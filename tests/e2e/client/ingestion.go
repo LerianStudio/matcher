@@ -1,5 +1,4 @@
-//go:build e2e
-
+//nolint:varnamelen,wsl_v5 // Test ingestion client favors concise path composition.
 package client
 
 import (
@@ -31,6 +30,7 @@ func (c *IngestionClient) UploadFile(
 	path := fmt.Sprintf("/v1/imports/contexts/%s/sources/%s/upload", contextID, sourceID)
 	formFields := map[string]string{"format": format}
 
+	//nolint:bodyclose // DoMultipart reads and closes the response body internally.
 	resp, body, err := c.client.DoMultipart(ctx, path, "file", fileName, content, formFields)
 	if err != nil {
 		return nil, fmt.Errorf("upload file: %w", err)
@@ -165,6 +165,7 @@ func (c *IngestionClient) PreviewFile(
 		formFields["max_rows"] = strconv.Itoa(maxRows)
 	}
 
+	//nolint:bodyclose // DoMultipart reads and closes the response body internally.
 	resp, body, err := c.client.DoMultipart(ctx, path, "file", fileName, content, formFields)
 	if err != nil {
 		return nil, fmt.Errorf("preview file: %w", err)
@@ -190,40 +191,7 @@ func (c *IngestionClient) SearchTransactions(
 ) (*SearchTransactionsResponse, error) {
 	var resp SearchTransactionsResponse
 
-	qp := url.Values{}
-	if params.Query != "" {
-		qp.Set("q", params.Query)
-	}
-	if params.AmountMin != "" {
-		qp.Set("amount_min", params.AmountMin)
-	}
-	if params.AmountMax != "" {
-		qp.Set("amount_max", params.AmountMax)
-	}
-	if params.DateFrom != "" {
-		qp.Set("date_from", params.DateFrom)
-	}
-	if params.DateTo != "" {
-		qp.Set("date_to", params.DateTo)
-	}
-	if params.Reference != "" {
-		qp.Set("reference", params.Reference)
-	}
-	if params.Currency != "" {
-		qp.Set("currency", params.Currency)
-	}
-	if params.SourceID != "" {
-		qp.Set("source_id", params.SourceID)
-	}
-	if params.Status != "" {
-		qp.Set("status", params.Status)
-	}
-	if params.Limit > 0 {
-		qp.Set("limit", strconv.Itoa(params.Limit))
-	}
-	if params.Offset > 0 {
-		qp.Set("offset", strconv.Itoa(params.Offset))
-	}
+	qp := buildSearchTransactionsQuery(params)
 
 	path := fmt.Sprintf("/v1/imports/contexts/%s/transactions/search", contextID)
 	if len(qp) > 0 {
@@ -235,4 +203,36 @@ func (c *IngestionClient) SearchTransactions(
 		return nil, fmt.Errorf("search transactions: %w", err)
 	}
 	return &resp, nil
+}
+
+func buildSearchTransactionsQuery(params SearchTransactionsParams) url.Values {
+	query := url.Values{}
+
+	stringFilters := map[string]string{
+		"q":          params.Query,
+		"amount_min": params.AmountMin,
+		"amount_max": params.AmountMax,
+		"date_from":  params.DateFrom,
+		"date_to":    params.DateTo,
+		"reference":  params.Reference,
+		"currency":   params.Currency,
+		"source_id":  params.SourceID,
+		"status":     params.Status,
+	}
+
+	for key, value := range stringFilters {
+		if value != "" {
+			query.Set(key, value)
+		}
+	}
+
+	if params.Limit > 0 {
+		query.Set("limit", strconv.Itoa(params.Limit))
+	}
+
+	if params.Offset > 0 {
+		query.Set("offset", strconv.Itoa(params.Offset))
+	}
+
+	return query
 }

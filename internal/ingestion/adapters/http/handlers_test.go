@@ -25,8 +25,8 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
@@ -39,6 +39,7 @@ import (
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	outboxMocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 	"github.com/LerianStudio/matcher/internal/shared/testutil"
+	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
 var (
@@ -106,6 +107,24 @@ func (d *stubDedupe) MarkSeenWithRetry(
 	return d.markErr
 }
 
+func (d *stubDedupe) MarkSeenBulk(
+	_ context.Context,
+	_ uuid.UUID,
+	hashes []string,
+	_ time.Duration,
+) (map[string]bool, error) {
+	if d.markErr != nil {
+		return nil, d.markErr
+	}
+
+	result := make(map[string]bool, len(hashes))
+	for _, h := range hashes {
+		result[h] = true
+	}
+
+	return result, nil
+}
+
 func (d *stubDedupe) Clear(_ context.Context, _ uuid.UUID, _ string) error {
 	return nil
 }
@@ -157,17 +176,15 @@ func (r *stubSourceRepo) FindByID(
 type stubContextProvider struct {
 	info              *ReconciliationContextInfo
 	err               error
-	receivedTenantID  uuid.UUID
 	receivedContextID uuid.UUID
 	mu                sync.Mutex
 }
 
 func (prov *stubContextProvider) FindByID(
 	_ context.Context,
-	tenantID, contextID uuid.UUID,
+	contextID uuid.UUID,
 ) (*ReconciliationContextInfo, error) {
 	prov.mu.Lock()
-	prov.receivedTenantID = tenantID
 	prov.receivedContextID = contextID
 	prov.mu.Unlock()
 
@@ -225,6 +242,13 @@ func (a *jobRepoAdapter) Update(
 	}
 
 	return result, nil
+}
+
+func (a *jobRepoAdapter) FindLatestByExtractionID(
+	_ context.Context,
+	_ uuid.UUID,
+) (*entities.IngestionJob, error) {
+	return nil, nil
 }
 
 func (a *jobRepoAdapter) WithTx(ctx context.Context, fn func(*sql.Tx) error) error {
@@ -523,11 +547,59 @@ func requireErrorResponse(
 ) {
 	t.Helper()
 
-	var errResp libHTTP.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&errResp))
-	require.Equal(t, expectedCode, errResp.Code)
-	require.Equal(t, expectedTitle, errResp.Title)
+	require.Equal(t, expectedIngestionCode(expectedTitle, expectedMessage), errResp.Code)
+	require.Equal(t, http.StatusText(expectedCode), errResp.Title)
 	require.Equal(t, expectedMessage, errResp.Message)
+}
+
+func expectedIngestionCode(expectedTitle, expectedMessage string) string {
+	switch expectedMessage {
+	case "source not found":
+		return constant.CodeIngestionSourceNotFound
+	case "field mapping not found for source":
+		return constant.CodeIngestionFieldMapNotFound
+	case "job not found":
+		return constant.CodeIngestionJobNotFound
+	case "invalid context id":
+		return constant.CodeInvalidContextID
+	case "format is required":
+		return constant.CodeIngestionFormatRequired
+	case "file is empty", "file is empty or has no content", "file contains no data rows":
+		return constant.CodeIngestionEmptyFile
+	}
+
+	switch expectedTitle {
+	case "invalid_request":
+		return constant.CodeInvalidRequest
+	case "not_found":
+		return constant.CodeNotFound
+	case "payload_too_large":
+		return constant.CodeRequestEntityTooLarge
+	case "ingestion_source_not_found":
+		return constant.CodeIngestionSourceNotFound
+	case "ingestion_field_map_not_found":
+		return constant.CodeIngestionFieldMapNotFound
+	case "ingestion_format_required":
+		return constant.CodeIngestionFormatRequired
+	case "ingestion_empty_file":
+		return constant.CodeIngestionEmptyFile
+	case "ingestion_job_not_found":
+		return constant.CodeIngestionJobNotFound
+	case "invalid_state":
+		return constant.CodeIngestionInvalidState
+	case "unauthorized":
+		return constant.CodeUnauthorized
+	case "forbidden":
+		return constant.CodeForbidden
+	case "context_not_active":
+		return constant.CodeContextNotActive
+	case "internal_server_error":
+		return constant.CodeInternalServerError
+	default:
+		return constant.CodeInternalServerError
+	}
 }
 
 func TestNewHandlersValidation(t *testing.T) {
@@ -576,7 +648,7 @@ func TestUploadFileValidatesInput(t *testing.T) {
 		defer resp.Body.Close()
 
 		require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
-		requireErrorResponse(t, resp, 400, "invalid_request", "invalid context_id")
+		requireErrorResponse(t, resp, 400, "invalid_context_id", "invalid context id")
 	})
 
 	t.Run("invalid format", func(t *testing.T) {
@@ -782,11 +854,11 @@ func TestListJobsByContextBadSortOrder(t *testing.T) {
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-	var errResp libHTTP.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 
-	require.Equal(t, 400, errResp.Code)
-	require.Equal(t, "invalid_request", errResp.Title)
+	require.Equal(t, constant.CodeInvalidRequest, errResp.Code)
+	require.Equal(t, http.StatusText(http.StatusBadRequest), errResp.Title)
 	require.Equal(t, "invalid sort_order: must be asc or desc", errResp.Message)
 }
 
@@ -914,11 +986,11 @@ func TestListTransactionsByJobBadSortOrder(t *testing.T) {
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-	var errResp libHTTP.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 
-	require.Equal(t, 400, errResp.Code)
-	require.Equal(t, "invalid_request", errResp.Title)
+	require.Equal(t, constant.CodeInvalidRequest, errResp.Code)
+	require.Equal(t, http.StatusText(http.StatusBadRequest), errResp.Title)
 	require.Equal(t, "invalid sort_order: must be asc or desc", errResp.Message)
 }
 
@@ -1021,11 +1093,11 @@ func TestListJobsByContextContextNotActive(t *testing.T) {
 
 	require.Equal(t, fiber.StatusForbidden, resp.StatusCode)
 
-	var errResp libHTTP.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 
-	require.Equal(t, 403, errResp.Code)
-	require.Equal(t, "context_not_active", errResp.Title)
+	require.Equal(t, constant.CodeContextNotActive, errResp.Code)
+	require.Equal(t, http.StatusText(http.StatusForbidden), errResp.Title)
 	require.Equal(t, "context is not active", errResp.Message)
 }
 
@@ -1204,10 +1276,10 @@ func TestListJobsByContextInternalError(t *testing.T) {
 
 	require.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
 
-	var errResp libHTTP.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-	require.Equal(t, 500, errResp.Code)
-	require.Equal(t, "internal_server_error", errResp.Title)
+	require.Equal(t, constant.CodeInternalServerError, errResp.Code)
+	require.Equal(t, http.StatusText(http.StatusInternalServerError), errResp.Title)
 }
 
 func TestListTransactionsByJobInternalError(t *testing.T) {
@@ -1251,10 +1323,10 @@ func TestListTransactionsByJobInternalError(t *testing.T) {
 
 	require.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
 
-	var errResp libHTTP.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-	require.Equal(t, 500, errResp.Code)
-	require.Equal(t, "internal_server_error", errResp.Title)
+	require.Equal(t, constant.CodeInternalServerError, errResp.Code)
+	require.Equal(t, http.StatusText(http.StatusInternalServerError), errResp.Title)
 }
 
 func TestListTransactionsByJobNotFound(t *testing.T) {
@@ -1293,10 +1365,10 @@ func TestListTransactionsByJobNotFound(t *testing.T) {
 
 	require.Equal(t, fiber.StatusNotFound, resp.StatusCode)
 
-	var errResp libHTTP.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-	require.Equal(t, 404, errResp.Code)
-	require.Equal(t, "not_found", errResp.Title)
+	require.Equal(t, constant.CodeIngestionJobNotFound, errResp.Code)
+	require.Equal(t, http.StatusText(http.StatusNotFound), errResp.Title)
 	require.Equal(t, "job not found", errResp.Message)
 }
 
@@ -1334,9 +1406,9 @@ func TestListTransactionsByJobInvalidJobID(t *testing.T) {
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-	var errResp libHTTP.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-	require.Equal(t, 400, errResp.Code)
+	require.Equal(t, constant.CodeInvalidRequest, errResp.Code)
 	require.Equal(t, "invalid job_id", errResp.Message)
 }
 
@@ -1405,7 +1477,7 @@ func TestGetJobInvalidJobID(t *testing.T) {
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-	var errResp libHTTP.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 	require.Equal(t, "invalid job_id", errResp.Message)
 }
@@ -1513,7 +1585,7 @@ func TestUploadFileInvalidSourceID(t *testing.T) {
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-	var errResp libHTTP.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 	require.Equal(t, "invalid source_id", errResp.Message)
 }
@@ -1584,7 +1656,7 @@ func TestIgnoreTransactionHandler_InvalidTransactionID(t *testing.T) {
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-	var errResp libHTTP.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 	require.Equal(t, "invalid transaction_id", errResp.Message)
 }
@@ -1712,9 +1784,9 @@ func TestIgnoreTransactionHandler_TransactionNotIgnorable(t *testing.T) {
 
 	require.Equal(t, fiber.StatusConflict, resp.StatusCode)
 
-	var errResp libHTTP.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-	require.Equal(t, "invalid_state", errResp.Title)
+	require.Equal(t, http.StatusText(http.StatusConflict), errResp.Title)
 	require.Contains(t, errResp.Message, "only UNMATCHED transactions can be ignored")
 }
 
@@ -1756,7 +1828,7 @@ func TestIgnoreTransactionHandler_ReasonRequired(t *testing.T) {
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-	var errResp libHTTP.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 	require.Equal(t, "invalid request body", errResp.Message)
 }
@@ -2147,7 +2219,7 @@ func TestLogSpanError_WithNilLogger(t *testing.T) {
 	defer span.End()
 
 	require.NotPanics(t, func() {
-		logSpanError(ctx, span, nil, "test message", errors.New("test error"))
+		(&Handlers{}).logSpanError(ctx, span, nil, "test message", errors.New("test error"))
 	})
 }
 
@@ -2160,6 +2232,6 @@ func TestLogSpanError_WithLogger(t *testing.T) {
 	defer span.End()
 
 	mock := &testutil.TestLogger{}
-	logSpanError(ctx, span, mock, "test message", errors.New("test error"))
+	(&Handlers{}).logSpanError(ctx, span, mock, "test message", errors.New("test error"))
 	require.True(t, mock.ErrorCalled)
 }

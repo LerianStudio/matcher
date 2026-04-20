@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
 	"github.com/bxcodec/dbresolver/v2"
 	"github.com/golang-migrate/migrate/v4"
 	migratePostgres "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -32,7 +32,6 @@ import (
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
-	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	embeddedmigrations "github.com/LerianStudio/matcher/migrations"
 )
@@ -103,9 +102,9 @@ func createSharedInfra(ctx context.Context) (*SharedInfra, error) {
 			wait.ForAll(
 				wait.ForLog("database system is ready to accept connections").
 					WithOccurrence(2).
-					WithStartupTimeout(60*time.Second),
+					WithStartupTimeout(120*time.Second),
 				wait.ForListeningPort("5432/tcp"),
-			).WithStartupTimeout(60*time.Second)),
+			).WithStartupTimeout(120*time.Second)),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start postgres: %w", err)
@@ -126,7 +125,7 @@ func createSharedInfra(ctx context.Context) (*SharedInfra, error) {
 			wait.ForAll(
 				wait.ForListeningPort("6379/tcp"),
 				wait.ForLog("Ready to accept connections"),
-			).WithStartupTimeout(30*time.Second)),
+			).WithStartupTimeout(120*time.Second)),
 	)
 	if err != nil {
 		_ = pgContainer.Terminate(ctx)
@@ -318,6 +317,14 @@ func (h *SharedTestHarness) Cleanup() error {
 
 const schemaMigrationsTable = "schema_migrations"
 
+// systemplaneEntriesTable is the lib-commons v5 systemplane-backing table.
+// It stores runtime configuration overrides (e.g., rate_limit.max) that the
+// test harness seeds once via the systemplane Client's Set() API. Truncating
+// this table between tests would revert overrides to the compile-time
+// defaults in internal/bootstrap/systemplane_keys.go, which are too low for
+// integration test workloads and cause 429 Too Many Requests failures.
+const systemplaneEntriesTable = "systemplane_entries"
+
 func resetSharedDatabase(t *testing.T, connection *libPostgres.Client) error {
 	t.Helper()
 
@@ -389,8 +396,9 @@ SELECT tablename
 FROM pg_tables
 WHERE schemaname = 'public'
   AND tablename <> $1
+  AND tablename <> $2
 ORDER BY tablename ASC
-`, schemaMigrationsTable)
+`, schemaMigrationsTable, systemplaneEntriesTable)
 	if err != nil {
 		return nil, fmt.Errorf("querying table names: %w", err)
 	}
@@ -659,7 +667,7 @@ func setupSharedSeedData(
 ) (SeedData, error) {
 	t.Helper()
 
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(connection, nil)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(connection, nil)
 	contextRepo := configContextRepo.NewRepository(provider)
 	sourceRepo, err := configSourceRepo.NewRepository(provider)
 	if err != nil {

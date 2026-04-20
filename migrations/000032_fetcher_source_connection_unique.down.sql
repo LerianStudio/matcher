@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS idx_reconciliation_sources_fetcher_connection;

@@ -19,6 +19,11 @@ import (
 // ErrNilOutboxRepository is returned when the outbox repository is nil.
 var ErrNilOutboxRepository = errors.New("outbox repository is required")
 
+// auditConfigEntityType labels truncation metrics emitted from this
+// publisher so operators can distinguish config-diff truncation from the
+// exception-context publisher.
+const auditConfigEntityType = "audit_config"
+
 // OutboxPublisher publishes configuration audit events to the outbox for asynchronous processing.
 type OutboxPublisher struct {
 	outboxRepo sharedPorts.OutboxRepository
@@ -33,7 +38,16 @@ func NewOutboxPublisher(repo sharedPorts.OutboxRepository) (*OutboxPublisher, er
 	return &OutboxPublisher{outboxRepo: repo}, nil
 }
 
-// Publish publishes a configuration audit event to the outbox.
+// Publish enqueues a configuration audit event on the outbox.
+//
+// The publisher uses a single-marshal gating strategy: the complete
+// AuditLogCreatedEvent is serialized once, and only if the resulting
+// payload exceeds the broker's per-event cap does Publish swap Changes
+// for a truncation marker and re-marshal. This replaces the prior
+// measure-then-marshal approach (which marshaled Changes separately for
+// a heuristic size check and then marshaled the envelope again) with a
+// cheaper and more accurate gate that measures the exact bytes the broker
+// will receive.
 func (pub *OutboxPublisher) Publish(ctx context.Context, event ports.AuditEvent) error {
 	if pub == nil || pub.outboxRepo == nil {
 		return ErrNilOutboxRepository
@@ -64,9 +78,9 @@ func (pub *OutboxPublisher) Publish(ctx context.Context, event ports.AuditEvent)
 		Timestamp:  time.Now().UTC(),
 	}
 
-	payload, err := json.Marshal(auditEvent)
+	payload, err := marshalOrTruncate(ctx, &auditEvent)
 	if err != nil {
-		return fmt.Errorf("marshal audit event: %w", err)
+		return err
 	}
 
 	outboxEvent, err := sharedDomain.NewOutboxEvent(
@@ -87,3 +101,47 @@ func (pub *OutboxPublisher) Publish(ctx context.Context, event ports.AuditEvent)
 }
 
 var _ ports.AuditPublisher = (*OutboxPublisher)(nil)
+
+// marshalOrTruncate serializes the audit event and, if the resulting
+// payload exceeds the broker's cap, replaces Changes with a truncation
+// marker and re-marshals. The final payload is returned or a marshal
+// error wrapped for the caller.
+//
+// This is the single-marshal counterpart of the prior measure-first
+// helper: it gates on the actual outgoing bytes rather than on a
+// Changes-only heuristic.
+func marshalOrTruncate(
+	ctx context.Context,
+	event *sharedDomain.AuditLogCreatedEvent,
+) ([]byte, error) {
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return nil, fmt.Errorf("marshal audit event: %w", err)
+	}
+
+	if len(payload) <= sharedDomain.DefaultOutboxMaxPayloadBytes {
+		return payload, nil
+	}
+
+	originalSize := len(payload)
+
+	sharedDomain.RecordOutboxTruncation(
+		ctx,
+		auditConfigEntityType,
+		event.EntityID,
+		originalSize,
+		sharedDomain.DefaultOutboxMaxPayloadBytes,
+	)
+
+	event.Changes = sharedDomain.BuildAuditChangesTruncationMarker(
+		originalSize,
+		sharedDomain.DefaultOutboxMaxPayloadBytes,
+	)
+
+	payload, err = json.Marshal(event)
+	if err != nil {
+		return nil, fmt.Errorf("marshal truncated audit event: %w", err)
+	}
+
+	return payload, nil
+}

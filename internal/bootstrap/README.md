@@ -64,9 +64,9 @@ Readiness uses `HealthDependencies`. Redis is optional by default; dependencies 
 13. Construct the `Service` (server + outbox runner).
 
 The init order is explicit because several modules share infrastructure or publish to the outbox:
-- `outboxRepo` is instantiated once from `internal/outbox/adapters/postgres` and shared across modules.
+- The outbox repository is built from `lib-commons/v5/commons/outbox/postgres` (once per process) and shared across modules via `sharedPorts.OutboxRepository`.
 - Ingestion and matching both depend on the same outbox repository instance for transactional event storage.
-- The dispatcher depends on the outbox repo plus both RabbitMQ publishers.
+- The dispatcher (provided by `lib-commons/v5/commons/outbox`) depends on the outbox repo plus both RabbitMQ publishers.
 
 If you add a module with cross-context dependencies, update this list to keep the wiring order visible.
 
@@ -84,7 +84,7 @@ Exports PostgreSQL connection pool metrics (open connections, in-use, idle, wait
 
 ### Systemplane Integration
 
-The systemplane (`lib-commons/v4/commons/systemplane`) is integrated during bootstrap to provide runtime configuration authority:
+The systemplane (`lib-commons/v5/commons/systemplane`) is integrated during bootstrap to provide runtime configuration authority. The admin HTTP surface is mounted separately via `MountSystemplaneAPI` at `/system/:namespace/:key`:
 
 - **Config Manager**: Wraps the systemplane service to provide `configManager.Get()` for runtime config reads.
 - **Key Registry**: All configurable keys are registered with types, defaults, scopes, and mutability metadata.
@@ -189,8 +189,8 @@ Key environment variables:
 | | `CORS_ALLOWED_METHODS` | Allowed CORS methods |
 | | `CORS_ALLOWED_HEADERS` | Allowed CORS headers |
 | | `SERVER_TLS_CERT_FILE` / `SERVER_TLS_KEY_FILE` | TLS configuration |
-| **Auth** | `AUTH_ENABLED` | Toggle JWT validation |
-| | `AUTH_SERVICE_ADDRESS` | Auth service host |
+| **Auth** | `PLUGIN_AUTH_ENABLED` | Toggle JWT validation |
+| | `PLUGIN_AUTH_ADDRESS` | Auth service host |
 | | `AUTH_JWT_SECRET` | JWT secret when auth enabled |
 | | `DEFAULT_TENANT_ID` / `DEFAULT_TENANT_SLUG` | Fallback tenant settings |
 | **DB** | `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_SSLMODE` | Primary database configuration |

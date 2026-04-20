@@ -93,7 +93,6 @@ func TestRunMatch_PersistFailureRunsFinalize(t *testing.T) {
 		MatchItemRepo:    matchItemRepo,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outboxRepo,
-		RateRepo:         &stubRateRepo{},
 		FeeVarianceRepo:  &stubFeeVarianceRepo{},
 		AdjustmentRepo:   &stubAdjustmentRepo{},
 		InfraProvider:    &stubInfraProviderForRun{},
@@ -187,7 +186,6 @@ func TestRunMatch_InvalidProposalIsSkipped(t *testing.T) {
 		MatchItemRepo:    matchItemRepo,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outboxRepo,
-		RateRepo:         &stubRateRepo{},
 		FeeVarianceRepo:  &stubFeeVarianceRepo{},
 		AdjustmentRepo:   &stubAdjustmentRepo{},
 		InfraProvider:    &stubInfraProviderForRun{},
@@ -305,7 +303,6 @@ func TestRunMatch_MalformedProposalScoreFailsRun(t *testing.T) {
 		MatchItemRepo:    matchItemRepo,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outboxRepo,
-		RateRepo:         &stubRateRepo{},
 		FeeVarianceRepo:  &stubFeeVarianceRepo{},
 		AdjustmentRepo:   &stubAdjustmentRepo{},
 		InfraProvider:    &stubInfraProviderForRun{},
@@ -410,7 +407,6 @@ func TestRunMatch_LockFailure(t *testing.T) {
 		MatchItemRepo:    matchItemRepo,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outboxRepo,
-		RateRepo:         &stubRateRepo{},
 		FeeVarianceRepo:  &stubFeeVarianceRepo{},
 		AdjustmentRepo:   &stubAdjustmentRepo{},
 		InfraProvider:    &stubInfraProviderForRun{},
@@ -507,7 +503,6 @@ func TestRunMatch_SkipsProposalWithMissingTransaction(t *testing.T) {
 		MatchItemRepo:    matchItemRepo,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outboxRepo,
-		RateRepo:         &stubRateRepo{},
 		FeeVarianceRepo:  &stubFeeVarianceRepo{},
 		AdjustmentRepo:   &stubAdjustmentRepo{},
 		InfraProvider:    &stubInfraProviderForRun{},
@@ -636,7 +631,6 @@ func TestRunMatch_SkipsProposalWithMissingBaseCurrency(t *testing.T) {
 		MatchItemRepo:    matchItemRepo,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outboxRepo,
-		RateRepo:         &stubRateRepo{},
 		FeeVarianceRepo:  &stubFeeVarianceRepo{},
 		AdjustmentRepo:   &stubAdjustmentRepo{},
 		InfraProvider:    &stubInfraProviderForRun{},
@@ -761,7 +755,6 @@ func TestRunMatch_ContextCancelled(t *testing.T) {
 		MatchItemRepo:    matchItemRepo,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outboxRepo,
-		RateRepo:         &stubRateRepo{},
 		FeeVarianceRepo:  &stubFeeVarianceRepo{},
 		AdjustmentRepo:   &stubAdjustmentRepo{},
 		InfraProvider:    &stubInfraProviderForRun{},
@@ -792,7 +785,7 @@ func TestEnqueueMatchConfirmedEvents_NilOutboxRepo(t *testing.T) {
 	require.ErrorIs(t, err, ErrOutboxRepoNotConfigured)
 }
 
-func TestEnqueueMatchConfirmedEvents_NonSQLTx(t *testing.T) {
+func TestEnqueueMatchConfirmedEvents_NilTx(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
@@ -800,7 +793,7 @@ func TestEnqueueMatchConfirmedEvents_NonSQLTx(t *testing.T) {
 
 	uc := &UseCase{outboxRepoTx: outboxmocks.NewMockOutboxRepository(ctrl)}
 
-	err := uc.enqueueMatchConfirmedEvents(context.Background(), &fakeTx{}, nil)
+	err := uc.enqueueMatchConfirmedEvents(context.Background(), nil, nil)
 	require.ErrorIs(t, err, ErrOutboxRequiresSQLTx)
 }
 

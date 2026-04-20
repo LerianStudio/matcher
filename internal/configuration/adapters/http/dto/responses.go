@@ -15,8 +15,6 @@ type ReconciliationContextResponse struct {
 	Interval string `json:"interval"         example:"daily"`
 	// Current status of the context
 	Status string `json:"status"           example:"ACTIVE"                               enums:"DRAFT,ACTIVE,PAUSED,ARCHIVED"`
-	// Optional rate ID for FX conversions
-	RateID string `json:"rateId,omitempty" example:"550e8400-e29b-41d4-a716-446655440000"`
 	// Absolute fee tolerance amount
 	FeeToleranceAbs string `json:"feeToleranceAbs"  example:"0.50"`
 	// Percentage fee tolerance

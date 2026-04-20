@@ -26,7 +26,7 @@ on:
 jobs:
   go-analysis:
     name: Go Analysis
-    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/go-pr-analysis.yml@v1.15.0
+    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/go-pr-analysis.yml@v1.23.1
     with:
       runner_type: "blacksmith-4vcpu-ubuntu-2404"
       app_name_prefix: "matcher"
@@ -46,7 +46,7 @@ jobs:
     name: Migration Integrity
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Check migration file integrity
         run: |
           chmod +x scripts/check-migrations.sh

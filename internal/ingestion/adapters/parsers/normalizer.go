@@ -166,6 +166,10 @@ func extractDate(mapping map[string]string, row map[string]any, rowNumber int) (
 }
 
 // buildTransaction constructs the domain Transaction entity and marks it extraction-complete.
+//
+// The metadata map is built in buildMetadata for each row and never referenced
+// again by the parser, so we hand ownership to the Transaction via the donate
+// constructor and avoid the recursive deep-copy on the ingestion hot path.
 func buildTransaction(
 	ctx context.Context,
 	tenantID uuid.UUID,
@@ -178,7 +182,7 @@ func buildTransaction(
 	metadata map[string]any,
 	rowNumber int,
 ) (*shared.Transaction, *ports.ParseError) {
-	transaction, err := shared.NewTransaction(
+	transaction, err := shared.NewTransactionWithDonatedMetadata(
 		ctx,
 		tenantID,
 		job.ID,

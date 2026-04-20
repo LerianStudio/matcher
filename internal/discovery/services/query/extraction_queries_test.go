@@ -53,6 +53,70 @@ func (m *mockExtractionRepoForQuery) UpdateWithTx(_ context.Context, _ sharedPor
 	return nil
 }
 
+func (m *mockExtractionRepoForQuery) LinkIfUnlinked(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+
+func (m *mockExtractionRepoForQuery) MarkBridgeFailed(_ context.Context, _ *entities.ExtractionRequest) error {
+	return nil
+}
+
+func (m *mockExtractionRepoForQuery) MarkBridgeFailedWithTx(_ context.Context, _ sharedPorts.Tx, _ *entities.ExtractionRequest) error {
+	return nil
+}
+
+func (m *mockExtractionRepoForQuery) IncrementBridgeAttempts(_ context.Context, _ uuid.UUID, _ int) error {
+	return nil
+}
+
+func (m *mockExtractionRepoForQuery) IncrementBridgeAttemptsWithTx(_ context.Context, _ sharedPorts.Tx, _ uuid.UUID, _ int) error {
+	return nil
+}
+
+func (m *mockExtractionRepoForQuery) FindEligibleForBridge(_ context.Context, _ int) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
+func (m *mockExtractionRepoForQuery) CountBridgeReadiness(_ context.Context, _ time.Duration) (repositories.BridgeReadinessCounts, error) {
+	return repositories.BridgeReadinessCounts{}, nil
+}
+
+func (m *mockExtractionRepoForQuery) ListBridgeCandidates(
+	_ context.Context,
+	_ string,
+	_ time.Duration,
+	_ time.Time,
+	_ uuid.UUID,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
+func (m *mockExtractionRepoForQuery) FindBridgeRetentionCandidates(
+	_ context.Context,
+	_ time.Duration,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
+func (m *mockExtractionRepoForQuery) MarkCustodyDeleted(
+	_ context.Context,
+	_ uuid.UUID,
+	_ time.Time,
+) error {
+	return nil
+}
+
+func (m *mockExtractionRepoForQuery) MarkCustodyDeletedWithTx(
+	_ context.Context,
+	_ sharedPorts.Tx,
+	_ uuid.UUID,
+	_ time.Time,
+) error {
+	return nil
+}
+
 func TestGetExtraction_Success(t *testing.T) {
 	t.Parallel()
 

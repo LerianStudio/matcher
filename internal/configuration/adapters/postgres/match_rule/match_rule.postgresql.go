@@ -11,10 +11,10 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
@@ -70,7 +70,7 @@ func (repo *Repository) Create(
 		logger.With(
 			libLog.Any("context.id", entity.ContextID.String()),
 			libLog.Any("priority", entity.Priority),
-			libLog.Any("error.message", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "failed to create match rule")
 
 		return nil, fmt.Errorf("failed to create match rule: %w", err)
@@ -116,7 +116,7 @@ func (repo *Repository) CreateWithTx(
 		logger.With(
 			libLog.Any("context.id", entity.ContextID.String()),
 			libLog.Any("priority", entity.Priority),
-			libLog.Any("error.message", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "failed to create match rule")
 
 		return nil, fmt.Errorf("failed to create match rule: %w", err)
@@ -169,16 +169,9 @@ func (repo *Repository) FindByID(
 	ctx, span := tracer.Start(ctx, "postgres.find_match_rule_by_id")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	result, err := common.WithTenantTx(
+	result, err := common.WithTenantTxProvider(
 		ctx,
-		connection.Connection(),
+		repo.provider,
 		func(tx *sql.Tx) (*entities.MatchRule, error) {
 			row := tx.QueryRowContext(
 				ctx,
@@ -197,7 +190,7 @@ func (repo *Repository) FindByID(
 			logger.With(
 				libLog.Any("context.id", contextID.String()),
 				libLog.Any("match_rule.id", id.String()),
-				libLog.Any("error.message", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelError, "failed to find match rule by id")
 		}
 
@@ -223,13 +216,6 @@ func (repo *Repository) FindByContextID(
 	ctx, span := tracer.Start(ctx, "postgres.find_match_rules_by_context")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
 	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
 	decodedCursor, cursorID, err := parseCursor(cursor)
@@ -239,9 +225,9 @@ func (repo *Repository) FindByContextID(
 
 	var pagination libHTTP.CursorPagination
 
-	result, err := common.WithTenantTx(
+	result, err := common.WithTenantTxProvider(
 		ctx,
-		connection.Connection(),
+		repo.provider,
 		func(tx *sql.Tx) (rules entities.MatchRules, err error) {
 			builder := squirrel.Select(strings.Split(matchRuleColumns, ", ")...).
 				From("match_rules").
@@ -291,7 +277,7 @@ func (repo *Repository) FindByContextID(
 
 		logger.With(
 			libLog.Any("context.id", contextID.String()),
-			libLog.Any("error.message", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "failed to list match rules")
 
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("failed to find match rules by context: %w", err)
@@ -385,7 +371,7 @@ func (repo *Repository) FindByContextIDWithTx(
 
 		logger.With(
 			libLog.Any("context.id", contextID.String()),
-			libLog.Any("error.message", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "failed to list match rules with tx")
 
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("failed to find match rules by context with tx: %w", err)
@@ -411,13 +397,6 @@ func (repo *Repository) FindByContextIDAndType(
 	ctx, span := tracer.Start(ctx, "postgres.find_match_rules_by_context_and_type")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
 	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
 	decodedCursor, cursorID, err := parseCursor(cursor)
@@ -427,9 +406,9 @@ func (repo *Repository) FindByContextIDAndType(
 
 	var pagination libHTTP.CursorPagination
 
-	result, err := common.WithTenantTx(
+	result, err := common.WithTenantTxProvider(
 		ctx,
-		connection.Connection(),
+		repo.provider,
 		func(tx *sql.Tx) (rules entities.MatchRules, err error) {
 			builder := squirrel.Select(strings.Split(matchRuleColumns, ", ")...).
 				From("match_rules").
@@ -481,7 +460,7 @@ func (repo *Repository) FindByContextIDAndType(
 		logger.With(
 			libLog.Any("context.id", contextID.String()),
 			libLog.Any("rule.type", ruleType.String()),
-			libLog.Any("error.message", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "failed to list match rules")
 
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("failed to find match rules by context and type: %w", err)
@@ -505,16 +484,9 @@ func (repo *Repository) FindByPriority(
 	ctx, span := tracer.Start(ctx, "postgres.find_match_rule_by_priority")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	result, err := common.WithTenantTx(
+	result, err := common.WithTenantTxProvider(
 		ctx,
-		connection.Connection(),
+		repo.provider,
 		func(tx *sql.Tx) (*entities.MatchRule, error) {
 			row := tx.QueryRowContext(
 				ctx,
@@ -533,7 +505,7 @@ func (repo *Repository) FindByPriority(
 			logger.With(
 				libLog.Any("context.id", contextID.String()),
 				libLog.Any("priority", priority),
-				libLog.Any("error.message", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelError, "failed to find match rule by priority")
 		}
 
@@ -575,7 +547,7 @@ func (repo *Repository) Update(
 			logger.With(
 				libLog.Any("context.id", entity.ContextID.String()),
 				libLog.Any("match_rule.id", entity.ID.String()),
-				libLog.Any("error.message", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelError, "failed to update match rule")
 		}
 
@@ -623,7 +595,7 @@ func (repo *Repository) UpdateWithTx(
 			logger.With(
 				libLog.Any("context.id", entity.ContextID.String()),
 				libLog.Any("match_rule.id", entity.ID.String()),
-				libLog.Any("error.message", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelError, "failed to update match rule")
 		}
 
@@ -694,7 +666,7 @@ func (repo *Repository) Delete(ctx stdctx.Context, contextID, id uuid.UUID) erro
 			logger.With(
 				libLog.Any("context.id", contextID.String()),
 				libLog.Any("match_rule.id", id.String()),
-				libLog.Any("error.message", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelError, "failed to delete match rule")
 		}
 
@@ -738,7 +710,7 @@ func (repo *Repository) DeleteWithTx(
 			logger.With(
 				libLog.Any("context.id", contextID.String()),
 				libLog.Any("match_rule.id", id.String()),
-				libLog.Any("error.message", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelError, "failed to delete match rule")
 		}
 
@@ -795,14 +767,7 @@ func (repo *Repository) ReorderPriorities(
 	ctx, span := tracer.Start(ctx, "postgres.reorder_match_rule_priorities")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	_, err = common.WithTenantTx(ctx, connection.Connection(), func(tx *sql.Tx) (bool, error) {
+	_, err := common.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) (bool, error) {
 		// Offset priorities to avoid unique constraint collisions during reorder.
 		offset := len(ruleIDs) + reorderPriorityOffset
 
@@ -841,7 +806,7 @@ func (repo *Repository) ReorderPriorities(
 			logger.With(
 				libLog.Any("context.id", contextID.String()),
 				libLog.Any("rule_ids.count", len(ruleIDs)),
-				libLog.Any("error.message", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelError, "failed to reorder match rule priorities")
 		}
 

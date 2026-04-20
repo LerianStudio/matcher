@@ -16,7 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/internal/reporting/ports"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/pkg/storageopt"
 )
 
 // mockReadCloser provides a test double for io.ReadCloser.
@@ -145,12 +146,36 @@ func TestUploadWithOptions_EmptyKeyReturnsError(t *testing.T) {
 
 	url, err := client.UploadWithOptions(
 		context.Background(), "", nil, "application/gzip",
-		ports.WithStorageClass("GLACIER"),
+		storageopt.WithStorageClass("GLACIER"),
 	)
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrKeyRequired)
 	assert.Empty(t, url)
+}
+
+func TestS3Client_UnavailableClientReturnsSharedError(t *testing.T) {
+	t.Parallel()
+
+	var client *S3Client
+
+	_, err := client.Upload(context.Background(), "key", bytes.NewReader([]byte("data")), "text/plain")
+	require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable)
+
+	_, err = client.UploadWithOptions(context.Background(), "key", bytes.NewReader([]byte("data")), "text/plain")
+	require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable)
+
+	_, err = client.Download(context.Background(), "key")
+	require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable)
+
+	err = client.Delete(context.Background(), "key")
+	require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable)
+
+	_, err = client.GeneratePresignedURL(context.Background(), "key", time.Hour)
+	require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable)
+
+	_, err = client.Exists(context.Background(), "key")
+	require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable)
 }
 
 func TestUploadWithOptions_EmptyKeyReturnsError_NoOptions(t *testing.T) {
@@ -453,7 +478,7 @@ func TestEmptyKeyValidation_TableDriven(t *testing.T) {
 			name:   "UploadWithOptions_EmptyKey",
 			method: "UploadWithOptions",
 			action: func() error {
-				_, err := client.UploadWithOptions(context.Background(), "", nil, "text/plain", ports.WithStorageClass("GLACIER"))
+				_, err := client.UploadWithOptions(context.Background(), "", nil, "text/plain", storageopt.WithStorageClass("GLACIER"))
 				return err
 			},
 		},
@@ -632,8 +657,9 @@ func TestNewS3Client_EndpointVariations(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		endpoint string
+		name        string
+		endpoint    string
+		expectError error
 	}{
 		{
 			name:     "seaweedfs",
@@ -648,8 +674,9 @@ func TestNewS3Client_EndpointVariations(t *testing.T) {
 			endpoint: "https://minio.example.com",
 		},
 		{
-			name:     "custom_port",
-			endpoint: "http://storage.local:8080",
+			name:        "custom_port",
+			endpoint:    "http://storage.local:8080",
+			expectError: ErrInsecureEndpoint,
 		},
 		{
 			name:     "no_endpoint",
@@ -667,11 +694,63 @@ func TestNewS3Client_EndpointVariations(t *testing.T) {
 			}
 
 			client, err := NewS3Client(context.Background(), cfg)
+			if tt.expectError != nil {
+				require.ErrorIs(t, err, tt.expectError)
+				require.Nil(t, client)
+				return
+			}
 
 			require.NoError(t, err)
 			require.NotNil(t, client)
 		})
 	}
+}
+
+func TestValidateEndpointSecurity(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		endpoint      string
+		allowInsecure bool
+		expectError   error
+	}{
+		{name: "empty", endpoint: ""},
+		{name: "localhost http", endpoint: "http://localhost:8333"},
+		{name: "loopback ip", endpoint: "http://127.0.0.1:9000"},
+		{name: "https remote", endpoint: "https://storage.example.com"},
+		{name: "remote http", endpoint: "http://storage.example.com", expectError: ErrInsecureEndpoint},
+		{name: "remote http allowed", endpoint: "http://storage.example.com", allowInsecure: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := validateEndpointSecurity(tt.endpoint, tt.allowInsecure)
+			if tt.expectError != nil {
+				require.ErrorIs(t, err, tt.expectError)
+				return
+			}
+
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestNewS3Client_AllowInsecureEndpoint(t *testing.T) {
+	t.Parallel()
+
+	cfg := S3Config{
+		Bucket:        "test-bucket",
+		Endpoint:      "http://storage.internal:8333",
+		AllowInsecure: true,
+	}
+
+	client, err := NewS3Client(context.Background(), cfg)
+
+	require.NoError(t, err)
+	require.NotNil(t, client)
 }
 
 func TestNewS3Client_CredentialCombinations(t *testing.T) {
@@ -957,7 +1036,7 @@ func TestContextCancellation(t *testing.T) {
 		t.Parallel()
 
 		reader := bytes.NewReader([]byte("test"))
-		_, err := client.UploadWithOptions(ctx, "key", reader, "application/gzip", ports.WithStorageClass("GLACIER"))
+		_, err := client.UploadWithOptions(ctx, "key", reader, "application/gzip", storageopt.WithStorageClass("GLACIER"))
 
 		assert.Error(t, err)
 	})
@@ -1084,7 +1163,7 @@ func TestS3Client_InterfaceCompliance(t *testing.T) {
 
 	var _ interface {
 		Upload(ctx context.Context, key string, reader io.Reader, contentType string) (string, error)
-		UploadWithOptions(ctx context.Context, key string, reader io.Reader, contentType string, opts ...ports.UploadOption) (string, error)
+		UploadWithOptions(ctx context.Context, key string, reader io.Reader, contentType string, opts ...sharedPorts.UploadOption) (string, error)
 		Download(ctx context.Context, key string) (io.ReadCloser, error)
 		Delete(ctx context.Context, key string) error
 		GeneratePresignedURL(ctx context.Context, key string, expiry time.Duration) (string, error)
@@ -1164,5 +1243,109 @@ func TestKeySpecialCharacters(t *testing.T) {
 			assert.NotEmpty(t, key, "special key should not be empty")
 			assert.Greater(t, len(key), 0)
 		})
+	}
+}
+
+// ---------- Error-path tests: nil inner S3 SDK client ----------
+//
+// These verify that an S3Client whose underlying AWS SDK client is nil
+// (struct exists, but s3 field is zero-value) returns a proper error
+// through ensureReady() instead of panicking with a nil-pointer deref.
+// The nil-*S3Client-pointer case is covered by
+// TestS3Client_UnavailableClientReturnsSharedError above; these target
+// the complementary "constructed-but-unconfigured" scenario.
+
+func TestS3Client_Upload_NilInnerClient(t *testing.T) {
+	t.Parallel()
+
+	client := &S3Client{
+		bucket: "test-bucket",
+		// s3 field is nil — simulates a partially constructed client
+	}
+
+	url, err := client.Upload(
+		context.Background(),
+		"reports/2024/export.csv",
+		bytes.NewReader([]byte("col1,col2\na,b\n")),
+		"text/csv",
+	)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable)
+	assert.Empty(t, url)
+}
+
+func TestS3Client_Download_NilInnerClient(t *testing.T) {
+	t.Parallel()
+
+	client := &S3Client{
+		bucket: "test-bucket",
+	}
+
+	reader, err := client.Download(
+		context.Background(),
+		"reports/2024/export.csv",
+	)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable)
+	assert.Nil(t, reader)
+}
+
+func TestS3Client_Delete_NilInnerClient(t *testing.T) {
+	t.Parallel()
+
+	client := &S3Client{
+		bucket: "test-bucket",
+	}
+
+	err := client.Delete(
+		context.Background(),
+		"reports/2024/export.csv",
+	)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable)
+}
+
+// TestS3Client_NilInnerClient_Idempotent verifies that repeatedly calling
+// operations on a client with a nil SDK handle is safe and deterministic:
+// every call returns the same sentinel error, no panic, no state mutation.
+// S3Client has no Close() method (the ObjectStorageClient interface doesn't
+// define one), so "idempotent teardown" means "safe to abandon or re-call."
+func TestS3Client_NilInnerClient_Idempotent(t *testing.T) {
+	t.Parallel()
+
+	client := &S3Client{
+		bucket: "test-bucket",
+	}
+
+	const iterations = 3
+
+	for i := range iterations {
+		_, err := client.Upload(
+			context.Background(),
+			"key",
+			bytes.NewReader([]byte("data")),
+			"text/plain",
+		)
+		require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable,
+			"Upload iteration %d should return unavailable", i)
+
+		_, err = client.Download(context.Background(), "key")
+		require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable,
+			"Download iteration %d should return unavailable", i)
+
+		err = client.Delete(context.Background(), "key")
+		require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable,
+			"Delete iteration %d should return unavailable", i)
+
+		_, err = client.GeneratePresignedURL(context.Background(), "key", time.Hour)
+		require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable,
+			"GeneratePresignedURL iteration %d should return unavailable", i)
+
+		_, err = client.Exists(context.Background(), "key")
+		require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable,
+			"Exists iteration %d should return unavailable", i)
 	}
 }

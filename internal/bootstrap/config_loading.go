@@ -13,10 +13,32 @@ import (
 	"strconv"
 	"strings"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libZap "github.com/LerianStudio/lib-commons/v5/commons/zap"
+
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
+
+type envAliasKind string
+
+const (
+	envAliasKindString envAliasKind = "string"
+	envAliasKindBool   envAliasKind = "bool"
+)
+
+type envAlias struct {
+	legacy  string
+	current string
+	kind    envAliasKind
+}
+
+var legacyAuthEnvAliases = []envAlias{
+	{legacy: "AUTH_ENABLED", current: "PLUGIN_AUTH_ENABLED", kind: envAliasKindBool},
+	{legacy: "AUTH_SERVICE_ADDRESS", current: "PLUGIN_AUTH_ADDRESS", kind: envAliasKindString},
+}
+
+var errConflictingEnvAliasValues = errors.New("conflicting environment alias values")
 
 // Architecture Decision: Environment-Only Configuration
 //
@@ -49,14 +71,10 @@ func LoadConfigWithLogger(logger libLog.Logger) (*Config, error) {
 	}
 
 	// Store logger for runtime warnings (e.g., capping invalid config values)
-	if isNilInterface(logger) {
+	if sharedPorts.IsNilValue(logger) {
 		var logErr error
 
-		logger, logErr = libZap.New(libZap.Config{
-			Environment:     ResolveLoggerEnvironment(cfg.App.EnvName),
-			Level:           ResolveLoggerLevel(cfg.App.LogLevel),
-			OTelLibraryName: "github.com/LerianStudio/matcher",
-		})
+		logger, logErr = buildLoggerFromConfig(cfg)
 		if logErr != nil {
 			return nil, fmt.Errorf("initialize default logger: %w", logErr)
 		}
@@ -117,6 +135,13 @@ func (cfg *Config) enforceProductionSecurityDefaults(logger libLog.Logger) {
 
 		cfg.RateLimit.Enabled = true
 	}
+
+	if cfg.ObjectStorage.AllowInsecure {
+		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("SECURITY: OBJECT_STORAGE_ALLOW_INSECURE_ENDPOINT=true is not allowed in production. "+
+			"Forcing insecure object storage endpoint support to disabled. env=%s", cfg.App.EnvName))
+
+		cfg.ObjectStorage.AllowInsecure = false
+	}
 }
 
 // sanitizeEnvVarsForConfig trims trailing whitespace from all environment variables
@@ -173,6 +198,10 @@ func sanitizeEnvVarsForStruct(structType reflect.Type) {
 }
 
 func loadConfigFromEnvForStartup(cfg *Config) error {
+	if err := normalizeLegacyAuthEnvVars(); err != nil {
+		return fmt.Errorf("normalize legacy auth env vars: %w", err)
+	}
+
 	// Trim trailing whitespace from all config-related env vars before parsing.
 	// This is safe during bootstrap because it happens before background goroutines
 	// are started. Handles edge cases like trailing whitespace from shell quoting
@@ -180,6 +209,64 @@ func loadConfigFromEnvForStartup(cfg *Config) error {
 	sanitizeEnvVarsForConfig()
 
 	return loadConfigFromEnv(cfg)
+}
+
+func normalizeLegacyAuthEnvVars() error {
+	for _, alias := range legacyAuthEnvAliases {
+		legacyRaw, legacySet := os.LookupEnv(alias.legacy)
+		currentRaw, currentSet := os.LookupEnv(alias.current)
+
+		legacyValue := strings.TrimSpace(legacyRaw)
+		currentValue := strings.TrimSpace(currentRaw)
+
+		if legacySet && currentSet && legacyValue != "" && currentValue != "" && envAliasValuesConflict(alias.kind, legacyValue, currentValue) {
+			return fmt.Errorf(
+				"%w: conflicting values for %s and %s",
+				errConflictingEnvAliasValues,
+				alias.legacy,
+				alias.current,
+			)
+		}
+
+		if legacySet && currentValue == "" {
+			if err := os.Setenv(alias.current, legacyValue); err != nil {
+				return fmt.Errorf("set %s from %s: %w", alias.current, alias.legacy, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func envAliasValuesConflict(kind envAliasKind, legacyValue, currentValue string) bool {
+	normalizedLegacy, legacyNormalized := normalizeEnvAliasValue(kind, legacyValue)
+
+	normalizedCurrent, currentNormalized := normalizeEnvAliasValue(kind, currentValue)
+
+	if legacyNormalized && currentNormalized {
+		return normalizedLegacy != normalizedCurrent
+	}
+
+	return legacyValue != currentValue
+}
+
+func normalizeEnvAliasValue(kind envAliasKind, value string) (string, bool) {
+	trimmedValue := strings.TrimSpace(value)
+	if trimmedValue == "" {
+		return "", false
+	}
+
+	switch kind {
+	case envAliasKindBool:
+		parsedValue, err := strconv.ParseBool(trimmedValue)
+		if err != nil {
+			return "", false
+		}
+
+		return strconv.FormatBool(parsedValue), true
+	default:
+		return trimmedValue, true
+	}
 }
 
 func loadConfigFromEnv(cfg *Config) error {
@@ -211,33 +298,5 @@ func loadConfigFromEnv(cfg *Config) error {
 	loadErr = errors.Join(loadErr, libCommons.SetConfigFromEnvVars(&cfg.CleanupWorker))
 	loadErr = errors.Join(loadErr, libCommons.SetConfigFromEnvVars(&cfg.Fetcher))
 
-	applyDeprecatedTenancyEnvAlias(cfg)
-
 	return loadErr
-}
-
-func applyDeprecatedTenancyEnvAlias(cfg *Config) {
-	if cfg == nil {
-		return
-	}
-
-	legacyRaw, legacySet := os.LookupEnv("MULTI_TENANT_INFRA_ENABLED")
-	_, primarySet := os.LookupEnv("MULTI_TENANT_ENABLED")
-
-	if primarySet {
-		cfg.Tenancy.MultiTenantInfraEnabled = cfg.Tenancy.MultiTenantEnabled
-		cfg.normalizeTenancyConfig()
-
-		return
-	}
-
-	if legacySet {
-		legacyEnabled, err := strconv.ParseBool(strings.TrimSpace(legacyRaw))
-		if err == nil {
-			cfg.Tenancy.MultiTenantInfraEnabled = legacyEnabled
-			cfg.Tenancy.MultiTenantEnabled = legacyEnabled
-		}
-	}
-
-	cfg.normalizeTenancyConfig()
 }

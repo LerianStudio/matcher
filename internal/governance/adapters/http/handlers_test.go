@@ -18,15 +18,16 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	sharedhttp "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/governance/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
 var (
@@ -191,7 +192,7 @@ func testGetAuditLogInvalidUUID(t *testing.T) {
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-	var errResp sharedhttp.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 	require.Equal(t, "invalid audit log id", errResp.Message)
 }
@@ -349,9 +350,35 @@ func verifyErrorResponse(
 
 	require.Equal(t, expectedStatus, resp.StatusCode)
 
-	var errResp sharedhttp.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
+	require.Equal(t, expectedGovernanceCode(expectedStatus, expectedMessage), errResp.Code)
+	require.Equal(t, http.StatusText(expectedStatus), errResp.Title)
 	require.Equal(t, expectedMessage, errResp.Message)
+}
+
+func expectedGovernanceCode(expectedStatus int, expectedMessage string) string {
+	switch expectedMessage {
+	case "audit log not found":
+		return constant.CodeGovernanceAuditLogNotFound
+	case "actor mapping not found":
+		return constant.CodeGovernanceActorMappingNotFound
+	case "archive not found":
+		return constant.CodeGovernanceArchiveNotFound
+	}
+
+	switch expectedStatus {
+	case fiber.StatusBadRequest:
+		return constant.CodeInvalidRequest
+	case fiber.StatusUnauthorized:
+		return constant.CodeUnauthorized
+	case fiber.StatusForbidden:
+		return constant.CodeForbidden
+	case fiber.StatusNotFound:
+		return constant.CodeNotFound
+	default:
+		return constant.CodeInternalServerError
+	}
 }
 
 func testListAuditLogsByEntitySuccess(t *testing.T) {
@@ -1204,7 +1231,7 @@ func TestListAuditLogs(t *testing.T) {
 
 		require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-		var errResp sharedhttp.ErrorResponse
+		var errResp ErrorResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 		require.Contains(t, errResp.Message, "date_from")
 	})
@@ -1226,7 +1253,7 @@ func TestListAuditLogs(t *testing.T) {
 
 		require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-		var errResp sharedhttp.ErrorResponse
+		var errResp ErrorResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 		require.Contains(t, errResp.Message, "date_to")
 	})
@@ -1316,7 +1343,7 @@ func TestListAuditLogs(t *testing.T) {
 
 		require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-		var errResp sharedhttp.ErrorResponse
+		var errResp ErrorResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 		require.Contains(t, errResp.Message, "actor")
 	})
@@ -1339,7 +1366,7 @@ func TestListAuditLogs(t *testing.T) {
 
 		require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-		var errResp sharedhttp.ErrorResponse
+		var errResp ErrorResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 		require.Contains(t, errResp.Message, "action")
 	})
@@ -1362,7 +1389,7 @@ func TestListAuditLogs(t *testing.T) {
 
 		require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-		var errResp sharedhttp.ErrorResponse
+		var errResp ErrorResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 		require.Contains(t, errResp.Message, "entity_type")
 	})
@@ -1400,7 +1427,7 @@ func TestBadRequestWithNilLogger(t *testing.T) {
 		_, span := tracer.Start(c.UserContext(), "test")
 		defer span.End()
 
-		return badRequest(c.UserContext(), c, span, &libLog.NopLogger{}, "test error", errors.New("test"))
+		return (&Handler{}).badRequest(c.UserContext(), c, span, &libLog.NopLogger{}, "test error", errors.New("test"))
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
@@ -1411,10 +1438,9 @@ func TestBadRequestWithNilLogger(t *testing.T) {
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-	var errResp sharedhttp.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-	require.Equal(t, 400, errResp.Code)
-	require.Equal(t, "invalid_request", errResp.Title)
+	require.Equal(t, http.StatusText(http.StatusBadRequest), errResp.Title)
 	require.Equal(t, "test error", errResp.Message)
 }
 
@@ -1427,7 +1453,7 @@ func TestWriteServiceErrorWithNilLogger(t *testing.T) {
 		_, span := tracer.Start(c.UserContext(), "test")
 		defer span.End()
 
-		return writeServiceError(c.UserContext(), c, span, &libLog.NopLogger{}, "test error", errors.New("test"))
+		return (&Handler{}).writeServiceError(c.UserContext(), c, span, &libLog.NopLogger{}, "test error", errors.New("test"))
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
@@ -1438,10 +1464,9 @@ func TestWriteServiceErrorWithNilLogger(t *testing.T) {
 
 	require.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
 
-	var errResp sharedhttp.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-	require.Equal(t, 500, errResp.Code)
-	require.Equal(t, "internal_server_error", errResp.Title)
+	require.Equal(t, http.StatusText(http.StatusInternalServerError), errResp.Title)
 	require.Equal(t, "an unexpected error occurred", errResp.Message)
 }
 
@@ -1454,7 +1479,7 @@ func TestWriteNotFoundWithNilLogger(t *testing.T) {
 		_, span := tracer.Start(c.UserContext(), "test")
 		defer span.End()
 
-		return writeNotFound(c.UserContext(), c, span, &libLog.NopLogger{}, "not found", errors.New("test"))
+		return (&Handler{}).writeNotFound(c.UserContext(), c, span, &libLog.NopLogger{}, "not_found", "not found", errors.New("test"))
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
@@ -1465,9 +1490,8 @@ func TestWriteNotFoundWithNilLogger(t *testing.T) {
 
 	require.Equal(t, fiber.StatusNotFound, resp.StatusCode)
 
-	var errResp sharedhttp.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-	require.Equal(t, 404, errResp.Code)
-	require.Equal(t, "not_found", errResp.Title)
+	require.Equal(t, http.StatusText(http.StatusNotFound), errResp.Title)
 	require.Equal(t, "not found", errResp.Message)
 }

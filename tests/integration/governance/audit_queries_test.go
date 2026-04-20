@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	pkghttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	pkghttp "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	auditRepo "github.com/LerianStudio/matcher/internal/governance/adapters/postgres"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	"github.com/LerianStudio/matcher/tests/integration"

@@ -236,9 +236,7 @@ func TestRepository_FindByID_NotFound(t *testing.T) {
 		WHERE id = $1
 	`)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(missingID.String()).WillReturnError(sql.ErrNoRows)
-	mock.ExpectRollback()
 
 	result, err := repo.FindByID(ctx, missingID)
 	require.ErrorIs(t, err, ErrDisputeNotFound)
@@ -281,9 +279,7 @@ func TestRepository_FindByID_Success(t *testing.T) {
 		now,
 	)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(disputeID.String()).WillReturnRows(rows)
-	mock.ExpectCommit()
 
 	result, err := repo.FindByID(ctx, disputeID)
 	require.NoError(t, err)
@@ -337,9 +333,7 @@ func TestRepository_FindByExceptionID_NotFound(t *testing.T) {
 			LIMIT 1
 		`)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(exceptionID.String()).WillReturnError(sql.ErrNoRows)
-	mock.ExpectRollback()
 
 	result, err := repo.FindByExceptionID(ctx, exceptionID)
 	require.ErrorIs(t, err, ErrDisputeNotFound)
@@ -383,9 +377,7 @@ func TestRepository_FindByExceptionID_Success(t *testing.T) {
 		now,
 	)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(exceptionID.String()).WillReturnRows(rows)
-	mock.ExpectCommit()
 
 	result, err := repo.FindByExceptionID(ctx, exceptionID)
 	require.NoError(t, err)
@@ -685,9 +677,7 @@ func TestRepository_FindByID_WithEvidence(t *testing.T) {
 		now,
 	)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(disputeID.String()).WillReturnRows(rows)
-	mock.ExpectCommit()
 
 	result, err := repo.FindByID(ctx, disputeID)
 	require.NoError(t, err)
@@ -731,9 +721,7 @@ func TestRepository_FindByID_NullEvidence(t *testing.T) {
 		now,
 	)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(disputeID.String()).WillReturnRows(rows)
-	mock.ExpectCommit()
 
 	result, err := repo.FindByID(ctx, disputeID)
 	require.NoError(t, err)
@@ -791,9 +779,7 @@ func TestRepository_FindByID_AllDisputeStates(t *testing.T) {
 				now,
 			)
 
-			mock.ExpectBegin()
 			mock.ExpectQuery(query).WithArgs(disputeID.String()).WillReturnRows(rows)
-			mock.ExpectCommit()
 
 			result, err := repo.FindByID(ctx, disputeID)
 			require.NoError(t, err)
@@ -851,9 +837,7 @@ func TestRepository_FindByID_AllCategories(t *testing.T) {
 				now,
 			)
 
-			mock.ExpectBegin()
 			mock.ExpectQuery(query).WithArgs(disputeID.String()).WillReturnRows(rows)
-			mock.ExpectCommit()
 
 			result, err := repo.FindByID(ctx, disputeID)
 			require.NoError(t, err)
@@ -1198,11 +1182,9 @@ func TestRepository_ExistsForTenant_Success(t *testing.T) {
 
 	query := regexp.QuoteMeta(`SELECT EXISTS(SELECT 1 FROM disputes WHERE id = $1)`)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).
 		WithArgs(disputeID.String()).
 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectCommit()
 
 	exists, err := repo.ExistsForTenant(ctx, disputeID)
 	require.NoError(t, err)
@@ -1220,11 +1202,9 @@ func TestRepository_ExistsForTenant_NotExists(t *testing.T) {
 
 	query := regexp.QuoteMeta(`SELECT EXISTS(SELECT 1 FROM disputes WHERE id = $1)`)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).
 		WithArgs(disputeID.String()).
 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
-	mock.ExpectCommit()
 
 	exists, err := repo.ExistsForTenant(ctx, disputeID)
 	require.NoError(t, err)
@@ -1242,9 +1222,7 @@ func TestRepository_ExistsForTenant_QueryError(t *testing.T) {
 
 	query := regexp.QuoteMeta(`SELECT EXISTS(SELECT 1 FROM disputes WHERE id = $1)`)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(disputeID.String()).WillReturnError(errors.New("db error"))
-	mock.ExpectRollback()
 
 	exists, err := repo.ExistsForTenant(ctx, disputeID)
 	require.Error(t, err)
@@ -1320,11 +1298,9 @@ func TestRepository_FindByID_QueryError(t *testing.T) {
 		WHERE id = $1
 	`)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).
 		WithArgs(disputeID.String()).
 		WillReturnError(errors.New("database error"))
-	mock.ExpectRollback()
 
 	result, err := repo.FindByID(ctx, disputeID)
 	require.Error(t, err)
@@ -1350,11 +1326,9 @@ func TestRepository_FindByExceptionID_QueryError(t *testing.T) {
 			LIMIT 1
 		`)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).
 		WithArgs(exceptionID.String()).
 		WillReturnError(errors.New("database error"))
-	mock.ExpectRollback()
 
 	result, err := repo.FindByExceptionID(ctx, exceptionID)
 	require.Error(t, err)
@@ -1457,9 +1431,7 @@ func TestRepository_FindByID_WithReopenReason(t *testing.T) {
 		now,
 	)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(disputeID.String()).WillReturnRows(rows)
-	mock.ExpectCommit()
 
 	result, err := repo.FindByID(ctx, disputeID)
 	require.NoError(t, err)

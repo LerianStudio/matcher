@@ -1,7 +1,7 @@
 # =============================================================================
 # Stage 1: Build
 # =============================================================================
-FROM --platform=$BUILDPLATFORM golang:1.26.1-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.2-alpine AS builder
 
 WORKDIR /matcher-app
 
@@ -55,10 +55,27 @@ USER nonroot:nonroot
 
 EXPOSE 4018
 
+# Go runtime memory hint. Not set in the image. Recommended explicit setting is
+# approximately 85% of the container memory limit (e.g., GOMEMLIMIT=425MiB for
+# a 500MiB pod), matching bootstrap guidance in
+# internal/bootstrap/gomemlimit_warn.go.
+# Note: when Fetcher is enabled, bootstrap auto-applies ~85% of the cgroup
+# memory limit if GOMEMLIMIT is unset (see internal/bootstrap/init_fetcher_bridge.go);
+# explicit operator values still take precedence. Example Kubernetes env:
+#   env:
+#     - name: GOMEMLIMIT
+#       valueFrom:
+#         resourceFieldRef:
+#           resource: limits.memory
+#           divisor: "1"
+# Go 1.26 auto-detects cgroup CPU via GOMAXPROCS but does NOT auto-detect
+# cgroup memory; setting GOMEMLIMIT avoids OOM-kills from uncapped Go heap.
+
 # Health probe defaults to http://localhost:4018/health.
 # Override at runtime via HEALTH_PROBE_URL env var for non-default ports.
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
     CMD ["/health-probe"]
 
 ENTRYPOINT ["/app"]
+
 

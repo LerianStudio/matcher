@@ -19,10 +19,6 @@ type mockNilConnProvider struct{}
 
 var _ sharedPorts.InfrastructureProvider = (*mockNilConnProvider)(nil)
 
-func (m *mockNilConnProvider) GetPostgresConnection(_ context.Context) (*sharedPorts.PostgresConnectionLease, error) {
-	return nil, nil
-}
-
 func (m *mockNilConnProvider) GetRedisConnection(_ context.Context) (*sharedPorts.RedisConnectionLease, error) {
 	return nil, nil
 }
@@ -31,20 +27,20 @@ func (m *mockNilConnProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, 
 	return nil, nil
 }
 
-func (m *mockNilConnProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
+func (m *mockNilConnProvider) GetReplicaDB(_ context.Context) (*sharedPorts.DBLease, error) {
 	return nil, nil
 }
 
-// mockErrProvider returns a configurable error from GetPostgresConnection.
+func (m *mockNilConnProvider) GetPrimaryDB(_ context.Context) (*sharedPorts.DBLease, error) {
+	return nil, nil
+}
+
+// mockErrProvider returns a configurable infrastructure error.
 type mockErrProvider struct {
 	err error
 }
 
 var _ sharedPorts.InfrastructureProvider = (*mockErrProvider)(nil)
-
-func (m *mockErrProvider) GetPostgresConnection(_ context.Context) (*sharedPorts.PostgresConnectionLease, error) {
-	return nil, m.err
-}
 
 func (m *mockErrProvider) GetRedisConnection(_ context.Context) (*sharedPorts.RedisConnectionLease, error) {
 	return nil, nil
@@ -54,8 +50,12 @@ func (m *mockErrProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, erro
 	return nil, m.err
 }
 
-func (m *mockErrProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
+func (m *mockErrProvider) GetReplicaDB(_ context.Context) (*sharedPorts.DBLease, error) {
 	return nil, nil
+}
+
+func (m *mockErrProvider) GetPrimaryDB(_ context.Context) (*sharedPorts.DBLease, error) {
+	return nil, m.err
 }
 
 func TestBeginTenantTx_NilProvider(t *testing.T) {

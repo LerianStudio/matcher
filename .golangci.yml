@@ -230,6 +230,15 @@ linters:
         # ===========================================
         - pattern: 'fmt\.Errorf\([^)]*%v[^)]*err\)'
           msg: 'Use %w instead of %v for error wrapping to preserve error chain for errors.Is() checks'
+        # ===========================================
+        # %worker Typo Prevention
+        # A find/replace renaming receiver `w` to `worker` can clobber the %w
+        # error-wrap verb into %worker (or the intermediate %wo/%wor/%worke).
+        # fmt parses %w and treats the trailing letters as literal text, which
+        # corrupts error messages and breaks errors.Is on nil errors.
+        # ===========================================
+        - pattern: '%w(orker|orke|or|o)\b'
+          msg: 'Use %w for error wrapping — %worker/%wo/%wor/%worke is a find/replace typo from renaming a `w` receiver; fmt treats the trailing letters as literal text'
     depguard:
       rules:
         main:
@@ -254,7 +263,7 @@ linters:
               desc: "Hexagonal violation: HTTP handlers must use services, not postgres adapters directly"
             - pkg: "github.com/LerianStudio/matcher/internal/matching/adapters/postgres"
               desc: "Hexagonal violation: HTTP handlers must use services, not postgres adapters directly"
-            # Remaining bounded contexts — prevents governance/exception/reporting/outbox
+            # Remaining bounded contexts — prevents governance/exception/reporting
             # HTTP handlers from bypassing their service layers as well:
             - pkg: "github.com/LerianStudio/matcher/internal/governance/adapters/postgres"
               desc: "Hexagonal violation: HTTP handlers must use services, not postgres adapters directly (governance)"
@@ -262,8 +271,6 @@ linters:
               desc: "Hexagonal violation: HTTP handlers must use services, not postgres adapters directly (exception)"
             - pkg: "github.com/LerianStudio/matcher/internal/reporting/adapters/postgres"
               desc: "Hexagonal violation: HTTP handlers must use services, not postgres adapters directly (reporting)"
-            - pkg: "github.com/LerianStudio/matcher/internal/outbox/adapters/postgres"
-              desc: "Hexagonal violation: HTTP handlers must use services, not postgres adapters directly (outbox)"
             - pkg: "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres"
               desc: "Hexagonal violation: HTTP handlers must use services, not postgres adapters directly (discovery)"
         # Cross-context port isolation: governance HTTP handlers must not reach into
@@ -306,8 +313,6 @@ linters:
               desc: "Cross-context violation: Configuration cannot import Exception. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/reporting"
               desc: "Cross-context violation: Configuration cannot import Reporting. Use shared/ports or shared kernel."
-            - pkg: "github.com/LerianStudio/matcher/internal/outbox"
-              desc: "Cross-context violation: Configuration cannot import Outbox. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/discovery"
               desc: "Cross-context violation: Configuration cannot import Discovery. Use shared/ports or shared kernel."
         cross-context-ingestion:
@@ -328,8 +333,6 @@ linters:
               desc: "Cross-context violation: Ingestion cannot import Exception. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/reporting"
               desc: "Cross-context violation: Ingestion cannot import Reporting. Use shared/ports or shared kernel."
-            - pkg: "github.com/LerianStudio/matcher/internal/outbox"
-              desc: "Cross-context violation: Ingestion cannot import Outbox. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/discovery"
               desc: "Cross-context violation: Ingestion cannot import Discovery. Use shared/ports or shared kernel."
         cross-context-matching:
@@ -350,36 +353,8 @@ linters:
               desc: "Cross-context violation: Matching cannot import Exception. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/reporting"
               desc: "Cross-context violation: Matching cannot import Reporting. Use shared/ports or shared kernel."
-            - pkg: "github.com/LerianStudio/matcher/internal/outbox"
-              desc: "Cross-context violation: Matching cannot import Outbox. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/discovery"
               desc: "Cross-context violation: Matching cannot import Discovery. Use shared/ports or shared kernel."
-        # ===========================================
-        # Outbox Context Isolation
-        # The outbox is infrastructure — it must not depend on any business context.
-        # It should only know about its own domain (the outbox event envelope) and
-        # shared kernel types. All six other contexts are blocked here.
-        # ===========================================
-        cross-context-outbox:
-          list-mode: original
-          files:
-            - "**/internal/outbox/**/*.go"
-          deny:
-            - pkg: "github.com/LerianStudio/matcher/internal/configuration"
-              desc: "Cross-context violation: Outbox cannot import Configuration directly."
-            - pkg: "github.com/LerianStudio/matcher/internal/matching"
-              desc: "Cross-context violation: Outbox cannot import Matching directly."
-            # Extended: remaining contexts that were missing from the original rule:
-            - pkg: "github.com/LerianStudio/matcher/internal/ingestion"
-              desc: "Cross-context violation: Outbox cannot import Ingestion directly."
-            - pkg: "github.com/LerianStudio/matcher/internal/exception"
-              desc: "Cross-context violation: Outbox cannot import Exception directly."
-            - pkg: "github.com/LerianStudio/matcher/internal/governance"
-              desc: "Cross-context violation: Outbox cannot import Governance directly."
-            - pkg: "github.com/LerianStudio/matcher/internal/reporting"
-              desc: "Cross-context violation: Outbox cannot import Reporting directly."
-            - pkg: "github.com/LerianStudio/matcher/internal/discovery"
-              desc: "Cross-context violation: Outbox cannot import Discovery directly."
         # ===========================================
         # Future Bounded Contexts (add as they're created)
         # ===========================================
@@ -399,8 +374,6 @@ linters:
               desc: "Cross-context violation: Exception cannot import Governance. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/reporting"
               desc: "Cross-context violation: Exception cannot import Reporting. Use shared/ports or shared kernel."
-            - pkg: "github.com/LerianStudio/matcher/internal/outbox"
-              desc: "Cross-context violation: Exception cannot import Outbox. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/discovery"
               desc: "Cross-context violation: Exception cannot import Discovery. Use shared/ports or shared kernel."
         cross-context-governance:
@@ -419,8 +392,6 @@ linters:
             # Block Reporting and Outbox contexts:
             - pkg: "github.com/LerianStudio/matcher/internal/reporting"
               desc: "Cross-context violation: Governance cannot import Reporting. Use shared/ports or shared kernel."
-            - pkg: "github.com/LerianStudio/matcher/internal/outbox"
-              desc: "Cross-context violation: Governance cannot import Outbox. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/discovery"
               desc: "Cross-context violation: Governance cannot import Discovery. Use shared/ports or shared kernel."
         # ===========================================
@@ -444,8 +415,6 @@ linters:
               desc: "Cross-context violation: Reporting cannot import Exception. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/governance"
               desc: "Cross-context violation: Reporting cannot import Governance. Use shared/ports or shared kernel."
-            - pkg: "github.com/LerianStudio/matcher/internal/outbox"
-              desc: "Cross-context violation: Reporting cannot import Outbox. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/discovery"
               desc: "Cross-context violation: Reporting cannot import Discovery. Use shared/ports or shared kernel."
         # ===========================================
@@ -469,8 +438,6 @@ linters:
               desc: "Cross-context violation: Discovery cannot import Governance. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/reporting"
               desc: "Cross-context violation: Discovery cannot import Reporting. Use shared/ports or shared kernel."
-            - pkg: "github.com/LerianStudio/matcher/internal/outbox"
-              desc: "Cross-context violation: Discovery cannot import Outbox. Use shared/ports or shared kernel."
         # ===========================================
         # Service Layer Must Not Import Adapters (NEW)
         # Use cases (command + query services) must program to port interfaces,
@@ -497,8 +464,6 @@ linters:
             - pkg: "github.com/LerianStudio/matcher/internal/governance/adapters"
               desc: "Service layer cannot import adapters. Depend on port interfaces declared in ports/."
             - pkg: "github.com/LerianStudio/matcher/internal/reporting/adapters"
-              desc: "Service layer cannot import adapters. Depend on port interfaces declared in ports/."
-            - pkg: "github.com/LerianStudio/matcher/internal/outbox/adapters"
               desc: "Service layer cannot import adapters. Depend on port interfaces declared in ports/."
             - pkg: "github.com/LerianStudio/matcher/internal/discovery/adapters"
               desc: "Service layer cannot import adapters. Depend on port interfaces declared in ports/."
@@ -535,8 +500,6 @@ linters:
               desc: "DTO layer cannot import services. DTOs are pure data structures."
             - pkg: "github.com/LerianStudio/matcher/internal/reporting/services"
               desc: "DTO layer cannot import services. DTOs are pure data structures."
-            - pkg: "github.com/LerianStudio/matcher/internal/outbox/services"
-              desc: "DTO layer cannot import services. DTOs are pure data structures."
             - pkg: "github.com/LerianStudio/matcher/internal/discovery/services"
               desc: "DTO layer cannot import services. DTOs are pure data structures."
         # ===========================================
@@ -564,8 +527,6 @@ linters:
               desc: "Worker must not import postgres adapters directly. Use service use cases or port interfaces."
             - pkg: "github.com/LerianStudio/matcher/internal/reporting/adapters/postgres"
               desc: "Worker must not import postgres adapters directly. Use service use cases or port interfaces."
-            - pkg: "github.com/LerianStudio/matcher/internal/outbox/adapters/postgres"
-              desc: "Worker must not import postgres adapters directly. Use service use cases or port interfaces."
             - pkg: "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres"
               desc: "Worker must not import postgres adapters directly. Use service use cases or port interfaces."
             # Shared adapter packages — also adapter implementations, not port interfaces:
@@ -573,6 +534,8 @@ linters:
               desc: "Workers must not import redis adapters directly. Inject via port interface."
             - pkg: "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
               desc: "Workers must not import rabbitmq adapters directly. Inject via port interface."
+            - pkg: "github.com/LerianStudio/matcher/internal/shared/adapters/custody"
+              desc: "Workers must not import the custody adapter directly. Inject via sharedPorts.ArtifactCustodyStore / sharedPorts.CustodyKeyBuilder."
         # ===========================================
         # CQRS Enforcement
         # Commands and Queries must be strictly separated.
@@ -660,17 +623,17 @@ linters:
               desc: "Domain purity violation: avoid logging in domain layer."
             - pkg: "go.opentelemetry.io/otel"
               desc: "Domain purity violation: avoid tracing in domain layer."
-            - pkg: "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+            - pkg: "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
               desc: "Domain purity violation: avoid tracing in domain layer."
-            - pkg: "github.com/LerianStudio/lib-commons/v4/commons/log"
+            - pkg: "github.com/LerianStudio/lib-commons/v5/commons/log"
               desc: "Domain purity violation: avoid logging in domain layer."
-            - pkg: "github.com/LerianStudio/lib-commons/v4/commons/zap"
+            - pkg: "github.com/LerianStudio/lib-commons/v5/commons/zap"
               desc: "Domain purity violation: avoid logging in domain layer."
-            - pkg: "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+            - pkg: "github.com/LerianStudio/lib-commons/v5/commons/postgres"
               desc: "Domain purity violation: avoid infrastructure dependencies in domain layer."
-            - pkg: "github.com/LerianStudio/lib-commons/v4/commons/redis"
+            - pkg: "github.com/LerianStudio/lib-commons/v5/commons/redis"
               desc: "Domain purity violation: avoid infrastructure dependencies in domain layer."
-            - pkg: "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
+            - pkg: "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
               desc: "Domain purity violation: avoid infrastructure dependencies in domain layer."
         # ===========================================
         # Shared Kernel Boundaries
@@ -697,8 +660,6 @@ linters:
               desc: "Shared adapters must use shared kernel (internal/shared/domain), not governance entities."
             - pkg: "github.com/LerianStudio/matcher/internal/reporting/domain/entities"
               desc: "Shared adapters must use shared kernel (internal/shared/domain), not reporting entities."
-            - pkg: "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
-              desc: "Shared adapters must use shared kernel (internal/shared/domain), not outbox entities."
         # ===========================================
         # Anti-Corruption Layer (cross/) Constraints
         # Cross adapters can import other contexts but must convert to shared types
@@ -722,8 +683,6 @@ linters:
             - pkg: "github.com/LerianStudio/matcher/internal/governance/adapters/http"
               desc: "Cross adapters should only import domain types, not HTTP adapters."
             - pkg: "github.com/LerianStudio/matcher/internal/reporting/adapters/http"
-              desc: "Cross adapters should only import domain types, not HTTP adapters."
-            - pkg: "github.com/LerianStudio/matcher/internal/outbox/adapters/http"
               desc: "Cross adapters should only import domain types, not HTTP adapters."
         # ===========================================
         # Ports Must Be Pure Interfaces
@@ -821,10 +780,10 @@ linters:
         - "func (*github.com/gofiber/fiber/v2.Ctx).SendString(body string) error"
         - "func (*github.com/gofiber/fiber/v2.App).Listen(addr string) error"
         # lib-commons HTTP response helpers - terminal operations in handlers
-        - "func github.com/LerianStudio/lib-commons/v4/commons/net/http.Respond(c *github.com/gofiber/fiber/v2.Ctx, status int, payload any) error"
-        - "func github.com/LerianStudio/lib-commons/v4/commons/net/http.RespondStatus(c *github.com/gofiber/fiber/v2.Ctx, status int) error"
-        - "func github.com/LerianStudio/lib-commons/v4/commons/net/http.RespondError(c *github.com/gofiber/fiber/v2.Ctx, status int, title string, message string) error"
-        - "func github.com/LerianStudio/lib-commons/v4/commons/net/http.RenderError(ctx *github.com/gofiber/fiber/v2.Ctx, err error) error"
+        - "func github.com/LerianStudio/lib-commons/v5/commons/net/http.Respond(c *github.com/gofiber/fiber/v2.Ctx, status int, payload any) error"
+        - "func github.com/LerianStudio/lib-commons/v5/commons/net/http.RespondStatus(c *github.com/gofiber/fiber/v2.Ctx, status int) error"
+        - "func github.com/LerianStudio/lib-commons/v5/commons/net/http.RespondError(c *github.com/gofiber/fiber/v2.Ctx, status int, title string, message string) error"
+        - "func github.com/LerianStudio/lib-commons/v5/commons/net/http.RenderError(ctx *github.com/gofiber/fiber/v2.Ctx, err error) error"
         # pkg/http error response helpers - terminal HTTP operations
         - "func github.com/LerianStudio/matcher/pkg/http.WriteError(c *github.com/gofiber/fiber/v2.Ctx, status int, title string, message string) error"
         - "func github.com/LerianStudio/matcher/pkg/http.BadRequestError(c *github.com/gofiber/fiber/v2.Ctx, title string, message string) error"
@@ -848,11 +807,8 @@ linters:
         - "func (*database/sql.Rows).Scan(dest ...any) error"
         - "func (*database/sql.Rows).Err() error"
         - "func (database/sql.Result).RowsAffected() (int64, error)"
-        # Internal WithTenantTx helper - already handles tenant context and error wrapping
-        - "func github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/common.WithTenantTx[T any](ctx context.Context, conn *github.com/LerianStudio/lib-commons/v4/commons/postgres.Client, fn func(*database/sql.Tx) (T, error)) (T, error)"
         # InfrastructureProvider interface methods - thin wrapper for tenant-aware connection resolution
-        - "func (github.com/LerianStudio/matcher/internal/shared/ports.InfrastructureProvider).GetPostgresConnection(ctx context.Context) (*github.com/LerianStudio/lib-commons/v4/commons/postgres.Client, error)"
-        - "func (github.com/LerianStudio/matcher/internal/shared/ports.InfrastructureProvider).GetRedisConnection(ctx context.Context) (*github.com/LerianStudio/lib-commons/v4/commons/redis.Client, error)"
+        - "func (github.com/LerianStudio/matcher/internal/shared/ports.InfrastructureProvider).GetRedisConnection(ctx context.Context) (*github.com/LerianStudio/matcher/internal/shared/ports.RedisConnectionLease, error)"
         # Interface Scan method
         - "func (interface).Scan(dest ...any) error"
         # Additional lib-commons HTTP helpers
@@ -1062,10 +1018,34 @@ linters:
           - gosec
         text: G118
         path: internal/reporting/services/worker/export_worker\.go
+      # G117 false-positive: OAuth2 token endpoint response DTO. `AccessToken` must
+      # be exported with this exact JSON tag per the OAuth2 spec so encoding/json
+      # can unmarshal the token endpoint payload. Transient deserialization target,
+      # not a persisted secret.
       - linters:
           - gosec
-        text: G118
-        path: internal/shared/infrastructure/tenant/adapters/connection_manager\.go
+        text: 'G117: Exported struct field "AccessToken" \(JSON key "access_token"\)'
+        path: internal/discovery/adapters/m2m/token_exchanger\.go
+      # G117 false-positive: internal Redis cache serialization struct, deliberately
+      # separated from the public M2MCredentials (which uses json:"-" to prevent
+      # API exposure). Marshaled only into the Redis cache — never an API response.
+      - linters:
+          - gosec
+        text: 'G117: Exported struct field "ClientSecret" \(JSON key "clientSecret"\)'
+        path: internal/shared/adapters/m2m/provider\.go
+      # G704 false-positive: authURL is operator-controlled (systemplane/env config),
+      # not request-tainted. Gosec's taint analysis cannot distinguish config-sourced
+      # URLs from user-sourced URLs.
+      - linters:
+          - gosec
+        text: 'G704: SSRF via taint analysis'
+        path: internal/discovery/adapters/m2m/token_exchanger\.go
+      # G704 false-positive: e2e test harness HTTP client. Base URL is controlled
+      # by the test harness, not user input. Test-only code.
+      - linters:
+          - gosec
+        text: 'G704: SSRF via taint analysis'
+        path: tests/e2e/client/client\.go
       - linters:
           - errcheck
           - gosec

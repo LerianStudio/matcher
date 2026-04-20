@@ -18,13 +18,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace/noop"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query"
 	"github.com/LerianStudio/matcher/internal/shared/testutil"
+	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
 var (
@@ -39,7 +40,7 @@ type mockContextProvider struct {
 
 func (m *mockContextProvider) FindByID(
 	_ context.Context,
-	_, _ uuid.UUID,
+	_ uuid.UUID,
 ) (*ReconciliationContextInfo, error) {
 	return m.info, m.err
 }
@@ -250,13 +251,23 @@ func requireErrorMessage(t *testing.T, response *http.Response, expected string)
 	require.Equal(t, expected, payload["message"])
 }
 
+func requireProductErrorResponse(t *testing.T, response *http.Response, expectedCode, expectedMessage string, expectedStatus int) {
+	t.Helper()
+
+	var payload map[string]any
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&payload))
+	require.Equal(t, expectedCode, payload["code"])
+	require.Equal(t, http.StatusText(expectedStatus), payload["title"])
+	require.Equal(t, expectedMessage, payload["message"])
+}
+
 func requireNotFoundResponse(t *testing.T, response *http.Response, expectedMessage string) {
 	t.Helper()
 
 	var payload map[string]any
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&payload))
-	require.Equal(t, float64(404), payload["code"])
-	require.Equal(t, "not_found", payload["title"])
+	require.Equal(t, constant.CodeNotFound, payload["code"])
+	require.Equal(t, http.StatusText(http.StatusNotFound), payload["title"])
 	require.Equal(t, expectedMessage, payload["message"])
 }
 
@@ -524,12 +535,11 @@ func TestHandlers_GetVolumeStats(t *testing.T) {
 		}
 
 		handlers := setupStatsHandlers(t, &mockDashboardRepository{}, provider)
-		testBadRequestError(
-			t,
-			handlers.GetVolumeStats,
-			"/v1/reports/contexts/invalid-uuid/dashboard/volume?date_from="+dateFrom+"&date_to="+dateTo,
-			"invalid context_id",
-		)
+		app := setupTestApp(handlers.GetVolumeStats)
+		resp := makeStatsRequest(t, app, "/v1/reports/contexts/invalid-uuid/dashboard/volume?date_from="+dateFrom+"&date_to="+dateTo)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		requireProductErrorResponse(t, resp, constant.CodeInvalidContextID, "invalid context id", http.StatusBadRequest)
 	})
 }
 
@@ -649,12 +659,11 @@ func TestHandlers_GetMatchRateStats_InvalidContextID(t *testing.T) {
 
 	provider := &mockContextProvider{info: &ReconciliationContextInfo{ID: uuid.New(), Active: true}}
 	handlers := setupStatsHandlers(t, &mockDashboardRepository{}, provider)
-	testBadRequestError(
-		t,
-		handlers.GetMatchRateStats,
-		"/v1/reports/contexts/invalid-uuid/dashboard/match-rate?date_from="+dateFrom+"&date_to="+dateTo,
-		"invalid context_id",
-	)
+	app := setupTestApp(handlers.GetMatchRateStats)
+	resp := makeStatsRequest(t, app, "/v1/reports/contexts/invalid-uuid/dashboard/match-rate?date_from="+dateFrom+"&date_to="+dateTo)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	requireProductErrorResponse(t, resp, constant.CodeInvalidContextID, "invalid context id", http.StatusBadRequest)
 }
 
 func TestHandlers_GetSLAStats_Success(t *testing.T) {
@@ -775,9 +784,11 @@ func TestHandlers_GetSLAStats_InvalidContextID(t *testing.T) {
 
 	provider := &mockContextProvider{info: &ReconciliationContextInfo{ID: uuid.New(), Active: true}}
 	handlers := setupStatsHandlers(t, &mockDashboardRepository{}, provider)
-	testBadRequestError(t, handlers.GetSLAStats,
-		"/v1/reports/contexts/invalid-uuid/dashboard/sla?date_from="+dateFrom+"&date_to="+dateTo,
-		"invalid context_id")
+	app := setupTestApp(handlers.GetSLAStats)
+	resp := makeStatsRequest(t, app, "/v1/reports/contexts/invalid-uuid/dashboard/sla?date_from="+dateFrom+"&date_to="+dateTo)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	requireProductErrorResponse(t, resp, constant.CodeInvalidContextID, "invalid context id", http.StatusBadRequest)
 }
 
 func TestHandlers_GetDashboardAggregates_Success(t *testing.T) {
@@ -861,8 +872,8 @@ func TestHandlers_GetDashboardAggregates_InactiveContext(t *testing.T) {
 
 	var payload map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
-	require.Equal(t, float64(403), payload["code"])
-	require.Equal(t, "context_not_active", payload["title"])
+	require.Equal(t, constant.CodeContextNotActive, payload["code"])
+	require.Equal(t, http.StatusText(http.StatusForbidden), payload["title"])
 	require.Equal(t, "context is not active", payload["message"])
 }
 
@@ -969,7 +980,7 @@ func TestLogSpanError_WithNilLogger(t *testing.T) {
 	defer span.End()
 
 	require.NotPanics(t, func() {
-		logSpanError(context.Background(), span, nil, "test message", errors.New("test error"))
+		(&Handlers{}).logSpanError(context.Background(), span, nil, "test message", errors.New("test error"))
 	})
 }
 
@@ -982,6 +993,6 @@ func TestLogSpanError_WithLogger(t *testing.T) {
 	defer span.End()
 
 	mock := &testutil.TestLogger{}
-	logSpanError(context.Background(), span, mock, "test message", errors.New("test error"))
+	(&Handlers{}).logSpanError(context.Background(), span, mock, "test message", errors.New("test error"))
 	require.True(t, mock.ErrorCalled)
 }

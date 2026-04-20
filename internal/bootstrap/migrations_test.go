@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 )
 
 type fakeMigrator struct {
@@ -223,7 +223,7 @@ func TestApplyMigrations_NoChange_ReturnsNil(t *testing.T) {
 		upErr:   migrate.ErrNoChange,
 	}
 
-	err := applyMigrations(context.Background(), migrator, &libLog.NopLogger{}, true)
+	err := applyMigrations(context.Background(), nil, migrator, &libLog.NopLogger{}, true)
 	require.NoError(t, err)
 }
 

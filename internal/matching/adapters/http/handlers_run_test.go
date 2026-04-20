@@ -15,15 +15,17 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace/noop"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+
 	"github.com/LerianStudio/matcher/internal/auth"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	"github.com/LerianStudio/matcher/internal/matching/services/command"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
 func TestRunMatchHandler_InvalidPayload(t *testing.T) {
@@ -239,7 +241,7 @@ func TestRunMatchHandler_ContextNotActive(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 
 	require.Equal(t, fiber.StatusForbidden, resp.StatusCode)
-	require.Equal(t, "context_not_active", errResp.Title)
+	require.Equal(t, http.StatusText(fiber.StatusForbidden), errResp.Title)
 }
 
 func TestGetMatchRunHandler_InvalidRunID(t *testing.T) {
@@ -663,7 +665,7 @@ func TestGetMatchRunHandler_ContextNotActive(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 
 	require.Equal(t, fiber.StatusForbidden, resp.StatusCode)
-	require.Equal(t, "context_not_active", errResp.Title)
+	require.Equal(t, http.StatusText(fiber.StatusForbidden), errResp.Title)
 }
 
 func TestGetMatchRunHandler_ContextNotFound(t *testing.T) {
@@ -1015,43 +1017,50 @@ func TestHandleRunMatchError(t *testing.T) {
 		name           string
 		err            error
 		expectedStatus int
+		expectedCode   string
 	}{
-		{"context not found", command.ErrContextNotFound, fiber.StatusNotFound},
-		{"context not active", command.ErrContextNotActive, fiber.StatusForbidden},
-		{"match run locked", command.ErrMatchRunLocked, fiber.StatusConflict},
-		{"no sources configured", command.ErrNoSourcesConfigured, fiber.StatusBadRequest},
+		{"context not found", command.ErrContextNotFound, fiber.StatusNotFound, constant.CodeNotFound},
+		{"context not active", command.ErrContextNotActive, fiber.StatusForbidden, constant.CodeContextNotActive},
+		{"match run locked", command.ErrMatchRunLocked, fiber.StatusConflict, constant.CodeMatchingRunInProgress},
+		{"no sources configured", command.ErrNoSourcesConfigured, fiber.StatusBadRequest, constant.CodeMatchingNoSourcesConfigured},
 		{
 			"at least two sources required",
 			command.ErrAtLeastTwoSourcesRequired,
 			fiber.StatusBadRequest,
+			constant.CodeMatchingAtLeastTwoSources,
 		},
 		{
 			"source side required",
 			command.ErrSourceSideRequiredForMatching,
 			fiber.StatusBadRequest,
+			constant.CodeMatchingSourceSideRequired,
 		},
 		{
 			"1:1 requires exactly one left",
 			command.ErrOneToOneRequiresExactlyOneLeftSource,
 			fiber.StatusBadRequest,
+			constant.CodeMatchingInvalidOneToOneTopology,
 		},
 		{
 			"1:1 requires exactly one right",
 			command.ErrOneToOneRequiresExactlyOneRightSource,
 			fiber.StatusBadRequest,
+			constant.CodeMatchingInvalidOneToOneTopology,
 		},
 		{
 			"1:N requires exactly one left",
 			command.ErrOneToManyRequiresExactlyOneLeftSource,
 			fiber.StatusBadRequest,
+			constant.CodeMatchingInvalidOneToManyTopology,
 		},
 		{
 			"requires at least one right",
 			command.ErrAtLeastOneRightSourceRequired,
 			fiber.StatusBadRequest,
+			constant.CodeMatchingInvalidOneToManyTopology,
 		},
-		{"match run mode required", command.ErrMatchRunModeRequired, fiber.StatusBadRequest},
-		{"generic error", errTestDatabaseError, fiber.StatusInternalServerError},
+		{"match run mode required", command.ErrMatchRunModeRequired, fiber.StatusBadRequest, constant.CodeInvalidRequest},
+		{"generic error", errTestDatabaseError, fiber.StatusInternalServerError, constant.CodeInternalServerError},
 	}
 
 	for _, tc := range testCases {
@@ -1067,7 +1076,7 @@ func TestHandleRunMatchError(t *testing.T) {
 				}
 				_, span := tracer.Start(ctx, "test")
 				defer span.End()
-				return handleRunMatchError(ctx, c, span, logger, tc.err)
+				return (&Handler{}).handleRunMatchError(ctx, c, span, logger, tc.err)
 			})
 
 			ctx := libCommons.ContextWithTracer(
@@ -1085,6 +1094,10 @@ func TestHandleRunMatchError(t *testing.T) {
 			defer resp.Body.Close()
 
 			require.Equal(t, tc.expectedStatus, resp.StatusCode)
+
+			var errResp sharedhttp.ErrorResponse
+			require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
+			require.Equal(t, tc.expectedCode, errResp.Code)
 		})
 	}
 }
@@ -1101,7 +1114,7 @@ func TestHandleRunMatchError_FeeRulesMissing_Returns422(t *testing.T) {
 		}
 		_, span := tracer.Start(ctx, "test")
 		defer span.End()
-		return handleRunMatchError(ctx, c, span, logger, command.ErrFeeRulesRequiredForNormalization)
+		return (&Handler{}).handleRunMatchError(ctx, c, span, logger, command.ErrFeeRulesRequiredForNormalization)
 	})
 
 	ctx := libCommons.ContextWithTracer(
@@ -1122,7 +1135,7 @@ func TestHandleRunMatchError_FeeRulesMissing_Returns422(t *testing.T) {
 
 	var errResp sharedhttp.ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-	require.Equal(t, "fee_rules_missing", errResp.Title)
+	require.Equal(t, http.StatusText(fiber.StatusUnprocessableEntity), errResp.Title)
 }
 
 func TestHandleRunMatchError_FeeRulesMisconfigured_Returns422(t *testing.T) {
@@ -1137,7 +1150,7 @@ func TestHandleRunMatchError_FeeRulesMisconfigured_Returns422(t *testing.T) {
 		}
 		_, span := tracer.Start(ctx, "test")
 		defer span.End()
-		return handleRunMatchError(ctx, c, span, logger, command.ErrFeeRulesReferenceMissingSchedules)
+		return (&Handler{}).handleRunMatchError(ctx, c, span, logger, command.ErrFeeRulesReferenceMissingSchedules)
 	})
 
 	ctx := libCommons.ContextWithTracer(
@@ -1158,7 +1171,7 @@ func TestHandleRunMatchError_FeeRulesMisconfigured_Returns422(t *testing.T) {
 
 	var errResp sharedhttp.ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-	require.Equal(t, "fee_rules_misconfigured", errResp.Title)
+	require.Equal(t, http.StatusText(fiber.StatusUnprocessableEntity), errResp.Title)
 }
 
 func TestListMatchRunsHandler_SortOrderAsc(t *testing.T) {
@@ -1365,7 +1378,7 @@ func TestGetMatchRunResultsHandler_ContextNotActive(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 
 	require.Equal(t, fiber.StatusForbidden, resp.StatusCode)
-	require.Equal(t, "context_not_active", errResp.Title)
+	require.Equal(t, http.StatusText(fiber.StatusForbidden), errResp.Title)
 }
 
 func TestRunMatchHandler_RunMatchWithoutPrimarySourceID(t *testing.T) {

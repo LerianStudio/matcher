@@ -15,5 +15,9 @@ type CommentRepository interface {
 	Create(ctx context.Context, comment *entities.ExceptionComment) (*entities.ExceptionComment, error)
 	FindByID(ctx context.Context, id uuid.UUID) (*entities.ExceptionComment, error)
 	FindByExceptionID(ctx context.Context, exceptionID uuid.UUID) ([]*entities.ExceptionComment, error)
-	Delete(ctx context.Context, id uuid.UUID) error
+	// DeleteByExceptionAndID deletes a comment identified by both exceptionID
+	// and commentID. Both IDs must match — a comment created on exception A
+	// cannot be deleted by supplying its commentID under exception B's URL.
+	// Returns ErrCommentNotFound when no row matches both IDs.
+	DeleteByExceptionAndID(ctx context.Context, exceptionID, commentID uuid.UUID) error
 }

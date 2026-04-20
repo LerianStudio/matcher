@@ -2,11 +2,15 @@ package ports
 
 import (
 	"context"
+	"errors"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/services"
 )
 
 //go:generate mockgen -destination=mocks/external_connector_mock.go -package=mocks . ExternalConnector
+
+// ErrConnectorNotConfigured indicates that the selected routing target has no connector configuration.
+var ErrConnectorNotConfigured = errors.New("connector not configured for target")
 
 // DispatchResult contains the result of an external dispatch operation.
 type DispatchResult struct {

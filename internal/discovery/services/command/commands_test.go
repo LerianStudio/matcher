@@ -12,9 +12,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
+	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -50,9 +51,9 @@ func (m *mockFetcherClient) IsHealthy(_ context.Context) bool {
 	return m.healthy
 }
 
-func (m *mockFetcherClient) ListConnections(_ context.Context, orgID string) ([]*sharedPorts.FetcherConnection, error) {
+func (m *mockFetcherClient) ListConnections(_ context.Context, productName string) ([]*sharedPorts.FetcherConnection, error) {
 	m.listCallCount++
-	m.lastListOrgID = orgID
+	m.lastListOrgID = productName
 
 	return m.connections, m.listErr
 }
@@ -224,6 +225,70 @@ func (m *mockExtractionRepo) FindByID(ctx context.Context, id uuid.UUID) (*entit
 	}
 
 	return m.findByIDReq, m.findByIDErr
+}
+
+func (m *mockExtractionRepo) LinkIfUnlinked(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+
+func (m *mockExtractionRepo) MarkBridgeFailed(_ context.Context, _ *entities.ExtractionRequest) error {
+	return nil
+}
+
+func (m *mockExtractionRepo) MarkBridgeFailedWithTx(_ context.Context, _ *sql.Tx, _ *entities.ExtractionRequest) error {
+	return nil
+}
+
+func (m *mockExtractionRepo) IncrementBridgeAttempts(_ context.Context, _ uuid.UUID, _ int) error {
+	return nil
+}
+
+func (m *mockExtractionRepo) IncrementBridgeAttemptsWithTx(_ context.Context, _ *sql.Tx, _ uuid.UUID, _ int) error {
+	return nil
+}
+
+func (m *mockExtractionRepo) FindEligibleForBridge(_ context.Context, _ int) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
+func (m *mockExtractionRepo) CountBridgeReadiness(_ context.Context, _ time.Duration) (repositories.BridgeReadinessCounts, error) {
+	return repositories.BridgeReadinessCounts{}, nil
+}
+
+func (m *mockExtractionRepo) ListBridgeCandidates(
+	_ context.Context,
+	_ string,
+	_ time.Duration,
+	_ time.Time,
+	_ uuid.UUID,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
+func (m *mockExtractionRepo) FindBridgeRetentionCandidates(
+	_ context.Context,
+	_ time.Duration,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
+func (m *mockExtractionRepo) MarkCustodyDeleted(
+	_ context.Context,
+	_ uuid.UUID,
+	_ time.Time,
+) error {
+	return nil
+}
+
+func (m *mockExtractionRepo) MarkCustodyDeletedWithTx(
+	_ context.Context,
+	_ sharedPorts.Tx,
+	_ uuid.UUID,
+	_ time.Time,
+) error {
+	return nil
 }
 
 // --- Tests ---

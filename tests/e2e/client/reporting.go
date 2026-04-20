@@ -1,11 +1,11 @@
-//go:build e2e
-
+//nolint:perfsprint,varnamelen,wsl_v5 // Test reporting client favors concise path composition.
 package client
 
 import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 )
 
 // ReportingClient handles reporting API endpoints.
@@ -124,6 +124,7 @@ func (c *ReportingClient) ExportMatchedReport(
 		dateFrom,
 		dateTo,
 	)
+	//nolint:bodyclose // DoRaw reads and closes the response body internally.
 	_, body, err := c.client.DoRaw(ctx, http.MethodGet, path, nil, "")
 	if err != nil {
 		return nil, fmt.Errorf("export matched report: %w", err)
@@ -142,6 +143,7 @@ func (c *ReportingClient) ExportUnmatchedReport(
 		dateFrom,
 		dateTo,
 	)
+	//nolint:bodyclose // DoRaw reads and closes the response body internally.
 	_, body, err := c.client.DoRaw(ctx, http.MethodGet, path, nil, "")
 	if err != nil {
 		return nil, fmt.Errorf("export unmatched report: %w", err)
@@ -155,6 +157,7 @@ func (c *ReportingClient) ExportSummaryReport(
 	contextID, dateFrom, dateTo string,
 ) ([]byte, error) {
 	path := fmt.Sprintf("/v1/reports/contexts/%s/summary/export?date_from=%s&date_to=%s", contextID, dateFrom, dateTo)
+	//nolint:bodyclose // DoRaw reads and closes the response body internally.
 	_, body, err := c.client.DoRaw(ctx, http.MethodGet, path, nil, "")
 	if err != nil {
 		return nil, fmt.Errorf("export summary report: %w", err)
@@ -168,6 +171,7 @@ func (c *ReportingClient) ExportVarianceReport(
 	contextID, dateFrom, dateTo string,
 ) ([]byte, error) {
 	path := fmt.Sprintf("/v1/reports/contexts/%s/variance/export?date_from=%s&date_to=%s", contextID, dateFrom, dateTo)
+	//nolint:bodyclose // DoRaw reads and closes the response body internally.
 	_, body, err := c.client.DoRaw(ctx, http.MethodGet, path, nil, "")
 	if err != nil {
 		return nil, fmt.Errorf("export variance report: %w", err)
@@ -226,6 +230,7 @@ func (c *ReportingClient) CancelExportJob(ctx context.Context, jobID string) err
 // DownloadExportJob downloads the export job result.
 func (c *ReportingClient) DownloadExportJob(ctx context.Context, jobID string) ([]byte, error) {
 	path := fmt.Sprintf("/v1/export-jobs/%s/download", jobID)
+	//nolint:bodyclose // DoRaw reads and closes the response body internally.
 	_, body, err := c.client.DoRaw(ctx, http.MethodGet, path, nil, "")
 	if err != nil {
 		return nil, fmt.Errorf("download export job: %w", err)
@@ -326,4 +331,120 @@ func (c *ReportingClient) CountExceptions(
 		return nil, fmt.Errorf("count exceptions: %w", err)
 	}
 	return &resp, nil
+}
+
+// GetMatchedReport retrieves a paginated matched transactions report.
+func (c *ReportingClient) GetMatchedReport(
+	ctx context.Context,
+	contextID string,
+	params map[string]string,
+) (*PaginatedMatchedReport, error) {
+	var resp PaginatedMatchedReport
+	path := fmt.Sprintf("/v1/reports/contexts/%s/matched", contextID)
+	path = appendQueryParams(path, params)
+	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("get matched report: %w", err)
+	}
+	return &resp, nil
+}
+
+// GetUnmatchedReport retrieves a paginated unmatched transactions report.
+func (c *ReportingClient) GetUnmatchedReport(
+	ctx context.Context,
+	contextID string,
+	params map[string]string,
+) (*PaginatedUnmatchedReport, error) {
+	var resp PaginatedUnmatchedReport
+	path := fmt.Sprintf("/v1/reports/contexts/%s/unmatched", contextID)
+	path = appendQueryParams(path, params)
+	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("get unmatched report: %w", err)
+	}
+	return &resp, nil
+}
+
+// GetSummaryReport retrieves the summary report for a reconciliation context.
+func (c *ReportingClient) GetSummaryReport(
+	ctx context.Context,
+	contextID string,
+	params map[string]string,
+) (*SummaryReportResponse, error) {
+	var resp SummaryReportResponse
+	path := fmt.Sprintf("/v1/reports/contexts/%s/summary", contextID)
+	path = appendQueryParams(path, params)
+	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("get summary report: %w", err)
+	}
+	return &resp, nil
+}
+
+// GetVarianceReport retrieves a paginated variance report.
+func (c *ReportingClient) GetVarianceReport(
+	ctx context.Context,
+	contextID string,
+	params map[string]string,
+) (*PaginatedVarianceReport, error) {
+	var resp PaginatedVarianceReport
+	path := fmt.Sprintf("/v1/reports/contexts/%s/variance", contextID)
+	path = appendQueryParams(path, params)
+	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("get variance report: %w", err)
+	}
+	return &resp, nil
+}
+
+// CountUnmatched retrieves the unmatched transaction count for export sizing.
+func (c *ReportingClient) CountUnmatched(
+	ctx context.Context,
+	contextID, dateFrom, dateTo string,
+) (*ExportCountResponse, error) {
+	var resp ExportCountResponse
+	path := appendQueryParams(
+		fmt.Sprintf("/v1/reports/contexts/%s/unmatched/count", contextID),
+		map[string]string{
+			"date_from": dateFrom,
+			"date_to":   dateTo,
+		},
+	)
+	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("count unmatched: %w", err)
+	}
+	return &resp, nil
+}
+
+// ListExportJobsByContext retrieves export jobs for a specific context.
+func (c *ReportingClient) ListExportJobsByContext(
+	ctx context.Context,
+	contextID string,
+	params map[string]string,
+) (*ExportJobListPage, error) {
+	var resp ExportJobListPage
+	path := appendQueryParams(
+		fmt.Sprintf("/v1/contexts/%s/export-jobs", contextID),
+		params,
+	)
+	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("list export jobs by context: %w", err)
+	}
+	return &resp, nil
+}
+
+// appendQueryParams appends URL-encoded query parameters from a map to a URL path.
+func appendQueryParams(path string, params map[string]string) string {
+	if len(params) == 0 {
+		return path
+	}
+
+	qp := url.Values{}
+	for k, v := range params {
+		qp.Set(k, v)
+	}
+
+	return path + "?" + qp.Encode()
 }

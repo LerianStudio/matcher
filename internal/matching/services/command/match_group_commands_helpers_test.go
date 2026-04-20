@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	"github.com/LerianStudio/matcher/internal/auth"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	"github.com/LerianStudio/matcher/internal/matching/domain/enums"
@@ -595,16 +595,133 @@ func TestPerformFeeVerification_NilCtxInfo(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestPerformFeeVerification_NilRateID(t *testing.T) {
+func TestPerformFeeVerification_EmptyFeeRules(t *testing.T) {
 	t.Parallel()
 
 	uc := &UseCase{}
 	err := uc.performFeeVerification(context.Background(), nil, nil, nil, &feeVerificationInput{
-		ctxInfo: &ports.ReconciliationContextInfo{
-			RateID: nil,
-		},
+		ctxInfo:    &ports.ReconciliationContextInfo{},
+		leftRules:  nil,
+		rightRules: nil,
 	})
 	require.NoError(t, err)
+}
+
+func TestPerformFeeVerification_FatalFindingDoesNotPersistPartialResults(t *testing.T) {
+	t.Parallel()
+
+	leftTxID := uuid.MustParse("00000000-0000-0000-0000-000000100130")
+	rightTxID := uuid.MustParse("00000000-0000-0000-0000-000000100131")
+	leftSourceID := uuid.MustParse("00000000-0000-0000-0000-000000100132")
+	rightSourceID := uuid.MustParse("00000000-0000-0000-0000-000000100133")
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100134")
+	runID := uuid.MustParse("00000000-0000-0000-0000-000000100135")
+	validScheduleID := uuid.MustParse("00000000-0000-0000-0000-000000100136")
+	invalidScheduleID := uuid.MustParse("00000000-0000-0000-0000-000000100137")
+
+	validRule, err := fee.NewFeeRule(
+		context.Background(), contextID, validScheduleID,
+		fee.MatchingSideLeft, "valid-left-rule", 1, nil,
+	)
+	require.NoError(t, err)
+
+	invalidRule, err := fee.NewFeeRule(
+		context.Background(), contextID, invalidScheduleID,
+		fee.MatchingSideRight, "invalid-right-rule", 1, nil,
+	)
+	require.NoError(t, err)
+
+	validSchedule := &fee.FeeSchedule{
+		ID:               validScheduleID,
+		Currency:         "USD",
+		ApplicationOrder: fee.ApplicationOrderParallel,
+		Items: []fee.FeeScheduleItem{{
+			ID:        uuid.New(),
+			Name:      "flat-valid",
+			Priority:  1,
+			Structure: fee.FlatFee{Amount: decimal.NewFromInt(10)},
+		}},
+	}
+
+	invalidSchedule := &fee.FeeSchedule{
+		ID:               invalidScheduleID,
+		Currency:         "USD",
+		ApplicationOrder: fee.ApplicationOrder("INVALID"),
+		Items: []fee.FeeScheduleItem{{
+			ID:        uuid.New(),
+			Name:      "flat-invalid",
+			Priority:  1,
+			Structure: fee.FlatFee{Amount: decimal.NewFromInt(10)},
+		}},
+	}
+
+	groups := []*matchingEntities.MatchGroup{
+		{
+			ID:     uuid.New(),
+			Status: matchingVO.MatchGroupStatusConfirmed,
+			Items: []*matchingEntities.MatchItem{
+				{TransactionID: leftTxID},
+			},
+		},
+		{
+			ID:     uuid.New(),
+			Status: matchingVO.MatchGroupStatusConfirmed,
+			Items: []*matchingEntities.MatchItem{
+				{TransactionID: rightTxID},
+			},
+		},
+	}
+
+	feeInput := &feeVerificationInput{
+		ctxInfo: &ports.ReconciliationContextInfo{ID: contextID},
+		txByID: map[uuid.UUID]*shared.Transaction{
+			leftTxID: {
+				ID:       leftTxID,
+				SourceID: leftSourceID,
+				Amount:   decimal.NewFromInt(1000),
+				Currency: "USD",
+				Metadata: map[string]any{"fee": map[string]any{"amount": "50.00", "currency": "USD"}},
+			},
+			rightTxID: {
+				ID:       rightTxID,
+				SourceID: rightSourceID,
+				Amount:   decimal.NewFromInt(1000),
+				Currency: "USD",
+				Metadata: map[string]any{"fee": map[string]any{"amount": "15.00", "currency": "USD"}},
+			},
+		},
+		sourceTypeByID: map[uuid.UUID]string{
+			leftSourceID:  "LEDGER",
+			rightSourceID: "BANK",
+		},
+		leftSourceIDs:  map[uuid.UUID]struct{}{leftSourceID: {}},
+		rightSourceIDs: map[uuid.UUID]struct{}{rightSourceID: {}},
+		leftRules:      []*fee.FeeRule{validRule},
+		rightRules:     []*fee.FeeRule{invalidRule},
+		allSchedules: map[uuid.UUID]*fee.FeeSchedule{
+			validScheduleID:   validSchedule,
+			invalidScheduleID: invalidSchedule,
+		},
+	}
+
+	feeVarianceRepo := &stubFeeVarianceRepo{}
+	exceptionCreator := &stubExceptionCreator{}
+	uc := &UseCase{
+		feeVarianceRepo:  feeVarianceRepo,
+		exceptionCreator: exceptionCreator,
+	}
+
+	err = uc.performFeeVerification(
+		context.Background(),
+		nil,
+		&matchingEntities.MatchRun{ID: runID, ContextID: contextID},
+		groups,
+		feeInput,
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "collect fee findings")
+	assert.False(t, feeVarianceRepo.called, "fatal findings must prevent fee variance persistence")
+	assert.False(t, exceptionCreator.called, "fatal findings must prevent fee exception persistence")
 }
 
 // --- processFeeForItem tests ---
@@ -614,7 +731,7 @@ func TestProcessFeeForItem_NilItem(t *testing.T) {
 
 	result := processFeeForItem(
 		context.Background(), nil, nil, nil, nil,
-		&feeVerificationInput{}, &fee.Rate{}, fee.Tolerance{},
+		&feeVerificationInput{}, &fee.FeeSchedule{}, fee.Tolerance{},
 	)
 	assert.Nil(t, result)
 }
@@ -630,7 +747,7 @@ func TestProcessFeeForItem_MissingTransaction(t *testing.T) {
 	}
 	result := processFeeForItem(
 		context.Background(), nil, item, nil, nil,
-		feeIn, &fee.Rate{}, fee.Tolerance{},
+		feeIn, &fee.FeeSchedule{}, fee.Tolerance{},
 	)
 	assert.Nil(t, result)
 }
@@ -645,7 +762,7 @@ func TestProcessFeeForItem_NilTransactionInMap(t *testing.T) {
 	}
 	result := processFeeForItem(
 		context.Background(), nil, item, nil, nil,
-		feeIn, &fee.Rate{}, fee.Tolerance{},
+		feeIn, &fee.FeeSchedule{}, fee.Tolerance{},
 	)
 	assert.Nil(t, result)
 }
@@ -669,7 +786,7 @@ func TestProcessFeeForItem_FeeExtractionError(t *testing.T) {
 	}
 	result := processFeeForItem(
 		context.Background(), nil, item, nil, nil,
-		feeIn, &fee.Rate{Currency: "USD"}, fee.Tolerance{},
+		feeIn, &fee.FeeSchedule{Currency: "USD"}, fee.Tolerance{},
 	)
 	require.NotNil(t, result)
 	require.NotNil(t, result.exceptionInput)
@@ -678,7 +795,7 @@ func TestProcessFeeForItem_FeeExtractionError(t *testing.T) {
 
 // TestProcessFeeForItem_NewFeeVarianceFailure exercises the branch where fee
 // extraction and verification succeed (producing a non-match variance) but
-// NewFeeVariance fails due to an invalid input (uuid.Nil rate ID).
+// NewFeeVariance fails due to an invalid input (uuid.Nil schedule ID).
 // The function must return a fatalErr so the caller can abort the run.
 func TestProcessFeeForItem_NewFeeVarianceFailure(t *testing.T) {
 	t.Parallel()
@@ -692,7 +809,7 @@ func TestProcessFeeForItem_NewFeeVarianceFailure(t *testing.T) {
 	item := &matchingEntities.MatchItem{TransactionID: txID}
 
 	// Transaction with valid fee metadata so extractActualFee succeeds.
-	// Actual fee = 50 USD, but expected fee from the flat rate = 10 USD,
+	// Actual fee = 50 USD, but expected fee from the schedule = 10 USD,
 	// which produces a variance well outside zero tolerance.
 	txn := &shared.Transaction{
 		ID:       txID,
@@ -713,29 +830,32 @@ func TestProcessFeeForItem_NewFeeVarianceFailure(t *testing.T) {
 		ContextID: contextID,
 	}
 
-	// RateID is uuid.Nil ⟹ NewFeeVariance will fail on "rate id is required".
-	nilRateID := uuid.Nil
 	feeIn := &feeVerificationInput{
 		ctxInfo: &ports.ReconciliationContextInfo{
-			ID:     contextID,
-			RateID: &nilRateID,
+			ID: contextID,
 		},
 		txByID:         map[uuid.UUID]*shared.Transaction{txID: txn},
 		sourceTypeByID: map[uuid.UUID]string{sourceID: "file"},
 	}
 
-	rate := &fee.Rate{
-		ID:       uuid.New(),
-		Currency: "USD",
-		Structure: fee.FlatFee{
-			Amount: decimal.NewFromInt(10), // expected = 10 USD, actual = 50 USD → OVERCHARGE
+	// Schedule with uuid.Nil ID ⟹ NewFeeVariance will fail on "fee schedule id is required".
+	schedule := &fee.FeeSchedule{
+		ID:               uuid.Nil,
+		Currency:         "USD",
+		ApplicationOrder: fee.ApplicationOrderParallel,
+		Items: []fee.FeeScheduleItem{
+			{
+				Name:      "flat",
+				Priority:  1,
+				Structure: fee.FlatFee{Amount: decimal.NewFromInt(10)}, // expected = 10 USD, actual = 50 USD → OVERCHARGE
+			},
 		},
 	}
 	tolerance := fee.Tolerance{} // zero tolerance → variance guaranteed
 
 	result := processFeeForItem(
 		context.Background(), nil, item, group, createdRun,
-		feeIn, rate, tolerance,
+		feeIn, schedule, tolerance,
 	)
 
 	// NewFeeVariance fails ⟹ fatalErr must be set so the run aborts.
@@ -743,6 +863,109 @@ func TestProcessFeeForItem_NewFeeVarianceFailure(t *testing.T) {
 	require.Error(t, result.fatalErr, "expected fatalErr when NewFeeVariance fails")
 	assert.Contains(t, result.fatalErr.Error(), "create fee variance")
 	assert.Nil(t, result.variance, "variance must be nil on construction failure")
+}
+
+func TestProcessFeeForItem_CalculateExpectedFeeFailure_ReturnsFatalErr(t *testing.T) {
+	t.Parallel()
+
+	txID := uuid.MustParse("00000000-0000-0000-0000-000000100115")
+	sourceID := uuid.MustParse("00000000-0000-0000-0000-000000100116")
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100117")
+	runID := uuid.MustParse("00000000-0000-0000-0000-000000100118")
+	groupID := uuid.MustParse("00000000-0000-0000-0000-000000100119")
+
+	item := &matchingEntities.MatchItem{TransactionID: txID}
+	txn := &shared.Transaction{
+		ID:       txID,
+		SourceID: sourceID,
+		Amount:   decimal.NewFromInt(1000),
+		Currency: "USD",
+		Metadata: map[string]any{
+			"fee": map[string]any{
+				"amount":   "15.00",
+				"currency": "USD",
+			},
+		},
+	}
+
+	group := &matchingEntities.MatchGroup{ID: groupID}
+	createdRun := &matchingEntities.MatchRun{ID: runID, ContextID: contextID}
+	feeIn := &feeVerificationInput{
+		ctxInfo:        &ports.ReconciliationContextInfo{ID: contextID},
+		txByID:         map[uuid.UUID]*shared.Transaction{txID: txn},
+		sourceTypeByID: map[uuid.UUID]string{sourceID: "file"},
+	}
+
+	schedule := &fee.FeeSchedule{
+		ID:               uuid.New(),
+		Currency:         "USD",
+		ApplicationOrder: fee.ApplicationOrder("INVALID"),
+		Items: []fee.FeeScheduleItem{{
+			ID:        uuid.New(),
+			Name:      "flat",
+			Priority:  1,
+			Structure: fee.FlatFee{Amount: decimal.NewFromInt(10)},
+		}},
+	}
+
+	result := processFeeForItem(context.Background(), nil, item, group, createdRun, feeIn, schedule, fee.Tolerance{})
+	require.NotNil(t, result)
+	require.Error(t, result.fatalErr)
+	assert.Contains(t, result.fatalErr.Error(), "calculate expected fee")
+	assert.Nil(t, result.exceptionInput)
+	assert.Nil(t, result.variance)
+}
+
+func TestProcessFeeForItem_VerifyFeeFailure_ReturnsFatalErr(t *testing.T) {
+	t.Parallel()
+
+	txID := uuid.MustParse("00000000-0000-0000-0000-000000100120")
+	sourceID := uuid.MustParse("00000000-0000-0000-0000-000000100121")
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100122")
+	runID := uuid.MustParse("00000000-0000-0000-0000-000000100123")
+	groupID := uuid.MustParse("00000000-0000-0000-0000-000000100124")
+
+	item := &matchingEntities.MatchItem{TransactionID: txID}
+	txn := &shared.Transaction{
+		ID:       txID,
+		SourceID: sourceID,
+		Amount:   decimal.NewFromInt(1000),
+		Currency: "USD",
+		Metadata: map[string]any{
+			"fee": map[string]any{
+				"amount":   "10.00",
+				"currency": "USD",
+			},
+		},
+	}
+
+	group := &matchingEntities.MatchGroup{ID: groupID}
+	createdRun := &matchingEntities.MatchRun{ID: runID, ContextID: contextID}
+	feeIn := &feeVerificationInput{
+		ctxInfo:        &ports.ReconciliationContextInfo{ID: contextID},
+		txByID:         map[uuid.UUID]*shared.Transaction{txID: txn},
+		sourceTypeByID: map[uuid.UUID]string{sourceID: "file"},
+	}
+
+	schedule := &fee.FeeSchedule{
+		ID:               uuid.New(),
+		Currency:         "USD",
+		ApplicationOrder: fee.ApplicationOrderParallel,
+		Items: []fee.FeeScheduleItem{{
+			ID:        uuid.New(),
+			Name:      "flat",
+			Priority:  1,
+			Structure: fee.FlatFee{Amount: decimal.NewFromInt(10)},
+		}},
+	}
+
+	tolerance := fee.Tolerance{Percent: decimal.RequireFromString("-0.01")}
+	result := processFeeForItem(context.Background(), nil, item, group, createdRun, feeIn, schedule, tolerance)
+	require.NotNil(t, result)
+	require.Error(t, result.fatalErr)
+	assert.Contains(t, result.fatalErr.Error(), "verify fee variance")
+	assert.Nil(t, result.exceptionInput)
+	assert.Nil(t, result.variance)
 }
 
 // --- persistFeeFindings tests ---
@@ -766,7 +989,7 @@ func TestCollectFeeFindings_SkipsNilGroups(t *testing.T) {
 	groups := []*matchingEntities.MatchGroup{nil}
 	findings, err := collectFeeFindings(
 		context.Background(), nil, groups, nil,
-		&feeVerificationInput{}, &fee.Rate{}, fee.Tolerance{},
+		&feeVerificationInput{}, fee.Tolerance{},
 	)
 	require.NoError(t, err)
 	assert.Empty(t, findings.variances)
@@ -786,7 +1009,7 @@ func TestCollectFeeFindings_SkipsNonConfirmedGroups(t *testing.T) {
 	}
 	findings, err := collectFeeFindings(
 		context.Background(), nil, groups, nil,
-		&feeVerificationInput{}, &fee.Rate{}, fee.Tolerance{},
+		&feeVerificationInput{}, fee.Tolerance{},
 	)
 	require.NoError(t, err)
 	assert.Empty(t, findings.variances)
@@ -794,20 +1017,6 @@ func TestCollectFeeFindings_SkipsNonConfirmedGroups(t *testing.T) {
 }
 
 // --- loadFeeRulesAndSchedules tests ---
-
-func TestLoadFeeRulesAndSchedules_NoRules(t *testing.T) {
-	t.Parallel()
-
-	uc := &UseCase{
-		feeRuleProvider: &stubFeeRuleProviderWithResult{rules: nil},
-	}
-
-	leftRules, rightRules, schedules, err := uc.loadFeeRulesAndSchedules(context.Background(), uuid.New())
-	require.NoError(t, err)
-	assert.Nil(t, leftRules)
-	assert.Nil(t, rightRules)
-	assert.Nil(t, schedules)
-}
 
 // --- recordGroupResults tests ---
 
@@ -1293,162 +1502,6 @@ func TestEnqueueMatchConfirmedEvents_SkipsNonConfirmedGroups(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
 	err := uc.enqueueMatchConfirmedEvents(ctx, new(sql.Tx), groups)
 	require.NoError(t, err)
-}
-
-// --- loadFeeRulesAndSchedules with actual rules and schedules ---
-
-func TestLoadFeeRulesAndSchedules_WithRulesAndSchedules(t *testing.T) {
-	t.Parallel()
-
-	scheduleID := uuid.MustParse("00000000-0000-0000-0000-000000100800")
-	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100803")
-
-	schedule := &fee.FeeSchedule{
-		ID:       scheduleID,
-		Currency: "USD",
-	}
-
-	rules := []*fee.FeeRule{
-		{
-			ID:            uuid.MustParse("00000000-0000-0000-0000-000000100804"),
-			ContextID:     contextID,
-			Side:          fee.MatchingSideLeft,
-			FeeScheduleID: scheduleID,
-			Name:          "Left rule",
-			Priority:      1,
-		},
-		{
-			ID:            uuid.MustParse("00000000-0000-0000-0000-000000100805"),
-			ContextID:     contextID,
-			Side:          fee.MatchingSideRight,
-			FeeScheduleID: scheduleID,
-			Name:          "Right rule",
-			Priority:      1,
-		},
-	}
-
-	uc := &UseCase{
-		feeRuleProvider: &stubFeeRuleProviderWithResult{rules: rules},
-		feeScheduleRepo: &stubFeeScheduleRepoWithResult{
-			schedules: map[uuid.UUID]*fee.FeeSchedule{scheduleID: schedule},
-		},
-	}
-
-	leftRules, rightRules, allSchedules, err := uc.loadFeeRulesAndSchedules(context.Background(), contextID)
-	require.NoError(t, err)
-	require.NotNil(t, leftRules)
-	require.NotNil(t, rightRules)
-	require.NotNil(t, allSchedules)
-	assert.Len(t, leftRules, 1)
-	assert.Len(t, rightRules, 1)
-	assert.Equal(t, schedule, allSchedules[scheduleID])
-}
-
-func TestLoadFeeRulesAndSchedules_GetByIDsError(t *testing.T) {
-	t.Parallel()
-
-	scheduleID := uuid.MustParse("00000000-0000-0000-0000-000000100810")
-	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100812")
-
-	rules := []*fee.FeeRule{
-		{
-			ID:            uuid.MustParse("00000000-0000-0000-0000-000000100813"),
-			ContextID:     contextID,
-			Side:          fee.MatchingSideLeft,
-			FeeScheduleID: scheduleID,
-			Name:          "Test rule",
-			Priority:      1,
-		},
-	}
-
-	uc := &UseCase{
-		feeRuleProvider: &stubFeeRuleProviderWithResult{rules: rules},
-		feeScheduleRepo: &stubFeeScheduleRepoWithResult{
-			err: errors.New("db error"),
-		},
-	}
-
-	leftRules, rightRules, allSchedules, err := uc.loadFeeRulesAndSchedules(context.Background(), contextID)
-	require.Error(t, err)
-	assert.Nil(t, leftRules)
-	assert.Nil(t, rightRules)
-	assert.Nil(t, allSchedules)
-}
-
-func TestLoadFeeRulesAndSchedules_FindByContextIDError(t *testing.T) {
-	t.Parallel()
-
-	uc := &UseCase{
-		feeRuleProvider: &stubFeeRuleProviderWithResult{
-			err: errors.New("provider error"),
-		},
-	}
-
-	leftRules, rightRules, allSchedules, err := uc.loadFeeRulesAndSchedules(context.Background(), uuid.New())
-	require.Error(t, err)
-	assert.Nil(t, leftRules)
-	assert.Nil(t, rightRules)
-	assert.Nil(t, allSchedules)
-}
-
-func TestLoadFeeRulesAndSchedules_NilFeeScheduleRepo(t *testing.T) {
-	t.Parallel()
-
-	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100814")
-	scheduleID := uuid.MustParse("00000000-0000-0000-0000-000000100815")
-
-	rules := []*fee.FeeRule{
-		{
-			ID:            uuid.MustParse("00000000-0000-0000-0000-000000100816"),
-			ContextID:     contextID,
-			Side:          fee.MatchingSideAny,
-			FeeScheduleID: scheduleID,
-			Name:          "Any rule",
-			Priority:      1,
-		},
-	}
-
-	uc := &UseCase{
-		feeRuleProvider: &stubFeeRuleProviderWithResult{rules: rules},
-		feeScheduleRepo: nil,
-	}
-
-	leftRules, rightRules, allSchedules, err := uc.loadFeeRulesAndSchedules(context.Background(), contextID)
-	require.ErrorIs(t, err, ErrNilFeeScheduleRepository)
-	assert.Nil(t, leftRules)
-	assert.Nil(t, rightRules)
-	assert.Nil(t, allSchedules)
-}
-
-func TestLoadFeeRulesAndSchedules_MissingScheduleReference(t *testing.T) {
-	t.Parallel()
-
-	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100817")
-	missingScheduleID := uuid.MustParse("00000000-0000-0000-0000-000000100818")
-
-	rules := []*fee.FeeRule{{
-		ID:            uuid.MustParse("00000000-0000-0000-0000-000000100819"),
-		ContextID:     contextID,
-		Side:          fee.MatchingSideAny,
-		FeeScheduleID: missingScheduleID,
-		Name:          "Missing schedule",
-		Priority:      1,
-	}}
-
-	uc := &UseCase{
-		feeRuleProvider: &stubFeeRuleProviderWithResult{rules: rules},
-		feeScheduleRepo: &stubFeeScheduleRepoWithResult{scheduleCount: 0, schedules: map[uuid.UUID]*fee.FeeSchedule{}},
-	}
-
-	leftRules, rightRules, allSchedules, err := uc.loadFeeRulesAndSchedules(context.Background(), contextID)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrFeeRulesReferenceMissingSchedules,
-		"should wrap the missing-schedules sentinel error")
-	assert.Contains(t, err.Error(), "1 missing references",
-		"error message should report the count of missing schedule references")
-	assert.Nil(t, leftRules)
-	assert.Nil(t, rightRules)
-	assert.Nil(t, allSchedules)
 }
 
 type stubFeeRuleProviderWithResult struct {

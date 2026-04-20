@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	outboxServices "github.com/LerianStudio/lib-commons/v5/commons/outbox"
 	"github.com/LerianStudio/matcher/internal/bootstrap"
-	outboxServices "github.com/LerianStudio/matcher/internal/outbox/services"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 )
 
@@ -262,7 +262,9 @@ func TestCHAOS13_SlowPGDuringStartup(t *testing.T) {
 // temporarily unavailable during the outbox dispatcher's tenant discovery
 // phase, the dispatcher gracefully skips the cycle and recovers.
 //
-// Target: outbox.postgresql.go:224-283 — ListTenants queries pg_namespace.
+// Target: canonical outbox dispatcher tenant discovery (lib-commons/v5 outbox
+// Dispatcher with SchemaResolver) — previously the bespoke ListTenants
+// pg_namespace query lived in-repo; it is now owned by lib-commons.
 // Injection: Brief PG outage during dispatch.
 // Expected: Dispatch cycle fails gracefully, next cycle succeeds.
 func TestCHAOS14_TenantDiscoveryFailure(t *testing.T) {

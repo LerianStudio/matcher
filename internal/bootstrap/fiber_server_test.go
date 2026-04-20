@@ -26,11 +26,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	"github.com/LerianStudio/lib-commons/v4/commons/net/http/ratelimit"
-	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	"github.com/LerianStudio/lib-commons/v5/commons/net/http/ratelimit"
+	libRabbitmq "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
 
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
 // Sentinel errors for test cases.
@@ -98,8 +99,8 @@ func TestCustomErrorHandler_ReturnsInternalError(t *testing.T) {
 
 	var body map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	assert.Equal(t, "internal server error", body["message"])
-	assert.Equal(t, float64(500), body["code"])
+	assert.Equal(t, "an unexpected error occurred", body["message"])
+	assert.Equal(t, constant.CodeInternalServerError, body["code"])
 }
 
 func TestCustomErrorHandler_ReturnsBadRequestMessage(t *testing.T) {
@@ -119,8 +120,8 @@ func TestCustomErrorHandler_ReturnsBadRequestMessage(t *testing.T) {
 
 	var body map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	assert.Equal(t, "invalid_request", body["title"])
-	assert.Equal(t, float64(400), body["code"])
+	assert.Equal(t, http.StatusText(http.StatusBadRequest), body["title"])
+	assert.Equal(t, constant.CodeInvalidRequest, body["code"])
 }
 
 func TestReadinessHandler_ProductionHidesChecks(t *testing.T) {
@@ -381,7 +382,7 @@ func TestRateLimiterMiddleware(t *testing.T) {
 
 	rl := NewLibRateLimiter(nil, &libLog.NopLogger{})
 	rlGetter := func() *ratelimit.RateLimiter { return rl }
-	rateLimiterHandler := NewGlobalRateLimit(rlGetter, cfg, nil)
+	rateLimiterHandler := NewGlobalRateLimit(rlGetter, cfg, nil, nil)
 
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.SendStatus(http.StatusOK)
@@ -764,7 +765,7 @@ func TestExportRateLimiter(t *testing.T) {
 			},
 		}
 
-		handler := NewExportRateLimit(nil, cfg, nil)
+		handler := NewExportRateLimit(nil, cfg, nil, nil)
 
 		require.NotNil(t, handler)
 
@@ -800,7 +801,7 @@ func TestExportRateLimiter(t *testing.T) {
 
 		rl := NewLibRateLimiter(nil, &libLog.NopLogger{})
 		rlGetter := func() *ratelimit.RateLimiter { return rl }
-		handler := NewExportRateLimit(rlGetter, cfg, nil)
+		handler := NewExportRateLimit(rlGetter, cfg, nil, nil)
 
 		require.NotNil(t, handler)
 
@@ -898,7 +899,7 @@ func TestRuntimeBodyLimitMiddleware_UsesLiveConfig(t *testing.T) {
 	assert.Equal(t, http.StatusRequestEntityTooLarge, largeResp.StatusCode)
 	body, readErr := io.ReadAll(largeResp.Body)
 	require.NoError(t, readErr)
-	assert.Contains(t, string(body), "request_entity_too_large")
+	assert.Contains(t, string(body), constant.CodeRequestEntityTooLarge)
 }
 
 func TestCustomErrorHandler_NotFoundError(t *testing.T) {
@@ -935,7 +936,7 @@ func TestCustomErrorHandler_UnprocessableEntity(t *testing.T) {
 
 	var body map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	assert.Equal(t, "request_failed", body["title"])
+	assert.Equal(t, http.StatusText(http.StatusUnprocessableEntity), body["title"])
 }
 
 func TestCustomErrorHandler_ConflictError(t *testing.T) {
@@ -957,7 +958,7 @@ func TestCustomErrorHandler_ConflictError(t *testing.T) {
 
 	var body map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	assert.Equal(t, "request_failed", body["title"])
+	assert.Equal(t, http.StatusText(http.StatusConflict), body["title"])
 }
 
 func TestCustomErrorHandler_ProductionHidesDetails(t *testing.T) {
@@ -1179,72 +1180,6 @@ func TestResolveObjectStorageCheck(t *testing.T) {
 	})
 }
 
-func TestClientErrorMessageForStatusCases(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		status   int
-		expected string
-	}{
-		{
-			name:     "bad request returns invalid_request",
-			status:   http.StatusBadRequest,
-			expected: "invalid_request",
-		},
-		{
-			name:     "unauthorized returns unauthorized",
-			status:   http.StatusUnauthorized,
-			expected: "unauthorized",
-		},
-		{
-			name:     "forbidden returns forbidden",
-			status:   http.StatusForbidden,
-			expected: "forbidden",
-		},
-		{
-			name:     "not found returns not_found",
-			status:   http.StatusNotFound,
-			expected: "not_found",
-		},
-		{
-			name:     "conflict returns request_failed",
-			status:   http.StatusConflict,
-			expected: "request_failed",
-		},
-		{
-			name:     "unprocessable entity returns request_failed",
-			status:   http.StatusUnprocessableEntity,
-			expected: "request_failed",
-		},
-		{
-			name:     "too many requests returns rate_limited",
-			status:   http.StatusTooManyRequests,
-			expected: "rate_limited",
-		},
-		{
-			name:     "internal server error returns request_failed",
-			status:   http.StatusInternalServerError,
-			expected: "request_failed",
-		},
-		{
-			name:     "unknown status returns request_failed",
-			status:   418,
-			expected: "request_failed",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			result := clientErrorMessageForStatus(tt.status)
-
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestTruncateHeaderID(t *testing.T) {
 	t.Parallel()
 
@@ -1291,7 +1226,7 @@ func TestNewRateLimiterReturnsHandler(t *testing.T) {
 			},
 		}
 
-		handler := NewGlobalRateLimit(nil, cfg, nil)
+		handler := NewGlobalRateLimit(nil, cfg, nil, nil)
 
 		require.NotNil(t, handler)
 	})
@@ -1309,7 +1244,7 @@ func TestNewRateLimiterReturnsHandler(t *testing.T) {
 
 		rl := NewLibRateLimiter(nil, &libLog.NopLogger{})
 		rlGetter := func() *ratelimit.RateLimiter { return rl }
-		handler := NewGlobalRateLimit(rlGetter, cfg, nil)
+		handler := NewGlobalRateLimit(rlGetter, cfg, nil, nil)
 
 		require.NotNil(t, handler)
 	})
@@ -1352,7 +1287,7 @@ func TestCustomErrorHandler_TooManyRequests(t *testing.T) {
 
 	var body map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	assert.Equal(t, "rate_limited", body["title"])
+	assert.Equal(t, http.StatusText(http.StatusTooManyRequests), body["title"])
 }
 
 func TestCustomErrorHandler_Forbidden(t *testing.T) {
@@ -1374,7 +1309,7 @@ func TestCustomErrorHandler_Forbidden(t *testing.T) {
 
 	var body map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	assert.Equal(t, "forbidden", body["title"])
+	assert.Equal(t, http.StatusText(http.StatusForbidden), body["title"])
 }
 
 func TestCustomErrorHandler_Unauthorized(t *testing.T) {
@@ -1396,7 +1331,7 @@ func TestCustomErrorHandler_Unauthorized(t *testing.T) {
 
 	var body map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	assert.Equal(t, "unauthorized", body["title"])
+	assert.Equal(t, http.StatusText(http.StatusUnauthorized), body["title"])
 }
 
 func TestSanitizeHeaderID_EdgeCases(t *testing.T) {

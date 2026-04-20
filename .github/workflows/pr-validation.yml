@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   validate:
-    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/pr-validation.yml@v1.17.0
+    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/pr-validation.yml@v1.23.1
     with:
       runner_type: "blacksmith-4vcpu-ubuntu-2404"
       pr_title_types: |
@@ -45,6 +45,7 @@ jobs:
         scripts
         configs
         deps
+        workflows
         configuration
         ingestion
         matching
@@ -54,8 +55,6 @@ jobs:
         outbox
         shared
       require_scope: false
-      min_description_length: 50
-      check_changelog: true
       enable_auto_labeler: true
       labeler_config_path: '.github/labeler.yml'
     secrets: inherit

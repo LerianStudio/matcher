@@ -12,10 +12,11 @@ import (
 	"sync"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // WorkerLifecycle is the interface that all managed workers must satisfy.
@@ -444,5 +445,5 @@ func sameWorkerInstance(a, other WorkerLifecycle) bool {
 }
 
 func isNilWorkerLifecycle(worker WorkerLifecycle) bool {
-	return isNilInterface(worker)
+	return sharedPorts.IsNilValue(worker)
 }

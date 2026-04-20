@@ -126,6 +126,50 @@ func TestRepository_Create_Success_Sqlmock(t *testing.T) {
 	assert.Len(t, result.Items, 1)
 }
 
+func TestRepository_CreateWithTx_Success_Sqlmock(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() {
+		mock.ExpectClose()
+		require.NoError(t, db.Close())
+		require.NoError(t, mock.ExpectationsWereMet())
+	}()
+
+	provider := testutil.NewMockProviderFromDB(t, db)
+	repo := NewRepository(provider)
+	ctx := context.Background()
+	schedule := newTestSchedule()
+	model, items, err := FromEntity(schedule)
+	require.NoError(t, err)
+
+	mock.ExpectBegin()
+	tx, err := db.Begin()
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback() }()
+
+	mock.ExpectExec("INSERT INTO fee_schedules").
+		WithArgs(
+			model.ID, model.TenantID, model.Name, model.Currency,
+			model.ApplicationOrder, model.RoundingScale, model.RoundingMode,
+			model.CreatedAt, model.UpdatedAt,
+		).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO fee_schedule_items").
+		WithArgs(
+			items[0].ID, items[0].FeeScheduleID, items[0].Name, items[0].Priority,
+			items[0].StructureType, items[0].StructureData,
+			items[0].CreatedAt, items[0].UpdatedAt,
+		).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	result, err := repo.CreateWithTx(ctx, tx, schedule)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, schedule.ID, result.ID)
+}
+
 func TestRepository_Create_InsertScheduleError_Sqlmock(t *testing.T) {
 	t.Parallel()
 

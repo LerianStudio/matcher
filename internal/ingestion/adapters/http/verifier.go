@@ -7,17 +7,28 @@ import (
 
 	"github.com/google/uuid"
 
-	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	sharedhttp "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 )
 
 // NewTenantOwnershipVerifier creates a new verifier using the context provider.
+//
+// Tenant isolation is enforced inside the provider: the backing
+// configuration ContextRepository's FindByID method pulls tenant_id from
+// the ambient request context and issues SELECT ... WHERE tenant_id = $1
+// AND id = $2. A request for a contextID minted under a different tenant
+// therefore returns sql.ErrNoRows → ContextAccessInfo{nil} → 404 here,
+// before the handler runs.
+//
+// The verifier adds one check beyond what FindByID returns: the context
+// must be Active. That prevents ingestion endpoints from running against
+// paused contexts.
 func NewTenantOwnershipVerifier(ctxProvider contextProvider) sharedhttp.TenantOwnershipVerifier {
-	return func(ctx context.Context, tenantID, contextID uuid.UUID) error {
+	return func(ctx context.Context, _, contextID uuid.UUID) error {
 		if ctxProvider == nil {
 			return fmt.Errorf("ingestion context verifier not initialized: %w", sharedhttp.ErrContextAccessDenied)
 		}
 
-		ctxInfo, err := ctxProvider.FindByID(ctx, tenantID, contextID)
+		ctxInfo, err := ctxProvider.FindByID(ctx, contextID)
 		if err != nil {
 			// Return the infrastructure error unwrapped so the classifier
 			// maps it to ErrContextLookupFailed (500) instead of access-denied (403).
@@ -28,14 +39,6 @@ func NewTenantOwnershipVerifier(ctxProvider contextProvider) sharedhttp.TenantOw
 			return sharedhttp.ErrContextNotFound
 		}
 
-		// The contextProvider.FindByID already filters by tenantID.
-		// If we get a result, the context belongs to the tenant.
-		// Additional ID check for defense in depth.
-		if ctxInfo.ID != contextID {
-			return sharedhttp.ErrContextNotOwned
-		}
-
-		// Verify the context is active before allowing operations.
 		if !ctxInfo.Active {
 			return fmt.Errorf("%w: context is paused", sharedhttp.ErrContextNotActive)
 		}

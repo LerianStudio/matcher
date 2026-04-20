@@ -27,12 +27,6 @@ var (
 
 type fakeDashboardInfraProvider struct{}
 
-func (f *fakeDashboardInfraProvider) GetPostgresConnection(
-	_ context.Context,
-) (*ports.PostgresConnectionLease, error) {
-	return nil, nil
-}
-
 func (f *fakeDashboardInfraProvider) GetRedisConnection(
 	_ context.Context,
 ) (*ports.RedisConnectionLease, error) {
@@ -43,7 +37,11 @@ func (f *fakeDashboardInfraProvider) BeginTx(_ context.Context) (*ports.TxLease,
 	return nil, errTestTransactionsUnsupported
 }
 
-func (f *fakeDashboardInfraProvider) GetReplicaDB(_ context.Context) (*ports.ReplicaDBLease, error) {
+func (f *fakeDashboardInfraProvider) GetReplicaDB(_ context.Context) (*ports.DBLease, error) {
+	return nil, nil
+}
+
+func (f *fakeDashboardInfraProvider) GetPrimaryDB(_ context.Context) (*ports.DBLease, error) {
 	return nil, nil
 }
 
@@ -354,7 +352,8 @@ func TestGetSummaryMetrics_HappyPath_AllTransactionsMatched(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, 100, result.TotalTransactions)
 	assert.Equal(t, 100, result.TotalMatches)
-	assert.InDelta(t, 1.0, result.MatchRate, 0.0001)
+	// 100 / 100 * 100 = 100% (percentage scale).
+	assert.InDelta(t, 100.0, result.MatchRate, 0.0001)
 	assert.Equal(t, 0, result.PendingExceptions)
 	assert.True(t, result.CriticalExposure.IsZero())
 }
@@ -396,7 +395,8 @@ func TestGetSummaryMetrics_HappyPath_PartialMatches(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, 1000, result.TotalTransactions)
 	assert.Equal(t, 850, result.TotalMatches)
-	assert.InDelta(t, 0.85, result.MatchRate, 0.001)
+	// 850 / 1000 * 100 = 85% (percentage scale).
+	assert.InDelta(t, 85.0, result.MatchRate, 0.01)
 	assert.Equal(t, 150, result.PendingExceptions)
 	assert.True(t, result.CriticalExposure.Equal(decimal.NewFromFloat(25000.50)))
 	assert.InDelta(t, 48.5, result.OldestExceptionAge, 0.1)
@@ -480,7 +480,8 @@ func TestGetSummaryMetrics_EdgeCase_MatchRateClampingOver100Percent(t *testing.T
 	require.NotNil(t, result)
 	assert.Equal(t, 100, result.TotalTransactions)
 	assert.Equal(t, 150, result.TotalMatches)
-	assert.InDelta(t, 1.0, result.MatchRate, 0.0001)
+	// Clamped to the percentage ceiling (100.0) when matched > total.
+	assert.InDelta(t, 100.0, result.MatchRate, 0.0001)
 }
 
 func TestGetSummaryMetrics_WithSourceIDFilter(t *testing.T) {
@@ -522,7 +523,8 @@ func TestGetSummaryMetrics_WithSourceIDFilter(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, 50, result.TotalTransactions)
 	assert.Equal(t, 45, result.TotalMatches)
-	assert.InDelta(t, 0.9, result.MatchRate, 0.001)
+	// 45 / 50 * 100 = 90% (percentage scale).
+	assert.InDelta(t, 90.0, result.MatchRate, 0.01)
 	assert.Equal(t, 5, result.PendingExceptions)
 }
 
@@ -560,7 +562,11 @@ func TestGetSummaryMetrics_DatabaseError(t *testing.T) {
 	assert.Contains(t, err.Error(), "database connection lost")
 }
 
-func TestGetSummaryMetrics_MatchRateReturnsDecimalNotPercentage(t *testing.T) {
+// TestGetSummaryMetrics_MatchRateReturnsPercentageNotDecimal pins the
+// percentage-scale convention (0-100) for SummaryMetrics.MatchRate. Earlier
+// versions returned a 0.0-1.0 ratio; callers and the console now expect the
+// same scale as MatchRateStats.
+func TestGetSummaryMetrics_MatchRateReturnsPercentageNotDecimal(t *testing.T) {
 	t.Parallel()
 
 	repo, mock := setupRepository(t)
@@ -595,8 +601,9 @@ func TestGetSummaryMetrics_MatchRateReturnsDecimalNotPercentage(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.InDelta(t, 0.85, result.MatchRate, 0.0001)
-	assert.Less(t, result.MatchRate, 1.01)
+	// 170 / 200 * 100 = 85 (percentage scale).
+	assert.InDelta(t, 85.0, result.MatchRate, 0.01)
+	assert.LessOrEqual(t, result.MatchRate, 100.0)
 	assert.GreaterOrEqual(t, result.MatchRate, 0.0)
 }
 
@@ -968,7 +975,8 @@ func TestGetSourceBreakdown_DatabaseQuery(t *testing.T) {
 		assert.Equal(t, "Bank A", result[0].SourceName)
 		assert.Equal(t, int64(100), result[0].TotalTxns)
 		assert.Equal(t, int64(80), result[0].MatchedTxns)
-		assert.InDelta(t, 0.8, result[0].MatchRate, 0.001)
+		// 80 / 100 * 100 = 80% (percentage scale).
+		assert.InDelta(t, 80.0, result[0].MatchRate, 0.01)
 		assert.Equal(t, int64(20), result[0].UnmatchedTxns)
 		assert.True(t, result[0].UnmatchedAmount.Equal(decimal.NewFromFloat(10000.00)))
 	})
@@ -1023,7 +1031,7 @@ func TestGetSourceBreakdown_DatabaseQuery(t *testing.T) {
 		require.Nil(t, result)
 	})
 
-	t.Run("match rate clamped at 1.0", func(t *testing.T) {
+	t.Run("match rate clamped at 100 percent", func(t *testing.T) {
 		t.Parallel()
 
 		repo, mock := setupRepository(t)
@@ -1048,7 +1056,8 @@ func TestGetSourceBreakdown_DatabaseQuery(t *testing.T) {
 
 		require.NoError(t, err)
 		require.Len(t, result, 1)
-		assert.InDelta(t, 1.0, result[0].MatchRate, 0.001)
+		// Clamped to the percentage ceiling (100.0) when matched > total.
+		assert.InDelta(t, 100.0, result[0].MatchRate, 0.001)
 		assert.Equal(t, int64(0), result[0].UnmatchedTxns) // Clamped to 0
 		assert.True(t, result[0].UnmatchedAmount.IsZero()) // Clamped to 0
 	})

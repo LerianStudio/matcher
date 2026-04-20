@@ -20,9 +20,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/dispute"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
@@ -32,6 +32,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/services/query"
 	govEntities "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/testutil"
+	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
 // errTest is a sentinel error for testing internal error handling.
@@ -78,7 +79,7 @@ func requireErrorResponse(
 	t *testing.T,
 	resp *http.Response,
 	expectedStatus int,
-	expectedCode int,
+	_ int,
 	expectedTitle,
 	expectedMessage string,
 ) {
@@ -88,11 +89,65 @@ func requireErrorResponse(
 
 	require.Equal(t, expectedStatus, resp.StatusCode)
 
-	var errResp libHTTP.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-	require.Equal(t, expectedCode, errResp.Code)
-	require.Equal(t, expectedTitle, errResp.Title)
+	require.Equal(t, expectedMTCHCode(expectedTitle, expectedMessage), errResp.Code)
+	require.Equal(t, http.StatusText(expectedStatus), errResp.Title)
 	require.Equal(t, expectedMessage, errResp.Message)
+}
+
+func expectedMTCHCode(expectedTitle, expectedMessage string) string {
+	switch expectedMessage {
+	case "exception not found":
+		return constant.CodeExceptionNotFound
+	case "dispute not found":
+		return constant.CodeDisputeNotFound
+	case "comment not found":
+		return constant.CodeCommentNotFound
+	case "connector not configured for target system":
+		return constant.CodeDispatchConnectorNotConfigured
+	case "exception cannot be resolved in current state":
+		return constant.CodeExceptionInvalidState
+	}
+
+	switch expectedTitle {
+	case "invalid_request":
+		return constant.CodeInvalidRequest
+	case "not_found":
+		return constant.CodeNotFound
+	case "unprocessable_entity":
+		if strings.Contains(expectedMessage, "unsupported target system") {
+			return constant.CodeDispatchTargetUnsupported
+		}
+
+		return constant.CodeUnprocessableEntity
+	case "internal_server_error":
+		return constant.CodeInternalServerError
+	case "unauthorized":
+		return constant.CodeUnauthorized
+	case "forbidden":
+		return constant.CodeForbidden
+	case "context_not_active":
+		return constant.CodeContextNotActive
+	case "rate_limit_exceeded":
+		return constant.CodeCallbackRateLimitExceeded
+	case "callback_in_progress":
+		return constant.CodeCallbackInProgress
+	case "callback_retryable":
+		return constant.CodeCallbackRetryable
+	case "exception_not_found":
+		return constant.CodeExceptionNotFound
+	case "dispute_not_found":
+		return constant.CodeDisputeNotFound
+	case "comment_not_found":
+		return constant.CodeCommentNotFound
+	case "dispatch_target_unsupported":
+		return constant.CodeDispatchTargetUnsupported
+	case "dispatch_connector_not_configured":
+		return constant.CodeDispatchConnectorNotConfigured
+	default:
+		return constant.CodeInternalServerError
+	}
 }
 
 type stubExceptionRepo struct {
@@ -117,6 +172,27 @@ func (repo *stubExceptionRepo) FindByID(
 	}
 
 	return repo.exception, nil
+}
+
+func (repo *stubExceptionRepo) FindByIDs(
+	ctx context.Context,
+	_ []uuid.UUID,
+) ([]*entities.Exception, error) {
+	repo.seenCtxErr = ctx.Err()
+
+	if repo.returnCtxErr {
+		return nil, fmt.Errorf("context error: %w", ctx.Err())
+	}
+
+	if repo.err != nil {
+		return nil, repo.err
+	}
+
+	if repo.exception == nil {
+		return []*entities.Exception{}, nil
+	}
+
+	return []*entities.Exception{repo.exception}, nil
 }
 
 func (repo *stubExceptionRepo) List(
@@ -524,7 +600,7 @@ func TestHandleExceptionError_Mappings(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			resp := executeErrorHandler(t, handleExceptionError, tt.err)
+			resp := executeErrorHandler(t, (&Handlers{}).handleExceptionError, tt.err)
 			defer resp.Body.Close()
 
 			requireErrorResponse(
@@ -588,7 +664,7 @@ func TestHandleDisputeError_Mappings(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			resp := executeErrorHandler(t, handleDisputeError, tt.err)
+			resp := executeErrorHandler(t, (&Handlers{}).handleDisputeError, tt.err)
 			defer resp.Body.Close()
 
 			requireErrorResponse(
@@ -652,7 +728,7 @@ func TestHandleDispatchError_Mappings(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			resp := executeErrorHandler(t, handleDispatchError, tt.err)
+			resp := executeErrorHandler(t, (&Handlers{}).handleDispatchError, tt.err)
 			defer resp.Body.Close()
 
 			requireErrorResponse(
@@ -980,7 +1056,7 @@ func TestHandleExceptionVerificationError_AllCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			resp := executeErrorHandler(t, handleExceptionVerificationError, tt.err)
+			resp := executeErrorHandler(t, (&Handlers{}).handleExceptionVerificationError, tt.err)
 			defer resp.Body.Close()
 
 			requireErrorResponse(
@@ -1068,7 +1144,7 @@ func TestHandleDisputeVerificationError_AllCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			resp := executeErrorHandler(t, handleDisputeVerificationError, tt.err)
+			resp := executeErrorHandler(t, (&Handlers{}).handleDisputeVerificationError, tt.err)
 			defer resp.Body.Close()
 
 			requireErrorResponse(
@@ -1127,6 +1203,22 @@ func TestHandleExceptionError_AllMappings(t *testing.T) {
 			expectedMessage: command.ErrZeroAdjustmentAmount.Error(),
 		},
 		{
+			name:            "negative adjustment amount returns bad request",
+			err:             command.ErrNegativeAdjustmentAmount,
+			expectedStatus:  fiber.StatusBadRequest,
+			expectedCode:    400,
+			expectedTitle:   "invalid_request",
+			expectedMessage: command.ErrNegativeAdjustmentAmount.Error(),
+		},
+		{
+			name:            "invalid override reason returns bad request",
+			err:             value_objects.ErrInvalidOverrideReason,
+			expectedStatus:  fiber.StatusBadRequest,
+			expectedCode:    400,
+			expectedTitle:   "invalid_request",
+			expectedMessage: value_objects.ErrInvalidOverrideReason.Error(),
+		},
+		{
 			name:            "invalid currency returns bad request",
 			err:             command.ErrInvalidCurrency,
 			expectedStatus:  fiber.StatusBadRequest,
@@ -1164,7 +1256,7 @@ func TestHandleExceptionError_AllMappings(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			resp := executeErrorHandler(t, handleExceptionError, tt.err)
+			resp := executeErrorHandler(t, (&Handlers{}).handleExceptionError, tt.err)
 			defer resp.Body.Close()
 
 			requireErrorResponse(
@@ -1192,13 +1284,36 @@ func TestForbiddenWithNilError(t *testing.T) {
 
 		defer span.End()
 
-		return forbidden(spanCtx, c, span, &libLog.NopLogger{}, nil)
+		return (&Handlers{}).forbidden(spanCtx, c, span, &libLog.NopLogger{}, nil)
 	})
 
 	request := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	resp, err := app.Test(request)
 	require.NoError(t, err)
 
+	defer resp.Body.Close()
+
+	requireErrorResponse(t, resp, fiber.StatusForbidden, 403, "forbidden", "access denied")
+}
+
+func TestForbiddenWithNilLogger_DoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	tracer := noop.NewTracerProvider().Tracer("test")
+	ctx := libCommons.ContextWithTracer(context.Background(), tracer)
+
+	app := newFiberTestApp(ctx)
+	app.Get("/", func(c *fiber.Ctx) error {
+		spanCtx, span := tracer.Start(c.UserContext(), "test")
+		c.SetUserContext(spanCtx)
+		defer span.End()
+
+		return (&Handlers{}).forbidden(spanCtx, c, span, nil, errTest)
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	resp, err := app.Test(request)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	requireErrorResponse(t, resp, fiber.StatusForbidden, 403, "forbidden", "access denied")
@@ -1213,7 +1328,7 @@ func TestLogSpanError_WithNilLogger(t *testing.T) {
 	defer span.End()
 
 	require.NotPanics(t, func() {
-		logSpanError(context.Background(), span, nil, "test message", errTest)
+		(&Handlers{}).logSpanError(context.Background(), span, nil, "test message", errTest)
 	})
 }
 
@@ -1228,7 +1343,7 @@ func TestLogSpanError_WithLogger_LogsErrorMessage(t *testing.T) {
 
 	spyLogger := &testutil.TestLogger{}
 
-	logSpanError(ctx, span, spyLogger, "something went wrong", errTest)
+	(&Handlers{}).logSpanError(ctx, span, spyLogger, "something went wrong", errTest)
 
 	require.True(t, spyLogger.ErrorCalled, "expected Log to be called at LevelError")
 	require.Len(t, spyLogger.Messages, 1)
@@ -1246,7 +1361,7 @@ func TestLogSpanError_WithLogger_NilError_DoesNotLog(t *testing.T) {
 
 	spyLogger := &testutil.TestLogger{}
 
-	logSpanError(ctx, span, spyLogger, "should not appear", nil)
+	(&Handlers{}).logSpanError(ctx, span, spyLogger, "should not appear", nil)
 
 	assert.False(t, spyLogger.ErrorCalled, "expected Log NOT to be called when err is nil")
 	assert.Empty(t, spyLogger.Messages)
@@ -1710,7 +1825,7 @@ func TestBadRequest_Response(t *testing.T) {
 
 		defer span.End()
 
-		return badRequest(spanCtx, c, span, &libLog.NopLogger{}, "test message", errTest)
+		return (&Handlers{}).badRequest(spanCtx, c, span, &libLog.NopLogger{}, "test message", errTest)
 	})
 
 	request := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -1735,7 +1850,7 @@ func TestNotFound_Response(t *testing.T) {
 
 		defer span.End()
 
-		return notFound(spanCtx, c, span, &libLog.NopLogger{}, "resource not found", errTest)
+		return (&Handlers{}).notFound(spanCtx, c, span, &libLog.NopLogger{}, "resource not found", errTest)
 	})
 
 	request := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -1760,7 +1875,7 @@ func TestUnprocessable_Response(t *testing.T) {
 
 		defer span.End()
 
-		return unprocessable(spanCtx, c, span, &libLog.NopLogger{}, "cannot process", errTest)
+		return (&Handlers{}).unprocessable(spanCtx, c, span, &libLog.NopLogger{}, "cannot process", errTest)
 	})
 
 	request := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -1792,7 +1907,7 @@ func TestInternalError_Response(t *testing.T) {
 
 		defer span.End()
 
-		return internalError(spanCtx, c, span, &libLog.NopLogger{}, "something went wrong", errTest)
+		return (&Handlers{}).internalError(spanCtx, c, span, &libLog.NopLogger{}, "something went wrong", errTest)
 	})
 
 	request := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -1824,7 +1939,7 @@ func TestForbidden_WithProvidedError(t *testing.T) {
 
 		defer span.End()
 
-		return forbidden(spanCtx, c, span, &libLog.NopLogger{}, errTest)
+		return (&Handlers{}).forbidden(spanCtx, c, span, &libLog.NopLogger{}, errTest)
 	})
 
 	request := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -1839,7 +1954,7 @@ func TestForbidden_WithProvidedError(t *testing.T) {
 func TestHandleExceptionError_InvalidCurrencyCode(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleExceptionError, value_objects.ErrInvalidCurrencyCode)
+	resp := executeErrorHandler(t, (&Handlers{}).handleExceptionError, value_objects.ErrInvalidCurrencyCode)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -1855,7 +1970,7 @@ func TestHandleExceptionError_InvalidCurrencyCode(t *testing.T) {
 func TestHandleExceptionError_InvalidAdjustmentReason(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleExceptionError, value_objects.ErrInvalidAdjustmentReason)
+	resp := executeErrorHandler(t, (&Handlers{}).handleExceptionError, value_objects.ErrInvalidAdjustmentReason)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -1873,7 +1988,7 @@ func TestHandleExceptionError_InvalidResolutionTransition(t *testing.T) {
 
 	resp := executeErrorHandler(
 		t,
-		handleExceptionError,
+		(&Handlers{}).handleExceptionError,
 		value_objects.ErrInvalidResolutionTransition,
 	)
 	defer resp.Body.Close()
@@ -1891,7 +2006,7 @@ func TestHandleExceptionError_InvalidResolutionTransition(t *testing.T) {
 func TestHandleDisputeError_CategoryRequired(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleDisputeError, command.ErrDisputeCategoryRequired)
+	resp := executeErrorHandler(t, (&Handlers{}).handleDisputeError, command.ErrDisputeCategoryRequired)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -1907,7 +2022,7 @@ func TestHandleDisputeError_CategoryRequired(t *testing.T) {
 func TestHandleDisputeError_DescriptionRequired(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleDisputeError, command.ErrDisputeDescriptionRequired)
+	resp := executeErrorHandler(t, (&Handlers{}).handleDisputeError, command.ErrDisputeDescriptionRequired)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -1923,7 +2038,7 @@ func TestHandleDisputeError_DescriptionRequired(t *testing.T) {
 func TestHandleDisputeError_CommentRequired(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleDisputeError, command.ErrDisputeCommentRequired)
+	resp := executeErrorHandler(t, (&Handlers{}).handleDisputeError, command.ErrDisputeCommentRequired)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -1939,7 +2054,7 @@ func TestHandleDisputeError_CommentRequired(t *testing.T) {
 func TestHandleDisputeError_ResolutionRequired(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleDisputeError, command.ErrDisputeResolutionRequired)
+	resp := executeErrorHandler(t, (&Handlers{}).handleDisputeError, command.ErrDisputeResolutionRequired)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -1955,7 +2070,7 @@ func TestHandleDisputeError_ResolutionRequired(t *testing.T) {
 func TestHandleDisputeError_InvalidDisputeTransition(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleDisputeError, dispute.ErrInvalidDisputeTransition)
+	resp := executeErrorHandler(t, (&Handlers{}).handleDisputeError, dispute.ErrInvalidDisputeTransition)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -1971,7 +2086,7 @@ func TestHandleDisputeError_InvalidDisputeTransition(t *testing.T) {
 func TestHandleDispatchError_ExceptionIDRequired(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleDispatchError, command.ErrExceptionIDRequired)
+	resp := executeErrorHandler(t, (&Handlers{}).handleDispatchError, command.ErrExceptionIDRequired)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -1987,7 +2102,7 @@ func TestHandleDispatchError_ExceptionIDRequired(t *testing.T) {
 func TestHandleDispatchError_ActorRequired(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleDispatchError, command.ErrActorRequired)
+	resp := executeErrorHandler(t, (&Handlers{}).handleDispatchError, command.ErrActorRequired)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -1997,6 +2112,40 @@ func TestHandleDispatchError_ActorRequired(t *testing.T) {
 		400,
 		"invalid_request",
 		command.ErrActorRequired.Error(),
+	)
+}
+
+func TestHandleDispatchError_ConnectorNotConfigured(t *testing.T) {
+	t.Parallel()
+
+	wrappedErr := fmt.Errorf("dispatch to jira: %w: JIRA", command.ErrDispatchConnectorNotConfigured)
+
+	resp := executeErrorHandler(t, (&Handlers{}).handleDispatchError, wrappedErr)
+
+	requireErrorResponse(
+		t,
+		resp,
+		fiber.StatusUnprocessableEntity,
+		422,
+		"unprocessable_entity",
+		"connector not configured for target system",
+	)
+}
+
+func TestHandleDispatchError_ExceptionNotFound(t *testing.T) {
+	t.Parallel()
+
+	wrappedErr := fmt.Errorf("find exception: %w", entities.ErrExceptionNotFound)
+
+	resp := executeErrorHandler(t, (&Handlers{}).handleDispatchError, wrappedErr)
+
+	requireErrorResponse(
+		t,
+		resp,
+		fiber.StatusNotFound,
+		404,
+		"not_found",
+		"exception not found",
 	)
 }
 
@@ -2400,7 +2549,7 @@ func TestListExceptions_ExternalSystemExceedsMaxLength(t *testing.T) {
 	handlers := newExceptionHandlers(t, &stubExceptionRepo{})
 	app.Get("/v1/exceptions", handlers.ListExceptions)
 
-	longExtSystem := strings.Repeat("x", 51)
+	longExtSystem := strings.Repeat("x", libHTTP.MaxQueryParamLengthLong+1)
 	request := httptest.NewRequest(
 		http.MethodGet,
 		"/v1/exceptions?external_system="+longExtSystem,
@@ -2456,7 +2605,7 @@ func TestParseExceptionFilter_ExternalSystemExceedsMaxLength(t *testing.T) {
 		return c.SendStatus(fiber.StatusOK)
 	})
 
-	longExtSystem := strings.Repeat("x", 51)
+	longExtSystem := strings.Repeat("x", libHTTP.MaxQueryParamLengthLong+1)
 	request := httptest.NewRequest(http.MethodGet, "/test?external_system="+longExtSystem, http.NoBody)
 	resp, err := app.Test(request)
 	require.NoError(t, err)
@@ -2508,7 +2657,7 @@ func TestParseExceptionFilter_ExternalSystemAtExactLimit(t *testing.T) {
 		return c.SendStatus(fiber.StatusOK)
 	})
 
-	exactExtSystem := strings.Repeat("x", 50)
+	exactExtSystem := strings.Repeat("x", libHTTP.MaxQueryParamLengthLong)
 	request := httptest.NewRequest(http.MethodGet, "/test?external_system="+exactExtSystem, http.NoBody)
 	resp, err := app.Test(request)
 	require.NoError(t, err)

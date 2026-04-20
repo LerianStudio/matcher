@@ -22,60 +22,93 @@ type FetcherConnection struct {
 	DatabaseType string
 	Host         string
 	Port         int
+	Schema       string
 	DatabaseName string
+	UserName     string
 	ProductName  string
-	Status       string
+	Metadata     map[string]any
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 // FetcherTableSchema represents a table's schema as discovered by Fetcher.
+// Fetcher returns flat field name arrays per table, not rich column metadata.
 type FetcherTableSchema struct {
-	TableName string
-	Columns   []FetcherColumnInfo
-}
-
-// FetcherColumnInfo represents a column's metadata.
-type FetcherColumnInfo struct {
-	Name     string
-	Type     string
-	Nullable bool
+	Name   string   `json:"Name"`
+	Fields []string `json:"Fields"`
 }
 
 // FetcherSchema represents the full schema of a Fetcher connection.
 type FetcherSchema struct {
-	ConnectionID string
-	Tables       []FetcherTableSchema
-	DiscoveredAt time.Time
+	ID           string               `json:"ID"`
+	ConfigName   string               `json:"ConfigName"`
+	DatabaseName string               `json:"DatabaseName"`
+	Type         string               `json:"Type"`
+	Tables       []FetcherTableSchema `json:"Tables"`
+	DiscoveredAt time.Time            `json:"DiscoveredAt"`
 }
 
 // FetcherTestResult represents the result of testing a Fetcher connection.
+// Consumers derive Healthy from Status == "success".
 type FetcherTestResult struct {
-	ConnectionID string
-	Healthy      bool
-	LatencyMs    int64
-	ErrorMessage string
+	Status    string
+	Message   string
+	LatencyMs int64
 }
 
 // ExtractionJobInput represents the input for submitting a data extraction job.
+// MappedFields is configName -> table -> columns. Filters is configName -> table -> filter.
+// Metadata must include a "source" key required by Fetcher.
 type ExtractionJobInput struct {
-	ConnectionID string
-	Tables       map[string]ExtractionTableConfig
-	Filters      *ExtractionFilters
-}
-
-// ExtractionTableConfig defines what to extract from a single table.
-type ExtractionTableConfig struct {
-	Columns   []string
-	StartDate string
-	EndDate   string
+	MappedFields map[string]map[string][]string
+	Filters      map[string]map[string]map[string]any
+	Metadata     map[string]any
 }
 
 // ExtractionJobStatus represents the status of a running extraction job.
 type ExtractionJobStatus struct {
-	JobID        string
-	Status       string // PENDING, RUNNING, COMPLETE, FAILED
-	Progress     int    // 0-100
-	ResultPath   string
-	ErrorMessage string
+	ID     string
+	Status string // canonical uppercase status, e.g. PENDING, SUBMITTED, RUNNING, EXTRACTING, COMPLETE, FAILED, CANCELLED
+	// MappedFields echoes the submitted MappedFields, potentially with
+	// server-side transformation (e.g. unqualified table names auto-qualified
+	// to schema.table). Nil when Fetcher does not echo these fields.
+	MappedFields map[string]map[string][]string
+	// ResultPath is the S3 object key where Fetcher stored the (encrypted) extraction output.
+	ResultPath string
+	// ResultHmac is the hex-encoded HMAC-SHA256 digest the trusted
+	// bridge uses to verify artifact integrity end-to-end.
+	//
+	// Contract (locked in FETCHER_MATCHER.md, design decision D4):
+	//   - The HMAC is computed over the ciphertext produced by AES-256-GCM
+	//     encryption of the extraction result. Both sides verify ciphertext
+	//     because that is what reaches the wire: HMAC-then-verify gives us
+	//     an integrity check before we ever hand bytes to the AES tag.
+	//   - The HMAC key is derived locally (no remote key exchange) via
+	//     HKDF-SHA256 from the shared master key APP_ENC_KEY, using the
+	//     contract-locked context string "fetcher-external-hmac-v1".
+	//
+	// Matcher's artifact verifier
+	// (internal/discovery/adapters/fetcher/artifact_verifier.go) recomputes
+	// this digest in constant time (hmac.Equal) and refuses to decrypt
+	// anything that fails the check. Mismatches collapse to
+	// sharedPorts.ErrIntegrityVerificationFailed so bridge callers never
+	// retry a tampered or corrupted artifact.
+	//
+	// Open item: Fetcher's published external contract documents HMAC over
+	// the *plaintext* in some historical notes. FETCHER_MATCHER.md records
+	// the ciphertext-HMAC alignment as the single source of truth; any
+	// drift must be resolved before T-003 connects to a real Fetcher
+	// instance.
+	ResultHmac  string
+	RequestHash string
+	Metadata    map[string]any
+	// CreatedAt is the timestamp when the extraction job was created by Fetcher.
+	CreatedAt time.Time
+	// CompletedAt is the timestamp when the extraction job completed. Nil while
+	// the job is still running or queued. Consumers MUST nil-check before
+	// dereferencing -- use IsZero() on the dereferenced value only after the
+	// pointer is confirmed non-nil.
+	CompletedAt *time.Time
 }
 
 // FetcherClient defines the interface for communicating with the Fetcher service.
@@ -86,7 +119,8 @@ type FetcherClient interface {
 	IsHealthy(ctx context.Context) bool
 
 	// ListConnections retrieves all database connections managed by Fetcher.
-	ListConnections(ctx context.Context, orgID string) ([]*FetcherConnection, error)
+	// productName is sent as X-Product-Name header to scope the listing.
+	ListConnections(ctx context.Context, productName string) ([]*FetcherConnection, error)
 
 	// GetSchema retrieves the schema (tables and columns) for a specific connection.
 	GetSchema(ctx context.Context, connectionID string) (*FetcherSchema, error)

@@ -257,13 +257,13 @@ func TestDashboardTrend_WithData(t *testing.T) {
 		require.Equal(t, 3, trend.Matches[idx], "Aug 5 matched")
 		require.Equal(t, 2, trend.Exceptions[idx], "Aug 5 exceptions")
 
-		// Match rate for day 1: 2/3 ≈ 0.6667.
+		// Match rate for day 1: 2/3 ≈ 66.6667% (percentage scale, 0-100).
 		idx = dateIdx["2025-08-01"]
-		require.InDelta(t, 2.0/3.0, trend.MatchRates[idx], 0.01, "Aug 1 match rate")
+		require.InDelta(t, 200.0/3.0, trend.MatchRates[idx], 0.01, "Aug 1 match rate")
 
-		// Match rate for day 5: 3/4 = 0.75.
+		// Match rate for day 5: 3/4 = 75% (percentage scale, 0-100).
 		idx = dateIdx["2025-08-05"]
-		require.InDelta(t, 0.75, trend.MatchRates[idx], 0.01, "Aug 5 match rate")
+		require.InDelta(t, 75.0, trend.MatchRates[idx], 0.01, "Aug 5 match rate")
 	})
 }
 

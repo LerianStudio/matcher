@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -79,13 +79,14 @@ type flatConfig struct {
 	ExportRateLimitExpirySec    int
 	DispatchRateLimitMax        int
 	DispatchRateLimitExpirySec  int
+	AdminRateLimitMax           int
+	AdminRateLimitExpirySec     int
 	InfraConnectTimeoutSec      int
 	IdempotencyRetryWindowSec   int
 	IdempotencySuccessTTLHours  int
 	ExportWorkerPollIntervalSec int
 	ObjectStorageEndpoint       string
 	ObjectStorageBucket         string
-	MultiTenantInfraEnabled     bool
 	WebhookTimeoutSec           int
 	ArchivalEnabled             bool
 	ArchivalIntervalHours       int
@@ -108,7 +109,6 @@ func buildConfig(fc flatConfig) Config {
 	cfg.Tenancy.DefaultTenantSlug = fc.DefaultTenantSlug
 	cfg.Tenancy.MultiTenantEnabled = fc.MultiTenantEnabled
 	cfg.Tenancy.MultiTenantURL = fc.MultiTenantURL
-	cfg.Tenancy.MultiTenantInfraEnabled = fc.MultiTenantInfraEnabled
 	cfg.Server.BodyLimitBytes = fc.BodyLimitBytes
 	cfg.Server.CORSAllowedOrigins = fc.CORSAllowedOrigins
 	cfg.Server.TLSTerminatedUpstream = fc.TLSTerminatedUpstream
@@ -166,6 +166,8 @@ func buildConfig(fc flatConfig) Config {
 	cfg.RateLimit.ExportExpirySec = fc.ExportRateLimitExpirySec
 	cfg.RateLimit.DispatchMax = fc.DispatchRateLimitMax
 	cfg.RateLimit.DispatchExpirySec = fc.DispatchRateLimitExpirySec
+	cfg.RateLimit.AdminMax = fc.AdminRateLimitMax
+	cfg.RateLimit.AdminExpirySec = fc.AdminRateLimitExpirySec
 	cfg.Infrastructure.ConnectTimeoutSec = fc.InfraConnectTimeoutSec
 	cfg.Idempotency.RetryWindowSec = fc.IdempotencyRetryWindowSec
 	cfg.Idempotency.SuccessTTLHours = fc.IdempotencySuccessTTLHours
@@ -444,7 +446,7 @@ func testConfigAuthValidations(t *testing.T) {
 				BodyLimitBytes:  1024,
 				LogLevel:        "info",
 			}),
-			errMsg: "AUTH_SERVICE_ADDRESS is required when AUTH_ENABLED=true",
+			errMsg: "PLUGIN_AUTH_ADDRESS is required when PLUGIN_AUTH_ENABLED=true",
 		},
 		{
 			name: "auth enabled requires token secret",
@@ -456,7 +458,7 @@ func testConfigAuthValidations(t *testing.T) {
 				BodyLimitBytes:  1024,
 				LogLevel:        "info",
 			}),
-			errMsg: "AUTH_JWT_SECRET is required when AUTH_ENABLED=true",
+			errMsg: "AUTH_JWT_SECRET is required when PLUGIN_AUTH_ENABLED=true",
 		},
 	}
 
@@ -1299,6 +1301,14 @@ func TestConfig_WebhookTimeout_LogsWarningOnCap(t *testing.T) {
 	assert.Equal(t, 300*time.Second, result)
 }
 
+func TestConfig_WebhookTimeout_NilConfigUsesDefault(t *testing.T) {
+	t.Parallel()
+
+	var cfg *Config
+
+	assert.Equal(t, 30*time.Second, cfg.WebhookTimeout())
+}
+
 func TestConfig_ValidateServerConfig_TLSValidation(t *testing.T) {
 	t.Parallel()
 
@@ -1896,6 +1906,8 @@ func TestConfig_ValidateRateLimitConfig_ExpiryValidation(t *testing.T) {
 			ExportRateLimitExpirySec:   60,
 			DispatchRateLimitMax:       50,
 			DispatchRateLimitExpirySec: 60,
+			AdminRateLimitMax:          30,
+			AdminRateLimitExpirySec:    60,
 			InfraConnectTimeoutSec:     30,
 		})
 
@@ -2192,7 +2204,7 @@ func TestConfig_AuthHostAndSecretValidation(t *testing.T) {
 
 		err := cfg.Validate()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "AUTH_SERVICE_ADDRESS is required when AUTH_ENABLED=true")
+		assert.Contains(t, err.Error(), "PLUGIN_AUTH_ADDRESS is required when PLUGIN_AUTH_ENABLED=true")
 	})
 
 	t.Run("fails when auth enabled but secret missing", func(t *testing.T) {
@@ -2215,7 +2227,7 @@ func TestConfig_AuthHostAndSecretValidation(t *testing.T) {
 
 		err := cfg.Validate()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "AUTH_JWT_SECRET is required when AUTH_ENABLED=true")
+		assert.Contains(t, err.Error(), "AUTH_JWT_SECRET is required when PLUGIN_AUTH_ENABLED=true")
 	})
 
 	t.Run("fails when auth enabled but host is whitespace only", func(t *testing.T) {
@@ -2238,7 +2250,7 @@ func TestConfig_AuthHostAndSecretValidation(t *testing.T) {
 
 		err := cfg.Validate()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "AUTH_SERVICE_ADDRESS is required when AUTH_ENABLED=true")
+		assert.Contains(t, err.Error(), "PLUGIN_AUTH_ADDRESS is required when PLUGIN_AUTH_ENABLED=true")
 	})
 }
 
@@ -2412,6 +2424,14 @@ func TestConfig_ArchivalPresignExpiry(t *testing.T) {
 	}
 }
 
+func TestConfig_ArchivalPresignExpiry_NilConfigUsesDefault(t *testing.T) {
+	t.Parallel()
+
+	var cfg *Config
+
+	assert.Equal(t, 3600*time.Second, cfg.ArchivalPresignExpiry())
+}
+
 func TestConfig_ArchivalPresignExpiry_LogsWarningOnCap(t *testing.T) {
 	t.Parallel()
 
@@ -2522,6 +2542,14 @@ func TestConfig_ExportPresignExpiry(t *testing.T) {
 			assert.Equal(t, tt.expected, cfg.ExportPresignExpiry())
 		})
 	}
+}
+
+func TestConfig_ExportPresignExpiry_NilConfigUsesDefault(t *testing.T) {
+	t.Parallel()
+
+	var cfg *Config
+
+	assert.Equal(t, 3600*time.Second, cfg.ExportPresignExpiry())
 }
 
 func TestConfig_ExportPresignExpiry_LogsWarningOnCap(t *testing.T) {

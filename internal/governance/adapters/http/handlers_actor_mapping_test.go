@@ -38,7 +38,7 @@ func newTestActorMappingHandler(
 	queryUC, err := query.NewActorMappingQueryUseCase(repo)
 	require.NoError(t, err)
 
-	handler, err := NewActorMappingHandler(cmdUC, queryUC)
+	handler, err := NewActorMappingHandler(cmdUC, queryUC, false)
 	require.NoError(t, err)
 
 	return handler
@@ -66,7 +66,7 @@ func TestNewActorMappingHandler(t *testing.T) {
 		queryUC, err := query.NewActorMappingQueryUseCase(repo)
 		require.NoError(t, err)
 
-		handler, err := NewActorMappingHandler(nil, queryUC)
+		handler, err := NewActorMappingHandler(nil, queryUC, false)
 		require.ErrorIs(t, err, ErrActorMappingCommandUCRequired)
 		require.Nil(t, handler)
 	})
@@ -80,7 +80,7 @@ func TestNewActorMappingHandler(t *testing.T) {
 		cmdUC, err := command.NewActorMappingUseCase(repo)
 		require.NoError(t, err)
 
-		handler, err := NewActorMappingHandler(cmdUC, nil)
+		handler, err := NewActorMappingHandler(cmdUC, nil, false)
 		require.ErrorIs(t, err, ErrActorMappingQueryUCRequired)
 		require.Nil(t, handler)
 	})
@@ -106,8 +106,7 @@ func TestUpsertActorMappingHandler(t *testing.T) {
 		}
 
 		repo := mocks.NewMockActorMappingRepository(ctrl)
-		repo.EXPECT().Upsert(gomock.Any(), gomock.Any()).Return(nil)
-		repo.EXPECT().GetByActorID(gomock.Any(), "actor-123").Return(mapping, nil)
+		repo.EXPECT().Upsert(gomock.Any(), gomock.Any()).Return(mapping, nil)
 
 		handler := newTestActorMappingHandler(t, repo)
 
@@ -126,6 +125,44 @@ func TestUpsertActorMappingHandler(t *testing.T) {
 		assert.Equal(t, "actor-123", response.ActorID)
 		require.NotNil(t, response.DisplayName)
 		assert.Equal(t, "John Doe", *response.DisplayName)
+		require.NotNil(t, response.Email)
+		assert.Equal(t, "john@example.com", *response.Email)
+	})
+
+	t.Run("success preserves existing email when omitted in request", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		now := time.Now().UTC()
+		updatedName := "Updated Name"
+		existingEmail := "existing@example.com"
+
+		mapping := &entities.ActorMapping{
+			ActorID:     "actor-123",
+			DisplayName: &updatedName,
+			Email:       &existingEmail,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+
+		repo := mocks.NewMockActorMappingRepository(ctrl)
+		repo.EXPECT().Upsert(gomock.Any(), gomock.Any()).Return(mapping, nil)
+
+		handler := newTestActorMappingHandler(t, repo)
+
+		body := dto.UpsertActorMappingRequest{DisplayName: &updatedName}
+
+		resp := testUpsertActorMappingRequest(t, handler, "actor-123", body)
+		defer resp.Body.Close()
+
+		require.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+		var response dto.ActorMappingResponse
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+		require.NotNil(t, response.DisplayName)
+		assert.Equal(t, updatedName, *response.DisplayName)
+		require.NotNil(t, response.Email)
+		assert.Equal(t, existingEmail, *response.Email)
 	})
 
 	t.Run("missing actor id", func(t *testing.T) {
@@ -161,7 +198,25 @@ func TestUpsertActorMappingHandler(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		repo := mocks.NewMockActorMappingRepository(ctrl)
-		repo.EXPECT().Upsert(gomock.Any(), gomock.Any()).Return(errTestActorMappingRepoFailed)
+		repo.EXPECT().Upsert(gomock.Any(), gomock.Any()).Return(nil, errTestActorMappingRepoFailed)
+
+		handler := newTestActorMappingHandler(t, repo)
+
+		displayName := "John Doe"
+		body := dto.UpsertActorMappingRequest{DisplayName: &displayName}
+
+		resp := testUpsertActorMappingRequest(t, handler, "actor-123", body)
+		defer resp.Body.Close()
+
+		require.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
+	})
+
+	t.Run("nil persisted mapping returns internal server error", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		repo := mocks.NewMockActorMappingRepository(ctrl)
+		repo.EXPECT().Upsert(gomock.Any(), gomock.Any()).Return(nil, nil)
 
 		handler := newTestActorMappingHandler(t, repo)
 

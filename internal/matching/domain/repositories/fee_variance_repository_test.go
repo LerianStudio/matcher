@@ -4,6 +4,7 @@ package repositories
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -47,7 +48,7 @@ func createTestFeeVariance(id uuid.UUID) *entities.FeeVariance {
 		RunID:         uuid.New(),
 		MatchGroupID:  uuid.New(),
 		TransactionID: uuid.New(),
-		RateID:        uuid.New(),
+		FeeScheduleID: uuid.New(),
 		Currency:      "USD",
 		ExpectedFee:   decimal.NewFromFloat(10.00),
 		ActualFee:     decimal.NewFromFloat(9.50),
@@ -268,11 +269,11 @@ func TestMockFeeVarianceRepository_TransactionHandling(t *testing.T) {
 			},
 		}
 
-		mockTx := "mock-transaction"
+		mockTx := new(sql.Tx)
 		_, err := mock.CreateBatchWithTx(context.Background(), mockTx, []*entities.FeeVariance{})
 
 		require.NoError(t, err)
-		assert.Equal(t, "mock-transaction", receivedTx)
+		assert.Same(t, mockTx, receivedTx)
 	})
 
 	t.Run("handles nil transaction", func(t *testing.T) {

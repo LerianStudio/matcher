@@ -14,8 +14,8 @@ import (
 	"go.uber.org/mock/gomock"
 
 	matching "github.com/LerianStudio/matcher/internal/matching/domain/services"
-	outboxmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	outboxmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 )
 
 func TestExecuteRules_Success(t *testing.T) {
@@ -68,7 +68,6 @@ func TestExecuteRules_Success(t *testing.T) {
 		MatchItemRepo:    &stubMatchItemRepo{},
 		ExceptionCreator: &stubExceptionCreator{},
 		OutboxRepo:       outboxRepo,
-		RateRepo:         &stubRateRepo{},
 		FeeVarianceRepo:  &stubFeeVarianceRepo{},
 		AdjustmentRepo:   &stubAdjustmentRepo{},
 		InfraProvider:    &stubInfraProviderForRun{},
@@ -112,7 +111,6 @@ func TestExecuteRules_InvalidContext(t *testing.T) {
 		MatchItemRepo:    &stubMatchItemRepo{},
 		ExceptionCreator: &stubExceptionCreator{},
 		OutboxRepo:       outboxRepo,
-		RateRepo:         &stubRateRepo{},
 		FeeVarianceRepo:  &stubFeeVarianceRepo{},
 		AdjustmentRepo:   &stubAdjustmentRepo{},
 		InfraProvider:    &stubInfraProviderForRun{},
@@ -155,7 +153,6 @@ func TestExecuteRules_DecodeError(t *testing.T) {
 		MatchItemRepo:    &stubMatchItemRepo{},
 		ExceptionCreator: &stubExceptionCreator{},
 		OutboxRepo:       outboxRepo,
-		RateRepo:         &stubRateRepo{},
 		FeeVarianceRepo:  &stubFeeVarianceRepo{},
 		AdjustmentRepo:   &stubAdjustmentRepo{},
 		InfraProvider:    &stubInfraProviderForRun{},
@@ -190,7 +187,6 @@ func TestExecuteRules_ProviderError(t *testing.T) {
 		MatchItemRepo:    &stubMatchItemRepo{},
 		ExceptionCreator: &stubExceptionCreator{},
 		OutboxRepo:       outboxRepo,
-		RateRepo:         &stubRateRepo{},
 		FeeVarianceRepo:  &stubFeeVarianceRepo{},
 		AdjustmentRepo:   &stubAdjustmentRepo{},
 		InfraProvider:    &stubInfraProviderForRun{},

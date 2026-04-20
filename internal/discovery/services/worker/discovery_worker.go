@@ -14,16 +14,17 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
-	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
 	discoveryPorts "github.com/LerianStudio/matcher/internal/discovery/ports"
 	"github.com/LerianStudio/matcher/internal/discovery/services/syncer"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -295,7 +296,7 @@ func (dw *DiscoveryWorker) pollCycle(ctx context.Context) {
 
 	acquired, token, err := dw.acquireLock(ctx, discoveryLockKey)
 	if err != nil {
-		logger.With(libLog.Any("error", err.Error())).
+		logger.With(libLog.Err(err)).
 			Log(ctx, libLog.LevelWarn, "discovery: lock error")
 
 		return
@@ -329,7 +330,7 @@ func (dw *DiscoveryWorker) syncConnectionsAndSchemas(ctx context.Context) {
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list tenants for discovery", err)
 
-		logger.With(libLog.Any("error", err.Error())).
+		logger.With(libLog.Err(err)).
 			Log(ctx, libLog.LevelError, "discovery: failed to list tenants")
 
 		return
@@ -351,13 +352,15 @@ func (dw *DiscoveryWorker) syncTenantConnections(parentCtx context.Context, tena
 
 	span.SetAttributes(attribute.String("tenant.id", tenantID))
 
-	fetcherConns, err := dw.fetcherClient.ListConnections(ctx, tenantID)
+	// X-Product-Name identifies the calling product ("matcher"), NOT the tenant.
+	// Tenant filtering is done server-side via JWT forwarded in the request context.
+	fetcherConns, err := dw.fetcherClient.ListConnections(ctx, constants.ApplicationName)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list connections from fetcher", err)
 
 		logger.With(
 			libLog.String("tenant.id", tenantID),
-			libLog.Any("error", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "discovery: failed to list tenant connections from fetcher")
 
 		return
@@ -398,7 +401,7 @@ func (dw *DiscoveryWorker) syncConnection(ctx context.Context, fc *sharedPorts.F
 
 		logger.With(
 			libLog.String("fetcher_conn_id", fc.ID),
-			libLog.Any("error", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "discovery: failed to sync connection")
 
 		return
@@ -416,7 +419,7 @@ func (dw *DiscoveryWorker) markStaleConnections(ctx context.Context, seenFetcher
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to find all connections", err)
 
-		logger.With(libLog.Any("error", err.Error())).
+		logger.With(libLog.Err(err)).
 			Log(ctx, libLog.LevelError, "discovery: failed to find all connections for stale check")
 
 		return
@@ -442,7 +445,7 @@ func (dw *DiscoveryWorker) markStaleConnections(ctx context.Context, seenFetcher
 		if err := dw.syncer.MarkConnectionUnreachable(ctx, conn); err != nil {
 			logger.With(
 				libLog.String("connection.id", conn.ID.String()),
-				libLog.Any("error", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelWarn, "discovery: failed to mark connection unreachable")
 
 			continue
@@ -500,7 +503,7 @@ func (dw *DiscoveryWorker) releaseLock(ctx context.Context, key, token string) {
 	if rdbErr != nil {
 		dw.logger.With(
 			libLog.String("lock.key", key),
-			libLog.Any("error", rdbErr.Error()),
+			libLog.Err(rdbErr),
 		).Log(ctx, libLog.LevelWarn, "discovery: failed to acquire redis client for lock release")
 
 		return
@@ -516,7 +519,7 @@ end
 	if _, err := rdb.Eval(ctx, script, []string{key}, token).Result(); err != nil {
 		dw.logger.With(
 			libLog.String("lock.key", key),
-			libLog.Any("error", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelWarn, "discovery: failed to release lock")
 	}
 }

@@ -93,23 +93,32 @@ func TestHashActor(t *testing.T) {
 	t.Run("returns empty string for empty input", func(t *testing.T) {
 		t.Parallel()
 
-		result := HashActor("")
+		result := HashActor("", "any-salt")
 		assert.Empty(t, result)
 	})
 
-	t.Run("returns hash of correct length", func(t *testing.T) {
+	t.Run("returns hash of correct length without salt", func(t *testing.T) {
 		t.Parallel()
 
-		result := HashActor("user-123")
+		result := HashActor("user-123", "")
 		assert.Len(t, result, ActorHashLength)
 	})
 
-	t.Run("returns consistent hash for same input", func(t *testing.T) {
+	t.Run("returns hash of correct length with salt", func(t *testing.T) {
+		t.Parallel()
+
+		result := HashActor("user-123", "tenant-salt-abc")
+		assert.Len(t, result, ActorHashLength)
+	})
+
+	t.Run("returns consistent hash for same input and salt", func(t *testing.T) {
 		t.Parallel()
 
 		actor := "user@example.com"
-		hash1 := HashActor(actor)
-		hash2 := HashActor(actor)
+		salt := "tenant-salt-xyz"
+
+		hash1 := HashActor(actor, salt)
+		hash2 := HashActor(actor, salt)
 
 		assert.Equal(t, hash1, hash2)
 	})
@@ -117,22 +126,93 @@ func TestHashActor(t *testing.T) {
 	t.Run("returns different hashes for different inputs", func(t *testing.T) {
 		t.Parallel()
 
-		hash1 := HashActor("user-123")
-		hash2 := HashActor("user-456")
+		hash1 := HashActor("user-123", "salt")
+		hash2 := HashActor("user-456", "salt")
 
 		assert.NotEqual(t, hash1, hash2)
+	})
+
+	t.Run("returns different hashes for different salts", func(t *testing.T) {
+		t.Parallel()
+
+		actor := "user-123"
+		hashA := HashActor(actor, "tenant-a-salt")
+		hashB := HashActor(actor, "tenant-b-salt")
+
+		assert.NotEqual(t, hashA, hashB,
+			"salting must yield distinct digests across tenants for the same actor")
+	})
+
+	t.Run("salted and unsalted hashes differ", func(t *testing.T) {
+		t.Parallel()
+
+		actor := "user-123"
+		unsalted := HashActor(actor, "")
+		salted := HashActor(actor, "any-salt")
+
+		assert.NotEqual(t, unsalted, salted,
+			"introducing a salt must change the digest so operators can tell legacy rows apart")
 	})
 
 	t.Run("hash is hexadecimal", func(t *testing.T) {
 		t.Parallel()
 
-		result := HashActor("test-actor")
+		result := HashActor("test-actor", "")
 
 		// Verify all characters are valid hex
 		for _, c := range result {
 			assert.True(t, (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'),
 				"character %c is not valid hex", c)
 		}
+	})
+}
+
+func TestAuditEvent_ResolveActorHash(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns empty string for empty actor with no precomputed hash", func(t *testing.T) {
+		t.Parallel()
+
+		event := AuditEvent{Actor: "", ActorHash: ""}
+		assert.Empty(t, event.ResolveActorHash("any-salt"))
+	})
+
+	t.Run("returns precomputed hash verbatim", func(t *testing.T) {
+		t.Parallel()
+
+		event := AuditEvent{Actor: "user-123", ActorHash: "precomputed"}
+		assert.Equal(t, "precomputed", event.ResolveActorHash("any-salt"))
+	})
+
+	t.Run("derives hash from actor when ActorHash is empty", func(t *testing.T) {
+		t.Parallel()
+
+		event := AuditEvent{Actor: "user-123", ActorHash: ""}
+		salt := "tenant-salt"
+
+		assert.Equal(t, HashActor("user-123", salt), event.ResolveActorHash(salt))
+	})
+}
+
+func TestSaltProviderFunc(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil func returns empty salt", func(t *testing.T) {
+		t.Parallel()
+
+		var provider SaltProviderFunc
+
+		assert.Empty(t, provider.SaltFor(t.Context()))
+	})
+
+	t.Run("non-nil func forwards to underlying function", func(t *testing.T) {
+		t.Parallel()
+
+		provider := SaltProviderFunc(func(_ context.Context) string {
+			return "delegated-salt"
+		})
+
+		assert.Equal(t, "delegated-salt", provider.SaltFor(t.Context()))
 	})
 }
 

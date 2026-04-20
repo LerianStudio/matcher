@@ -319,7 +319,6 @@ func (h *ChaosHarness) EnableAllProxies(t *testing.T) {
 func (h *ChaosHarness) IsolateService(t *testing.T, service string) error {
 	t.Helper()
 
-	var proxy *toxiproxy.Proxy
 	restore, err := isolateServiceProxy(service, map[string]proxyController{
 		"postgres": toxiproxyController{proxy: h.PGProxy},
 		"redis":    toxiproxyController{proxy: h.RedisProxy},

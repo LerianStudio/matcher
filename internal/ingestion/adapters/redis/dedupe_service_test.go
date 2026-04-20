@@ -12,7 +12,8 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/internal/auth"
+	"github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
+
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
@@ -72,7 +73,8 @@ func TestDedupeServiceIsDuplicate(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, isDuplicate)
 
-	key := service.buildKey(ctx, contextID, hash)
+	key, keyErr := service.buildKey(ctx, contextID, hash)
+	require.NoError(t, keyErr)
 	require.NoError(t, client.Set(ctx, key, "1", 0).Err())
 
 	isDuplicate, err = service.IsDuplicate(ctx, contextID, hash)
@@ -103,7 +105,8 @@ func TestDedupeServiceMarkSeenSetsKey(t *testing.T) {
 	hash := service.CalculateHash(sourceID, "ext")
 
 	require.NoError(t, service.MarkSeen(ctx, contextID, hash, time.Minute))
-	key := service.buildKey(ctx, contextID, hash)
+	key, keyErr := service.buildKey(ctx, contextID, hash)
+	require.NoError(t, keyErr)
 	require.Positive(t, client.Exists(ctx, key).Val())
 }
 
@@ -113,10 +116,15 @@ func TestDedupeServiceBuildKey_TenantAwareWhenTenantPresent(t *testing.T) {
 	service := NewDedupeService(nil)
 	contextID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	hash := "hash"
-	ctx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
+	ctx := core.ContextWithTenantID(context.Background(), "tenant-a")
 
-	require.Equal(t, "matcher:dedupe:tenant-a:00000000-0000-0000-0000-000000000001:hash", service.buildKey(ctx, contextID, hash))
-	require.Equal(t, "matcher:dedupe:00000000-0000-0000-0000-000000000001:hash", service.buildKey(context.Background(), contextID, hash))
+	tenantKey, err := service.buildKey(ctx, contextID, hash)
+	require.NoError(t, err)
+	require.Equal(t, "tenant:tenant-a:matcher:dedupe:00000000-0000-0000-0000-000000000001:hash", tenantKey)
+
+	plainKey, err := service.buildKey(context.Background(), contextID, hash)
+	require.NoError(t, err)
+	require.Equal(t, "matcher:dedupe:00000000-0000-0000-0000-000000000001:hash", plainKey)
 }
 
 func TestDedupeService_TenantAwareOperationsStayIsolated(t *testing.T) {
@@ -131,8 +139,8 @@ func TestDedupeService_TenantAwareOperationsStayIsolated(t *testing.T) {
 	sourceID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
 	hash := service.CalculateHash(sourceID, "tenant-aware")
 
-	tenantACtx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
-	tenantBCtx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-b")
+	tenantACtx := core.ContextWithTenantID(context.Background(), "tenant-a")
+	tenantBCtx := core.ContextWithTenantID(context.Background(), "tenant-b")
 
 	require.NoError(t, service.MarkSeen(tenantACtx, contextID, hash, time.Minute))
 
@@ -350,4 +358,102 @@ func TestDedupeServiceClearBatchEmptyHashes(t *testing.T) {
 
 	err := service.ClearBatch(context.Background(), uuid.New(), []string{})
 	require.NoError(t, err)
+}
+
+func TestDedupeServiceMarkSeenBulkMarksAllNewHashes(t *testing.T) {
+	t.Parallel()
+
+	_, client := setupRedis(t)
+	conn := testutil.NewRedisClientWithMock(client)
+	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
+	service := NewDedupeService(provider)
+
+	ctx := context.Background()
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	sourceID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+
+	hashes := []string{
+		service.CalculateHash(sourceID, "ext-bulk-1"),
+		service.CalculateHash(sourceID, "ext-bulk-2"),
+		service.CalculateHash(sourceID, "ext-bulk-3"),
+	}
+
+	result, err := service.MarkSeenBulk(ctx, contextID, hashes, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, result, len(hashes))
+
+	for _, hash := range hashes {
+		require.True(t, result[hash], "expected hash to be newly set")
+
+		isDup, dupErr := service.IsDuplicate(ctx, contextID, hash)
+		require.NoError(t, dupErr)
+		require.True(t, isDup)
+	}
+}
+
+func TestDedupeServiceMarkSeenBulkReportsDuplicates(t *testing.T) {
+	t.Parallel()
+
+	_, client := setupRedis(t)
+	conn := testutil.NewRedisClientWithMock(client)
+	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
+	service := NewDedupeService(provider)
+
+	ctx := context.Background()
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	sourceID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+
+	existingHash := service.CalculateHash(sourceID, "existing")
+	require.NoError(t, service.MarkSeen(ctx, contextID, existingHash, time.Minute))
+
+	newHash := service.CalculateHash(sourceID, "brand-new")
+
+	result, err := service.MarkSeenBulk(ctx, contextID, []string{existingHash, newHash}, time.Minute)
+	require.NoError(t, err)
+	require.False(t, result[existingHash], "pre-existing hash should not be newly set")
+	require.True(t, result[newHash])
+}
+
+func TestDedupeServiceMarkSeenBulkEmpty(t *testing.T) {
+	t.Parallel()
+
+	_, client := setupRedis(t)
+	conn := testutil.NewRedisClientWithMock(client)
+	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
+	service := NewDedupeService(provider)
+
+	result, err := service.MarkSeenBulk(context.Background(), uuid.New(), nil, time.Minute)
+	require.NoError(t, err)
+	require.Empty(t, result)
+}
+
+func TestDedupeServiceMarkSeenBulkNilConnection(t *testing.T) {
+	t.Parallel()
+
+	service := &DedupeService{}
+	_, err := service.MarkSeenBulk(context.Background(), uuid.New(), []string{"h"}, time.Minute)
+	require.ErrorIs(t, err, errRedisConnRequired)
+}
+
+func TestDedupeServiceMarkSeenBulkZeroTTLKeysPersist(t *testing.T) {
+	t.Parallel()
+
+	srv, client := setupRedis(t)
+	conn := testutil.NewRedisClientWithMock(client)
+	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
+	service := NewDedupeService(provider)
+
+	ctx := context.Background()
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	sourceID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	hash := service.CalculateHash(sourceID, "no-ttl")
+
+	result, err := service.MarkSeenBulk(ctx, contextID, []string{hash}, 0)
+	require.NoError(t, err)
+	require.True(t, result[hash])
+
+	key, err := service.buildKey(ctx, contextID, hash)
+	require.NoError(t, err)
+
+	require.Equal(t, time.Duration(0), srv.TTL(key), "zero TTL should leave the key without expiration")
 }

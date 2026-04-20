@@ -82,9 +82,14 @@ func RegisterActorMappingRoutes(
 		auth.ResourceGovernance,
 		auth.ActionActorMappingWrite,
 	).Put("/v1/governance/actor-mappings/:actorId", handler.UpsertActorMapping)
+	// GET returns the cleartext PII (display_name, email) for a given actor ID
+	// — this IS the de-anonymization primitive. Gate it with the narrower
+	// ActionActorMappingDeanonymize action so that granting operators general
+	// mapping visibility (future list endpoints) stays separable from granting
+	// individual identity resolution.
 	protected(
 		auth.ResourceGovernance,
-		auth.ActionActorMappingRead,
+		auth.ActionActorMappingDeanonymize,
 	).Get("/v1/governance/actor-mappings/:actorId", handler.GetActorMapping)
 	protected(
 		auth.ResourceGovernance,

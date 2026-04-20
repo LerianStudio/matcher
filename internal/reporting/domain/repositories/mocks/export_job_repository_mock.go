@@ -13,7 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	http "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	http "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	entities "github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	uuid "github.com/google/uuid"
 	gomock "go.uber.org/mock/gomock"
@@ -118,18 +118,19 @@ func (mr *MockExportJobRepositoryMockRecorder) List(ctx, status, cursor, limit a
 }
 
 // ListByContext mocks base method.
-func (m *MockExportJobRepository) ListByContext(ctx context.Context, contextID uuid.UUID, limit int) ([]*entities.ExportJob, error) {
+func (m *MockExportJobRepository) ListByContext(ctx context.Context, contextID uuid.UUID, cursor *http.TimestampCursor, limit int) ([]*entities.ExportJob, http.CursorPagination, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListByContext", ctx, contextID, limit)
+	ret := m.ctrl.Call(m, "ListByContext", ctx, contextID, cursor, limit)
 	ret0, _ := ret[0].([]*entities.ExportJob)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(http.CursorPagination)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // ListByContext indicates an expected call of ListByContext.
-func (mr *MockExportJobRepositoryMockRecorder) ListByContext(ctx, contextID, limit any) *gomock.Call {
+func (mr *MockExportJobRepositoryMockRecorder) ListByContext(ctx, contextID, cursor, limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListByContext", reflect.TypeOf((*MockExportJobRepository)(nil).ListByContext), ctx, contextID, limit)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListByContext", reflect.TypeOf((*MockExportJobRepository)(nil).ListByContext), ctx, contextID, cursor, limit)
 }
 
 // ListExpired mocks base method.

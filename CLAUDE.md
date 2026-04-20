@@ -1,116 +1,133 @@
 # CLAUDE.md
 
-This file helps AI agents work effectively in the Matcher codebase. It complements [AGENTS.md](AGENTS.md) and [docs/PROJECT_RULES.md](docs/PROJECT_RULES.md).
+Comprehensive reference for AI coding agents working in the Matcher codebase. Read [AGENTS.md](AGENTS.md) first for a concise overview, then use this file for deep patterns and conventions.
 
-## Quick Reference
+## Quick Start (30 seconds)
 
-**Project**: Transaction reconciliation engine for Lerian Studio ecosystem  
-**Language**: Go 1.26.1  
-**Pattern**: Modular monolith with DDD + Hexagonal Architecture + CQRS-light  
-**Database**: PostgreSQL 17 with schema-per-tenant isolation  
-**Testing**: TDD required; testify + sqlmock + testcontainers
+```bash
+make up          # Start infrastructure (Postgres, Redis, RabbitMQ, SeaweedFS)
+make migrate-up  # Apply database migrations
+make dev         # Run with live reload (air) on :4018
+make test        # Run unit tests
+make lint        # Run 75+ linters
+```
+
+Health check: `GET http://localhost:4018/health`
+
+## Project Identity
+
+| Attribute | Value |
+|-----------|-------|
+| **Project** | Transaction reconciliation engine for Lerian Studio |
+| **Language** | Go (module: `go 1.26.0`) |
+| **Architecture** | Modular monolith: DDD + Hexagonal + CQRS-light |
+| **Database** | PostgreSQL 17, schema-per-tenant isolation |
+| **Cache/Locking** | Valkey (Redis-compatible) 8 |
+| **Messaging** | RabbitMQ 4.1 via transactional outbox |
+| **Object Storage** | S3-compatible (SeaweedFS in dev) |
+| **Testing** | TDD required; testify + sqlmock + testcontainers |
+| **License** | Elastic License 2.0 |
 
 ## Essential Commands
 
+### Development
+
 ```bash
-# Development
-make dev              # Live reload with air (watches *.go, *.sql)
-make tidy             # Clean Go modules
+make dev              # Live reload with air (watches *.go, *.sql in cmd/, internal/, pkg/)
 make build            # Build binary to bin/matcher
-
-# Testing
-make test             # Unit tests only (default)
-make test-unit        # Explicit unit tests
-make test-int         # Integration tests (requires Docker)
-make test-e2e         # E2E tests (requires full stack)
-make test-e2e-fast    # Fast E2E tests (short mode, 5m timeout)
-make test-e2e-journeys # Journey-based E2E tests only
-make test-all         # All tests with merged coverage
-make check-tests      # Verify every .go file has _test.go
-go test -v -run TestFunctionName ./path/to/package/...  # Single test
-
-# Quality
-make lint             # golangci-lint (75+ linters enabled)
-make sec              # gosec security scanner
-make vet              # Go vet static analysis
-make vulncheck        # Go vulnerability scanner
-make format           # go fmt
-make cover            # Coverage report (opens coverage.html)
-make check-coverage   # Verify coverage thresholds
-
-# Database
-make migrate-up       # Apply migrations
-make migrate-down     # Rollback last migration
-make migrate-create NAME=add_feature  # New migration
-make check-migrations # Verify migration pairs and sequential numbering
-
-# Docker
-make up               # Start infrastructure (postgres, redis, rabbitmq)
-make down             # Stop all services
-make start            # Start existing containers
-make stop             # Stop running containers
-make restart          # Restart all containers (down + up)
-make logs             # Tail all service logs
-make clean-docker     # Remove all containers/volumes
-
-# Code generation
-make generate         # Generate mocks (go:generate)
-make generate-docs    # Generate Swagger docs
-
-# Environment (zero-config — all defaults are baked in)
-# Override via env vars for production. See config/.config-map.example for bootstrap-only keys.
+make tidy             # Clean Go modules (root + tools/)
+make clean            # Remove build artifacts and tmp/
 ```
 
-## Architecture Quick Start
+### Testing
+
+```bash
+make test             # Unit tests (alias for test-unit)
+make test-unit        # Explicit unit tests with coverage
+make test-int         # Integration tests (requires Docker)
+make test-e2e         # E2E tests (requires full stack via make up)
+make test-e2e-fast    # E2E in quick mode (short flag, 5m timeout)
+make test-e2e-journeys # Journey-based E2E only
+make test-e2e-discovery # Discovery E2E with mock Fetcher
+make test-e2e-dashboard # 5k transaction dashboard stresser
+make test-chaos       # Fault injection tests (Toxiproxy + containers)
+make test-all         # All tests (unit + integration + e2e) with merged coverage
+
+# Single test
+go test -v -tags=unit -run TestFunctionName ./path/to/package/...
+```
+
+### Quality
+
+```bash
+make lint             # golangci-lint (75+ linters, .golangci.yml)
+make lint-fix         # golangci-lint with auto-fix
+make lint-custom      # Custom Matcher linters (entity, observability, tx patterns)
+make lint-custom-strict # Custom linters in strict mode (fails on violations)
+make format           # go fmt
+make sec              # gosec security scanner
+make vet              # go vet static analysis
+make vulncheck        # Go vulnerability scanner
+make ci               # Full local CI pipeline (lint + test + sec + vet + checks)
+```
+
+### Verification
+
+```bash
+make check-tests              # Every .go file has a _test.go
+make check-test-tags          # Test files have proper build tags
+make check-migrations         # Migration pairs and sequential numbering
+make check-coverage           # Coverage meets 70% threshold
+make check-generated-artifacts # Swagger docs are up to date
+```
+
+### Code Generation
+
+```bash
+make generate         # go:generate (mocks, etc.)
+make generate-docs    # Swagger/OpenAPI docs to docs/swagger/
+```
+
+### Database
+
+```bash
+make migrate-up                   # Apply all pending migrations
+make migrate-down                 # Rollback last migration
+make migrate-to VERSION=<n>       # Migrate to specific version
+make migrate-create NAME=<name>   # Create new migration pair
+```
+
+### Docker
+
+```bash
+make up               # Start all services (postgres, redis, rabbitmq, seaweedfs, app)
+make down             # Stop all services
+make restart          # Stop + start
+make rebuild-up       # Rebuild images and restart
+make logs             # Tail all service logs
+make clean-docker     # Remove all containers, volumes, prune
+make docker-build     # Build Docker image locally
+```
+
+## Architecture
 
 ### Bounded Contexts
 
 ```
 internal/
+├── auth/             # JWT extraction, tenant resolution, RBAC middleware
+├── bootstrap/        # Composition root: config, DI, server, systemplane
 ├── configuration/    # Reconciliation contexts, sources, match rules, fee schedules/rules, scheduling
-├── discovery/        # External data source discovery, schema detection, extraction management
-├── ingestion/        # File parsing, normalization, deduplication
-├── matching/         # Match orchestration, rule execution, fee verification, confidence scoring
-├── exception/        # Exception lifecycle, disputes, evidence, resolutions
+├── discovery/        # External data source discovery, schema detection, extraction
+├── ingestion/        # File parsing (CSV/JSON/XML/ISO 20022), normalization, dedup
+├── matching/         # Match orchestration, rule execution, fee verification, scoring
+├── exception/        # Exception lifecycle, disputes, evidence, resolutions, bulk ops
 ├── governance/       # Immutable audit logs, hash chains, archival
-├── reporting/        # Dashboard analytics, export jobs, variance reports, archival
-├── outbox/           # Reliable event publication
-└── shared/           # Shared kernel: cross-context domain types + port abstractions
+├── reporting/        # Dashboard analytics, export jobs (CSV/PDF), variance reports
+├── outbox/           # Reliable event publication via transactional outbox
+├── shared/           # Shared kernel: cross-context domain types + port abstractions
+└── testutil/         # Shared test helpers (Ptr[T], deterministic time)
 ```
-
-### Shared Kernel (`internal/shared/`)
-
-The `shared/` module is the **designated bridge** between bounded contexts. It contains types that multiple contexts legitimately need to share, preventing import cycles between context packages.
-
-```
-internal/shared/
-├── domain/
-│   ├── audit_log.go          # AuditLog entity (used by governance + matching)
-│   ├── events.go             # Domain event base types
-│   ├── field_map.go          # FieldMap for normalization (used by ingestion + matching)
-│   ├── ingestion_events.go   # Ingestion event payloads
-│   ├── match_rule.go         # MatchRule (used by matching + configuration)
-│   ├── outbox_event.go       # OutboxEvent envelope (used by outbox + all publishers)
-│   ├── transaction.go        # Transaction entity (used by ingestion + matching + exception)
-│   ├── exception/            # Exception severity value objects (type-aliased for backward compat)
-│   └── fee/                  # Fee schedule domain (moved from matching; used by config + matching)
-└── ports/
-    ├── audit.go              # AuditRepository interface (cross-context)
-    ├── infrastructure.go     # InfrastructureProvider (DB resolver)
-    ├── match_trigger.go      # MatchTrigger port for auto-match on upload
-    ├── object_storage.go     # ObjectStorage port
-    ├── outbox.go             # OutboxRepository interface (cross-context)
-    └── tx.go                 # TxRunner port
-```
-
-**Type-alias pattern**: When a type migrates to `shared/domain/`, the original package re-exports it via a type alias for backward compatibility:
-```go
-// exception/domain/value_objects/severity.go
-import sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
-type Severity = sharedexception.Severity  // type alias, not redefinition
-```
-
-**Cross-context import rule**: Bounded contexts **must not** import each other directly. Use `internal/shared/` as the bridge. This is enforced by depguard rules in `.golangci.yml`.
 
 ### Hexagonal Structure (per context)
 
@@ -122,238 +139,188 @@ internal/{context}/
 │   ├── postgres/         # Repository implementations
 │   │   └── {aggregate}/  # One dir per aggregate root
 │   └── rabbitmq/         # Message publishers/consumers
-├── ports/                # External dependency abstractions (EventPublisher, ObjectStorage, etc.)
+├── ports/                # External dependency abstractions (context-specific)
 ├── domain/
 │   ├── entities/         # Aggregate roots with business logic
-│   ├── value_objects/    # Value types (primary convention; most contexts use this)
-│   ├── enums/            # Type-safe enumerations (matching also has this alongside value_objects)
-│   ├── repositories/     # Repository interfaces for the context's own aggregates
-│   └── errors/           # Domain-scoped sentinel errors (preferred location; governance has this;
-│                         #   adapter-level sentinels live in adapters/postgres/{name}/errors.go)
+│   ├── value_objects/    # Value types (configuration, exception, ingestion, matching)
+│   ├── enums/            # Type-safe enumerations (matching)
+│   ├── repositories/     # Repository interfaces for own aggregates
+│   ├── services/         # Domain services (matching has this for rule evaluators)
+│   └── errors/           # Domain sentinel errors (governance)
 └── services/
-    ├── command/          # Write operations (*_commands.go + helper files)
+    ├── command/          # Write operations (*_commands.go + helpers)
     ├── query/            # Read operations (*_queries.go)
-    └── worker/           # Background workers (configuration, governance use this)
+    └── worker/           # Background workers (configuration, governance, reporting, discovery)
 ```
 
-**Interface location convention**:
-- `domain/repositories/` — repository interfaces for the context's own aggregate stores
-- `ports/` — external dependency abstractions (EventPublisher, ObjectStorage, CacheProvider, etc.)
-- `internal/shared/ports/` — cross-context abstractions (OutboxRepository, AuditRepository, etc.)
+### Interface Location Convention
 
-**Notes on domain subdirectory usage across contexts**:
-- `domain/value_objects/` — used by configuration, exception, ingestion, matching
-- `domain/enums/` — used by matching (alongside value_objects for exception reasons)
-- `domain/errors/` — used by governance; other contexts keep sentinels in `services/command/commands.go` or `adapters/postgres/{name}/errors.go`
+| Location | Contains |
+|----------|----------|
+| `{context}/domain/repositories/` | Repository interfaces for that context's own aggregates |
+| `{context}/ports/` | External dependency abstractions (EventPublisher, ObjectStorage, CacheProvider) |
+| `internal/shared/ports/` | Cross-context abstractions (OutboxRepository, AuditLogRepository, InfrastructureProvider, MatchTrigger, TenantLister, FetcherClient, M2MProvider, IdempotencyRepository) |
+
+### Shared Kernel (`internal/shared/`)
+
+The designated bridge between bounded contexts. Contains types multiple contexts legitimately share.
+
+```
+internal/shared/
+├── adapters/
+│   ├── cross/        # Bridge adapters connecting contexts
+│   ├── http/         # Shared HTTP middleware (idempotency, rate limiting, error mapping)
+│   ├── m2m/          # Machine-to-machine credential adapters
+│   ├── postgres/     # Common SQL utilities (pgcommon)
+│   └── rabbitmq/     # Shared RabbitMQ publisher with confirms + DLQ
+├── constants/        # Shared constants
+├── domain/
+│   ├── audit_log.go      # AuditLog entity (governance + matching)
+│   ├── events.go         # Domain event base types
+│   ├── field_map.go      # FieldMap for normalization (ingestion + matching)
+│   ├── idempotency.go    # Idempotency domain types
+│   ├── ingestion_events.go # Ingestion event payloads
+│   ├── match_rule.go     # MatchRule (matching + configuration)
+│   ├── outbox_event.go   # OutboxEvent envelope (outbox + all publishers)
+│   ├── transaction.go    # Transaction entity (ingestion + matching + exception)
+│   ├── exception/        # Exception severity value objects (type-aliased)
+│   └── fee/              # Fee schedule domain (used by config + matching)
+├── infrastructure/   # Shared infrastructure setup
+├── ports/            # Cross-context port interfaces (15+ files)
+├── sanitize/         # CSV formula injection prevention
+├── testutil/         # Shared test mocks and helpers
+└── utils/            # Generic utilities
+```
+
+**Cross-context import rule**: Bounded contexts **must not** import each other directly. Use `internal/shared/` as the bridge. Enforced by depguard rules in `.golangci.yml`.
+
+**Type-alias pattern**: When a type migrates to `shared/domain/`, the original package re-exports via type alias:
+```go
+// exception/domain/value_objects/severity.go
+import sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
+type Severity = sharedexception.Severity  // type alias, not redefinition
+```
 
 ## Code Patterns
 
 ### 1. Domain Entities
 
-**Key traits**:
-- Constructor functions enforce invariants (`New*()`)
+- Constructor `New*()` enforces invariants, returns `(*T, error)`
 - Use `pkg/assert` for validation (returns errors, never panics)
-- Immutable IDs (`uuid.UUID`)
-- Pure business logic (no logging/tracing)
-- UTC timestamps (`time.Now().UTC()`)
-- Rich behavior via methods (e.g., `CanAutoConfirm()`, `Reject()`)
+- Immutable IDs (`uuid.UUID`), UTC timestamps (`time.Now().UTC()`)
+- Pure business logic: no logging, no tracing, no infrastructure imports
+- Rich behavior via methods (e.g., `CanAutoConfirm()`, `Reject()`, `MarkComplete()`)
+- Identity fields (`ID`, `ContextID`, `TenantID`) immutable after creation
 
-**Example**:
 ```go
 func NewMatchItem(ctx context.Context, txID uuid.UUID, allocated, expected decimal.Decimal, currency string) (*MatchItem, error) {
     asserter := assert.New(ctx, nil, "matcher", "match_item.new")
-    
     if err := asserter.That(ctx, txID != uuid.Nil, "transaction id required"); err != nil {
         return nil, fmt.Errorf("match item transaction id: %w", err)
     }
-    
     if err := asserter.That(ctx, !allocated.IsNegative(), "allocated amount non-negative"); err != nil {
         return nil, fmt.Errorf("match item allocated amount: %w", err)
     }
-    
     return &MatchItem{
-        ID:              uuid.New(),
-        TransactionID:   txID,
-        AllocatedAmount: allocated,
-        CreatedAt:       time.Now().UTC(),
-        UpdatedAt:       time.Now().UTC(),
+        ID: uuid.New(), TransactionID: txID, AllocatedAmount: allocated,
+        CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
     }, nil
 }
 ```
 
 ### 2. Services (Use Cases)
 
-**Key traits**:
-- One service struct per use case
-- Hold dependencies via constructor
-- Context-first signatures
-- Dedicated input structs
-- Domain-specific method names (e.g., `RunMatch()`, `ManualMatch()`) preferred over generic `Execute()`
-- Sentinel errors at package level
-- OpenTelemetry spans for every method
-- Use `libCommons.NewTrackingFromContext(ctx)` for observability
+- One UseCase struct per bounded context (separate for command vs query)
+- Constructor validates required deps with sentinel errors; optional deps via `UseCaseOption`
+- Domain-specific method names (`RunMatch()`, `ManualMatch()`), NOT generic `Execute()`
+- Dedicated input struct per method
+- Every method: tracking + span + defer
 
-**Example**:
 ```go
-type RunMatchUseCase struct {
-    contextRepo ports.ContextRepository
-    matchRepo   ports.MatchRepository
-    eventBus    ports.EventPublisher
-}
-
-func NewRunMatchUseCase(contextRepo ports.ContextRepository, matchRepo ports.MatchRepository, eventBus ports.EventPublisher) *RunMatchUseCase {
-    return &RunMatchUseCase{contextRepo: contextRepo, matchRepo: matchRepo, eventBus: eventBus}
-}
-
-func (uc *RunMatchUseCase) RunMatch(ctx context.Context, input RunMatchInput) (*MatchRun, error) {
+func (uc *UseCase) RunMatch(ctx context.Context, input RunMatchInput) (*MatchRun, error) {
     track := libCommons.NewTrackingFromContext(ctx)
     ctx, span := track.Tracer.Start(ctx, "matching.run_match")
     defer span.End()
-
-    // Orchestration logic...
+    // orchestration logic...
 }
 ```
 
 ### 3. Repositories
 
-**Key traits**:
 - Implement domain port interfaces
-- Use `ports.InfrastructureProvider` for database access
-- Provide `WithTx` variants for transactional operations
-- Use `pgcommon.WithTenantTxProvider` for multi-tenancy
-- Convert between PostgreSQL models and domain entities
-- Use `squirrel` for dynamic query building
-- Cursor-based pagination via `libHTTP.CursorPagination`
-
-**Example**:
-```go
-func (repo *MatchGroupRepository) CreateBatch(ctx context.Context, groups []*domain.MatchGroup) error {
-    return pgcommon.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) error {
-        return repo.CreateBatchWithTx(ctx, tx, groups)
-    })
-}
-
-func (repo *MatchGroupRepository) CreateBatchWithTx(ctx context.Context, tx *sql.Tx, groups []*domain.MatchGroup) error {
-    // Insert logic with tenant isolation...
-}
-```
+- Use `pgcommon.WithTenantTxProvider(ctx, provider, fn)` for tenant-isolated transactions
+- Use `pgcommon.WithTenantTxOrExistingProvider(ctx, provider, existingTx, fn)` for composable transactions
+- Every write method must have a `*WithTx` variant (enforced by custom linter)
+- Separate PostgreSQL model structs from domain entities (`NewPostgreSQLModel()` / `ToEntity()`)
+- Use `squirrel` for dynamic query building with `squirrel.Dollar` placeholder format
+- Cursor-based pagination via `pgcommon.ApplyIDCursorPagination()`
 
 ### 4. HTTP Handlers
 
-**Key traits**:
-- Fiber framework (`gofiber/fiber/v2`)
-- Separate request/response DTOs
-- Validation via `sharedhttp.ParseBodyAndValidate()`
-- Context verification via `ParseAndVerifyContextParam()`
-- Swagger annotations for OpenAPI
-- Error mapping to HTTP status codes
-- Span per handler via `startHandlerSpan()`
-
-**Example**:
-```go
-// @Summary      Run match job
-// @Description  Execute matching rules for a reconciliation context
-// @Tags         matching
-// @Accept       json
-// @Produce      json
-// @Param        contextId   path      string           true  "Context ID"
-// @Param        request     body      RunMatchRequest  true  "Match parameters"
-// @Success      200         {object}  RunMatchResponse
-// @Failure      400         {object}  sharedhttp.ErrorResponse
-// @Router       /api/v1/contexts/{contextId}/matches [post]
-func (h *MatchHandler) RunMatch(c *fiber.Ctx) error {
-    ctx, span := startHandlerSpan(c, "run_match")
-    defer span.End()
-    
-    // Parse and validate...
-}
-```
+- Fiber v2 framework (`gofiber/fiber/v2`)
+- Every handler starts with: `ctx, span, logger := startHandlerSpan(fiberCtx, "handler.{context}.{operation}")` + `defer span.End()`
+- Body parsing: `libHTTP.ParseBodyAndValidate(fiberCtx, &payload)`
+- Context verification: `libHTTP.ParseAndVerifyTenantScopedID()` for path params
+- Swagger annotations required on all handlers
+- Route registration uses `protected(resource, actions...)` higher-order function
+- Error-to-HTTP mapping via `errors.Is(err, ErrSentinel)` → HTTP status codes
+- Response helpers: `libHTTP.Respond()`, `libHTTP.RespondError()`, `libHTTP.RespondStatus()`
 
 ### 5. Error Handling
 
-**Key traits**:
-- Sentinel errors via `errors.New()` at package level
-- Error wrapping with `fmt.Errorf("context: %w", err)`
+- Sentinel errors via `errors.New()` at package level, naming: `Err[Category][Specific]`
+- Error wrapping: `fmt.Errorf("context: %w", err)` — ALWAYS `%w`, never `%v`
 - Check with `errors.Is(err, ErrNotFound)`
-- Custom error types when extra context needed
-- Trace errors via `libOpentelemetry.HandleSpanError(span, "msg", err)`
+- Error tracing: `libOpentelemetry.HandleSpanError(span, "msg", err)` (takes value, not pointer)
+- Business error events: `libOpentelemetry.HandleSpanBusinessErrorEvent(span, "message")`
+- Error sanitization in production: `libLog.SafeError(logger, ctx, "msg", err, productionMode.Load())`
 
-**Example**:
-```go
-// Package-level sentinels
-var (
-    ErrContextNotFound = errors.New("reconciliation context not found")
-    ErrInvalidRule     = errors.New("invalid match rule")
-)
+**Sentinel locations** (5 places):
+1. `services/command/commands.go` — use case sentinels
+2. `domain/entities/*.go` — state transition errors
+3. `adapters/postgres/{name}/errors.go` — repository sentinels
+4. `adapters/http/errors.go` or `handlers.go` — HTTP-level errors
+5. `domain/errors/errors.go` — governance only
 
-// Wrapping
-if err := repo.Save(ctx, entity); err != nil {
-    return nil, fmt.Errorf("save match group: %w", err)
-}
+### 6. Nil Checks vs Asserters
 
-// Checking
-if errors.Is(err, ErrContextNotFound) {
-    return fiber.NewError(fiber.StatusNotFound, "Context not found")
-}
-```
+| Use simple `if x == nil` for | Use `pkg/assert` for |
+|-------------------------------|---------------------|
+| Nil receiver checks (fast path) | Domain entity invariant validation |
+| Dependency injection in constructors (sentinel errors) | Business rule validation with structured context |
+| Infrastructure/adapter layer | Multiple sequential validations |
 
-**Nil Checks vs Asserters**:
+### 7. Multi-Tenancy (CRITICAL SECURITY)
 
-Use **simple `if x == nil`** for:
-- Nil receiver checks at method start (fast path, no context available)
-- Dependency injection validation in constructors (return sentinel errors)
-- Infrastructure/adapter layer checks
-
-Use **`pkg/assert`** for:
-- Domain entity invariant validation (benefits from observability)
-- Business rule validation with structured context
-- Multiple sequential validations in constructors
-
-```go
-// Simple nil check - service layer dependency injection
-if jobRepo == nil {
-    return nil, ErrNilJobRepository
-}
-
-// Asserter - domain entity validation with observability
-asserter := assert.New(ctx, nil, "matcher", "match_item.new")
-if err := asserter.NotNil(ctx, txID, "transaction id required"); err != nil {
-    return nil, fmt.Errorf("match item transaction id: %w", err)
-}
-```
-
-### 6. Multi-Tenancy
-
-**CRITICAL SECURITY PATTERN**:
 - Tenant info (`tenantID`, `tenantSlug`) ONLY from JWT claims via context
-- NEVER accept tenant identifiers in request payloads, path params, query params, or headers
+- **NEVER** accept tenant identifiers in request payloads, path params, query params, or headers
 - Extract via `auth.GetTenantID(ctx)` or `auth.GetTenantSlug(ctx)`
 - Apply schema in transactions via `auth.ApplyTenantSchema(ctx, tx)`
-- Use `pgcommon.WithTenantTxProvider` wrapper for automatic isolation
-- If auth disabled or claims missing, run in single-tenant mode
+- Use `pgcommon.WithTenantTxProvider` for automatic isolation
+- If auth disabled or claims missing, run in single-tenant mode with `public` schema
+- Read operations use replica connections with connection-scoped `SET search_path`
+- Default tenant uses `public` schema (no UUID schema). Background workers MUST include default tenant when enumerating via `pg_namespace`
 
-### 7. Testing Patterns
+### 8. Testing Patterns
 
 **Build tags** (required at top of file):
-```go
-//go:build unit
 
-//go:build integration
-
-//go:build e2e
-
-//go:build chaos
-```
-
-> `chaos` is used by 9 files in `tests/chaos/` for fault-injection tests (Toxiproxy, container chaos). These tests require the full docker-compose stack plus Toxiproxy.
+| Tag | Scope | External deps |
+|-----|-------|---------------|
+| `//go:build unit` | Unit tests | None (mocks only) |
+| `//go:build integration` | Integration tests | Testcontainers |
+| `//go:build e2e` | End-to-end | Full stack |
+| `//go:build chaos` | Fault injection | Toxiproxy + containers |
 
 **Test structure**:
 - Co-locate tests with source (`*_test.go`)
-- Use testify assertions
-- Mock dependencies with interfaces
-- Use `sqlmock` for database tests
-- Use `testcontainers` for integration tests
+- Use testify `assert`/`require`
+- `sqlmock` for database unit tests
+- `testcontainers-go` for integration tests
+- `go.uber.org/mock` (gomock) for complex contracts; manual mocks for simple interfaces (<=5 methods)
 - Every `.go` file must have a corresponding `_test.go` (enforced by `make check-tests`)
+- Test env is clean: Makefile unsets all matcher config env vars before runs (`CLEAN_ENV`)
+- Coverage threshold: **70%** enforced in CI
 
 **Example**:
 ```go
@@ -363,9 +330,7 @@ func TestNewMatchItem_ValidInput_Success(t *testing.T) {
     ctx := context.Background()
     txID := uuid.New()
     amount := decimal.NewFromFloat(100.50)
-    
     item, err := NewMatchItem(ctx, txID, amount, amount, "USD")
-    
     assert.NoError(t, err)
     assert.NotNil(t, item)
     assert.Equal(t, txID, item.TransactionID)
@@ -375,425 +340,272 @@ func TestNewMatchItem_ValidInput_Success(t *testing.T) {
 ## File Naming Standards
 
 ### Postgres Adapters
+
 Each aggregate directory follows Pattern A:
-- `{name}.go` — model structs and domain↔DB conversions
+- `{name}.go` — model structs and domain<->DB conversions
 - `{name}.postgresql.go` — repository implementation
-- `{name}.postgresql_test.go` — postgres adapter tests (unit with sqlmock OR integration with testcontainers; build tag is the discriminator)
-- `{name}_sqlmock_test.go` — sqlmock-based unit tests (build tag: `unit`)
+- `{name}.postgresql_test.go` — postgres adapter tests (build tag discriminates unit vs integration)
+- `{name}_sqlmock_test.go` — sqlmock-based unit tests
 - `errors.go` — adapter-specific sentinel errors
 
-**Exceptions** (flat layout, files directly in `postgres/` without subdirectory):
-- `reporting/adapters/postgres/` — flat multi-repository, read-only projections
-- `shared/adapters/postgres/common/` — utility functions
-- `governance/adapters/postgres/` — audit_log adapter (flat, no model file; repository + errors only)
-- `outbox/adapters/postgres/` — outbox adapter (flat, repository only)
+**Flat layout exceptions**: `reporting/adapters/postgres/`, `shared/adapters/postgres/common/`, `governance/adapters/postgres/`
 
 ### Command/Query Services
-- Commands: `*_commands.go` (entity-grouped, plural) — e.g., `match_group_commands.go`, `adjustment_commands.go`
+
+- Commands: `*_commands.go` (entity-grouped, plural) — e.g., `match_group_commands.go`
 - Queries: `*_queries.go` (entity-grouped, plural) — e.g., `dashboard_queries.go`
 - Entry point: `commands.go` (UseCase struct, constructor, shared errors)
-- Helper files: private helper methods on the UseCase struct may use descriptive names without the `_commands.go` suffix (e.g., `match_group_persistence.go`, `rule_execution_support.go`, `tx_helpers.go`). These files contain internal implementation details, not public use-case entry points.
+- Helper files: private methods use descriptive names without the `_commands.go` suffix (e.g., `match_group_persistence.go`, `rule_execution_support.go`)
 
 ### HTTP Handlers
-Split into `handlers_{feature}.go` when a context has 3+ distinct feature areas:
-- e.g., `handlers_run.go`, `handlers_manual.go`, `handlers_adjustment.go`
+
+Split into `handlers_{feature}.go` when a context has 3+ distinct feature areas.
 
 ### Test Files
-- Build tags (`//go:build unit`, `//go:build integration`) are the authoritative discriminator
-- `_sqlmock_test.go` suffix for SQL mock-based unit tests
-- `_mock_test.go` suffix for other mock-based unit tests (e.g., RabbitMQ)
+
+- Build tags are the authoritative discriminator
+- `_sqlmock_test.go` for SQL mock-based unit tests
+- `_mock_test.go` for other mock-based unit tests (e.g., RabbitMQ)
 - Test files are NOT merged even when source files are consolidated
 
 ## Gotchas & Non-Obvious Patterns
 
-### 1. Never Panic in Production
-- Use `pkg/assert` which returns errors instead
-- Domain validation returns `(*T, error)` from constructors
-- Use `pkg/runtime` for panic recovery in critical paths
+1. **Never panic in production** — Use `pkg/assert` (returns errors). Use `pkg/runtime` for panic recovery in goroutines: `defer runtime.RecoverAndLogWithContext(ctx, logger, component, name)` as first defer (LIFO order).
 
-### 2. Tenant Isolation is Non-Negotiable
-- PostgreSQL `search_path` sets schema per request
-- Transactions MUST apply tenant schema via `auth.ApplyTenantSchema(ctx, tx)`
-- Repository methods extract tenant from context, never from parameters
-- Prevents tenant spoofing attacks
+2. **Tenant isolation is non-negotiable** — PostgreSQL `search_path` per request. Transactions MUST apply tenant schema. Repository methods extract tenant from context, never from parameters.
 
-### 3. Audit Trail is Append-Only
-- NEVER UPDATE or DELETE from audit tables
-- Use outbox pattern for reliable event publication
-- Events immutable after creation
+3. **Audit trail is append-only** — NEVER UPDATE or DELETE audit tables. Events immutable after creation.
 
-### 4. CQRS File Naming
-- Write operations: `*_commands.go` (e.g., `match_group_commands.go`, `adjustment_commands.go`)
-- Read operations: `*_queries.go` (e.g., `dashboard_queries.go`)
-- Helper files in `command/` may omit the `_commands.go` suffix when they contain only private methods on the UseCase struct (e.g., persistence helpers, rule execution support, transaction utilities)
-- Helps identify command/query separation at a glance
+4. **Observability is everywhere** — Start spans at service boundaries, always `defer span.End()`. Use `libCommons.NewTrackingFromContext(ctx)` for logger + tracer + headerID.
 
-### 5. Observability is Everywhere
-- Start spans at service boundaries: `ctx, span := tracer.Start(ctx, "name")`
-- Always `defer span.End()`
-- Log errors with structured fields: `logger.WithFields(...).Errorf(...)`
-- Use `libCommons.NewTrackingFromContext(ctx)` to extract logger, tracer, headerID
+5. **Transaction management** — Always provide `WithTx` variants. Use `pgcommon.WithTenantTxProvider` for automatic isolation. Keep transactions short and deterministic. 30s default timeout.
 
-### 6. Transaction Management
-- Always provide `WithTx` variants for repositories
-- Use `pgcommon.WithTenantTxProvider` for automatic tenant isolation + transaction management
-- Keep transactions short and deterministic
-- Avoid long-running operations inside transactions
+6. **Idempotency keys** — `sharedhttp.NewIdempotencyMiddleware(...)` for POST/PUT. Keys stored in Redis. Applied after auth + tenant extraction (needs tenant ID for scoping). Max 128 chars.
 
-### 7. Idempotency Keys
-- Use `sharedhttp.IdempotencyAdapter` for POST/PUT operations
-- Keys stored in Redis with configurable TTL
-- Prevents duplicate mutations from client retries
+7. **Outbox pattern** — All async communication via outbox (no direct context-to-context messaging). Dispatcher polls with configurable interval (~2s). `ConfirmablePublisher` with broker confirmation and automatic channel recovery.
 
-### 8. Migration Naming
-- Sequential versioning: `000001_init_schema.up.sql`, `000001_init_schema.down.sql`
-- Descriptive names: `000015_add_custom_source_type.up.sql`
-- Always provide `.down.sql` for rollback
-- Test both up and down before merging
+8. **Systemplane is runtime config authority** — Viper + env vars are bootstrap-only. After startup, `systemplane` owns all runtime config. Use `configManager.Get()` for values. v5 admin surface (management-plane, intentionally excluded from public OpenAPI): `GET /system/:namespace` (list with inline schema metadata), `GET /system/:namespace/:key` (read a single key), `PUT /system/:namespace/:key` (write a single key). The matcher namespace is `matcher`. The v4 `/v1/system/configs[...]` paths and the `/schema`, `/history`, `/reload` sub-endpoints are REMOVED — schema metadata is returned inline in list responses, history is available only via audit logs, and reload is no longer exposed (v5 auto-subscribes to changes).
 
-### 9. Air Live Reload
-- Watches `*.go`, `*.sql` files
-- Excludes `*_test.go`, `vendor/`, `docs/`, `migrations/`
-- Builds to `tmp/main`
-- Configure via `.air.toml`
+9. **Docker Compose auto-detection** — Makefile auto-detects `docker compose` vs `docker-compose` via `$(DOCKER_CMD)`.
 
-### 10. Docker Compose Command Detection
-- Makefile auto-detects `docker compose` vs `docker-compose`
-- Uses `$(DOCKER_CMD)` variable
-- No need to specify which version you have
+10. **Air live reload** — Watches `*.go`, `*.sql` in `cmd/`, `internal/`, `pkg/`. Excludes tests, tools, docs, migrations. Builds to `tmp/main`. Config in `.air.toml`.
 
-### 11. Services Layout: Workers vs Dispatcher
-- Background workers live in `services/worker/` (e.g., `configuration/services/worker/scheduler_worker.go`, `governance/services/worker/archival_worker.go`)
-- The outbox **dispatcher** is a known exception: it lives at `outbox/services/dispatcher.go` (services root, not in command/, query/, or worker/) because it is pure infrastructure — not a use case and not a scheduled job
+11. **Workers vs Dispatcher** — Background workers in `services/worker/`. The outbox dispatcher is provided by `lib-commons/v5/commons/outbox` and wired in `internal/bootstrap/outbox_wiring.go`; matcher registers one handler per event type rather than owning its own dispatcher package.
 
-### 12. Systemplane is the Runtime Config Authority
-- Viper + env vars are **bootstrap-only** — used to load the initial `Config` struct at startup
-- After startup, the **systemplane** (`lib-commons/v4/commons/systemplane`) owns all runtime config
-- For runtime config values: use `configManager.Get()` which returns the systemplane-backed `*Config`
-- For runtime config schema/metadata: use `registry.Get(key)` which returns `KeyDef` metadata
-- Direct systemplane API: `GET /v1/system/configs`, schema: `GET /v1/system/configs/schema`, history: `GET /v1/system/configs/history`
-- Never read Viper directly at runtime
+12. **Migration naming** — Sequential: `000001_descriptive_name.up.sql` / `.down.sql`. Currently 21 migrations. Always provide rollback. Validate with `make check-migrations`.
 
 ## Configuration
 
-### Environment Variables
+### Zero-Config Defaults
 
-Matcher uses **zero-config defaults** — all configuration has sensible defaults baked into `defaultConfig()`. No `.env` or YAML files are required. Override via environment variables for production.
+Matcher uses zero-config defaults — all configuration has sensible defaults baked into `defaultConfig()` in `internal/bootstrap/config_defaults.go`. No `.env` or YAML files required. Override via environment variables for production.
 
-**Runtime authority**: The systemplane (`lib-commons/v4/commons/systemplane`) is the sole runtime configuration authority. Env vars are bootstrap-only — after startup, the systemplane registry owns all config reads. Runtime queries: `GET /v1/system/configs`, schema: `GET /v1/system/configs/schema`, history: `GET /v1/system/configs/history`.
+### Bootstrap vs Runtime
 
-**Bootstrap-only keys** (require restart): See `config/.config-map.example`. These include server address, TLS, auth, and telemetry settings.
+| Bootstrap (require restart) | Runtime (hot-reloadable) |
+|----------------------------|--------------------------|
+| `SERVER_ADDRESS`, TLS, auth settings | Body limit, rate limits, worker intervals |
+| `POSTGRES_HOST`, `REDIS_HOST`, `RABBITMQ_HOST` | Feature flags, timeouts |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`, `LOG_LEVEL` | Export settings, archival intervals |
 
-**Bootstrap config reference**: See [`config/.config-map.example`](config/.config-map.example) for the complete list of bootstrap-only keys with documentation.
+> Note: `LOG_LEVEL` is bootstrap-only. Runtime log-level swapping is **not** implemented — changing `LOG_LEVEL` requires a process restart. The previous `app.log_level` systemplane key was removed in the lib-commons v5 migration because editing it via the admin API had no effect.
 
-**Categories**:
-- **Application**: `ENV_NAME`, `LOG_LEVEL`, `SERVER_ADDRESS`, `HTTP_BODY_LIMIT_BYTES`
-- **CORS**: `CORS_ALLOWED_ORIGINS`, `CORS_ALLOWED_METHODS`, `CORS_ALLOWED_HEADERS`
-- **TLS**: `SERVER_TLS_CERT_FILE`, `SERVER_TLS_KEY_FILE`
+See [`config/.config-map.example`](config/.config-map.example) for all bootstrap-only keys.
+
+### Environment Variable Categories
+
+- **Application**: `ENV_NAME`, `LOG_LEVEL`, `SERVER_ADDRESS`
 - **Tenancy**: `DEFAULT_TENANT_ID`, `DEFAULT_TENANT_SLUG`
 - **PostgreSQL**: `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_SSLMODE`, `POSTGRES_MAX_OPEN_CONNS`, `POSTGRES_MAX_IDLE_CONNS`
-- **PostgreSQL Replica**: `POSTGRES_REPLICA_HOST`, `POSTGRES_REPLICA_PORT`, `POSTGRES_REPLICA_USER`, `POSTGRES_REPLICA_PASSWORD`, `POSTGRES_REPLICA_DB`, `POSTGRES_REPLICA_SSLMODE`
-- **Redis**: `REDIS_HOST`, `REDIS_MASTER_NAME`, `REDIS_PASSWORD`, `REDIS_DB`, `REDIS_PROTOCOL`, `REDIS_TLS`, `REDIS_CA_CERT`, `REDIS_POOL_SIZE`, `REDIS_MIN_IDLE_CONNS`, `REDIS_READ_TIMEOUT_MS`, `REDIS_WRITE_TIMEOUT_MS`, `REDIS_DIAL_TIMEOUT_MS`
-- **RabbitMQ**: `RABBITMQ_URI`, `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`, `RABBITMQ_VHOST`, `RABBITMQ_HEALTH_URL`, `RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK`
-- **Auth**: `AUTH_ENABLED`, `AUTH_SERVICE_ADDRESS`, `AUTH_JWT_SECRET`
-- **OpenTelemetry**: `ENABLE_TELEMETRY`, `OTEL_LIBRARY_NAME`, `OTEL_RESOURCE_SERVICE_NAME`, `OTEL_RESOURCE_SERVICE_VERSION`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_RESOURCE_DEPLOYMENT_ENVIRONMENT`
-
-### Database Connection Patterns
-
-**Primary/Replica Setup**:
-- Write operations use primary connection
-- Read operations can use replica (via lib-commons)
-- Connection pooling configured via `POSTGRES_MAX_OPEN_CONNS`, `POSTGRES_MAX_IDLE_CONNS`
-
-**Redis Modes**:
-- Standalone: Set `REDIS_HOST`
-- Sentinel: Set `REDIS_MASTER_NAME` + `REDIS_HOST` (comma-separated sentinels)
-- Cluster: Handled by lib-commons based on `REDIS_PROTOCOL`
+- **PostgreSQL Replica**: `POSTGRES_REPLICA_HOST`, `POSTGRES_REPLICA_PORT`, etc.
+- **Redis**: `REDIS_HOST`, `REDIS_MASTER_NAME`, `REDIS_PASSWORD`, `REDIS_DB`
+- **RabbitMQ**: `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`, `RABBITMQ_VHOST`
+- **Auth**: `PLUGIN_AUTH_ENABLED`, `PLUGIN_AUTH_ADDRESS`, `AUTH_JWT_SECRET`
+- **OpenTelemetry**: `ENABLE_TELEMETRY`, `OTEL_LIBRARY_NAME`, `OTEL_RESOURCE_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`
+- **Object Storage**: `OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_BUCKET`, `OBJECT_STORAGE_ACCESS_KEY_ID`, `OBJECT_STORAGE_SECRET_ACCESS_KEY`
+- **Systemplane**: `SYSTEMPLANE_SECRET_MASTER_KEY`
 
 ## Required Libraries
 
 ### Lerian-Specific
 
-- **lib-auth/v2**: Authentication/authorization middleware
-  - JWT extraction: `auth.GetTenantID(ctx)`, `auth.GetTenantSlug(ctx)`
-  - Authorization: `auth.Authorize(serviceName, "resource", "action")`
-  - Apply tenant schema: `auth.ApplyTenantSchema(ctx, tx)`
+- **lib-auth/v3** (`v3.0.0-20260415175119-1568b252d48a`): JWT extraction, RBAC authorization, tenant schema application. This is a pre-release pseudo-version pending upstream tag — see the `lib-auth/v3 Pseudo-version Tracking` appendix below for action items.
+  - `auth.GetTenantID(ctx)`, `auth.GetTenantSlug(ctx)`, `auth.ApplyTenantSchema(ctx, tx)`
 
-- **lib-commons/v4**: Common utilities, telemetry, infrastructure
+- **lib-commons/v5** (`v5.0.0`): Common utilities, telemetry, infrastructure
   - Tracking: `libCommons.NewTrackingFromContext(ctx)` → logger, tracer, headerID
   - OpenTelemetry: `libOpentelemetry.HandleSpanError(span, "msg", err)`
   - Database: `libPostgres.New()` / `libPostgres.NewPrimaryReplica()`
   - Redis: `libRedis.New()`
   - Messaging: `libRabbitmq.New()`
+  - Assertions: `commons/assert` (imported as `pkg/assert` by convention, but lives in lib-commons)
+  - Panic recovery: `commons/runtime` (imported as `pkg/runtime` by convention, but lives in lib-commons)
+  - Runtime config: `commons/systemplane`
 
-### lib-commons Packages (used as `pkg/assert`, `pkg/runtime` in docs)
+### Key Third-Party
 
-- **lib-commons/v4/commons/assert**: Safe assertions without panics
-  - `asserter.That(ctx, condition, "msg", kv...)` → error
-  - `asserter.NotEmpty(ctx, value, "msg")` → error
-  - `asserter.NotNil(ctx, value, "msg")` → error
-
-- **lib-commons/v4/commons/runtime**: Panic recovery and runtime observability
-  - `runtime.RecoverAndLog(logger, name)` for deferred panic handling with logging
-  - `runtime.RecoverAndLogWithContext(ctx, logger, component, name)` for context-aware recovery with metrics/tracing
-  - `runtime.RecoverAndCrash(logger, name)` for critical paths that must crash on panic
-  - `runtime.RecoverWithPolicy(logger, name, policy)` for configurable recovery policies (`CrashProcess` or log-and-continue)
-  - `runtime.HandlePanicValue(ctx, logger, panicValue, component, name)` for framework-recovered panics (e.g., Fiber middleware)
-  - All `*WithContext` variants record metrics, span events, and error reports
+- `gofiber/fiber/v2` — HTTP framework
+- `Masterminds/squirrel` — SQL query builder
+- `shopspring/decimal` — Precise decimal arithmetic
+- `google/uuid` — UUID generation
+- `DATA-DOG/go-sqlmock` — SQL mocking for tests
+- `testcontainers/testcontainers-go` — Container-based integration tests
+- `go.uber.org/mock` — Interface mocking
+- `Shopify/toxiproxy/v2` — Chaos testing
 
 ### Internal Packages (`pkg/`)
 
-- **pkg/chanutil**: Safe channel utilities for goroutine communication
-
-- **pkg/storageopt**: Functional options for object storage operations
-
-### Systemplane (lib-commons)
-
-The systemplane runtime configuration authority now lives in `lib-commons/v4/commons/systemplane`:
-  - Registry, service manager, supervisor, reconcilers
-  - PostgreSQL and MongoDB store adapters
-  - Change feed adapters (PostgreSQL LISTEN/NOTIFY, MongoDB change streams)
-  - Fiber HTTP handler for `/v1/system/configs` API
+- **pkg/chanutil** — Safe channel utilities for goroutine communication
+- **pkg/storageopt** — Functional options for object storage operations
 
 ## Linting & Security
 
-### golangci-lint Configuration
+### golangci-lint (75+ linters)
 
-The project uses 75+ linters organized into categories:
-- **Security**: gosec, bidichk
-- **Bugs**: errcheck, govet, staticcheck
-- **Unused code**: ineffassign, unparam, unused, wastedassign
-- **Error handling**: err113, errchkjson, errname, errorlint, nilerr, wrapcheck
-- **Performance**: bodyclose, perfsprint, prealloc
-- **Complexity**: cyclop, gocognit, gocyclo, nestif
-- **Style**: goconst, gocritic, misspell, revive, whitespace, gofumpt, gci
-- **Context**: contextcheck, noctx
-- **Database**: rowserrcheck, sqlclosecheck
-- **Testing**: paralleltest, thelper, tparallel, testifylint
-- **Nil safety**: nilnil, funlen, godot
+Key categories: Security (gosec, bidichk), Bugs (errcheck, govet, staticcheck), Error handling (err113, errorlint, wrapcheck), Performance (bodyclose, prealloc), Complexity (cyclop, gocognit, nestif), Style (gofumpt, gci, gocritic), Testing (paralleltest, testifylint), Database (rowserrcheck, sqlclosecheck).
 
-### Security Rules (forbidigo)
+### forbidigo Security Rules (blocked patterns)
 
-The following patterns are **blocked** by linter:
+| Blocked | Use instead |
+|---------|-------------|
+| `json:"tenant_id"`, `.Params("tenantId")`, `.Query("tenant")` | `auth.GetTenantID(ctx)` |
+| `time.Now()[^.]` | `time.Now().UTC()` |
+| `fmt.Sprintf.*%s.*SQL` | Parameterized queries (`$1`, `$2`) |
+| `fmt.Errorf.*%v.*err` | `fmt.Errorf("...: %w", err)` |
+| `panic`, `log.Fatal*`, `os.Exit` | Return errors |
+| `.Params("contextId")` | `sharedhttp.ParseAndVerifyContextParam()` |
 
-```yaml
-# Multi-tenancy - NEVER accept tenant from request
-- json:"tenant_id"      # Use auth.GetTenantID(ctx)
-- .Params("tenantId")   # Use auth.GetTenantID(ctx)
-- .Query("tenant")      # Use auth.GetTenantID(ctx)
+### depguard Architectural Boundaries
 
-# Timestamps - ALWAYS use UTC
-- time.Now()[^.]        # Use time.Now().UTC()
+| Rule | Enforces |
+|------|----------|
+| `cross-context-{name}` (x8) | Full cross-context isolation; direct imports blocked |
+| `http-handlers-boundary` | HTTP handlers cannot import postgres adapters |
+| `service-no-adapters` | Services depend on ports, not adapters |
+| `dto-no-services` | DTOs are pure data structures |
+| `worker-no-adapters` | Workers depend on ports, not adapters |
+| `cqrs-command-isolation` | Commands cannot import queries |
+| `cqrs-query-isolation` | Queries cannot import commands |
+| `domain-purity` | Domain cannot import application or adapter packages |
+| `domain-no-logging` | Domain layer: no logging/tracing/infrastructure |
+| `entity-purity` | Entities cannot import repositories or `database/sql` |
 
-# SQL injection - ALWAYS use parameterized queries
-- fmt.Sprintf.*%s.*SQL  # Use $1, $2, ... placeholders
+### Custom Linters (`tools/linters/`)
 
-# Error wrapping - ALWAYS preserve error chain
-- fmt.Errorf.*%v.*err   # Use %w not %v
-```
+Run with `make lint-custom`:
 
-### Architectural Boundary Rules (depguard)
-
-In addition to the standard linters, `depguard` enforces hexagonal architecture boundaries:
-
-| Rule | What it enforces |
-|------|-----------------|
-| `http-handlers-boundary` | HTTP handlers cannot import postgres adapters directly (all 8 contexts) |
-| `cross-context-{name}` | Full cross-context isolation for all 8 bounded contexts; direct imports between contexts are blocked |
-| `service-no-adapters` | `services/command/` and `services/query/` cannot import adapter packages; depend on port interfaces only |
-| `dto-no-services` | `adapters/http/dto/` cannot import service packages; DTOs are pure data structures |
-| `worker-no-adapters` | `services/worker/` cannot import postgres adapter packages directly |
-
-**Shared kernel** (`internal/shared/`) is the designated bridge: when two contexts need to share a type, it moves to `shared/domain/`. When they need a shared interface, it goes in `shared/ports/`. This is the only sanctioned path for cross-context dependencies.
-
-### Custom Linters (tools/linters/)
-
-Run with `make lint-custom`. These enforce Matcher-specific patterns:
-
-| Linter | What it checks |
-|--------|----------------|
-| `entityconstructor` | `New<Type>(ctx, ...) (*Type, error)` pattern |
-| `observability` | `NewTrackingFromContext` + span creation |
-| `repositorytx` | Write methods have `*WithTx` variants |
-
-### Common Lint Fixes
-
-- **Unchecked errors**: Always check `err` return values
-- **Context propagation**: Pass `ctx` through call chains
-- **Error wrapping**: Use `fmt.Errorf("msg: %w", err)` not `fmt.Errorf("msg: %v", err)`
-- **SQL cleanup**: Defer `rows.Close()` and check `rows.Err()`
-- **HTTP body close**: Defer `resp.Body.Close()`
-- **Test parallelism**: Call `t.Parallel()` in table tests
-- **UTC timestamps**: Use `time.Now().UTC()` not `time.Now()`
-- **Import order**: stdlib → third-party → Lerian → project
-
-## Key Documentation
-
-| Document | Purpose |
-|----------|---------|
-| [CLAUDE.md](CLAUDE.md) | Main agent instruction file (this file's companion) |
-| [docs/PROJECT_RULES.md](docs/PROJECT_RULES.md) | Critical architectural rules and constraints |
-| [README.md](README.md) | User-facing project overview |
-| [config/.config-map.example](config/.config-map.example) | Bootstrap-only env vars (require restart) |
-| [docs/pre-dev/matcher/prd.md](docs/pre-dev/matcher/prd.md) | Product requirements, user stories |
-| [docs/pre-dev/matcher/trd.md](docs/pre-dev/matcher/trd.md) | Technical requirements, security |
-| [docs/pre-dev/matcher/api-design.md](docs/pre-dev/matcher/api-design.md) | API contracts, error codes |
-| [docs/pre-dev/matcher/data-model.md](docs/pre-dev/matcher/data-model.md) | Entity relationships, indexes |
-| [docs/pre-dev/matcher/tasks.md](docs/pre-dev/matcher/tasks.md) | Implementation tasks (32 tasks, 6 epics) |
+| Linter | Enforces |
+|--------|----------|
+| `entityconstructor` | `New<EntityName>(ctx, ...) (*EntityName, error)` pattern |
+| `observability` | `NewTrackingFromContext` + span creation + `defer span.End()` |
+| `repositorytx` | Write methods (`Create`, `Update`, `Delete`) have `*WithTx` variants |
 
 ## CI/CD
 
-### GitHub Actions Workflows
+All CI uses shared workflows from `LerianStudio/github-actions-shared-workflows`.
 
-All CI/CD uses shared workflows from `LerianStudio/github-actions-shared-workflows`.
-Coverage threshold enforced via workflow parameters (not local config file).
-
-- **go-combined-analysis.yml**: Lint, security scan, unit tests, coverage (via `go-pr-analysis.yml` shared workflow)
-  - Runs on PRs to `develop`/`release-candidate`/`main`
-  - Go version: 1.26.1, golangci-lint v2.10.1
-  - Coverage threshold: 70%, enforced via `fail_on_coverage_threshold: true`
-
-- **build.yml**: Docker image build and GitOps deployment updates (on tag push)
-  - Publishes to DockerHub (`lerianstudio`) and GHCR
-  - Updates GitOps values for dev/stg/prd/sandbox environments
-
-- **pr-security-scan.yml**: PR-specific security scanning via shared workflow
-  - Runs on PRs to `develop`/`release-candidate`/`main`
-
-- **pr-validation.yml**: PR title/scope validation and auto-labeling
-  - Enforces conventional commit format in PR titles
-  - Minimum 50-character description, changelog check
-
-- **release.yml**: Automated semantic releases on push to `develop`/`release-candidate`/`main`
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `go-combined-analysis.yml` | PRs to develop/RC/main | Lint, security, unit tests, coverage (70%), migration integrity |
+| `pr-security-scan.yml` | PRs | Security scanning |
+| `pr-validation.yml` | PRs | Conventional commits, 50-char min, changelog, auto-labels |
+| `build.yml` | Tag push | Docker build (DockerHub + GHCR) + GitOps updates |
+| `release.yml` | Push to develop/RC/main | Automated semantic releases |
 
 ### Pre-Commit Checklist
 
-Before pushing code:
-1. `make lint` → all checks pass
-2. `make lint-custom` → review custom linter warnings
-3. `make sec` → no security issues
-4. `make test` → all unit tests pass
-5. `make test-int` → integration tests pass (if you changed adapters)
-6. `make check-tests` → every `.go` has a `_test.go`
-7. `make check-test-tags` → test files have proper build tags
-8. `make check-migrations` → migration pairs and numbering are valid (if you changed migrations)
-9. `make generate-docs` → Swagger docs updated (if you changed API)
-10. Commit message follows conventional commits (optional but encouraged)
-
-## Debugging Tips
-
-### Database Issues
-
-- **Tenant isolation failing**: Check `auth.ApplyTenantSchema(ctx, tx)` called in transaction
-- **Migration stuck**: Run `SELECT * FROM schema_migrations;` to see current version
-- **Connection pool exhausted**: Increase `POSTGRES_MAX_OPEN_CONNS` or check for leaked connections
-
-### Redis Issues
-
-- **Key not found**: Check TTL configuration, verify Redis mode (standalone/sentinel/cluster)
-- **Connection errors**: Verify `REDIS_HOST`, `REDIS_PASSWORD`, `REDIS_DB` values
-
-### RabbitMQ Issues
-
-- **Queue not created**: Check RabbitMQ health endpoint, verify `RABBITMQ_VHOST`
-- **Messages not consumed**: Check consumer registration, verify queue bindings
-
-### Testing Issues
-
-- **Integration tests fail**: Ensure `make up` ran successfully, check Docker services
-- **E2E tests timeout**: Increase timeout with `-timeout=10m` flag
-- **Testcontainers hang**: Set `TESTCONTAINERS_RYUK_DISABLED=true` (macOS/Windows)
-
-### Performance Profiling
-
-```bash
-# CPU profiling
-go test -cpuprofile=cpu.prof -bench=. ./path/to/package
-go tool pprof cpu.prof
-
-# Memory profiling
-go test -memprofile=mem.prof -bench=. ./path/to/package
-go tool pprof mem.prof
-
-# Trace
-go test -trace=trace.out ./path/to/package
-go tool trace trace.out
-```
-
-## Reference Codebases
-
-Located in `.references/` (if available):
-- **lib-commons**: DB connections, Redis, RabbitMQ, telemetry, graceful shutdown
-- **lib-auth**: JWT extraction, authorization middleware patterns
-- **midaz**: Hexagonal structure reference, CQRS separation, migration naming
-
-When implementing new features, check reference codebases for established patterns.
-
-## TDD Workflow
-
-Matcher requires TDD (test-driven development):
-
-1. **RED**: Write a failing test that defines desired behavior
-2. **GREEN**: Write minimal code to make test pass
-3. **REFACTOR**: Improve code structure while keeping tests green
-
-**Every commit should include tests**. Use `make check-tests` to ensure no `.go` file is missing its `_test.go`.
+1. `make lint` — linters pass
+2. `make test` — unit tests pass
+3. `make check-tests` — every `.go` has a `_test.go`
+4. `make check-test-tags` — test files have proper build tags
+5. `make sec` — no security issues
+6. `make check-migrations` — migration pairs valid (if changed)
+7. `make generate-docs` — Swagger updated (if API changed)
+8. Commit message follows conventional commits
 
 ## Common Tasks
 
 ### Adding a New API Endpoint
 
-1. Define request/response DTOs in `adapters/http/dto/`
-2. Add handler method to `adapters/http/handlers.go`
-3. Register route in `adapters/http/routes.go`
-4. Add Swagger annotations to handler
-5. Run `make generate-docs` to update OpenAPI spec
+1. Define request/response DTOs in `{context}/adapters/http/dto/`
+2. Add handler method to `{context}/adapters/http/handlers.go` (or `handlers_{feature}.go`)
+3. Register route in `{context}/adapters/http/routes.go`
+4. Add Swagger annotations (`@Summary`, `@Tags`, `@Param`, `@Success`, `@Failure`, `@Router`)
+5. Run `make generate-docs`
 6. Write unit tests for handler
-7. Add integration test in `tests/integration/`
-
-**Note**: The reporting context also includes async export jobs (PDF/CSV generation via object storage) and archive management features, which follow the same endpoint pattern but with background processing.
+7. Wire up in `internal/bootstrap/routes.go`
 
 ### Adding a New Domain Entity
 
-1. Create entity in `domain/entities/{name}.go`
-2. Define constructor with `New{Name}()` that validates invariants
-3. Add business methods for state transitions
-4. Create repository interface in `ports/repositories.go`
-5. Implement repository in `adapters/postgres/{name}/`
-6. Write unit tests for entity behavior
-7. Write repository tests with sqlmock
+1. Create entity in `{context}/domain/entities/{name}.go` with `New{Name}()` constructor
+2. Add business methods for state transitions
+3. Create repository interface in `{context}/domain/repositories/`
+4. Implement in `{context}/adapters/postgres/{name}/`
+5. Write unit tests (entity behavior + sqlmock for repo)
+6. Wire up in `internal/bootstrap/`
 
 ### Adding a New Migration
 
 1. `make migrate-create NAME=descriptive_name`
-2. Edit generated `.up.sql` file with schema changes
-3. Edit generated `.down.sql` file with rollback logic
-4. Test locally: `make migrate-up && make migrate-down && make migrate-up`
-5. Verify migrations don't break existing data
-6. Add indexes for new foreign keys and filter columns
+2. Edit `.up.sql` with schema changes
+3. Edit `.down.sql` with rollback logic
+4. Test the forward path with `make migrate-up`
+5. If the migration is intentionally irreversible, verify the rollback/preflight guard instead of forcing `migrate-down`
+6. Add indexes for join/filter columns
+7. Validate: `make check-migrations`
 
 ### Adding a New Use Case
 
-1. Create service file in `services/command/` or `services/query/`
-2. Define input struct with required fields
-3. Create use case struct with dependencies
-4. Implement constructor with dependency validation
-5. Add domain-specific method (e.g., `RunMatch(ctx, input)`) rather than generic `Execute()`
-6. Start span, extract tracking, orchestrate domain logic
-7. Write unit tests with mocked dependencies
-8. Wire up in `internal/bootstrap/dependencies.go`
+1. Create service file in `{context}/services/command/` or `query/`
+2. Define input struct
+3. Add method to UseCase struct with domain-specific name
+4. Start span, extract tracking, orchestrate domain logic
+5. Write unit tests with mocked dependencies
+6. Wire up in `internal/bootstrap/`
 
-## Support & Community
+## Debugging Tips
 
-- **Discord**: [Lerian Studio Community](https://discord.gg/DnhqKwkGv3)
-- **GitHub Issues**: [Bug reports & feature requests](https://github.com/LerianStudio/matcher/issues)
-- **GitHub Discussions**: [Community discussions](https://github.com/LerianStudio/matcher/discussions)
-- **Twitter**: [@LerianStudio](https://twitter.com/LerianStudio)
-- **Email**: [contact@lerian.studio](mailto:contact@lerian.studio)
+| Problem | Solution |
+|---------|----------|
+| Tenant isolation failing | Verify `auth.ApplyTenantSchema(ctx, tx)` called in transaction |
+| Migration stuck | `SELECT * FROM schema_migrations;` to check state |
+| Connection pool exhausted | Increase `POSTGRES_MAX_OPEN_CONNS` or check for leaked connections |
+| Integration tests fail | Ensure `make up` ran, check Docker services health |
+| E2E tests timeout | Increase timeout: `-timeout=10m` |
+| Testcontainers hang | Set `TESTCONTAINERS_RYUK_DISABLED=true` (macOS/Windows) |
+| Redis key not found | Check TTL, verify Redis mode (standalone/sentinel/cluster) |
+| RabbitMQ messages stuck | Check consumer registration, verify queue bindings |
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| [`AGENTS.md`](AGENTS.md) | Concise agent overview (read first) |
+| [`docs/PROJECT_RULES.md`](docs/PROJECT_RULES.md) | Architectural rules and constraints |
+| [`config/.config-map.example`](config/.config-map.example) | Bootstrap env vars reference |
+| [`docs/multi-tenant-guide.md`](docs/multi-tenant-guide.md) | Multi-tenancy implementation guide |
+| [`.golangci.yml`](.golangci.yml) | Linter configuration (75+ linters) |
+| [`internal/bootstrap/`](internal/bootstrap/) | Composition root (config, DI, server) |
+| [`internal/shared/`](internal/shared/) | Shared kernel (cross-context types) |
+| [`docs/swagger/swagger.json`](docs/swagger/swagger.json) | OpenAPI specification |
+
+## lib-auth/v3 Pseudo-version Tracking
+
+go.mod currently pins `github.com/LerianStudio/lib-auth/v3` at pseudo-version
+`v3.0.0-20260415175119-1568b252d48a`. A tagged v3.0.0 does not yet exist
+upstream. This is intentional during the lib-commons v5 + lib-auth v3
+migration window.
+
+**Action items before production deploy:**
+- [ ] Confirm LerianStudio/lib-auth has published v3.0.0 (or v3.0.0-rc.N)
+- [ ] Bump `go.mod` to the tagged version
+- [ ] Run `go mod tidy && make test`
+- [ ] Remove this tracking entry
+
+**Monitoring:** `git ls-remote --tags https://github.com/LerianStudio/lib-auth | grep v3`
 
 ---
 
-**Last Updated**: February 2026  
-**Maintained By**: Lerian Studio Engineering Team
-
-For updates to this file, ensure all commands and patterns are validated against the current codebase. Never document hypothetical features or commands.
+**Last Updated**: April 2026
+**Go Version**: module `go 1.26.0`
+**Migrations**: 21 (000001 through 000021)

@@ -11,17 +11,16 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
-	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/pointers"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
-	"github.com/LerianStudio/matcher/internal/reporting/ports"
 	"github.com/LerianStudio/matcher/internal/reporting/services/command"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query"
-	sharedadaptershttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -60,45 +59,6 @@ var (
 	ErrExportWorkerDisabled = errors.New("export worker is disabled")
 )
 
-// logSpanBusinessEvent records a business-outcome event on the span without marking
-// the span as errored. Use for expected outcomes (validation, not-found, conflict)
-// that are not infrastructure failures.
-func logSpanBusinessEvent(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
-	libOpentelemetry.HandleSpanBusinessErrorEvent(span, message, err)
-	libLog.SafeError(logger, ctx, message, err, productionMode.Load())
-}
-
-// badRequestBiz responds with 400 and records a business event (not a span error).
-// Use for validation failures and malformed input — expected client behaviour.
-func badRequestBiz(
-	ctx context.Context,
-	fiberCtx *fiber.Ctx,
-	span trace.Span,
-	logger libLog.Logger,
-	message string,
-	err error,
-) error {
-	logSpanBusinessEvent(ctx, span, logger, message, err)
-
-	return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", message)
-}
-
-// notFoundBiz responds with 404 and records a business event (not a span error).
-// Use for "entity does not exist" responses — expected business outcome.
-func notFoundBiz(
-	ctx context.Context,
-	fiberCtx *fiber.Ctx,
-	span trace.Span,
-	logger libLog.Logger,
-	err error,
-) error {
-	const message = "export job not found"
-
-	logSpanBusinessEvent(ctx, span, logger, message, err)
-
-	return libHTTP.RespondError(fiberCtx, fiber.StatusNotFound, "not_found", message)
-}
-
 // ExportJobRuntimeConfig controls runtime-sensitive handler behavior without
 // coupling the reporting package to bootstrap internals.
 type ExportJobRuntimeConfig struct {
@@ -107,14 +67,91 @@ type ExportJobRuntimeConfig struct {
 }
 
 // ExportJobHandlers provides HTTP handlers for export job operations.
+//
+// productionMode governs SafeError behavior (suppresses internal error
+// details in client responses when true). Stored per-handler rather than
+// on a package-level atomic.Bool to avoid cross-test coupling via shared
+// global state.
 type ExportJobHandlers struct {
-	exportJobUC     *command.ExportJobUseCase
-	querySvc        *query.ExportJobQueryService
-	storage         ports.ObjectStorageClient
-	contextVerifier libHTTP.TenantOwnershipVerifier
-	enabled         bool
-	presignExpiry   time.Duration
-	runtimeConfig   func() ExportJobRuntimeConfig
+	exportJobUC           *command.ExportJobUseCase
+	querySvc              *query.ExportJobQueryService
+	storage               sharedPorts.ObjectStorageClient
+	contextVerifier       libHTTP.TenantOwnershipVerifier
+	enabled               bool
+	presignExpiry         time.Duration
+	runtimeConfigResolver func(context.Context) ExportJobRuntimeConfig
+	productionMode        bool
+}
+
+// logSpanBusinessEvent records a business-outcome event on the span without marking
+// the span as errored. Use for expected outcomes (validation, not-found, conflict)
+// that are not infrastructure failures.
+//
+// Defined as a method so it reads productionMode from the receiver rather
+// than a package-global atomic.Bool.
+func (handler *ExportJobHandlers) logSpanBusinessEvent(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
+	libOpentelemetry.HandleSpanBusinessErrorEvent(span, message, err)
+	libLog.SafeError(logger, ctx, message, err, handler.productionMode)
+}
+
+// logSpanError wraps sharedhttp.LogSpanError; reads productionMode from the receiver.
+func (handler *ExportJobHandlers) logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
+	sharedhttp.LogSpanError(ctx, span, logger, handler.productionMode, message, err)
+}
+
+// badRequestBiz responds with 400 and records a business event (not a span error).
+// Use for validation failures and malformed input — expected client behaviour.
+func (handler *ExportJobHandlers) badRequestBiz(
+	ctx context.Context,
+	fiberCtx *fiber.Ctx,
+	span trace.Span,
+	logger libLog.Logger,
+	message string,
+	err error,
+) error {
+	return handler.badRequestBizWithSlug(ctx, fiberCtx, span, logger, "invalid_request", message, err)
+}
+
+func (handler *ExportJobHandlers) badRequestBizWithSlug(
+	ctx context.Context,
+	fiberCtx *fiber.Ctx,
+	span trace.Span,
+	logger libLog.Logger,
+	slug, message string,
+	err error,
+) error {
+	handler.logSpanBusinessEvent(ctx, span, logger, message, err)
+
+	return respondError(fiberCtx, fiber.StatusBadRequest, slug, message)
+}
+
+// notFoundBiz responds with 404 and records a business event (not a span error).
+// Use for "entity does not exist" responses — expected business outcome.
+func (handler *ExportJobHandlers) notFoundBiz(
+	ctx context.Context,
+	fiberCtx *fiber.Ctx,
+	span trace.Span,
+	logger libLog.Logger,
+	err error,
+) error {
+	const message = "export job not found"
+
+	handler.logSpanBusinessEvent(ctx, span, logger, message, err)
+
+	return respondError(fiberCtx, fiber.StatusNotFound, "reporting_export_job_not_found", message)
+}
+
+// handleContextVerificationError maps errors from ParseAndVerifyTenantScopedID to HTTP responses.
+func (handler *ExportJobHandlers) handleContextVerificationError(
+	ctx context.Context,
+	fiberCtx *fiber.Ctx,
+	span trace.Span,
+	logger libLog.Logger,
+	err error,
+) error {
+	handler.logSpanError(ctx, span, logger, "context verification failed", err)
+
+	return respondContextVerificationError(fiberCtx, err)
 }
 
 // NewExportJobHandlers creates a new ExportJobHandlers instance.
@@ -123,9 +160,10 @@ type ExportJobHandlers struct {
 func NewExportJobHandlers(
 	exportJobUC *command.ExportJobUseCase,
 	querySvc *query.ExportJobQueryService,
-	storage ports.ObjectStorageClient,
+	storage sharedPorts.ObjectStorageClient,
 	ctxProvider contextProvider,
 	presignExpiry time.Duration,
+	production bool,
 ) (*ExportJobHandlers, error) {
 	if exportJobUC == nil {
 		return nil, ErrNilExportJobUseCase
@@ -135,7 +173,7 @@ func NewExportJobHandlers(
 		return nil, ErrNilExportJobQueryService
 	}
 
-	if storage == nil {
+	if sharedPorts.IsNilValue(storage) {
 		return nil, ErrNilStorageClientHandler
 	}
 
@@ -156,6 +194,7 @@ func NewExportJobHandlers(
 		contextVerifier: verifier,
 		enabled:         true,
 		presignExpiry:   presignExpiry,
+		productionMode:  production,
 	}, nil
 }
 
@@ -166,14 +205,14 @@ func (handler *ExportJobHandlers) SetRuntimeEnabled(enabled bool) {
 	}
 }
 
-// SetRuntimeConfigGetter allows bootstrap to inject live runtime settings.
-func (handler *ExportJobHandlers) SetRuntimeConfigGetter(getter func() ExportJobRuntimeConfig) {
+// SetRuntimeConfigResolver allows bootstrap to inject context-aware runtime settings.
+func (handler *ExportJobHandlers) SetRuntimeConfigResolver(resolver func(context.Context) ExportJobRuntimeConfig) {
 	if handler != nil {
-		handler.runtimeConfig = getter
+		handler.runtimeConfigResolver = resolver
 	}
 }
 
-func (handler *ExportJobHandlers) currentRuntimeConfig() ExportJobRuntimeConfig {
+func (handler *ExportJobHandlers) currentRuntimeConfigForContext(ctx context.Context) ExportJobRuntimeConfig {
 	enabled := true
 	config := ExportJobRuntimeConfig{
 		Enabled:       &enabled,
@@ -190,20 +229,20 @@ func (handler *ExportJobHandlers) currentRuntimeConfig() ExportJobRuntimeConfig 
 		config.PresignExpiry = handler.presignExpiry
 	}
 
-	if handler.runtimeConfig == nil {
-		return config
+	if handler.runtimeConfigResolver != nil {
+		runtimeConfig := handler.runtimeConfigResolver(ctx)
+		if runtimeConfig.Enabled == nil {
+			runtimeConfig.Enabled = config.Enabled
+		}
+
+		if runtimeConfig.PresignExpiry <= 0 {
+			runtimeConfig.PresignExpiry = config.PresignExpiry
+		}
+
+		return runtimeConfig
 	}
 
-	runtimeConfig := handler.runtimeConfig()
-	if runtimeConfig.Enabled == nil {
-		runtimeConfig.Enabled = config.Enabled
-	}
-
-	if runtimeConfig.PresignExpiry <= 0 {
-		runtimeConfig.PresignExpiry = config.PresignExpiry
-	}
-
-	return runtimeConfig
+	return config
 }
 
 // CreateExportJobRequest represents the request body for creating an export job.
@@ -338,9 +377,17 @@ type ExportJobResponse struct {
 }
 
 // ExportJobListResponse represents a list of export jobs.
+//
+// The export-jobs list endpoints use forward-only cursor pagination: clients
+// walk results by passing the returned nextCursor as the cursor query param on
+// the next request. prevCursor is intentionally omitted — the underlying
+// keyset query is unidirectional by creation timestamp and exposing a reverse
+// cursor would publish a capability the service does not honour.
 type ExportJobListResponse struct {
-	Items []*ExportJobResponse `json:"items" validate:"omitempty,max=200" maxItems:"200"`
-	sharedadaptershttp.CursorResponse
+	Items      []*ExportJobResponse `json:"items"                validate:"omitempty,max=200" maxItems:"200"`
+	NextCursor string               `json:"nextCursor,omitempty" example:"eyJpZCI6IjEyMyJ9"`
+	Limit      int                  `json:"limit"                example:"20"                                minimum:"1" maximum:"200"`
+	HasMore    bool                 `json:"hasMore"              example:"true"`
 }
 
 // DownloadExportJobResponse represents the response for downloading an export file.
@@ -387,13 +434,13 @@ func verifyJobTenantOwnership(ctx context.Context, job *entities.ExportJob) erro
 // @Param contextId path string true "Context ID" format(uuid)
 // @Param request body CreateExportJobRequest true "Export job parameters"
 // @Success 202 {object} CreateExportJobResponse
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid request payload"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
-// @Failure 409 {object} libHTTP.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
-// @Failure 503 {object} libHTTP.ErrorResponse "Export worker disabled"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
+// @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
+// @Failure 503 {object} sharedhttp.ErrorResponse "Export worker disabled"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/contexts/{contextId}/export-jobs [post]
 func (handler *ExportJobHandlers) CreateExportJob(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startExportJobSpan(fiberCtx, "handler.export_job.create")
@@ -411,14 +458,14 @@ func (handler *ExportJobHandlers) CreateExportJob(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
-	runtimeConfig := handler.currentRuntimeConfig()
+	runtimeConfig := handler.currentRuntimeConfigForContext(ctx)
 	if runtimeConfig.Enabled != nil && !*runtimeConfig.Enabled {
-		return libHTTP.RespondError(
+		return respondError(
 			fiberCtx,
 			fiber.StatusServiceUnavailable,
 			"export_worker_disabled",
@@ -428,12 +475,19 @@ func (handler *ExportJobHandlers) CreateExportJob(fiberCtx *fiber.Ctx) error {
 
 	var req CreateExportJobRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {
-		return badRequestBiz(ctx, fiberCtx, span, logger, "invalid request body", err)
+		return handler.badRequestBiz(ctx, fiberCtx, span, logger, "invalid request body", err)
 	}
 
 	parsed, msg, err := parseExportJobRequest(&req)
 	if err != nil {
-		return badRequestBiz(ctx, fiberCtx, span, logger, msg, err)
+		if errors.Is(err, entities.ErrInvalidExportFormat) ||
+			errors.Is(err, ErrPDFNotSupportedAsync) ||
+			errors.Is(err, ErrSummaryNotSupportedAsync) ||
+			errors.Is(err, ErrExceptionsNotSupportedAsync) {
+			return handler.badRequestBizWithSlug(ctx, fiberCtx, span, logger, "reporting_invalid_export_format", msg, err)
+		}
+
+		return handler.badRequestBiz(ctx, fiberCtx, span, logger, msg, err)
 	}
 
 	input := command.CreateExportJobInput{
@@ -450,9 +504,9 @@ func (handler *ExportJobHandlers) CreateExportJob(fiberCtx *fiber.Ctx) error {
 
 	output, err := handler.exportJobUC.CreateExportJob(ctx, input)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to create export job", err)
+		handler.logSpanError(ctx, span, logger, "failed to create export job", err)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
 	response := CreateExportJobResponse{
@@ -478,11 +532,11 @@ func (handler *ExportJobHandlers) CreateExportJob(fiberCtx *fiber.Ctx) error {
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param jobId path string true "Export Job ID" format(uuid)
 // @Success 200 {object} ExportJobResponse
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 404 {object} libHTTP.ErrorResponse "Export job not found"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Export job not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/export-jobs/{jobId} [get]
 func (handler *ExportJobHandlers) GetExportJob(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startExportJobSpan(fiberCtx, "handler.export_job.get")
@@ -493,28 +547,28 @@ func (handler *ExportJobHandlers) GetExportJob(fiberCtx *fiber.Ctx) error {
 
 	jobID, err := uuid.Parse(jobIDStr)
 	if err != nil {
-		return badRequestBiz(ctx, fiberCtx, span, logger, "invalid job ID", ErrInvalidJobID)
+		return handler.badRequestBiz(ctx, fiberCtx, span, logger, "invalid job ID", ErrInvalidJobID)
 	}
 
 	job, err := handler.querySvc.GetByID(ctx, jobID)
 	if err != nil {
 		if errors.Is(err, query.ErrExportJobNotFound) {
-			return notFoundBiz(ctx, fiberCtx, span, logger, err)
+			return handler.notFoundBiz(ctx, fiberCtx, span, logger, err)
 		}
 
-		logSpanError(ctx, span, logger, "failed to get export job", err)
+		handler.logSpanError(ctx, span, logger, "failed to get export job", err)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
 	if job == nil {
-		logSpanError(ctx, span, logger, "export job unexpectedly nil", nil)
+		handler.logSpanError(ctx, span, logger, "export job unexpectedly nil", nil)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
 	if err := verifyJobTenantOwnership(ctx, job); err != nil {
-		return notFoundBiz(ctx, fiberCtx, span, logger, err)
+		return handler.notFoundBiz(ctx, fiberCtx, span, logger, err)
 	}
 
 	response := handler.mapJobToResponse(ctx, job)
@@ -529,7 +583,7 @@ func (handler *ExportJobHandlers) GetExportJob(fiberCtx *fiber.Ctx) error {
 // ListExportJobs handles GET /v1/export-jobs
 // @ID listExportJobs
 // @Summary List export jobs
-// @Description Lists export jobs for the authenticated tenant using forward-only cursor-based pagination.
+// @Description Lists export jobs for the authenticated tenant using cursor-based pagination.
 // @Description Use the nextCursor value from the response to fetch subsequent pages.
 // @Tags Export Jobs
 // @Produce json
@@ -539,10 +593,10 @@ func (handler *ExportJobHandlers) GetExportJob(fiberCtx *fiber.Ctx) error {
 // @Param cursor query string false "Cursor for pagination (opaque)"
 // @Param limit query int false "Maximum number of records to return" default(20) minimum(1) maximum(200)
 // @Success 200 {object} ExportJobListResponse
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/export-jobs [get]
 func (handler *ExportJobHandlers) ListExportJobs(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startExportJobSpan(fiberCtx, "handler.export_job.list")
@@ -551,7 +605,7 @@ func (handler *ExportJobHandlers) ListExportJobs(fiberCtx *fiber.Ctx) error {
 
 	cursor, limit, err := parseTimestampCursorPagination(fiberCtx)
 	if err != nil {
-		return badRequestBiz(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+		return handler.badRequestBiz(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 	}
 
 	var status *string
@@ -565,9 +619,9 @@ func (handler *ExportJobHandlers) ListExportJobs(fiberCtx *fiber.Ctx) error {
 		Limit:  limit,
 	})
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to list export jobs", err)
+		handler.logSpanError(ctx, span, logger, "failed to list export jobs", err)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
 	responses := make([]*ExportJobResponse, len(jobs))
@@ -576,12 +630,10 @@ func (handler *ExportJobHandlers) ListExportJobs(fiberCtx *fiber.Ctx) error {
 	}
 
 	response := ExportJobListResponse{
-		Items: responses,
-		CursorResponse: sharedadaptershttp.CursorResponse{
-			Limit:      limit,
-			HasMore:    pagination.Next != "",
-			NextCursor: pagination.Next,
-		},
+		Items:      responses,
+		NextCursor: pagination.Next,
+		Limit:      limit,
+		HasMore:    pagination.Next != "",
 	}
 
 	if writeErr := libHTTP.Respond(fiberCtx, fiber.StatusOK, response); writeErr != nil {
@@ -612,12 +664,12 @@ func parseTimestampCursorPagination(fiberCtx *fiber.Ctx) (*libHTTP.TimestampCurs
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param jobId path string true "Export Job ID" format(uuid)
 // @Success 200 {object} ExportJobResponse
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid request payload"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 404 {object} libHTTP.ErrorResponse "Export job not found"
-// @Failure 409 {object} libHTTP.ErrorResponse "Job in terminal state or idempotency conflict"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Export job not found"
+// @Failure 409 {object} sharedhttp.ErrorResponse "Job in terminal state or idempotency conflict"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/export-jobs/{jobId}/cancel [post]
 func (handler *ExportJobHandlers) CancelExportJob(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startExportJobSpan(fiberCtx, "handler.export_job.cancel")
@@ -628,37 +680,37 @@ func (handler *ExportJobHandlers) CancelExportJob(fiberCtx *fiber.Ctx) error {
 
 	jobID, err := uuid.Parse(jobIDStr)
 	if err != nil {
-		return badRequestBiz(ctx, fiberCtx, span, logger, "invalid job ID", ErrInvalidJobID)
+		return handler.badRequestBiz(ctx, fiberCtx, span, logger, "invalid job ID", ErrInvalidJobID)
 	}
 
 	existingJob, err := handler.querySvc.GetByID(ctx, jobID)
 	if err != nil {
 		if errors.Is(err, query.ErrExportJobNotFound) {
-			return notFoundBiz(ctx, fiberCtx, span, logger, err)
+			return handler.notFoundBiz(ctx, fiberCtx, span, logger, err)
 		}
 
-		logSpanError(ctx, span, logger, "failed to get export job for cancel", err)
+		handler.logSpanError(ctx, span, logger, "failed to get export job for cancel", err)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
 	if existingJob == nil {
-		return notFoundBiz(ctx, fiberCtx, span, logger, query.ErrExportJobNotFound)
+		return handler.notFoundBiz(ctx, fiberCtx, span, logger, query.ErrExportJobNotFound)
 	}
 
 	if err := verifyJobTenantOwnership(ctx, existingJob); err != nil {
-		return notFoundBiz(ctx, fiberCtx, span, logger, err)
+		return handler.notFoundBiz(ctx, fiberCtx, span, logger, err)
 	}
 
 	if err := handler.exportJobUC.CancelExportJob(ctx, jobID); err != nil {
 		if errors.Is(err, command.ErrExportJobNotFound) {
-			return notFoundBiz(ctx, fiberCtx, span, logger, err)
+			return handler.notFoundBiz(ctx, fiberCtx, span, logger, err)
 		}
 
 		if errors.Is(err, command.ErrJobInTerminalState) {
-			logSpanBusinessEvent(ctx, span, logger, "job already in terminal state", err)
+			handler.logSpanBusinessEvent(ctx, span, logger, "job already in terminal state", err)
 
-			return libHTTP.RespondError(
+			return respondError(
 				fiberCtx,
 				fiber.StatusConflict,
 				"conflict",
@@ -666,22 +718,22 @@ func (handler *ExportJobHandlers) CancelExportJob(fiberCtx *fiber.Ctx) error {
 			)
 		}
 
-		logSpanError(ctx, span, logger, "failed to cancel export job", err)
+		handler.logSpanError(ctx, span, logger, "failed to cancel export job", err)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
 	job, err := handler.querySvc.GetByID(ctx, jobID)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to get cancelled job", err)
+		handler.logSpanError(ctx, span, logger, "failed to get cancelled job", err)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
 	if job == nil {
-		logSpanError(ctx, span, logger, "cancelled job unexpectedly nil", nil)
+		handler.logSpanError(ctx, span, logger, "cancelled job unexpectedly nil", nil)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
 	response := handler.mapJobToResponse(ctx, job)
@@ -703,12 +755,12 @@ func (handler *ExportJobHandlers) CancelExportJob(fiberCtx *fiber.Ctx) error {
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param jobId path string true "Export Job ID" format(uuid)
 // @Success 200 {object} DownloadExportJobResponse
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 404 {object} libHTTP.ErrorResponse "Export job not found"
-// @Failure 409 {object} libHTTP.ErrorResponse "Job not ready for download"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Export job not found"
+// @Failure 409 {object} sharedhttp.ErrorResponse "Job not ready for download"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/export-jobs/{jobId}/download [get]
 func (handler *ExportJobHandlers) DownloadExportJob(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startExportJobSpan(fiberCtx, "handler.export_job.download")
@@ -719,34 +771,34 @@ func (handler *ExportJobHandlers) DownloadExportJob(fiberCtx *fiber.Ctx) error {
 
 	jobID, err := uuid.Parse(jobIDStr)
 	if err != nil {
-		return badRequestBiz(ctx, fiberCtx, span, logger, "invalid job ID", ErrInvalidJobID)
+		return handler.badRequestBiz(ctx, fiberCtx, span, logger, "invalid job ID", ErrInvalidJobID)
 	}
 
 	job, err := handler.querySvc.GetByID(ctx, jobID)
 	if err != nil {
 		if errors.Is(err, query.ErrExportJobNotFound) {
-			return notFoundBiz(ctx, fiberCtx, span, logger, err)
+			return handler.notFoundBiz(ctx, fiberCtx, span, logger, err)
 		}
 
-		logSpanError(ctx, span, logger, "failed to get export job", err)
+		handler.logSpanError(ctx, span, logger, "failed to get export job", err)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
 	if job == nil {
-		logSpanError(ctx, span, logger, "export job unexpectedly nil", nil)
+		handler.logSpanError(ctx, span, logger, "export job unexpectedly nil", nil)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
 	if err := verifyJobTenantOwnership(ctx, job); err != nil {
-		return notFoundBiz(ctx, fiberCtx, span, logger, err)
+		return handler.notFoundBiz(ctx, fiberCtx, span, logger, err)
 	}
 
 	if !job.IsDownloadable() {
-		logSpanBusinessEvent(ctx, span, logger, "job not downloadable", ErrJobNotDownloadable)
+		handler.logSpanBusinessEvent(ctx, span, logger, "job not downloadable", ErrJobNotDownloadable)
 
-		return libHTTP.RespondError(
+		return respondError(
 			fiberCtx,
 			fiber.StatusConflict,
 			"not_ready",
@@ -755,7 +807,7 @@ func (handler *ExportJobHandlers) DownloadExportJob(fiberCtx *fiber.Ctx) error {
 	}
 
 	if time.Now().After(job.ExpiresAt) {
-		return libHTTP.RespondError(
+		return respondError(
 			fiberCtx,
 			fiber.StatusGone,
 			"expired",
@@ -763,31 +815,36 @@ func (handler *ExportJobHandlers) DownloadExportJob(fiberCtx *fiber.Ctx) error {
 		)
 	}
 
-	runtimeConfig := handler.currentRuntimeConfig()
+	runtimeConfig := handler.currentRuntimeConfigForContext(ctx)
 
 	downloadURL, err := handler.storage.GeneratePresignedURL(ctx, job.FileKey, runtimeConfig.PresignExpiry)
 	if err != nil {
 		if errors.Is(err, sharedPorts.ErrObjectStorageUnavailable) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusServiceUnavailable, "object_storage_unavailable", "export storage is unavailable")
+			return respondError(fiberCtx, fiber.StatusServiceUnavailable, "object_storage_unavailable", "export storage is unavailable")
 		}
 
-		logSpanError(ctx, span, logger, "failed to generate download URL", err)
+		handler.logSpanError(ctx, span, logger, "failed to generate download URL", err)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, DownloadExportJobResponse{
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, DownloadExportJobResponse{
 		DownloadURL: downloadURL,
 		FileName:    job.FileName,
 		SHA256:      job.SHA256,
 		ExpiresIn:   int(runtimeConfig.PresignExpiry.Seconds()),
-	})
+	}); err != nil {
+		return fmt.Errorf("respond download export job: %w", err)
+	}
+
+	return nil
 }
 
 // ListExportJobsByContext handles GET /v1/contexts/:contextId/export-jobs
 // @ID listExportJobsByContext
 // @Summary List export jobs by context
-// @Description Lists export jobs for a specific reconciliation context.
+// @Description Lists export jobs for a specific reconciliation context using cursor-based pagination.
+// @Description Use the nextCursor value from the response to fetch subsequent pages.
 // @Tags Export Jobs
 // @Produce json
 // @Security BearerAuth
@@ -796,11 +853,11 @@ func (handler *ExportJobHandlers) DownloadExportJob(fiberCtx *fiber.Ctx) error {
 // @Param cursor query string false "Pagination cursor from previous response"
 // @Param limit query int false "Maximum number of records to return" default(20) minimum(1) maximum(200)
 // @Success 200 {object} ExportJobListResponse
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/contexts/{contextId}/export-jobs [get]
 func (handler *ExportJobHandlers) ListExportJobsByContext(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startExportJobSpan(fiberCtx, "handler.export_job.list_by_context")
@@ -818,27 +875,25 @@ func (handler *ExportJobHandlers) ListExportJobsByContext(fiberCtx *fiber.Ctx) e
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
-	_, limit, err := libHTTP.ParseOpaqueCursorPagination(fiberCtx)
+	cursor, limit, err := parseTimestampCursorPagination(fiberCtx)
 	if err != nil {
-		return badRequestBiz(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+		return handler.badRequestBiz(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 	}
 
-	// Fetch limit+1 to determine if more pages exist without an extra COUNT query.
-	jobs, err := handler.querySvc.ListByContext(ctx, contextID, limit+1)
+	jobs, pagination, err := handler.querySvc.ListByContext(ctx, query.ListByContextInput{
+		ContextID: contextID,
+		Cursor:    cursor,
+		Limit:     limit,
+	})
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to list export jobs by context", err)
+		handler.logSpanError(ctx, span, logger, "failed to list export jobs by context", err)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
-	}
-
-	hasMore := len(jobs) > limit
-	if hasMore {
-		jobs = jobs[:limit]
+		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
 	responses := make([]*ExportJobResponse, len(jobs))
@@ -847,11 +902,10 @@ func (handler *ExportJobHandlers) ListExportJobsByContext(fiberCtx *fiber.Ctx) e
 	}
 
 	response := ExportJobListResponse{
-		Items: responses,
-		CursorResponse: sharedadaptershttp.CursorResponse{
-			Limit:   limit,
-			HasMore: hasMore,
-		},
+		Items:      responses,
+		NextCursor: pagination.Next,
+		Limit:      limit,
+		HasMore:    pagination.Next != "",
 	}
 
 	if writeErr := libHTTP.Respond(fiberCtx, fiber.StatusOK, response); writeErr != nil {

@@ -6,9 +6,6 @@ import (
 	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
 
-// CursorResponse is an alias for the shared cursor pagination type.
-type CursorResponse = sharedhttp.CursorResponse
-
 // AuditLogResponse represents an audit log entry in API responses.
 // @Description Immutable audit log entry for governance tracking
 type AuditLogResponse struct {
@@ -24,8 +21,18 @@ type AuditLogResponse struct {
 	Action string `json:"action"            example:"CREATE"`
 	// ID of the actor who performed the action
 	ActorID *string `json:"actorId,omitempty" example:"user@example.com"`
-	// Changes made to the entity
+	// Changes made to the entity. When the diff exceeded the outbox payload
+	// cap, Changes carries a truncation marker envelope instead of the full
+	// diff, and Truncated + OriginalSize expose the marker metadata as
+	// first-class fields.
 	Changes json.RawMessage `json:"changes" validate:"omitempty,max=10000" maxItems:"10000"`
+	// Truncated is true when the original audit diff exceeded the outbox
+	// payload cap and was replaced with a truncation marker. Consumers should
+	// treat Changes as a metadata envelope (not the full diff) in this case.
+	Truncated bool `json:"truncated"         example:"false"`
+	// OriginalSize is the byte size of the original diff before truncation.
+	// Zero when Truncated is false, or when the marker was malformed.
+	OriginalSize int64 `json:"originalSize"      example:"0"`
 	// Creation timestamp in RFC3339 format
 	CreatedAt string `json:"createdAt"         example:"2025-01-15T10:30:00Z"`
 }
@@ -35,5 +42,5 @@ type AuditLogResponse struct {
 type ListAuditLogsResponse struct {
 	// List of audit log entries
 	Items []AuditLogResponse `json:"items" validate:"omitempty,max=200" maxItems:"200"`
-	CursorResponse
+	sharedhttp.CursorResponse
 }

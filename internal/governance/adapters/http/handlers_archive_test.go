@@ -18,7 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/auth"
 	governanceDTO "github.com/LerianStudio/matcher/internal/governance/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
@@ -45,7 +44,7 @@ func TestNewArchiveHandler(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 		require.NotNil(t, handler)
 	})
@@ -53,7 +52,7 @@ func TestNewArchiveHandler(t *testing.T) {
 	t.Run("nil repository", func(t *testing.T) {
 		t.Parallel()
 
-		handler, err := NewArchiveHandler(nil, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(nil, storage, testPresignExpiry, false)
 		require.ErrorIs(t, err, ErrArchiveRepoRequired)
 		require.Nil(t, handler)
 	})
@@ -61,7 +60,7 @@ func TestNewArchiveHandler(t *testing.T) {
 	t.Run("nil storage client", func(t *testing.T) {
 		t.Parallel()
 
-		handler, err := NewArchiveHandler(repo, nil, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, nil, testPresignExpiry, false)
 		require.ErrorIs(t, err, ErrStorageClientRequired)
 		require.Nil(t, handler)
 	})
@@ -69,7 +68,7 @@ func TestNewArchiveHandler(t *testing.T) {
 	t.Run("zero presign expiry", func(t *testing.T) {
 		t.Parallel()
 
-		handler, err := NewArchiveHandler(repo, storage, 0)
+		handler, err := NewArchiveHandler(repo, storage, 0, false)
 		require.ErrorIs(t, err, ErrPresignExpiryRequired)
 		require.Nil(t, handler)
 	})
@@ -77,7 +76,7 @@ func TestNewArchiveHandler(t *testing.T) {
 	t.Run("negative presign expiry", func(t *testing.T) {
 		t.Parallel()
 
-		handler, err := NewArchiveHandler(repo, storage, -time.Minute)
+		handler, err := NewArchiveHandler(repo, storage, -time.Minute, false)
 		require.ErrorIs(t, err, ErrPresignExpiryRequired)
 		require.Nil(t, handler)
 	})
@@ -106,7 +105,7 @@ func TestListArchives(t *testing.T) {
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -142,7 +141,7 @@ func TestListArchives(t *testing.T) {
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -175,7 +174,7 @@ func TestListArchives(t *testing.T) {
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -195,7 +194,7 @@ func TestListArchives(t *testing.T) {
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -205,7 +204,7 @@ func TestListArchives(t *testing.T) {
 
 		require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-		var errResp sharedhttp.ErrorResponse
+		var errResp ErrorResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 		require.Contains(t, errResp.Message, "from")
 	})
@@ -219,7 +218,7 @@ func TestListArchives(t *testing.T) {
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -229,7 +228,7 @@ func TestListArchives(t *testing.T) {
 
 		require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-		var errResp sharedhttp.ErrorResponse
+		var errResp ErrorResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 		require.Contains(t, errResp.Message, "to")
 	})
@@ -251,7 +250,7 @@ func TestListArchives(t *testing.T) {
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -275,7 +274,7 @@ func TestListArchives(t *testing.T) {
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -285,9 +284,9 @@ func TestListArchives(t *testing.T) {
 
 		require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-		var errResp sharedhttp.ErrorResponse
+		var errResp ErrorResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-		require.Equal(t, fiber.StatusBadRequest, errResp.Code)
+		require.Equal(t, http.StatusText(http.StatusBadRequest), errResp.Title)
 		require.Contains(t, errResp.Message, "invalid pagination")
 	})
 
@@ -308,7 +307,7 @@ func TestListArchives(t *testing.T) {
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -340,7 +339,7 @@ func TestListArchives(t *testing.T) {
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -368,7 +367,7 @@ func TestListArchives(t *testing.T) {
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -401,7 +400,7 @@ func TestListArchives(t *testing.T) {
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -434,7 +433,7 @@ func TestListArchives(t *testing.T) {
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -472,7 +471,7 @@ func TestDownloadArchive(t *testing.T) {
 			GeneratePresignedURL(gomock.Any(), archive.ArchiveKey, testPresignExpiry).
 			Return(testPresignedURL, nil)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -508,9 +507,9 @@ func TestDownloadArchive(t *testing.T) {
 			GeneratePresignedURL(gomock.Any(), archive.ArchiveKey, runtimeExpiry).
 			Return(testPresignedURL, nil)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
-		handler.SetRuntimePresignExpiryGetter(func() time.Duration { return runtimeExpiry })
+		handler.SetRuntimePresignExpiryResolver(func(context.Context) time.Duration { return runtimeExpiry })
 
 		ctx := createTestContextWithTenant(tenantID)
 		resp := testDownloadArchiveRequest(ctx, t, handler, archiveID.String())
@@ -533,7 +532,7 @@ func TestDownloadArchive(t *testing.T) {
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -554,7 +553,7 @@ func TestDownloadArchive(t *testing.T) {
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -564,7 +563,7 @@ func TestDownloadArchive(t *testing.T) {
 
 		require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-		var errResp sharedhttp.ErrorResponse
+		var errResp ErrorResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 		require.Equal(t, "invalid archive id", errResp.Message)
 	})
@@ -581,7 +580,7 @@ func TestDownloadArchive(t *testing.T) {
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -604,7 +603,7 @@ func TestDownloadArchive(t *testing.T) {
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -631,7 +630,7 @@ func TestDownloadArchive(t *testing.T) {
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(requestTenantID)
@@ -654,7 +653,7 @@ func TestDownloadArchive(t *testing.T) {
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -683,7 +682,7 @@ func TestDownloadArchive(t *testing.T) {
 			GeneratePresignedURL(gomock.Any(), archive.ArchiveKey, testPresignExpiry).
 			Return("", errTestStorageFailed)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -818,7 +817,7 @@ func TestRegisterArchiveRoutes(t *testing.T) {
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		app := fiber.New()
@@ -844,7 +843,7 @@ func TestRegisterArchiveRoutes(t *testing.T) {
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
-		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
 
 		err = RegisterArchiveRoutes(nil, handler)

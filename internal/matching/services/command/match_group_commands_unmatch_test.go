@@ -163,8 +163,7 @@ func withTxExecutor() func(context.Context, func(matchingRepositories.Tx) error)
 }
 
 // withSQLTxExecutor returns a DoAndReturn function that executes the WithTx
-// callback with a zero-value *sql.Tx so that callers requiring a concrete
-// *sql.Tx type assertion (e.g. enqueueUnmatchEvent) do not fail.
+// callback with a zero-value transaction so tx-dependent outbox paths can run.
 func withSQLTxExecutor() func(context.Context, func(matchingRepositories.Tx) error) error {
 	return func(_ context.Context, fn func(matchingRepositories.Tx) error) error {
 		return fn(new(sql.Tx))
@@ -935,8 +934,7 @@ func TestEnqueueUnmatchEvent_NonSQLTx(t *testing.T) {
 		outboxRepoTx: outboxRepo,
 	}
 
-	// Pass a non-*sql.Tx value to exercise the type-assertion guard.
-	err := uc.enqueueUnmatchEvent(context.Background(), &fakeTx{}, group, "some reason")
+	err := uc.enqueueUnmatchEvent(context.Background(), nil, group, "some reason")
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrOutboxRequiresSQLTx)
 }

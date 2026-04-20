@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	dockercontainer "github.com/docker/docker/api/types/container"
-	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
@@ -92,8 +92,8 @@ func rabbitMQContainerRequest() testcontainers.ContainerRequest {
 
 type rabbitMQStartupContainer interface {
 	Host(context.Context) (string, error)
-	MappedPort(context.Context, nat.Port) (nat.Port, error)
-	Inspect(context.Context) (*dockercontainer.InspectResponse, error)
+	MappedPort(context.Context, string) (network.Port, error)
+	Inspect(context.Context) (*container.InspectResponse, error)
 }
 
 func containerHostWithRetry(ctx context.Context, container rabbitMQStartupContainer) (string, error) {
@@ -164,10 +164,10 @@ func mappedPortWithRetry(
 
 func resolveMappedPort(
 	ctx context.Context,
-	container rabbitMQStartupContainer,
+	c rabbitMQStartupContainer,
 	containerPort string,
 ) (string, error) {
-	mappedPort, err := container.MappedPort(ctx, nat.Port(containerPort))
+	mappedPort, err := c.MappedPort(ctx, containerPort)
 	if err == nil {
 		if mappedPort.Port() == "" {
 			return "", fmt.Errorf("empty mapped port for %s", containerPort)
@@ -181,7 +181,7 @@ func resolveMappedPort(
 		rawPort = containerPort[:idx]
 	}
 
-	mappedPortNoProtocol, noProtocolErr := container.MappedPort(ctx, nat.Port(rawPort))
+	mappedPortNoProtocol, noProtocolErr := c.MappedPort(ctx, rawPort)
 	if noProtocolErr == nil {
 		if mappedPortNoProtocol.Port() == "" {
 			return "", fmt.Errorf("empty mapped port for %s", containerPort)
@@ -190,7 +190,7 @@ func resolveMappedPort(
 		return mappedPortNoProtocol.Port(), nil
 	}
 
-	inspect, inspectErr := container.Inspect(ctx)
+	inspect, inspectErr := c.Inspect(ctx)
 	if inspectErr == nil {
 		if inspect == nil {
 			return "", fmt.Errorf("inspect returned nil container details for %s", containerPort)
@@ -202,12 +202,7 @@ func resolveMappedPort(
 					continue
 				}
 
-				exposedPortRaw := string(exposedPort)
-				if idx := strings.Index(exposedPortRaw, "/"); idx != -1 {
-					exposedPortRaw = exposedPortRaw[:idx]
-				}
-
-				if exposedPortRaw == rawPort && bindings[0].HostPort != "" {
+				if exposedPort.Port() == rawPort && bindings[0].HostPort != "" {
 					return bindings[0].HostPort, nil
 				}
 			}

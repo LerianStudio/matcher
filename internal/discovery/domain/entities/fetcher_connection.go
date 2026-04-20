@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+	"github.com/LerianStudio/lib-commons/v5/commons/assert"
 
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
@@ -28,6 +28,8 @@ type FetcherConnection struct {
 	Port             int
 	DatabaseName     string
 	ProductName      string
+	Schema           string
+	UserName         string
 	Status           vo.ConnectionStatus
 	LastSeenAt       time.Time
 	SchemaDiscovered bool
@@ -68,26 +70,16 @@ func NewFetcherConnection(
 	}, nil
 }
 
-// ApplyFetcherStatus updates the connection status from Fetcher's reported status string.
-// Returns true if the status was a recognized value, false if it was mapped to Unknown.
-func (fc *FetcherConnection) ApplyFetcherStatus(status string) bool {
+// MarkAvailable transitions the connection to AVAILABLE status.
+// Connections present in Fetcher's list are reachable by definition.
+func (fc *FetcherConnection) MarkAvailable() {
 	if fc == nil {
-		return false
+		return
 	}
 
-	parsedStatus, err := vo.ParseConnectionStatus(status)
-	recognized := err == nil
-
-	if err != nil {
-		parsedStatus = vo.ConnectionStatusUnknown
-	}
-
-	now := time.Now().UTC()
-	fc.Status = parsedStatus
-	fc.LastSeenAt = now
-	fc.UpdatedAt = now
-
-	return recognized
+	fc.Status = vo.ConnectionStatusAvailable
+	fc.LastSeenAt = time.Now().UTC()
+	fc.UpdatedAt = time.Now().UTC()
 }
 
 // MarkUnreachable transitions the connection to UNREACHABLE status.
@@ -112,7 +104,7 @@ func (fc *FetcherConnection) MarkSchemaDiscovered() {
 }
 
 // UpdateDetails updates the connection metadata from Fetcher.
-func (fc *FetcherConnection) UpdateDetails(host string, port int, dbName, productName string) error {
+func (fc *FetcherConnection) UpdateDetails(host string, port int, dbName, productName, schema, userName string) error {
 	if fc == nil {
 		return nil
 	}
@@ -123,10 +115,11 @@ func (fc *FetcherConnection) UpdateDetails(host string, port int, dbName, produc
 	}
 
 	fc.Host = host
-
 	fc.Port = port
 	fc.DatabaseName = dbName
 	fc.ProductName = productName
+	fc.Schema = schema
+	fc.UserName = userName
 	fc.UpdatedAt = time.Now().UTC()
 
 	return nil

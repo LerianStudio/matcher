@@ -1,9 +1,8 @@
-// Package cross provides adapters for cross-context dependencies.
-// These adapters bridge bounded contexts while keeping domain types isolated.
 package cross
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
@@ -13,15 +12,10 @@ import (
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
-// Sentinel errors for context lookup operations.
-var (
-	ErrContextLookupNotInitialized = errors.New("transaction context lookup not initialized")
-	ErrTransactionNotFound         = errors.New("transaction not found")
-	ErrIngestionJobNotFound        = errors.New("ingestion job not found")
-	ErrSourceNotFound              = errors.New("source not found for context lookup")
-	ErrTransactionFinderRequired   = errors.New("transaction finder is required")
-	ErrIngestionJobFinderRequired  = errors.New("ingestion job finder is required")
-)
+// ExceptionContextLookup resolves a reconciliation context ID for a transaction.
+type ExceptionContextLookup interface {
+	GetContextIDByTransactionID(ctx context.Context, transactionID uuid.UUID) (uuid.UUID, error)
+}
 
 // TransactionFinder is an interface for finding transactions by ID.
 type TransactionFinder interface {
@@ -34,52 +28,40 @@ type JobFinder interface {
 }
 
 // SourceContextFinder is an optional interface for resolving context IDs via the source path.
-// When the primary ingestion-job lookup fails, this provides a fallback:
-// Transaction.SourceID -> reconciliation_sources.context_id.
 type SourceContextFinder interface {
 	GetContextIDBySourceID(ctx context.Context, sourceID uuid.UUID) (uuid.UUID, error)
 }
 
-// TransactionContextLookup implements ExceptionContextLookup by looking up transactions and jobs.
-// It supports an optional source-based fallback for resilience when ingestion job lookups fail.
+// TransactionContextLookup resolves context IDs using transaction, ingestion job,
+// and optional source fallback lookups.
 type TransactionContextLookup struct {
 	transactionFinder TransactionFinder
 	jobFinder         JobFinder
-	sourceFinder      SourceContextFinder // optional fallback
+	sourceFinder      SourceContextFinder
 }
 
-// NewTransactionContextLookup creates a new TransactionContextLookup.
+// NewTransactionContextLookup creates a context resolver that derives context IDs from transaction metadata.
 func NewTransactionContextLookup(
 	transactionFinder TransactionFinder,
 	jobFinder JobFinder,
+	sourceFinder SourceContextFinder,
 ) (*TransactionContextLookup, error) {
 	if transactionFinder == nil {
-		return nil, ErrTransactionFinderRequired
+		return nil, ErrNilTransactionRepository
 	}
 
 	if jobFinder == nil {
-		return nil, ErrIngestionJobFinderRequired
+		return nil, ErrNilJobFinder
 	}
 
 	return &TransactionContextLookup{
 		transactionFinder: transactionFinder,
 		jobFinder:         jobFinder,
+		sourceFinder:      sourceFinder,
 	}, nil
 }
 
-// WithSourceFinder sets an optional source-based fallback for context ID resolution.
-// When set, if the ingestion job lookup fails, the lookup will attempt to resolve
-// the context ID via the transaction's SourceID -> reconciliation_sources.context_id.
-func (lookup *TransactionContextLookup) WithSourceFinder(sf SourceContextFinder) {
-	if lookup != nil {
-		lookup.sourceFinder = sf
-	}
-}
-
-// GetContextIDByTransactionID retrieves the context ID for a given transaction.
-// It first finds the transaction to get the IngestionJobID, then looks up the
-// ingestion job to get the ContextID. If the ingestion job lookup fails and a
-// SourceContextFinder is configured, it falls back to resolving via the source path.
+// GetContextIDByTransactionID resolves the reconciliation context for a transaction ID.
 func (lookup *TransactionContextLookup) GetContextIDByTransactionID(
 	ctx context.Context,
 	transactionID uuid.UUID,
@@ -88,9 +70,12 @@ func (lookup *TransactionContextLookup) GetContextIDByTransactionID(
 		return uuid.Nil, ErrContextLookupNotInitialized
 	}
 
-	// Step 1: Find the transaction to get its IngestionJobID and SourceID
 	tx, err := lookup.transactionFinder.FindByID(ctx, transactionID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return uuid.Nil, fmt.Errorf("%w: %s", ErrTransactionNotFound, transactionID)
+		}
+
 		return uuid.Nil, fmt.Errorf("find transaction: %w", err)
 	}
 
@@ -98,35 +83,45 @@ func (lookup *TransactionContextLookup) GetContextIDByTransactionID(
 		return uuid.Nil, fmt.Errorf("%w: %s", ErrTransactionNotFound, transactionID)
 	}
 
-	// Step 2: Try the primary path — find the ingestion job to get its ContextID
 	contextID, jobErr := lookup.resolveViaIngestionJob(ctx, tx.IngestionJobID)
 	if jobErr == nil {
 		return contextID, nil
 	}
 
-	// Step 3: If the primary path failed and a source finder is available,
-	// try the fallback path via SourceID -> reconciliation_sources.context_id
-	if lookup.sourceFinder != nil && tx.SourceID != uuid.Nil {
-		var sourceErr error
-
-		contextID, sourceErr = lookup.sourceFinder.GetContextIDBySourceID(ctx, tx.SourceID)
-		if sourceErr == nil {
-			return contextID, nil
-		}
-		// Both paths failed; return the original ingestion job error
-		// since it's the primary path and more informative
+	if lookup.sourceFinder == nil || tx.SourceID == uuid.Nil {
+		return uuid.Nil, jobErr
 	}
 
-	return uuid.Nil, jobErr
+	fallbackContextID, sourceErr := lookup.resolveViaSource(ctx, tx.SourceID)
+	if sourceErr == nil {
+		return fallbackContextID, nil
+	}
+
+	return uuid.Nil, mapSourceLookupError(jobErr, sourceErr)
 }
 
-// resolveViaIngestionJob looks up the context ID through the ingestion job.
+func (lookup *TransactionContextLookup) resolveViaSource(
+	ctx context.Context,
+	sourceID uuid.UUID,
+) (uuid.UUID, error) {
+	contextID, err := lookup.sourceFinder.GetContextIDBySourceID(ctx, sourceID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("resolve context via source: %w", err)
+	}
+
+	return contextID, nil
+}
+
 func (lookup *TransactionContextLookup) resolveViaIngestionJob(
 	ctx context.Context,
 	ingestionJobID uuid.UUID,
 ) (uuid.UUID, error) {
 	job, err := lookup.jobFinder.FindByID(ctx, ingestionJobID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return uuid.Nil, fmt.Errorf("%w: %s", ErrIngestionJobNotFound, ingestionJobID)
+		}
+
 		return uuid.Nil, fmt.Errorf("find ingestion job: %w", err)
 	}
 

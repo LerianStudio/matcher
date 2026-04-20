@@ -17,13 +17,14 @@ Matcher uses a **zero-config** approach:
 
 2. **Env vars override defaults at startup.** Any `env:` tagged field in the `Config` struct can be overridden via environment variables.
 
-3. **Systemplane handles runtime changes.** After startup, configuration is managed through the systemplane API — no restart required for most settings:
+3. **Systemplane handles runtime changes.** After startup, configuration is managed through the canonical lib-commons v5 systemplane admin API (management-plane surface, intentionally excluded from the public OpenAPI spec) — no restart required for most settings:
 
 ```
-GET  /v1/system/configs          — view current runtime config
-PATCH /v1/system/configs         — change any runtime-managed key
-GET  /v1/system/configs/schema   — see all keys, types, and mutability
-GET  /v1/system/configs/history  — audit trail of changes
+GET  /system/matcher             — list all keys (inline schema metadata)
+GET  /system/matcher/:key        — read a single key
+PUT  /system/matcher/:key        — write a single key
 ```
+
+See `github.com/LerianStudio/lib-commons/v5/commons/systemplane/admin` for the full HTTP surface. The previous v4 `/v1/system/configs[...]` paths and the `/schema`, `/history`, `/reload` sub-endpoints were removed in the v5 migration.
 
 Only bootstrap-only keys (listed in `.config-map.example`) require a restart.

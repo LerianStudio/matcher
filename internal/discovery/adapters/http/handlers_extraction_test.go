@@ -159,7 +159,7 @@ func TestPollExtraction_Success(t *testing.T) {
 	conn := fixture.seedConnection(t)
 	extraction := fixture.seedExtraction(t, conn.ID)
 	fixture.fetcherMock.jobStatus = &sharedPorts.ExtractionJobStatus{
-		JobID:      extraction.FetcherJobID,
+		ID:         extraction.FetcherJobID,
 		Status:     "COMPLETE",
 		ResultPath: "/tmp/result.csv",
 	}
@@ -184,9 +184,8 @@ func TestPollExtraction_FailedResponseSanitizesErrorMessage(t *testing.T) {
 	conn := fixture.seedConnection(t)
 	extraction := fixture.seedExtraction(t, conn.ID)
 	fixture.fetcherMock.jobStatus = &sharedPorts.ExtractionJobStatus{
-		JobID:        extraction.FetcherJobID,
-		Status:       "FAILED",
-		ErrorMessage: "dial tcp 10.0.0.8:5432: connection refused",
+		ID:     extraction.FetcherJobID,
+		Status: "FAILED",
 	}
 
 	app := setupTestApp(t, fixture.handler)
@@ -229,5 +228,5 @@ func TestPollExtraction_FetcherUnavailable_Returns503(t *testing.T) {
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
-	assertStructuredErrorResponse(t, resp, http.StatusServiceUnavailable, "service_unavailable", "fetcher service unavailable")
+	assertStructuredErrorResponse(t, resp, http.StatusServiceUnavailable, "discovery_fetcher_unavailable", "fetcher service unavailable")
 }

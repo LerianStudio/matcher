@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 )
 
 // RunE2E is the standard entry point for e2e tests.

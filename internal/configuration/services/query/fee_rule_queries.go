@@ -7,9 +7,9 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
@@ -36,7 +36,7 @@ func (uc *UseCase) GetFeeRule(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get fee rule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to get fee rule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to get fee rule")
 
 		return nil, fmt.Errorf("finding fee rule: %w", err)
 	}
@@ -62,7 +62,7 @@ func (uc *UseCase) ListFeeRules(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list fee rules", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list fee rules")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list fee rules")
 
 		return nil, fmt.Errorf("listing fee rules: %w", err)
 	}

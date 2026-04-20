@@ -25,7 +25,7 @@ import (
 func clearConfigEnvVars(t *testing.T) {
 	t.Helper()
 
-	for _, key := range configEnvVarKeys {
+	for _, key := range append(configEnvVarKeys, legacyAuthEnvVarKeys()...) {
 		value, exists := os.LookupEnv(key)
 		requireNoError(t, os.Unsetenv(key))
 
@@ -38,6 +38,15 @@ func clearConfigEnvVars(t *testing.T) {
 			requireNoError(t, os.Unsetenv(key))
 		})
 	}
+}
+
+func legacyAuthEnvVarKeys() []string {
+	keys := make([]string, 0, len(legacyAuthEnvAliases))
+	for _, alias := range legacyAuthEnvAliases {
+		keys = append(keys, alias.legacy)
+	}
+
+	return keys
 }
 
 func requireNoError(t *testing.T, err error) {
@@ -71,12 +80,18 @@ var configEnvVarKeys = []string{
 	"MULTI_TENANT_ENABLED",
 	"MULTI_TENANT_URL",
 	"MULTI_TENANT_ENVIRONMENT",
+	"MULTI_TENANT_REDIS_HOST",
+	"MULTI_TENANT_REDIS_PORT",
+	"MULTI_TENANT_REDIS_PASSWORD",
+	"MULTI_TENANT_REDIS_TLS",
 	"MULTI_TENANT_MAX_TENANT_POOLS",
 	"MULTI_TENANT_IDLE_TIMEOUT_SEC",
+	"MULTI_TENANT_TIMEOUT",
 	"MULTI_TENANT_CIRCUIT_BREAKER_THRESHOLD",
 	"MULTI_TENANT_CIRCUIT_BREAKER_TIMEOUT_SEC",
 	"MULTI_TENANT_SERVICE_API_KEY",
-	"MULTI_TENANT_INFRA_ENABLED",
+	"MULTI_TENANT_CACHE_TTL_SEC",
+	"MULTI_TENANT_CONNECTIONS_CHECK_INTERVAL_SEC",
 
 	// PostgresConfig
 	"POSTGRES_HOST",
@@ -124,8 +139,8 @@ var configEnvVarKeys = []string{
 	"RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK",
 
 	// AuthConfig
-	"AUTH_ENABLED",
-	"AUTH_SERVICE_ADDRESS",
+	"PLUGIN_AUTH_ENABLED",
+	"PLUGIN_AUTH_ADDRESS",
 	"AUTH_JWT_SECRET",
 
 	// SwaggerConfig
@@ -150,6 +165,8 @@ var configEnvVarKeys = []string{
 	"EXPORT_RATE_LIMIT_EXPIRY_SEC",
 	"DISPATCH_RATE_LIMIT_MAX",
 	"DISPATCH_RATE_LIMIT_EXPIRY_SEC",
+	"ADMIN_RATE_LIMIT_MAX",
+	"ADMIN_RATE_LIMIT_EXPIRY_SEC",
 
 	// InfrastructureConfig
 	"INFRA_CONNECT_TIMEOUT_SEC",
@@ -159,6 +176,10 @@ var configEnvVarKeys = []string{
 	"IDEMPOTENCY_RETRY_WINDOW_SEC",
 	"IDEMPOTENCY_SUCCESS_TTL_HOURS",
 	"IDEMPOTENCY_HMAC_SECRET",
+
+	// OutboxConfig
+	"OUTBOX_RETRY_WINDOW_SEC",
+	"OUTBOX_DISPATCH_INTERVAL_SEC",
 
 	// DedupeConfig
 	"DEDUPE_TTL_SEC",
@@ -170,6 +191,7 @@ var configEnvVarKeys = []string{
 	"OBJECT_STORAGE_ACCESS_KEY_ID",
 	"OBJECT_STORAGE_SECRET_ACCESS_KEY",
 	"OBJECT_STORAGE_USE_PATH_STYLE",
+	"OBJECT_STORAGE_ALLOW_INSECURE_ENDPOINT",
 
 	// ExportWorkerConfig
 	"EXPORT_WORKER_ENABLED",
@@ -215,4 +237,18 @@ var configEnvVarKeys = []string{
 	"FETCHER_SCHEMA_CACHE_TTL_SEC",
 	"FETCHER_EXTRACTION_POLL_INTERVAL_SEC",
 	"FETCHER_EXTRACTION_TIMEOUT_SEC",
+	"APP_ENC_KEY",
+	"FETCHER_MAX_EXTRACTION_BYTES",
+	"FETCHER_BRIDGE_INTERVAL_SEC",
+	"FETCHER_BRIDGE_BATCH_SIZE",
+	"FETCHER_BRIDGE_TENANT_CONCURRENCY",
+	"FETCHER_BRIDGE_STALE_THRESHOLD_SEC",
+	"FETCHER_BRIDGE_RETRY_MAX_ATTEMPTS",
+	"FETCHER_CUSTODY_RETENTION_SWEEP_INTERVAL_SEC",
+	"FETCHER_CUSTODY_RETENTION_GRACE_PERIOD_SEC",
+
+	// M2MConfig
+	"M2M_TARGET_SERVICE",
+	"M2M_CREDENTIAL_CACHE_TTL_SEC",
+	"AWS_REGION",
 }

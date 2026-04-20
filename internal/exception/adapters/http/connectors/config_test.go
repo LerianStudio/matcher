@@ -351,6 +351,22 @@ func TestIsPrivateIP(t *testing.T) {
 		{"fd00::1 unique local", "fd00::1", true},
 		{"2001:db8::1 documentation/example IPv6 (RFC 3849)", "2001:db8::1", false},
 		{"2607:f8b0:4004:800::200e public IPv6", "2607:f8b0:4004:800::200e", false},
+		// Unspecified — some kernels route 0.0.0.0 as localhost.
+		{"0.0.0.0 unspecified", "0.0.0.0", true},
+		{":: unspecified ipv6", "::", true},
+		// Multicast — never a valid webhook target.
+		{"224.0.0.1 multicast boundary", "224.0.0.1", true},
+		{"239.255.255.255 multicast upper", "239.255.255.255", true},
+		{"ff02::1 ipv6 multicast", "ff02::1", true},
+		// CGNAT 100.64.0.0/10 — RFC 6598 shared address space, NOT covered
+		// by ip.IsPrivate() but must be blocked: it is routable to internal
+		// metadata endpoints in some cloud providers.
+		{"100.64.0.0 cgnat low", "100.64.0.0", true},
+		{"100.64.0.1 cgnat", "100.64.0.1", true},
+		{"100.127.255.255 cgnat high", "100.127.255.255", true},
+		// Just outside CGNAT — must remain public.
+		{"100.63.255.255 just below cgnat", "100.63.255.255", false},
+		{"100.128.0.0 just above cgnat", "100.128.0.0", false},
 	}
 
 	for _, tt := range tests {

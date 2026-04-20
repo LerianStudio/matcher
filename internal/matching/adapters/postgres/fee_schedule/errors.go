@@ -10,6 +10,6 @@ var (
 	ErrFeeScheduleModelNeeded = errors.New("fee schedule model is required")
 	// ErrUnknownStructureType is returned when the fee structure type is unknown.
 	ErrUnknownStructureType = errors.New("unknown fee structure type")
-	// ErrInvalidTx is returned when an invalid transaction type is provided.
+	// ErrInvalidTx is returned when the transaction is missing.
 	ErrInvalidTx = errors.New("fee schedule repository invalid transaction")
 )

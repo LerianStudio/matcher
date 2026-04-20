@@ -9,8 +9,8 @@ import (
 	"github.com/shopspring/decimal"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	"github.com/LerianStudio/matcher/internal/matching/domain/enums"
@@ -263,7 +263,7 @@ func (uc *UseCase) processSingleProposal(
 	confidence, err := matchingVO.ParseConfidenceScore(proposal.Score)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "invalid proposal confidence score", err)
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "invalid proposal confidence score")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "invalid proposal confidence score")
 
 		return nil, fmt.Errorf("invalid proposal score %d: %w", proposal.Score, err)
 	}
@@ -322,7 +322,7 @@ func (uc *UseCase) processSingleProposal(
 	)
 	if err != nil {
 		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "match proposal processing failed", err)
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "match proposal processing failed")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "match proposal processing failed")
 
 		return nil, nil
 	}
@@ -330,7 +330,7 @@ func (uc *UseCase) processSingleProposal(
 	if group.CanAutoConfirm() {
 		if confirmErr := group.Confirm(ctx); confirmErr != nil {
 			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "match proposal confirm failed", confirmErr)
-			logger.With(libLog.Any("error", confirmErr.Error())).Log(ctx, libLog.LevelError, "match proposal confirm failed")
+			logger.With(libLog.Err(confirmErr)).Log(ctx, libLog.LevelError, "match proposal confirm failed")
 		}
 	}
 

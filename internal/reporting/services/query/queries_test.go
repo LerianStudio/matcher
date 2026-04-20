@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories/mocks"
@@ -455,13 +455,13 @@ func TestGetVarianceReport_ReturnsRowsFromRepo(t *testing.T) {
 	variancePct := decimal.NewFromFloat(10)
 	rows := []*entities.VarianceReportRow{
 		{
-			SourceID:      uuid.New(),
-			Currency:      "USD",
-			FeeType:       "PERCENTAGE",
-			TotalExpected: decimal.NewFromInt(100),
-			TotalActual:   decimal.NewFromInt(110),
-			NetVariance:   decimal.NewFromInt(10),
-			VariancePct:   &variancePct,
+			SourceID:        uuid.New(),
+			Currency:        "USD",
+			FeeScheduleName: "PERCENTAGE",
+			TotalExpected:   decimal.NewFromInt(100),
+			TotalActual:     decimal.NewFromInt(110),
+			NetVariance:     decimal.NewFromInt(10),
+			VariancePct:     &variancePct,
 		},
 	}
 
@@ -501,13 +501,13 @@ func TestExportVarianceCSV_CallsBuilderWithRepoData(t *testing.T) {
 	variancePct := decimal.NewFromFloat(5)
 	rows := []*entities.VarianceReportRow{
 		{
-			SourceID:      uuid.New(),
-			Currency:      "EUR",
-			FeeType:       "FLAT",
-			TotalExpected: decimal.NewFromInt(50),
-			TotalActual:   decimal.NewFromInt(55),
-			NetVariance:   decimal.NewFromInt(5),
-			VariancePct:   &variancePct,
+			SourceID:        uuid.New(),
+			Currency:        "EUR",
+			FeeScheduleName: "FLAT",
+			TotalExpected:   decimal.NewFromInt(50),
+			TotalActual:     decimal.NewFromInt(55),
+			NetVariance:     decimal.NewFromInt(5),
+			VariancePct:     &variancePct,
 		},
 	}
 
@@ -527,7 +527,8 @@ func TestExportVarianceCSV_CallsBuilderWithRepoData(t *testing.T) {
 		[]string{
 			"source_id",
 			"currency",
-			"fee_type",
+			"fee_schedule_id",
+			"fee_schedule_name",
 			"total_expected",
 			"total_actual",
 			"net_variance",
@@ -536,7 +537,8 @@ func TestExportVarianceCSV_CallsBuilderWithRepoData(t *testing.T) {
 		rowsData[0],
 	)
 	assert.Equal(t, rows[0].SourceID.String(), rowsData[1][0])
-	assert.Equal(t, rows[0].FeeType, rowsData[1][2])
+	assert.Equal(t, rows[0].FeeScheduleID.String(), rowsData[1][2])
+	assert.Equal(t, rows[0].FeeScheduleName, rowsData[1][3])
 }
 
 func TestExportVariancePDF_CallsBuilderWithRepoData(t *testing.T) {
@@ -556,13 +558,13 @@ func TestExportVariancePDF_CallsBuilderWithRepoData(t *testing.T) {
 
 	rows := []*entities.VarianceReportRow{
 		{
-			SourceID:      uuid.New(),
-			Currency:      "BRL",
-			FeeType:       "TIERED",
-			TotalExpected: decimal.NewFromInt(80),
-			TotalActual:   decimal.NewFromInt(85),
-			NetVariance:   decimal.NewFromInt(5),
-			VariancePct:   nil,
+			SourceID:        uuid.New(),
+			Currency:        "BRL",
+			FeeScheduleName: "TIERED",
+			TotalExpected:   decimal.NewFromInt(80),
+			TotalActual:     decimal.NewFromInt(85),
+			NetVariance:     decimal.NewFromInt(5),
+			VariancePct:     nil,
 		},
 	}
 
@@ -576,6 +578,7 @@ func TestExportVariancePDF_CallsBuilderWithRepoData(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(string(data), "%PDF-"))
+	assert.NotEmpty(t, data)
 }
 
 func readCSVRows(t *testing.T, data []byte) [][]string {

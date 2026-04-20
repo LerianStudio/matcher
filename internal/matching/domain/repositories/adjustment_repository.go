@@ -7,13 +7,11 @@ import (
 
 	"github.com/google/uuid"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 )
-
-//go:generate mockgen -destination=mocks/adjustment_repository_mock.go -package=mocks . AdjustmentRepository
 
 // AdjustmentRepository defines persistence operations for adjustments.
 type AdjustmentRepository interface {

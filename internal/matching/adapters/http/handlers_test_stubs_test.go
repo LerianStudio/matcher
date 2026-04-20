@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
@@ -26,9 +26,8 @@ import (
 )
 
 var (
-	errTestBoom            = errors.New("boom error")
-	errTestDatabaseError   = errors.New("database error")
-	errTestDatabaseTimeout = errors.New("database timeout")
+	errTestBoom          = errors.New("boom error")
+	errTestDatabaseError = errors.New("database error")
 )
 
 type stubMatchRunRepo struct {
@@ -545,12 +544,6 @@ func (r *runMatchOutboxRepo) MarkInvalid(_ context.Context, _ uuid.UUID, _ strin
 	return nil
 }
 
-type runMatchRateRepo struct{}
-
-func (r *runMatchRateRepo) GetByID(_ context.Context, _ uuid.UUID) (*matchingFee.Rate, error) {
-	return nil, nil
-}
-
 type runMatchFeeVarianceRepo struct{}
 
 func (r *runMatchFeeVarianceRepo) CreateBatchWithTx(
@@ -619,12 +612,6 @@ func (r *runMatchAdjustmentRepo) ListByMatchGroupID(
 
 type runMatchInfraProvider struct{}
 
-func (r *runMatchInfraProvider) GetPostgresConnection(
-	_ context.Context,
-) (*sharedPorts.PostgresConnectionLease, error) {
-	return nil, nil
-}
-
 func (r *runMatchInfraProvider) GetRedisConnection(
 	_ context.Context,
 ) (*sharedPorts.RedisConnectionLease, error) {
@@ -635,7 +622,11 @@ func (r *runMatchInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease
 	return nil, nil
 }
 
-func (r *runMatchInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
+func (r *runMatchInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.DBLease, error) {
+	return nil, nil
+}
+
+func (r *runMatchInfraProvider) GetPrimaryDB(_ context.Context) (*sharedPorts.DBLease, error) {
 	return nil, nil
 }
 
@@ -799,7 +790,6 @@ func newRunMatchUseCase(
 	itemRepo := &runMatchItemRepo{}
 	exceptionCreator := &runMatchExceptionCreator{}
 	outboxRepo := &runMatchOutboxRepo{}
-	rateRepo := &runMatchRateRepo{}
 	feeVarianceRepo := &runMatchFeeVarianceRepo{}
 	adjustmentRepo := &runMatchAdjustmentRepo{}
 	infraProvider := &runMatchInfraProvider{}
@@ -818,7 +808,6 @@ func newRunMatchUseCase(
 		MatchItemRepo:    itemRepo,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outboxRepo,
-		RateRepo:         rateRepo,
 		FeeVarianceRepo:  feeVarianceRepo,
 		AdjustmentRepo:   adjustmentRepo,
 		InfraProvider:    infraProvider,

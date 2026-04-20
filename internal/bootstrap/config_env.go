@@ -12,7 +12,9 @@ import (
 	"strings"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 const (
@@ -26,7 +28,7 @@ const (
 // logConfigWarn logs a warning if the config logger is available.
 // Safe to call even when cfg.Logger is nil (e.g., during early bootstrap).
 func (cfg *Config) logConfigWarn(ctx context.Context, msg string) {
-	if cfg != nil && !isNilInterface(cfg.Logger) {
+	if cfg != nil && !sharedPorts.IsNilValue(cfg.Logger) {
 		cfg.Logger.Log(ctx, libLog.LevelWarn, msg)
 	}
 }
@@ -38,15 +40,6 @@ func (cfg *Config) normalizeTenancyConfig() {
 
 	if cfg.Tenancy.MultiTenantEnvironment == "" {
 		cfg.Tenancy.MultiTenantEnvironment = cfg.effectiveMultiTenantEnvironment()
-	}
-
-	if cfg.Tenancy.MultiTenantEnabled {
-		cfg.Tenancy.MultiTenantInfraEnabled = true
-		return
-	}
-
-	if cfg.Tenancy.MultiTenantInfraEnabled {
-		cfg.Tenancy.MultiTenantEnabled = true
 	}
 }
 
@@ -60,6 +53,47 @@ func (cfg *Config) effectiveMultiTenantEnvironment() string {
 	}
 
 	return strings.TrimSpace(cfg.App.EnvName)
+}
+
+// MultiTenantTimeoutDuration returns the tenant-manager API timeout as a time.Duration.
+// Returns a minimum of 1 second if configured value is non-positive.
+func (cfg *Config) MultiTenantTimeoutDuration() time.Duration {
+	if cfg.Tenancy.MultiTenantTimeout <= 0 {
+		return time.Second
+	}
+
+	return time.Duration(cfg.Tenancy.MultiTenantTimeout) * time.Second
+}
+
+// MultiTenantCacheTTL returns the tenant config cache TTL as a time.Duration.
+// Returns a minimum of 1 second if configured value is non-positive.
+func (cfg *Config) MultiTenantCacheTTL() time.Duration {
+	if cfg.Tenancy.MultiTenantCacheTTLSec <= 0 {
+		return time.Second
+	}
+
+	return time.Duration(cfg.Tenancy.MultiTenantCacheTTLSec) * time.Second
+}
+
+// MultiTenantConnectionsCheckInterval returns the pgManager settings revalidation
+// interval as a time.Duration.
+// Returns a minimum of 1 second if configured value is non-positive.
+func (cfg *Config) MultiTenantConnectionsCheckInterval() time.Duration {
+	if cfg.Tenancy.MultiTenantConnectionsCheckIntervalSec <= 0 {
+		return time.Second
+	}
+
+	return time.Duration(cfg.Tenancy.MultiTenantConnectionsCheckIntervalSec) * time.Second
+}
+
+// MultiTenantIdleTimeout returns the tenant pool idle timeout as a time.Duration.
+// Returns a minimum of 1 second if configured value is non-positive.
+func (cfg *Config) MultiTenantIdleTimeout() time.Duration {
+	if cfg.Tenancy.MultiTenantIdleTimeoutSec <= 0 {
+		return time.Second
+	}
+
+	return time.Duration(cfg.Tenancy.MultiTenantIdleTimeoutSec) * time.Second
 }
 
 // PrimaryDSN returns the PostgreSQL connection string for the primary database.
@@ -287,33 +321,37 @@ func (cfg *Config) IdempotencySuccessTTL() time.Duration {
 	return time.Duration(cfg.Idempotency.SuccessTTLHours) * time.Hour
 }
 
+// OutboxRetryWindow returns the outbox dispatcher retry cooldown as a time.Duration.
+// Falls back to defaultOutboxRetryWindow (seconds) if configured value is non-positive.
+func (cfg *Config) OutboxRetryWindow() time.Duration {
+	if cfg.Outbox.RetryWindowSec <= 0 {
+		return time.Duration(defaultOutboxRetryWindow) * time.Second
+	}
+
+	return time.Duration(cfg.Outbox.RetryWindowSec) * time.Second
+}
+
+// OutboxDispatchInterval returns the outbox dispatcher poll interval as a time.Duration.
+// Falls back to defaultOutboxDispatchIntervalSec (seconds) if configured value is non-positive.
+func (cfg *Config) OutboxDispatchInterval() time.Duration {
+	if cfg.Outbox.DispatchIntervalSec <= 0 {
+		return time.Duration(defaultOutboxDispatchIntervalSec) * time.Second
+	}
+
+	return time.Duration(cfg.Outbox.DispatchIntervalSec) * time.Second
+}
+
 // WebhookTimeout returns the default webhook dispatch timeout as a time.Duration.
 // Returns a minimum of 1 second if configured value is non-positive.
 // Caps at 300 seconds (5 minutes) to prevent runaway connections.
 func (cfg *Config) WebhookTimeout() time.Duration {
-	const (
-		maxWebhookTimeoutSec     = 300 // 5 minutes
-		defaultWebhookTimeoutSec = 30
-	)
-
-	if cfg.Webhook.TimeoutSec <= 0 {
-		return time.Duration(defaultWebhookTimeoutSec) * time.Second
-	}
-
-	if cfg.Webhook.TimeoutSec > maxWebhookTimeoutSec {
-		cfg.logConfigWarn(context.Background(), fmt.Sprintf("WEBHOOK_TIMEOUT_SEC=%d exceeds maximum of %d seconds, capping to maximum",
-			cfg.Webhook.TimeoutSec, maxWebhookTimeoutSec))
-
-		return time.Duration(maxWebhookTimeoutSec) * time.Second
-	}
-
-	return time.Duration(cfg.Webhook.TimeoutSec) * time.Second
+	return normalizedWebhookTimeout(context.Background(), cfg)
 }
 
 // FetcherHealthTimeout returns the fetcher health-check timeout.
 // Returns a default of 5 seconds if configured value is non-positive.
 func (cfg *Config) FetcherHealthTimeout() time.Duration {
-	if cfg.Fetcher.HealthTimeoutSec <= 0 {
+	if cfg == nil || cfg.Fetcher.HealthTimeoutSec <= 0 {
 		return defaultFetcherHealthTimeout
 	}
 
@@ -323,7 +361,7 @@ func (cfg *Config) FetcherHealthTimeout() time.Duration {
 // FetcherRequestTimeout returns the fetcher request timeout.
 // Returns a default of 30 seconds if configured value is non-positive.
 func (cfg *Config) FetcherRequestTimeout() time.Duration {
-	if cfg.Fetcher.RequestTimeoutSec <= 0 {
+	if cfg == nil || cfg.Fetcher.RequestTimeoutSec <= 0 {
 		return defaultFetcherRequestTimeout
 	}
 
@@ -333,7 +371,7 @@ func (cfg *Config) FetcherRequestTimeout() time.Duration {
 // FetcherDiscoveryInterval returns the discovery worker interval.
 // Returns a default of 1 minute if configured value is non-positive.
 func (cfg *Config) FetcherDiscoveryInterval() time.Duration {
-	if cfg.Fetcher.DiscoveryIntervalSec <= 0 {
+	if cfg == nil || cfg.Fetcher.DiscoveryIntervalSec <= 0 {
 		return time.Minute
 	}
 
@@ -343,7 +381,7 @@ func (cfg *Config) FetcherDiscoveryInterval() time.Duration {
 // FetcherSchemaCacheTTL returns the schema cache TTL.
 // Returns a default of 5 minutes if configured value is non-positive.
 func (cfg *Config) FetcherSchemaCacheTTL() time.Duration {
-	if cfg.Fetcher.SchemaCacheTTLSec <= 0 {
+	if cfg == nil || cfg.Fetcher.SchemaCacheTTLSec <= 0 {
 		return defaultFetcherSchemaCacheTTL
 	}
 
@@ -353,7 +391,7 @@ func (cfg *Config) FetcherSchemaCacheTTL() time.Duration {
 // FetcherExtractionPollInterval returns the extraction poll interval.
 // Returns a default of 5 seconds if configured value is non-positive.
 func (cfg *Config) FetcherExtractionPollInterval() time.Duration {
-	if cfg.Fetcher.ExtractionPollSec <= 0 {
+	if cfg == nil || cfg.Fetcher.ExtractionPollSec <= 0 {
 		return defaultFetcherExtractionPollPeriod
 	}
 
@@ -363,7 +401,7 @@ func (cfg *Config) FetcherExtractionPollInterval() time.Duration {
 // FetcherExtractionTimeout returns the extraction timeout.
 // Returns a default of 10 minutes if configured value is non-positive.
 func (cfg *Config) FetcherExtractionTimeout() time.Duration {
-	if cfg.Fetcher.ExtractionTimeoutSec <= 0 {
+	if cfg == nil || cfg.Fetcher.ExtractionTimeoutSec <= 0 {
 		return defaultFetcherExtractionTimeout
 	}
 
@@ -384,23 +422,7 @@ func (cfg *Config) ExportWorkerPollInterval() time.Duration {
 // Returns a default of 1 hour if configured value is non-positive.
 // Caps at S3's maximum of 7 days (604800 seconds) if exceeded.
 func (cfg *Config) ExportPresignExpiry() time.Duration {
-	const (
-		maxPresignExpiry     = 604800 // S3 maximum: 7 days in seconds
-		defaultPresignExpiry = 3600   // 1 hour default
-	)
-
-	if cfg.ExportWorker.PresignExpirySec <= 0 {
-		return time.Duration(defaultPresignExpiry) * time.Second
-	}
-
-	if cfg.ExportWorker.PresignExpirySec > maxPresignExpiry {
-		cfg.logConfigWarn(context.Background(), fmt.Sprintf("EXPORT_PRESIGN_EXPIRY_SEC=%d exceeds S3 maximum of %d seconds, capping to maximum",
-			cfg.ExportWorker.PresignExpirySec, maxPresignExpiry))
-
-		return time.Duration(maxPresignExpiry) * time.Second
-	}
-
-	return time.Duration(cfg.ExportWorker.PresignExpirySec) * time.Second
+	return normalizedExportPresignExpiry(context.Background(), cfg)
 }
 
 // CleanupWorkerInterval returns the cleanup worker run interval as a time.Duration.
@@ -455,17 +477,61 @@ func (cfg *Config) ArchivalInterval() time.Duration {
 // Returns a default of 1 hour if configured value is non-positive.
 // Caps at S3's maximum of 7 days (604800 seconds) if exceeded.
 func (cfg *Config) ArchivalPresignExpiry() time.Duration {
+	return normalizedArchivalPresignExpiry(context.Background(), cfg)
+}
+
+func normalizedWebhookTimeout(ctx context.Context, cfg *Config) time.Duration {
+	const (
+		maxWebhookTimeoutSec     = 300 // 5 minutes
+		defaultWebhookTimeoutSec = 30
+	)
+
+	if cfg == nil || cfg.Webhook.TimeoutSec <= 0 {
+		return time.Duration(defaultWebhookTimeoutSec) * time.Second
+	}
+
+	if cfg.Webhook.TimeoutSec > maxWebhookTimeoutSec {
+		cfg.logConfigWarn(ctx, fmt.Sprintf("WEBHOOK_TIMEOUT_SEC=%d exceeds maximum of %d seconds, capping to maximum",
+			cfg.Webhook.TimeoutSec, maxWebhookTimeoutSec))
+
+		return time.Duration(maxWebhookTimeoutSec) * time.Second
+	}
+
+	return time.Duration(cfg.Webhook.TimeoutSec) * time.Second
+}
+
+func normalizedExportPresignExpiry(ctx context.Context, cfg *Config) time.Duration {
 	const (
 		maxPresignExpiry     = 604800 // S3 maximum: 7 days in seconds
 		defaultPresignExpiry = 3600   // 1 hour default
 	)
 
-	if cfg.Archival.PresignExpirySec <= 0 {
+	if cfg == nil || cfg.ExportWorker.PresignExpirySec <= 0 {
+		return time.Duration(defaultPresignExpiry) * time.Second
+	}
+
+	if cfg.ExportWorker.PresignExpirySec > maxPresignExpiry {
+		cfg.logConfigWarn(ctx, fmt.Sprintf("EXPORT_PRESIGN_EXPIRY_SEC=%d exceeds S3 maximum of %d seconds, capping to maximum",
+			cfg.ExportWorker.PresignExpirySec, maxPresignExpiry))
+
+		return time.Duration(maxPresignExpiry) * time.Second
+	}
+
+	return time.Duration(cfg.ExportWorker.PresignExpirySec) * time.Second
+}
+
+func normalizedArchivalPresignExpiry(ctx context.Context, cfg *Config) time.Duration {
+	const (
+		maxPresignExpiry     = 604800 // S3 maximum: 7 days in seconds
+		defaultPresignExpiry = 3600   // 1 hour default
+	)
+
+	if cfg == nil || cfg.Archival.PresignExpirySec <= 0 {
 		return time.Duration(defaultPresignExpiry) * time.Second
 	}
 
 	if cfg.Archival.PresignExpirySec > maxPresignExpiry {
-		cfg.logConfigWarn(context.Background(), fmt.Sprintf("ARCHIVAL_PRESIGN_EXPIRY_SEC=%d exceeds S3 maximum of %d seconds, capping to maximum",
+		cfg.logConfigWarn(ctx, fmt.Sprintf("ARCHIVAL_PRESIGN_EXPIRY_SEC=%d exceeds S3 maximum of %d seconds, capping to maximum",
 			cfg.Archival.PresignExpirySec, maxPresignExpiry))
 
 		return time.Duration(maxPresignExpiry) * time.Second
@@ -492,6 +558,18 @@ func (cfg *Config) DedupeTTL() time.Duration {
 	}
 
 	return time.Duration(cfg.Dedupe.TTLSec) * time.Second
+}
+
+// M2MCredentialCacheTTL returns the M2M credential L2 cache TTL as a time.Duration.
+// Returns a default of 5 minutes if configured value is non-positive.
+func (cfg *Config) M2MCredentialCacheTTL() time.Duration {
+	const defaultM2MCacheTTLSec = 300 // 5 minutes
+
+	if cfg.M2M.M2MCredentialCacheTTLSec <= 0 {
+		return time.Duration(defaultM2MCacheTTLSec) * time.Second
+	}
+
+	return time.Duration(cfg.M2M.M2MCredentialCacheTTLSec) * time.Second
 }
 
 // SchedulerInterval returns the scheduler worker poll interval as a time.Duration.

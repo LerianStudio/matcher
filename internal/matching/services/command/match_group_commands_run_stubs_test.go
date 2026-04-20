@@ -13,14 +13,13 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/mock/gomock"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	matching "github.com/LerianStudio/matcher/internal/matching/domain/services"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
-	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	outboxmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 )
@@ -674,17 +673,8 @@ func (stub *stubExceptionCreator) CreateExceptionsWithTx(
 }
 
 // ---------------------------------------------------------------------------
-// Stub types: rate, fee variance, adjustment repositories
+// Stub types: fee variance, adjustment repositories
 // ---------------------------------------------------------------------------
-
-type stubRateRepo struct {
-	rate *fee.Rate
-	err  error
-}
-
-func (s *stubRateRepo) GetByID(_ context.Context, _ uuid.UUID) (*fee.Rate, error) {
-	return s.rate, s.err
-}
 
 type stubFeeVarianceRepo struct {
 	variances []*matchingEntities.FeeVariance
@@ -769,12 +759,6 @@ type stubInfraProviderForRun struct {
 	err error
 }
 
-func (s *stubInfraProviderForRun) GetPostgresConnection(
-	_ context.Context,
-) (*sharedPorts.PostgresConnectionLease, error) {
-	return nil, nil
-}
-
 func (s *stubInfraProviderForRun) GetRedisConnection(
 	_ context.Context,
 ) (*sharedPorts.RedisConnectionLease, error) {
@@ -789,7 +773,11 @@ func (s *stubInfraProviderForRun) BeginTx(_ context.Context) (*sharedPorts.TxLea
 	return sharedPorts.NewTxLease(s.tx, nil), nil
 }
 
-func (s *stubInfraProviderForRun) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
+func (s *stubInfraProviderForRun) GetReplicaDB(_ context.Context) (*sharedPorts.DBLease, error) {
+	return nil, nil
+}
+
+func (s *stubInfraProviderForRun) GetPrimaryDB(_ context.Context) (*sharedPorts.DBLease, error) {
 	return nil, nil
 }
 
@@ -867,7 +855,6 @@ var (
 	_ matchingRepositories.MatchGroupRepository  = (*stubMatchGroupRepo)(nil)
 	_ matchingRepositories.MatchItemRepository   = (*stubMatchItemRepo)(nil)
 	_ ports.ExceptionCreator                     = (*stubExceptionCreator)(nil)
-	_ matchingRepositories.RateRepository        = (*stubRateRepo)(nil)
 	_ matchingRepositories.FeeVarianceRepository = (*stubFeeVarianceRepo)(nil)
 	_ matchingRepositories.AdjustmentRepository  = (*stubAdjustmentRepo)(nil)
 	_ sharedPorts.InfrastructureProvider         = (*stubInfraProviderForRun)(nil)

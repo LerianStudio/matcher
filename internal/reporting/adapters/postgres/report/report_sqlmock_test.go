@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
@@ -173,10 +173,12 @@ func TestScanVarianceRow(t *testing.T) {
 
 	totalExpected := decimal.NewFromInt(100)
 	netVariance := decimal.NewFromInt(20)
+	feeScheduleID := uuid.New()
 	row, err := scanVarianceRow(fakeVarianceScanner{
 		values: []any{
 			uuid.New(),
 			"USD",
+			feeScheduleID,
 			"FLAT",
 			totalExpected,
 			decimal.NewFromInt(80),
@@ -187,7 +189,8 @@ func TestScanVarianceRow(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, row)
 	assert.Equal(t, "USD", row.Currency)
-	assert.Equal(t, "FLAT", row.FeeType)
+	assert.Equal(t, feeScheduleID, row.FeeScheduleID)
+	assert.Equal(t, "FLAT", row.FeeScheduleName)
 	require.NotNil(t, row.VariancePct)
 	assert.True(
 		t,
@@ -204,12 +207,6 @@ func TestScanVarianceRow_Error(t *testing.T) {
 
 type mockInfrastructureProvider struct{}
 
-func (m *mockInfrastructureProvider) GetPostgresConnection(
-	_ context.Context,
-) (*ports.PostgresConnectionLease, error) {
-	return nil, nil
-}
-
 func (m *mockInfrastructureProvider) GetRedisConnection(
 	_ context.Context,
 ) (*ports.RedisConnectionLease, error) {
@@ -220,7 +217,11 @@ func (m *mockInfrastructureProvider) BeginTx(_ context.Context) (*ports.TxLease,
 	return nil, nil
 }
 
-func (m *mockInfrastructureProvider) GetReplicaDB(_ context.Context) (*ports.ReplicaDBLease, error) {
+func (m *mockInfrastructureProvider) GetReplicaDB(_ context.Context) (*ports.DBLease, error) {
+	return nil, nil
+}
+
+func (m *mockInfrastructureProvider) GetPrimaryDB(_ context.Context) (*ports.DBLease, error) {
 	return nil, nil
 }
 
@@ -521,10 +522,12 @@ func TestValidateVarianceFilter_ValidInput(t *testing.T) {
 func TestScanVarianceRow_ZeroExpected(t *testing.T) {
 	t.Parallel()
 
+	feeScheduleID := uuid.New()
 	row, err := scanVarianceRow(fakeVarianceScanner{
 		values: []any{
 			uuid.New(),
 			"EUR",
+			feeScheduleID,
 			"PERCENTAGE",
 			decimal.Zero,
 			decimal.NewFromInt(50),
@@ -535,7 +538,8 @@ func TestScanVarianceRow_ZeroExpected(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, row)
 	assert.Equal(t, "EUR", row.Currency)
-	assert.Equal(t, "PERCENTAGE", row.FeeType)
+	assert.Equal(t, feeScheduleID, row.FeeScheduleID)
+	assert.Equal(t, "PERCENTAGE", row.FeeScheduleName)
 	require.Nil(t, row.VariancePct)
 }
 
@@ -544,10 +548,12 @@ func TestScanVarianceRow_NegativeVariance(t *testing.T) {
 
 	totalExpected := decimal.NewFromInt(200)
 	netVariance := decimal.NewFromInt(-40)
+	feeScheduleID := uuid.New()
 	row, err := scanVarianceRow(fakeVarianceScanner{
 		values: []any{
 			uuid.New(),
 			"GBP",
+			feeScheduleID,
 			"TIERED",
 			totalExpected,
 			decimal.NewFromInt(240),
@@ -1372,7 +1378,7 @@ func TestPaginateVarianceItems(t *testing.T) {
 
 		sourceID := uuid.New()
 		testItems := []*entities.VarianceReportRow{
-			{SourceID: sourceID, Currency: "USD", FeeType: "FLAT"},
+			{SourceID: sourceID, Currency: "USD", FeeScheduleID: uuid.New(), FeeScheduleName: "FLAT"},
 		}
 
 		items, pagination, err := paginateVarianceItems(
@@ -1384,6 +1390,35 @@ func TestPaginateVarianceItems(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, items, 1)
 		assert.Empty(t, pagination.Prev)
+	})
+
+	t.Run("previous-direction pagination returns bounded page", func(t *testing.T) {
+		t.Parallel()
+
+		filter := entities.VarianceReportFilter{
+			ContextID: uuid.New(),
+			Cursor:    "some-cursor",
+			Limit:     2,
+		}
+		args := paginationArgs{
+			orderDirection: "ASC",
+			limit:          2,
+			cursor: libHTTP.Cursor{
+				Direction: libHTTP.CursorDirectionPrev,
+			},
+		}
+
+		testItems := []*entities.VarianceReportRow{
+			{SourceID: uuid.New(), Currency: "USD", FeeScheduleID: uuid.New(), FeeScheduleName: "Alpha"},
+			{SourceID: uuid.New(), Currency: "USD", FeeScheduleID: uuid.New(), FeeScheduleName: "Beta"},
+			{SourceID: uuid.New(), Currency: "USD", FeeScheduleID: uuid.New(), FeeScheduleName: "Gamma"},
+		}
+
+		items, pagination, err := paginateVarianceItems(filter, args, testItems)
+
+		require.NoError(t, err)
+		assert.Len(t, items, 2)
+		assert.True(t, pagination.Next != "" || pagination.Prev != "")
 	})
 }
 
@@ -2230,17 +2265,19 @@ func TestGetVarianceReport_DatabaseQuery(t *testing.T) {
 		}
 
 		sourceID := uuid.New()
+		feeScheduleID := uuid.New()
 
 		mock.ExpectQuery(regexp.QuoteMeta("SELECT")).
-			WillReturnRows(sqlmock.NewRows([]string{"source_id", "currency", "fee_type", "total_expected", "total_actual", "net_variance"}).
-				AddRow(sourceID, "USD", "FLAT", "100.00", "95.00", "-5.00"))
+			WillReturnRows(sqlmock.NewRows([]string{"source_id", "currency", "fee_schedule_id", "fee_schedule_name", "total_expected", "total_actual", "net_variance"}).
+				AddRow(sourceID, "USD", feeScheduleID, "Visa Domestic", "100.00", "95.00", "-5.00"))
 
 		items, _, err := repo.GetVarianceReport(ctx, filter)
 
 		require.NoError(t, err)
 		assert.Len(t, items, 1)
 		assert.Equal(t, "USD", items[0].Currency)
-		assert.Equal(t, "FLAT", items[0].FeeType)
+		assert.Equal(t, feeScheduleID, items[0].FeeScheduleID)
+		assert.Equal(t, "Visa Domestic", items[0].FeeScheduleName)
 	})
 
 	t.Run("with source ID filter", func(t *testing.T) {
@@ -2260,7 +2297,7 @@ func TestGetVarianceReport_DatabaseQuery(t *testing.T) {
 		}
 
 		mock.ExpectQuery(regexp.QuoteMeta("SELECT")).
-			WillReturnRows(sqlmock.NewRows([]string{"source_id", "currency", "fee_type", "total_expected", "total_actual", "net_variance"}))
+			WillReturnRows(sqlmock.NewRows([]string{"source_id", "currency", "fee_schedule_id", "fee_schedule_name", "total_expected", "total_actual", "net_variance"}))
 
 		items, pagination, err := repo.GetVarianceReport(ctx, filter)
 
@@ -2498,10 +2535,11 @@ func TestListVarianceForExport_DatabaseQuery(t *testing.T) {
 		}
 
 		sourceID := uuid.New()
+		feeScheduleID := uuid.New()
 
 		mock.ExpectQuery(regexp.QuoteMeta("SELECT")).
-			WillReturnRows(sqlmock.NewRows([]string{"source_id", "currency", "fee_type", "total_expected", "total_actual", "net_variance"}).
-				AddRow(sourceID, "USD", "FLAT", "200.00", "190.00", "-10.00"))
+			WillReturnRows(sqlmock.NewRows([]string{"source_id", "currency", "fee_schedule_id", "fee_schedule_name", "total_expected", "total_actual", "net_variance"}).
+				AddRow(sourceID, "USD", feeScheduleID, "Visa Domestic", "200.00", "190.00", "-10.00"))
 
 		items, err := repo.ListVarianceForExport(ctx, filter, 100)
 
@@ -2525,7 +2563,7 @@ func TestListVarianceForExport_DatabaseQuery(t *testing.T) {
 		}
 
 		mock.ExpectQuery(regexp.QuoteMeta("SELECT")).
-			WillReturnRows(sqlmock.NewRows([]string{"source_id", "currency", "fee_type", "total_expected", "total_actual", "net_variance"}))
+			WillReturnRows(sqlmock.NewRows([]string{"source_id", "currency", "fee_schedule_id", "fee_schedule_name", "total_expected", "total_actual", "net_variance"}))
 
 		items, err := repo.ListVarianceForExport(ctx, filter, 100)
 
@@ -2714,10 +2752,11 @@ func TestListVariancePage_DatabaseQuery(t *testing.T) {
 		}
 
 		sourceID := uuid.New()
+		feeScheduleID := uuid.New()
 
 		mock.ExpectQuery(regexp.QuoteMeta("SELECT")).
-			WillReturnRows(sqlmock.NewRows([]string{"source_id", "currency", "fee_type", "total_expected", "total_actual", "net_variance"}).
-				AddRow(sourceID, "USD", "FLAT", "100.00", "95.00", "-5.00"))
+			WillReturnRows(sqlmock.NewRows([]string{"source_id", "currency", "fee_schedule_id", "fee_schedule_name", "total_expected", "total_actual", "net_variance"}).
+				AddRow(sourceID, "USD", feeScheduleID, "Visa Domestic", "100.00", "95.00", "-5.00"))
 
 		items, nextKey, err := repo.ListVariancePage(ctx, filter, "", 10)
 
@@ -2742,7 +2781,7 @@ func TestListVariancePage_DatabaseQuery(t *testing.T) {
 		}
 
 		mock.ExpectQuery(regexp.QuoteMeta("SELECT")).
-			WillReturnRows(sqlmock.NewRows([]string{"source_id", "currency", "fee_type", "total_expected", "total_actual", "net_variance"}))
+			WillReturnRows(sqlmock.NewRows([]string{"source_id", "currency", "fee_schedule_id", "fee_schedule_name", "total_expected", "total_actual", "net_variance"}))
 
 		items, _, err := repo.ListVariancePage(ctx, filter, "", 10)
 
@@ -2759,16 +2798,17 @@ func TestApplyVarianceCursor(t *testing.T) {
 
 		baseQuery := "SELECT * FROM t WHERE ctx = $1"
 		baseArgs := []any{"ctx-val"}
-		afterKey := "550e8400-e29b-41d4-a716-446655440000:USD:FLAT"
+		feeScheduleID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440001")
+		afterKey := "550e8400-e29b-41d4-a716-446655440000:USD:" + feeScheduleID.String()
 
 		cf, err := applyVarianceCursor(afterKey, baseQuery, baseArgs, 2)
 
 		require.NoError(t, err)
-		assert.Contains(t, cf.query, "AND (t.source_id, fv.currency, r.structure_type) > ($2, $3, $4)")
+		assert.Contains(t, cf.query, "AND (t.source_id, fv.currency, fv.fee_schedule_id) > ($2, $3, $4)")
 		require.Len(t, cf.args, 4)
 		assert.Equal(t, uuid.MustParse("550e8400-e29b-41d4-a716-446655440000"), cf.args[1])
 		assert.Equal(t, "USD", cf.args[2])
-		assert.Equal(t, "FLAT", cf.args[3])
+		assert.Equal(t, feeScheduleID, cf.args[3])
 		assert.Equal(t, 5, cf.argIdx)
 	})
 
@@ -2791,7 +2831,7 @@ func TestApplyVarianceCursor(t *testing.T) {
 
 		baseQuery := "SELECT * FROM t WHERE ctx = $1"
 		baseArgs := []any{"ctx-val"}
-		afterKey := "not-a-uuid:USD:FLAT"
+		afterKey := "not-a-uuid:USD:550e8400-e29b-41d4-a716-446655440001"
 
 		_, err := applyVarianceCursor(afterKey, baseQuery, baseArgs, 2)
 
@@ -2805,7 +2845,7 @@ func TestApplyVarianceCursor(t *testing.T) {
 
 		baseQuery := "SELECT * FROM t WHERE ctx = $1"
 		baseArgs := []any{"ctx-val"}
-		afterKey := "550e8400-e29b-41d4-a716-446655440000:usd:FLAT"
+		afterKey := "550e8400-e29b-41d4-a716-446655440000:usd:550e8400-e29b-41d4-a716-446655440001"
 
 		_, err := applyVarianceCursor(afterKey, baseQuery, baseArgs, 2)
 
@@ -2814,18 +2854,18 @@ func TestApplyVarianceCursor(t *testing.T) {
 		assert.Contains(t, err.Error(), "currency is not a valid 3-letter ISO code")
 	})
 
-	t.Run("invalid fee type in cursor returns error", func(t *testing.T) {
+	t.Run("invalid fee schedule id in cursor returns error", func(t *testing.T) {
 		t.Parallel()
 
 		baseQuery := "SELECT * FROM t WHERE ctx = $1"
 		baseArgs := []any{"ctx-val"}
-		afterKey := "550e8400-e29b-41d4-a716-446655440000:USD:UNKNOWN"
+		afterKey := "550e8400-e29b-41d4-a716-446655440000:USD:"
 
 		_, err := applyVarianceCursor(afterKey, baseQuery, baseArgs, 2)
 
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrInvalidVarianceCursor)
-		assert.Contains(t, err.Error(), "fee type \"UNKNOWN\" is not a recognized structure type")
+		assert.Contains(t, err.Error(), "fee_schedule_id is not a valid UUID")
 	})
 
 	t.Run("empty cursor returns unchanged filter", func(t *testing.T) {
@@ -2840,5 +2880,19 @@ func TestApplyVarianceCursor(t *testing.T) {
 		assert.Equal(t, baseQuery, cf.query)
 		assert.Equal(t, baseArgs, cf.args)
 		assert.Equal(t, 2, cf.argIdx)
+	})
+
+	t.Run("malformed fee schedule id in cursor returns error", func(t *testing.T) {
+		t.Parallel()
+
+		baseQuery := "SELECT * FROM t WHERE ctx = $1"
+		baseArgs := []any{"ctx-val"}
+		afterKey := "550e8400-e29b-41d4-a716-446655440000:USD:not-a-uuid"
+
+		_, err := applyVarianceCursor(afterKey, baseQuery, baseArgs, 2)
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrInvalidVarianceCursor)
+		assert.Contains(t, err.Error(), "fee_schedule_id is not a valid UUID")
 	})
 }

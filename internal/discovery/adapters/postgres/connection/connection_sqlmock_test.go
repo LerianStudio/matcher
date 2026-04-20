@@ -54,6 +54,8 @@ func createTestConnection() *entities.FetcherConnection {
 		Port:             5432,
 		DatabaseName:     "testdb",
 		ProductName:      "PostgreSQL 17",
+		Schema:           "public",
+		UserName:         "app_user",
 		Status:           vo.ConnectionStatusAvailable,
 		LastSeenAt:       now,
 		SchemaDiscovered: true,
@@ -66,6 +68,7 @@ func connectionColumns() []string {
 	return []string{
 		"id", "fetcher_conn_id", "config_name", "database_type",
 		"host", "port", "database_name", "product_name",
+		"schema", "user_name",
 		"status", "last_seen_at", "schema_discovered",
 		"created_at", "updated_at",
 	}
@@ -146,6 +149,8 @@ func TestRepository_Upsert(t *testing.T) {
 				conn.Port,
 				conn.DatabaseName,
 				conn.ProductName,
+				conn.Schema,
+				conn.UserName,
 				conn.Status.String(),
 				conn.LastSeenAt,
 				conn.SchemaDiscovered,
@@ -183,6 +188,8 @@ func TestRepository_Upsert(t *testing.T) {
 				conn.Port,
 				conn.DatabaseName,
 				conn.ProductName,
+				conn.Schema,
+				conn.UserName,
 				conn.Status.String(),
 				conn.LastSeenAt,
 				conn.SchemaDiscovered,
@@ -249,6 +256,8 @@ func TestRepository_FindAll(t *testing.T) {
 				conn.Port,
 				conn.DatabaseName,
 				conn.ProductName,
+				conn.Schema,
+				conn.UserName,
 				conn.Status.String(),
 				conn.LastSeenAt,
 				conn.SchemaDiscovered,
@@ -337,6 +346,8 @@ func TestRepository_FindByID(t *testing.T) {
 				conn.Port,
 				conn.DatabaseName,
 				conn.ProductName,
+				conn.Schema,
+				conn.UserName,
 				conn.Status.String(),
 				conn.LastSeenAt,
 				conn.SchemaDiscovered,
@@ -405,6 +416,8 @@ func TestRepository_FindByFetcherID(t *testing.T) {
 				conn.Port,
 				conn.DatabaseName,
 				conn.ProductName,
+				conn.Schema,
+				conn.UserName,
 				conn.Status.String(),
 				conn.LastSeenAt,
 				conn.SchemaDiscovered,
@@ -480,6 +493,8 @@ func TestRepository_UpsertWithTx_Success(t *testing.T) {
 			conn.Port,
 			conn.DatabaseName,
 			conn.ProductName,
+			conn.Schema,
+			conn.UserName,
 			conn.Status.String(),
 			conn.LastSeenAt,
 			conn.SchemaDiscovered,
@@ -530,6 +545,8 @@ func TestConnectionModel_RoundTrip(t *testing.T) {
 	assert.Equal(t, original.Port, entity.Port)
 	assert.Equal(t, original.DatabaseName, entity.DatabaseName)
 	assert.Equal(t, original.ProductName, entity.ProductName)
+	assert.Equal(t, original.Schema, entity.Schema)
+	assert.Equal(t, original.UserName, entity.UserName)
 	assert.Equal(t, original.Status, entity.Status)
 	assert.Equal(t, original.SchemaDiscovered, entity.SchemaDiscovered)
 }

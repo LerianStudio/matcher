@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"regexp"
 	"testing"
 	"time"
 
@@ -18,8 +19,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
+	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
@@ -797,16 +799,15 @@ func TestScanContext_ValidRow(t *testing.T) {
 
 	id := uuid.New()
 	tenantID := uuid.New()
-	rateID := uuid.New().String()
 	now := time.Now().UTC()
 
 	rows := sqlmock.NewRows([]string{
 		"id", "tenant_id", "name", "type", "interval",
-		"status", "rate_id", "fee_tolerance_abs", "fee_tolerance_pct",
+		"status", "fee_tolerance_abs", "fee_tolerance_pct",
 		"fee_normalization", "auto_match_on_upload", "created_at", "updated_at",
 	}).AddRow(
 		id.String(), tenantID.String(), "Test Context", "1:1", "daily",
-		"ACTIVE", rateID, "10.50", "2.5", nil, false, now, now,
+		"ACTIVE", "10.50", "2.5", nil, false, now, now,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -826,47 +827,8 @@ func TestScanContext_ValidRow(t *testing.T) {
 	require.Equal(t, value_objects.ContextTypeOneToOne, result.Type)
 	require.Equal(t, "daily", result.Interval)
 	require.Equal(t, value_objects.ContextStatusActive, result.Status)
-	require.NotNil(t, result.RateID)
 	assert.True(t, result.FeeToleranceAbs.Equal(decimal.NewFromFloat(10.50)))
 	assert.True(t, result.FeeTolerancePct.Equal(decimal.NewFromFloat(2.5)))
-}
-
-func TestScanContext_NilRateID(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	db, mock, err := sqlmock.New()
-	require.NoError(t, err)
-
-	defer db.Close()
-
-	id := uuid.New()
-	tenantID := uuid.New()
-	now := time.Now().UTC()
-
-	rows := sqlmock.NewRows([]string{
-		"id", "tenant_id", "name", "type", "interval",
-		"status", "rate_id", "fee_tolerance_abs", "fee_tolerance_pct",
-		"fee_normalization", "auto_match_on_upload", "created_at", "updated_at",
-	}).AddRow(
-		id.String(), tenantID.String(), "Test Context", "1:N", "weekly",
-		"PAUSED", nil, "", "", nil, false, now, now,
-	)
-	mock.ExpectQuery("SELECT").WillReturnRows(rows)
-
-	sqlRows, err := db.QueryContext(ctx, "SELECT 1")
-	require.NoError(t, err)
-
-	defer sqlRows.Close()
-
-	require.True(t, sqlRows.Next())
-
-	result, err := scanContext(sqlRows)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Nil(t, result.RateID)
-	require.Equal(t, value_objects.ContextTypeOneToMany, result.Type)
-	require.Equal(t, value_objects.ContextStatusPaused, result.Status)
 }
 
 func TestScanContext_InvalidID(t *testing.T) {
@@ -882,11 +844,11 @@ func TestScanContext_InvalidID(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{
 		"id", "tenant_id", "name", "type", "interval",
-		"status", "rate_id", "fee_tolerance_abs", "fee_tolerance_pct",
+		"status", "fee_tolerance_abs", "fee_tolerance_pct",
 		"fee_normalization", "auto_match_on_upload", "created_at", "updated_at",
 	}).AddRow(
 		"invalid-uuid", uuid.New().String(), "Test", "1:1", "daily",
-		"ACTIVE", nil, "", "", nil, false, now, now,
+		"ACTIVE", "", "", nil, false, now, now,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -916,11 +878,11 @@ func TestScanContext_InvalidType(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{
 		"id", "tenant_id", "name", "type", "interval",
-		"status", "rate_id", "fee_tolerance_abs", "fee_tolerance_pct",
+		"status", "fee_tolerance_abs", "fee_tolerance_pct",
 		"fee_normalization", "auto_match_on_upload", "created_at", "updated_at",
 	}).AddRow(
 		uuid.New().String(), uuid.New().String(), "Test", "INVALID", "daily",
-		"ACTIVE", nil, "", "", nil, false, now, now,
+		"ACTIVE", "", "", nil, false, now, now,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -947,9 +909,26 @@ func TestExecuteCreate_Success(t *testing.T) {
 	defer db.Close()
 
 	entity := createValidContextEntity()
+	model, err := NewContextPostgreSQLModel(entity)
+	require.NoError(t, err)
 
 	mock.ExpectBegin()
-	mock.ExpectExec("INSERT INTO reconciliation_contexts").
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO reconciliation_contexts (id, tenant_id, name, type, interval, status, fee_tolerance_abs, fee_tolerance_pct, fee_normalization, auto_match_on_upload, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`)).
+		WithArgs(
+			model.ID,
+			model.TenantID,
+			model.Name,
+			model.Type,
+			model.Interval,
+			model.Status,
+			model.FeeToleranceAbs,
+			model.FeeTolerancePct,
+			model.FeeNormalization,
+			model.AutoMatchOnUpload,
+			model.CreatedAt,
+			model.UpdatedAt,
+		).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	tx, err := db.Begin()
@@ -975,9 +954,26 @@ func TestExecuteCreate_InsertError(t *testing.T) {
 	defer db.Close()
 
 	entity := createValidContextEntity()
+	model, err := NewContextPostgreSQLModel(entity)
+	require.NoError(t, err)
 
 	mock.ExpectBegin()
-	mock.ExpectExec("INSERT INTO reconciliation_contexts").
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO reconciliation_contexts (id, tenant_id, name, type, interval, status, fee_tolerance_abs, fee_tolerance_pct, fee_normalization, auto_match_on_upload, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`)).
+		WithArgs(
+			model.ID,
+			model.TenantID,
+			model.Name,
+			model.Type,
+			model.Interval,
+			model.Status,
+			model.FeeToleranceAbs,
+			model.FeeTolerancePct,
+			model.FeeNormalization,
+			model.AutoMatchOnUpload,
+			model.CreatedAt,
+			model.UpdatedAt,
+		).
 		WillReturnError(errors.New("duplicate key violation"))
 
 	tx, err := db.Begin()
@@ -1002,9 +998,26 @@ func TestExecuteUpdate_Success(t *testing.T) {
 	defer db.Close()
 
 	entity := createValidContextEntity()
+	entity.UpdatedAt = time.Now().UTC()
+	model, err := NewContextPostgreSQLModel(entity)
+	require.NoError(t, err)
 
 	mock.ExpectBegin()
-	mock.ExpectExec("UPDATE reconciliation_contexts").
+	mock.ExpectExec(regexp.QuoteMeta(`UPDATE reconciliation_contexts SET name = $1, type = $2, interval = $3, status = $4, fee_tolerance_abs = $5, fee_tolerance_pct = $6, fee_normalization = $7, auto_match_on_upload = $8, updated_at = $9
+		WHERE tenant_id = $10 AND id = $11`)).
+		WithArgs(
+			model.Name,
+			model.Type,
+			model.Interval,
+			model.Status,
+			model.FeeToleranceAbs,
+			model.FeeTolerancePct,
+			model.FeeNormalization,
+			model.AutoMatchOnUpload,
+			sqlmock.AnyArg(),
+			model.TenantID,
+			model.ID,
+		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	tx, err := db.Begin()
@@ -1030,9 +1043,26 @@ func TestExecuteUpdate_NoRowsAffected(t *testing.T) {
 	defer db.Close()
 
 	entity := createValidContextEntity()
+	entity.UpdatedAt = time.Now().UTC()
+	model, err := NewContextPostgreSQLModel(entity)
+	require.NoError(t, err)
 
 	mock.ExpectBegin()
-	mock.ExpectExec("UPDATE reconciliation_contexts").
+	mock.ExpectExec(regexp.QuoteMeta(`UPDATE reconciliation_contexts SET name = $1, type = $2, interval = $3, status = $4, fee_tolerance_abs = $5, fee_tolerance_pct = $6, fee_normalization = $7, auto_match_on_upload = $8, updated_at = $9
+		WHERE tenant_id = $10 AND id = $11`)).
+		WithArgs(
+			model.Name,
+			model.Type,
+			model.Interval,
+			model.Status,
+			model.FeeToleranceAbs,
+			model.FeeTolerancePct,
+			model.FeeNormalization,
+			model.AutoMatchOnUpload,
+			sqlmock.AnyArg(),
+			model.TenantID,
+			model.ID,
+		).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	tx, err := db.Begin()
@@ -1236,36 +1266,6 @@ func TestRepository_DeleteWithTx_ProviderError(t *testing.T) {
 	require.Contains(t, err.Error(), "delete reconciliation context")
 }
 
-func TestExecuteCreate_WithRateID(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	db, mock, err := sqlmock.New()
-	require.NoError(t, err)
-
-	defer db.Close()
-
-	entity := createValidContextEntity()
-	rateID := uuid.New()
-	entity.RateID = &rateID
-
-	mock.ExpectBegin()
-	mock.ExpectExec("INSERT INTO reconciliation_contexts").
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
-	tx, err := db.Begin()
-	require.NoError(t, err)
-
-	provider := &testutil.MockInfrastructureProvider{}
-	repo := NewRepository(provider)
-	result, err := repo.executeCreate(ctx, tx, entity)
-
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.NotNil(t, result.RateID)
-	require.Equal(t, rateID, *result.RateID)
-}
-
 func TestExecuteCreate_AllContextTypes(t *testing.T) {
 	t.Parallel()
 
@@ -1324,11 +1324,11 @@ func TestScanContext_ManyToManyType(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{
 		"id", "tenant_id", "name", "type", "interval",
-		"status", "rate_id", "fee_tolerance_abs", "fee_tolerance_pct",
+		"status", "fee_tolerance_abs", "fee_tolerance_pct",
 		"fee_normalization", "auto_match_on_upload", "created_at", "updated_at",
 	}).AddRow(
 		id.String(), tenantID.String(), "M:N Context", "N:M", "monthly",
-		"ACTIVE", nil, "100.00", "5.0", nil, false, now, now,
+		"ACTIVE", "100.00", "5.0", nil, false, now, now,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -1414,11 +1414,11 @@ func TestScanContext_InvalidStatus(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{
 		"id", "tenant_id", "name", "type", "interval",
-		"status", "rate_id", "fee_tolerance_abs", "fee_tolerance_pct",
+		"status", "fee_tolerance_abs", "fee_tolerance_pct",
 		"fee_normalization", "auto_match_on_upload", "created_at", "updated_at",
 	}).AddRow(
 		uuid.New().String(), uuid.New().String(), "Test", "1:1", "daily",
-		"INVALID_STATUS", nil, "", "", nil, false, now, now,
+		"INVALID_STATUS", "", "", nil, false, now, now,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -1448,11 +1448,11 @@ func TestScanContext_InvalidFeeToleranceAbs(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{
 		"id", "tenant_id", "name", "type", "interval",
-		"status", "rate_id", "fee_tolerance_abs", "fee_tolerance_pct",
+		"status", "fee_tolerance_abs", "fee_tolerance_pct",
 		"fee_normalization", "auto_match_on_upload", "created_at", "updated_at",
 	}).AddRow(
 		uuid.New().String(), uuid.New().String(), "Test", "1:1", "daily",
-		"ACTIVE", nil, "not-a-number", "", nil, false, now, now,
+		"ACTIVE", "not-a-number", "", nil, false, now, now,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -1469,41 +1469,6 @@ func TestScanContext_InvalidFeeToleranceAbs(t *testing.T) {
 	require.Contains(t, err.Error(), "parsing FeeToleranceAbs")
 }
 
-func TestScanContext_InvalidRateID(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	db, mock, err := sqlmock.New()
-	require.NoError(t, err)
-
-	defer db.Close()
-
-	now := time.Now().UTC()
-	invalidRateID := "not-a-valid-uuid"
-
-	rows := sqlmock.NewRows([]string{
-		"id", "tenant_id", "name", "type", "interval",
-		"status", "rate_id", "fee_tolerance_abs", "fee_tolerance_pct",
-		"fee_normalization", "auto_match_on_upload", "created_at", "updated_at",
-	}).AddRow(
-		uuid.New().String(), uuid.New().String(), "Test", "1:1", "daily",
-		"ACTIVE", invalidRateID, "", "", nil, false, now, now,
-	)
-	mock.ExpectQuery("SELECT").WillReturnRows(rows)
-
-	sqlRows, err := db.QueryContext(ctx, "SELECT 1")
-	require.NoError(t, err)
-
-	defer sqlRows.Close()
-
-	require.True(t, sqlRows.Next())
-
-	result, err := scanContext(sqlRows)
-	require.Error(t, err)
-	require.Nil(t, result)
-	require.Contains(t, err.Error(), "parsing RateID")
-}
-
 func TestScanContext_InvalidTenantID(t *testing.T) {
 	t.Parallel()
 
@@ -1517,11 +1482,11 @@ func TestScanContext_InvalidTenantID(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{
 		"id", "tenant_id", "name", "type", "interval",
-		"status", "rate_id", "fee_tolerance_abs", "fee_tolerance_pct",
+		"status", "fee_tolerance_abs", "fee_tolerance_pct",
 		"fee_normalization", "auto_match_on_upload", "created_at", "updated_at",
 	}).AddRow(
 		uuid.New().String(), "invalid-tenant-id", "Test", "1:1", "daily",
-		"ACTIVE", nil, "", "", nil, false, now, now,
+		"ACTIVE", "", "", nil, false, now, now,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -1561,9 +1526,27 @@ func TestRepository_Create_SuccessWithMock(t *testing.T) {
 	defer cleanup()
 
 	entity := createValidContextEntity()
+	model, err := NewContextPostgreSQLModel(entity)
+	require.NoError(t, err)
 
 	mock.ExpectBegin()
-	mock.ExpectExec("INSERT INTO reconciliation_contexts").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO reconciliation_contexts (id, tenant_id, name, type, interval, status, fee_tolerance_abs, fee_tolerance_pct, fee_normalization, auto_match_on_upload, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`)).
+		WithArgs(
+			model.ID,
+			model.TenantID,
+			model.Name,
+			model.Type,
+			model.Interval,
+			model.Status,
+			model.FeeToleranceAbs,
+			model.FeeTolerancePct,
+			model.FeeNormalization,
+			model.AutoMatchOnUpload,
+			model.CreatedAt,
+			model.UpdatedAt,
+		).
+		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
 	result, err := repo.Create(ctx, entity)
@@ -1603,27 +1586,29 @@ func TestRepository_FindByID_SuccessWithMock(t *testing.T) {
 	defer cleanup()
 
 	id := uuid.New()
-	tenantID := uuid.New()
+	ctx = context.WithValue(ctx, auth.TenantIDKey, auth.DefaultTenantID)
+	tenantID := uuid.MustParse(auth.DefaultTenantID)
 	now := time.Now().UTC()
 
 	rows := sqlmock.NewRows([]string{
 		"id", "tenant_id", "name", "type", "interval",
-		"status", "rate_id", "fee_tolerance_abs", "fee_tolerance_pct",
+		"status", "fee_tolerance_abs", "fee_tolerance_pct",
 		"fee_normalization", "auto_match_on_upload", "created_at", "updated_at",
 	}).AddRow(
 		id.String(), tenantID.String(), "Test Context", "1:1", "daily",
-		"ACTIVE", nil, "10.00", "2.5", nil, false, now, now,
+		"ACTIVE", "10.00", "2.5", nil, false, now, now,
 	)
 
-	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT .+ FROM reconciliation_contexts WHERE tenant_id").WillReturnRows(rows)
-	mock.ExpectCommit()
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT "+contextColumns+" FROM reconciliation_contexts WHERE tenant_id = $1 AND id = $2")).
+		WithArgs(auth.DefaultTenantID, id.String()).
+		WillReturnRows(rows)
 
 	result, err := repo.FindByID(ctx, id)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, id, result.ID)
+	require.Equal(t, tenantID, result.TenantID)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -1681,15 +1666,15 @@ func TestRepository_FindByName_SuccessWithMock(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{
 		"id", "tenant_id", "name", "type", "interval",
-		"status", "rate_id", "fee_tolerance_abs", "fee_tolerance_pct",
+		"status", "fee_tolerance_abs", "fee_tolerance_pct",
 		"fee_normalization", "auto_match_on_upload", "created_at", "updated_at",
 	}).AddRow(
 		id.String(), tenantID.String(), "Test Context", "1:N", "weekly",
-		"PAUSED", nil, "", "", nil, false, now, now,
+		"PAUSED", "", "", nil, false, now, now,
 	)
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT .+ FROM reconciliation_contexts WHERE tenant_id .+ AND name").
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT " + contextColumns + " FROM reconciliation_contexts WHERE tenant_id = $1 AND name = $2")).
 		WillReturnRows(rows)
 	mock.ExpectCommit()
 
@@ -1709,7 +1694,7 @@ func TestRepository_FindByName_NotFoundWithMock(t *testing.T) {
 	defer cleanup()
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT .+ FROM reconciliation_contexts WHERE tenant_id .+ AND name").
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT " + contextColumns + " FROM reconciliation_contexts WHERE tenant_id = $1 AND name = $2")).
 		WillReturnError(sql.ErrNoRows)
 	mock.ExpectRollback()
 
@@ -1727,7 +1712,7 @@ func TestRepository_FindByName_QueryErrorWithMock(t *testing.T) {
 	defer cleanup()
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT .+ FROM reconciliation_contexts WHERE tenant_id .+ AND name").
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT " + contextColumns + " FROM reconciliation_contexts WHERE tenant_id = $1 AND name = $2")).
 		WillReturnError(errors.New("database error"))
 	mock.ExpectRollback()
 
@@ -1751,18 +1736,18 @@ func TestRepository_FindAll_SuccessWithMock(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{
 		"id", "tenant_id", "name", "type", "interval",
-		"status", "rate_id", "fee_tolerance_abs", "fee_tolerance_pct",
+		"status", "fee_tolerance_abs", "fee_tolerance_pct",
 		"fee_normalization", "auto_match_on_upload", "created_at", "updated_at",
 	}).AddRow(
 		id1.String(), tenantID.String(), "Context 1", "1:1", "daily",
-		"ACTIVE", nil, "", "", nil, false, now, now,
+		"ACTIVE", "", "", nil, false, now, now,
 	).AddRow(
 		id2.String(), tenantID.String(), "Context 2", "1:N", "weekly",
-		"PAUSED", nil, "", "", nil, false, now, now,
+		"PAUSED", "", "", nil, false, now, now,
 	)
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT .+ FROM reconciliation_contexts WHERE tenant_id").WillReturnRows(rows)
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT " + contextColumns + " FROM reconciliation_contexts WHERE tenant_id = $1 ORDER BY id ASC LIMIT 11")).WillReturnRows(rows)
 	mock.ExpectCommit()
 
 	result, _, err := repo.FindAll(ctx, "", 10, nil, nil)
@@ -1790,15 +1775,15 @@ func TestRepository_FindAll_WithFiltersWithMock(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{
 		"id", "tenant_id", "name", "type", "interval",
-		"status", "rate_id", "fee_tolerance_abs", "fee_tolerance_pct",
+		"status", "fee_tolerance_abs", "fee_tolerance_pct",
 		"fee_normalization", "auto_match_on_upload", "created_at", "updated_at",
 	}).AddRow(
 		id.String(), tenantID.String(), "Filtered Context", "1:1", "daily",
-		"ACTIVE", nil, "", "", nil, false, now, now,
+		"ACTIVE", "", "", nil, false, now, now,
 	)
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT .+ FROM reconciliation_contexts WHERE tenant_id").WillReturnRows(rows)
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT " + contextColumns + " FROM reconciliation_contexts WHERE tenant_id = $1 AND type = $2 AND status = $3 AND id > $4 ORDER BY id ASC LIMIT 6")).WillReturnRows(rows)
 	mock.ExpectCommit()
 
 	cursorStr := encodeCursor(cursor, libHTTP.CursorDirectionNext)
@@ -1819,12 +1804,12 @@ func TestRepository_FindAll_EmptyWithMock(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{
 		"id", "tenant_id", "name", "type", "interval",
-		"status", "rate_id", "fee_tolerance_abs", "fee_tolerance_pct",
+		"status", "fee_tolerance_abs", "fee_tolerance_pct",
 		"fee_normalization", "auto_match_on_upload", "created_at", "updated_at",
 	})
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT .+ FROM reconciliation_contexts WHERE tenant_id").WillReturnRows(rows)
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT " + contextColumns + " FROM reconciliation_contexts WHERE tenant_id = $1 ORDER BY id ASC LIMIT 11")).WillReturnRows(rows)
 	mock.ExpectCommit()
 
 	result, _, err := repo.FindAll(ctx, "", 10, nil, nil)
@@ -1861,11 +1846,11 @@ func TestRepository_FindAll_ScanErrorWithMock(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{
 		"id", "tenant_id", "name", "type", "interval",
-		"status", "rate_id", "fee_tolerance_abs", "fee_tolerance_pct",
+		"status", "fee_tolerance_abs", "fee_tolerance_pct",
 		"fee_normalization", "auto_match_on_upload", "created_at", "updated_at",
 	}).AddRow(
 		uuid.New().String(), uuid.New().String(), "Test", "INVALID_TYPE", "daily",
-		"ACTIVE", nil, "", "", nil, false, time.Now().UTC(), time.Now().UTC(),
+		"ACTIVE", "", "", nil, false, time.Now().UTC(), time.Now().UTC(),
 	)
 
 	mock.ExpectBegin()
@@ -1886,9 +1871,28 @@ func TestRepository_Update_SuccessWithMock(t *testing.T) {
 	defer cleanup()
 
 	entity := createValidContextEntity()
+	originalUpdatedAt := entity.UpdatedAt
 
 	mock.ExpectBegin()
-	mock.ExpectExec("UPDATE reconciliation_contexts").WillReturnResult(sqlmock.NewResult(0, 1))
+	model, err := NewContextPostgreSQLModel(entity)
+	require.NoError(t, err)
+
+	mock.ExpectExec(regexp.QuoteMeta(`UPDATE reconciliation_contexts SET name = $1, type = $2, interval = $3, status = $4, fee_tolerance_abs = $5, fee_tolerance_pct = $6, fee_normalization = $7, auto_match_on_upload = $8, updated_at = $9
+		WHERE tenant_id = $10 AND id = $11`)).
+		WithArgs(
+			model.Name,
+			model.Type,
+			model.Interval,
+			model.Status,
+			model.FeeToleranceAbs,
+			model.FeeTolerancePct,
+			model.FeeNormalization,
+			model.AutoMatchOnUpload,
+			sqlmock.AnyArg(),
+			model.TenantID,
+			model.ID,
+		).
+		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
 	result, err := repo.Update(ctx, entity)
@@ -1896,6 +1900,8 @@ func TestRepository_Update_SuccessWithMock(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, entity.ID, result.ID)
+	require.True(t, result.UpdatedAt.After(originalUpdatedAt) || result.UpdatedAt.Equal(originalUpdatedAt))
+	require.NotEqual(t, originalUpdatedAt, result.UpdatedAt)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -2068,11 +2074,11 @@ func TestRepository_FindAll_WithOnlyTypeFilterWithMock(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{
 		"id", "tenant_id", "name", "type", "interval",
-		"status", "rate_id", "fee_tolerance_abs", "fee_tolerance_pct",
+		"status", "fee_tolerance_abs", "fee_tolerance_pct",
 		"fee_normalization", "auto_match_on_upload", "created_at", "updated_at",
 	}).AddRow(
 		id.String(), tenantID.String(), "One to Many", "1:N", "monthly",
-		"ACTIVE", nil, "", "", nil, false, now, now,
+		"ACTIVE", "", "", nil, false, now, now,
 	)
 
 	mock.ExpectBegin()
@@ -2100,11 +2106,11 @@ func TestRepository_FindAll_WithOnlyStatusFilterWithMock(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{
 		"id", "tenant_id", "name", "type", "interval",
-		"status", "rate_id", "fee_tolerance_abs", "fee_tolerance_pct",
+		"status", "fee_tolerance_abs", "fee_tolerance_pct",
 		"fee_normalization", "auto_match_on_upload", "created_at", "updated_at",
 	}).AddRow(
 		id.String(), tenantID.String(), "Paused Context", "N:M", "weekly",
-		"PAUSED", nil, "", "", nil, false, now, now,
+		"PAUSED", "", "", nil, false, now, now,
 	)
 
 	mock.ExpectBegin()
@@ -2219,11 +2225,11 @@ func TestRepository_FindAll_CursorPagination(t *testing.T) {
 
 		rows := sqlmock.NewRows([]string{
 			"id", "tenant_id", "name", "type", "interval",
-			"status", "rate_id", "fee_tolerance_abs", "fee_tolerance_pct",
+			"status", "fee_tolerance_abs", "fee_tolerance_pct",
 			"fee_normalization", "auto_match_on_upload", "created_at", "updated_at",
 		}).AddRow(
 			id.String(), tenantID.String(), "Context 1", "1:1", "daily",
-			"ACTIVE", nil, "", "", nil, false, now, now,
+			"ACTIVE", "", "", nil, false, now, now,
 		)
 
 		mock.ExpectBegin()
@@ -2250,22 +2256,23 @@ func TestRepository_FindAll_CursorPagination(t *testing.T) {
 		now := time.Now().UTC()
 		limit := 2
 		id1 := uuid.New()
+
 		id2 := uuid.New()
 		id3 := uuid.New()
 
 		rows := sqlmock.NewRows([]string{
 			"id", "tenant_id", "name", "type", "interval",
-			"status", "rate_id", "fee_tolerance_abs", "fee_tolerance_pct",
+			"status", "fee_tolerance_abs", "fee_tolerance_pct",
 			"fee_normalization", "auto_match_on_upload", "created_at", "updated_at",
 		}).AddRow(
 			id1.String(), tenantID.String(), "Context 1", "1:1", "daily",
-			"ACTIVE", nil, "", "", nil, false, now, now,
+			"ACTIVE", "", "", nil, false, now, now,
 		).AddRow(
 			id2.String(), tenantID.String(), "Context 2", "1:1", "daily",
-			"ACTIVE", nil, "", "", nil, false, now, now,
+			"ACTIVE", "", "", nil, false, now, now,
 		).AddRow(
 			id3.String(), tenantID.String(), "Context 3", "1:1", "daily",
-			"ACTIVE", nil, "", "", nil, false, now, now,
+			"ACTIVE", "", "", nil, false, now, now,
 		)
 
 		mock.ExpectBegin()
@@ -2296,14 +2303,14 @@ func TestRepository_FindAll_CursorPagination(t *testing.T) {
 
 		rows := sqlmock.NewRows([]string{
 			"id", "tenant_id", "name", "type", "interval",
-			"status", "rate_id", "fee_tolerance_abs", "fee_tolerance_pct",
+			"status", "fee_tolerance_abs", "fee_tolerance_pct",
 			"fee_normalization", "auto_match_on_upload", "created_at", "updated_at",
 		}).AddRow(
 			id1.String(), tenantID.String(), "Context 1", "1:1", "daily",
-			"ACTIVE", nil, "", "", nil, false, now, now,
+			"ACTIVE", "", "", nil, false, now, now,
 		).AddRow(
 			id2.String(), tenantID.String(), "Context 2", "1:1", "daily",
-			"ACTIVE", nil, "", "", nil, false, now, now,
+			"ACTIVE", "", "", nil, false, now, now,
 		)
 
 		mock.ExpectBegin()

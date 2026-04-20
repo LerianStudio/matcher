@@ -22,8 +22,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
@@ -33,6 +33,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/services/query"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	"github.com/LerianStudio/matcher/internal/shared/testutil"
+	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
 type handlerFixture struct {
@@ -300,12 +301,21 @@ func requireErrorMessage(t *testing.T, response *http.Response, expectedMessage 
 
 	var payload map[string]any
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&payload))
-	require.Equal(t, float64(400), payload["code"], "expected code to be 400")
-	require.Equal(t, "invalid_request", payload["title"], "expected title to be 'invalid_request'")
+	require.Equal(t, expectedConfigurationErrorCodeForMessage(expectedMessage), payload["code"])
+	require.Equal(t, http.StatusText(http.StatusBadRequest), payload["title"], "expected title to be 'Bad Request'")
 	require.NotEmpty(t, payload["message"], "expected message to not be empty")
 
 	if expectedMessage != "invalid_request" {
 		require.Equal(t, expectedMessage, payload["message"])
+	}
+}
+
+func expectedConfigurationErrorCodeForMessage(message string) string {
+	switch message {
+	case "invalid context id":
+		return constant.CodeInvalidContextID
+	default:
+		return constant.CodeInvalidRequest
 	}
 }
 
@@ -314,8 +324,8 @@ func requireUnauthorizedResponse(t *testing.T, response *http.Response) {
 
 	var payload map[string]any
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&payload))
-	require.Equal(t, float64(401), payload["code"])
-	require.Equal(t, "unauthorized", payload["title"])
+	require.Equal(t, constant.CodeUnauthorized, payload["code"])
+	require.Equal(t, http.StatusText(http.StatusUnauthorized), payload["title"])
 	require.Equal(t, "unauthorized", payload["message"])
 }
 
@@ -324,8 +334,18 @@ func requireNotFoundResponse(t *testing.T, response *http.Response, expectedMess
 
 	var payload map[string]any
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&payload))
-	require.Equal(t, float64(404), payload["code"])
-	require.Equal(t, "not_found", payload["title"])
+	require.Equal(t, expectedConfigurationNotFoundCode(expectedMessage), payload["code"])
+	require.Equal(t, http.StatusText(http.StatusNotFound), payload["title"])
+	require.Equal(t, expectedMessage, payload["message"])
+}
+
+func requireResourceNotFoundResponse(t *testing.T, response *http.Response, expectedMessage string) {
+	t.Helper()
+
+	var payload map[string]any
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&payload))
+	require.Equal(t, expectedConfigurationNotFoundCode(expectedMessage), payload["code"])
+	require.Equal(t, http.StatusText(http.StatusNotFound), payload["title"])
 	require.Equal(t, expectedMessage, payload["message"])
 }
 
@@ -338,8 +358,8 @@ func requireConflictResponse(
 
 	var payload map[string]any
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&payload))
-	require.Equal(t, float64(409), payload["code"])
-	require.Equal(t, expectedTitle, payload["title"])
+	require.Equal(t, expectedConfigurationCode(expectedTitle), payload["code"])
+	require.Equal(t, http.StatusText(http.StatusConflict), payload["title"])
 	require.Equal(t, expectedMessage, payload["message"])
 }
 
@@ -352,9 +372,81 @@ func requireBadRequestResponse(
 
 	var payload map[string]any
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&payload))
-	require.Equal(t, float64(400), payload["code"])
-	require.Equal(t, expectedTitle, payload["title"])
+	require.Equal(t, expectedConfigurationCode(expectedTitle), payload["code"])
+	require.Equal(t, http.StatusText(http.StatusBadRequest), payload["title"])
 	require.Equal(t, expectedMessage, payload["message"])
+}
+
+func expectedConfigurationCode(slug string) string {
+	switch slug {
+	case "invalid_request":
+		return constant.CodeInvalidRequest
+	case "invalid_context_id":
+		return constant.CodeInvalidContextID
+	case "unauthorized":
+		return constant.CodeUnauthorized
+	case "not_found":
+		return constant.CodeNotFound
+	case "forbidden":
+		return constant.CodeForbidden
+	case "context_not_active":
+		return constant.CodeContextNotActive
+	case "duplicate_name":
+		return constant.CodeConfigurationDuplicateName
+	case "priority_conflict":
+		return constant.CodeConfigurationPriorityConflict
+	case "invalid_state_transition":
+		return constant.CodeConfigurationInvalidState
+	case "archived_context":
+		return constant.CodeConfigurationArchivedContext
+	case "has_field_map":
+		return constant.CodeConfigurationHasFieldMap
+	case "has_children":
+		return constant.CodeConfigurationHasChildren
+	case "duplicate_priority":
+		return constant.CodeConfigurationDuplicatePriority
+	case "fee_schedule_in_use":
+		return constant.CodeConfigurationFeeScheduleInUse
+	case "configuration_context_name_required":
+		return constant.CodeConfigurationContextNameRequired
+	case "configuration_context_not_found":
+		return constant.CodeConfigurationContextNotFound
+	case "configuration_source_not_found":
+		return constant.CodeConfigurationSourceNotFound
+	case "configuration_field_map_not_found":
+		return constant.CodeConfigurationFieldMapNotFound
+	case "configuration_match_rule_not_found":
+		return constant.CodeConfigurationMatchRuleNotFound
+	case "configuration_fee_rule_not_found":
+		return constant.CodeConfigurationFeeRuleNotFound
+	case "configuration_fee_schedule_not_found":
+		return constant.CodeConfigurationFeeScheduleNotFound
+	case "configuration_schedule_not_found":
+		return constant.CodeConfigurationScheduleNotFound
+	default:
+		return constant.CodeInternalServerError
+	}
+}
+
+func expectedConfigurationNotFoundCode(message string) string {
+	switch message {
+	case "context not found", "source context not found":
+		return constant.CodeConfigurationContextNotFound
+	case "source not found":
+		return constant.CodeConfigurationSourceNotFound
+	case "field map not found":
+		return constant.CodeConfigurationFieldMapNotFound
+	case "match rule not found":
+		return constant.CodeConfigurationMatchRuleNotFound
+	case "fee rule not found":
+		return constant.CodeConfigurationFeeRuleNotFound
+	case "fee schedule not found":
+		return constant.CodeConfigurationFeeScheduleNotFound
+	case "schedule not found":
+		return constant.CodeConfigurationScheduleNotFound
+	default:
+		return constant.CodeNotFound
+	}
 }
 
 type contextHandlerTestCase struct {
@@ -2389,7 +2481,7 @@ func TestLogSpanError_WithNilLogger(t *testing.T) {
 	defer span.End()
 
 	require.NotPanics(t, func() {
-		logSpanError(context.Background(), span, nil, "test message", errors.New("test error"))
+		(&Handler{}).logSpanError(context.Background(), span, nil, "test message", errors.New("test error"))
 	})
 }
 
@@ -2402,7 +2494,7 @@ func TestLogSpanError_WithLogger(t *testing.T) {
 	defer span.End()
 
 	mock := &testutil.TestLogger{}
-	logSpanError(context.Background(), span, mock, "test message", errors.New("test error"))
+	(&Handler{}).logSpanError(context.Background(), span, mock, "test message", errors.New("test error"))
 	require.True(t, mock.ErrorCalled)
 }
 

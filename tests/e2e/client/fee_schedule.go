@@ -1,5 +1,4 @@
-//go:build e2e
-
+//nolint:perfsprint,varnamelen,wsl_v5 // Test fee schedule client favors concise path composition.
 package client
 
 import (

@@ -9,13 +9,13 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
-	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -51,24 +51,9 @@ func (uc *UseCase) RefreshDiscovery(ctx context.Context) (int, error) {
 	}
 
 	// List all connections from Fetcher.
-	orgID, tenantPresent := ctx.Value(auth.TenantIDKey).(string)
-
-	orgID = strings.TrimSpace(orgID)
-	if orgID == "" && tenantPresent {
-		orgID = strings.TrimSpace(auth.GetTenantID(ctx))
-	}
-
-	if uc.requireTenantContext && orgID == "" {
-		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "missing tenant context", ErrTenantContextRequired)
-
-		return 0, ErrTenantContextRequired
-	}
-
-	if orgID == "" {
-		orgID = auth.GetTenantID(ctx)
-	}
-
-	fetcherConns, err := uc.fetcherClient.ListConnections(ctx, orgID)
+	// X-Product-Name identifies the calling product ("matcher"), NOT the tenant.
+	// Tenant filtering is done server-side via the JWT forwarded in the request context.
+	fetcherConns, err := uc.fetcherClient.ListConnections(ctx, constants.ApplicationName)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "list connections from fetcher", err)
 
@@ -88,7 +73,7 @@ func (uc *UseCase) RefreshDiscovery(ctx context.Context) (int, error) {
 		if err := uc.syncConnection(ctx, logger, fc); err != nil {
 			logger.With(
 				libLog.Any("fetcherConnID", fc.ID),
-				libLog.Any("error", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelWarn, "failed to sync connection")
 
 			continue
@@ -208,7 +193,7 @@ func (uc *UseCase) reconcileStaleConnections(ctx context.Context, logger libLog.
 			if logger != nil {
 				logger.With(
 					libLog.String("connection.id", conn.ID.String()),
-					libLog.Any("error", err.Error()),
+					libLog.Err(err),
 				).Log(ctx, libLog.LevelWarn, "failed to mark stale connection unreachable during manual refresh")
 			}
 		}
@@ -275,8 +260,8 @@ func (uc *UseCase) TestConnection(ctx context.Context, connectionID uuid.UUID) (
 	return &ConnectionTestResult{
 		ConnectionID:  conn.ID,
 		FetcherConnID: conn.FetcherConnID,
-		Healthy:       result.Healthy,
+		Healthy:       strings.EqualFold(result.Status, "success"),
 		LatencyMs:     result.LatencyMs,
-		ErrorMessage:  result.ErrorMessage,
+		ErrorMessage:  result.Message,
 	}, nil
 }

@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	discoveryRedis "github.com/LerianStudio/matcher/internal/discovery/adapters/redis"
 	discoveryRepos "github.com/LerianStudio/matcher/internal/discovery/domain/repositories"

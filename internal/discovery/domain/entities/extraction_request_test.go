@@ -13,6 +13,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 func newExtractionRequest(t *testing.T) *entities.ExtractionRequest {
@@ -259,4 +260,173 @@ func TestExtractionRequest_FiltersJSON_NilFiltersReturnsNil(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Nil(t, filtersJSON)
+}
+
+// TestExtractionRequest_LinkToIngestion_CompleteExtraction_Linkable verifies
+// the happy-path state-machine transition for AC-F2 and AC-O2: a COMPLETE
+// extraction can be linked to a downstream ingestion job exactly once. The
+// UpdatedAt timestamp is bumped so UpdateIfUnchanged-style optimistic
+// concurrency sees a real state change.
+func TestExtractionRequest_LinkToIngestion_CompleteExtraction_Linkable(t *testing.T) {
+	t.Parallel()
+
+	req := newExtractionRequest(t)
+	require.NoError(t, req.MarkSubmitted("fetcher-job-123"))
+	require.NoError(t, req.MarkExtracting())
+	require.NoError(t, req.MarkComplete("/data/result.json"))
+
+	before := req.UpdatedAt
+	ingestionJobID := uuid.New()
+
+	err := req.LinkToIngestion(ingestionJobID)
+
+	require.NoError(t, err)
+	assert.Equal(t, ingestionJobID, req.IngestionJobID)
+	assert.True(t, req.UpdatedAt.After(before) || req.UpdatedAt.Equal(before),
+		"UpdatedAt should be bumped")
+}
+
+// TestExtractionRequest_LinkToIngestion_NilReceiver_IsNoop asserts the
+// defensive nil-receiver guard does not panic. Symmetric with the entity's
+// other transition methods.
+func TestExtractionRequest_LinkToIngestion_NilReceiver_IsNoop(t *testing.T) {
+	t.Parallel()
+
+	var req *entities.ExtractionRequest
+
+	err := req.LinkToIngestion(uuid.New())
+	require.NoError(t, err)
+}
+
+// TestExtractionRequest_LinkToIngestion_RejectsNilIngestionJobID guards the
+// invariant that a link must name a real ingestion job. Passing uuid.Nil is
+// a programmer error, surfaced as ErrInvalidTransition.
+func TestExtractionRequest_LinkToIngestion_RejectsNilIngestionJobID(t *testing.T) {
+	t.Parallel()
+
+	req := newExtractionRequest(t)
+	require.NoError(t, req.MarkSubmitted("fetcher-job-123"))
+	require.NoError(t, req.MarkExtracting())
+	require.NoError(t, req.MarkComplete("/data/result.json"))
+
+	err := req.LinkToIngestion(uuid.Nil)
+
+	require.ErrorIs(t, err, entities.ErrInvalidTransition)
+	assert.Equal(t, uuid.Nil, req.IngestionJobID,
+		"failed link should not mutate IngestionJobID")
+}
+
+// TestExtractionRequest_LinkToIngestion_RejectsNonCompleteState enforces the
+// invariant that only COMPLETE extractions have trustworthy output to link.
+// Table-driven to cover every non-terminal-success state.
+func TestExtractionRequest_LinkToIngestion_RejectsNonCompleteState(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		prepare func(t *testing.T, req *entities.ExtractionRequest)
+	}{
+		{
+			name:    "pending extraction",
+			prepare: func(t *testing.T, _ *entities.ExtractionRequest) { t.Helper() },
+		},
+		{
+			name: "submitted extraction",
+			prepare: func(t *testing.T, req *entities.ExtractionRequest) {
+				t.Helper()
+				require.NoError(t, req.MarkSubmitted("fetcher-job-123"))
+			},
+		},
+		{
+			name: "extracting extraction",
+			prepare: func(t *testing.T, req *entities.ExtractionRequest) {
+				t.Helper()
+				require.NoError(t, req.MarkSubmitted("fetcher-job-123"))
+				require.NoError(t, req.MarkExtracting())
+			},
+		},
+		{
+			name: "failed extraction",
+			prepare: func(t *testing.T, req *entities.ExtractionRequest) {
+				t.Helper()
+				require.NoError(t, req.MarkSubmitted("fetcher-job-123"))
+				require.NoError(t, req.MarkExtracting())
+				require.NoError(t, req.MarkFailed("boom"))
+			},
+		},
+		{
+			name: "cancelled extraction",
+			prepare: func(t *testing.T, req *entities.ExtractionRequest) {
+				t.Helper()
+				require.NoError(t, req.MarkCancelled())
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := newExtractionRequest(t)
+			tt.prepare(t, req)
+
+			err := req.LinkToIngestion(uuid.New())
+
+			require.ErrorIs(t, err, entities.ErrInvalidTransition)
+			assert.Equal(t, uuid.Nil, req.IngestionJobID,
+				"failed link should not mutate IngestionJobID")
+			assert.NotEqual(t, vo.ExtractionStatusComplete, req.Status,
+				"precondition: state must not be COMPLETE")
+		})
+	}
+}
+
+// TestExtractionRequest_LinkToIngestion_RejectsRelinkWithDifferentID enforces
+// the 1:1 extraction→ingestion invariant at the domain layer. This is the
+// belt that pairs with the adapter's atomic UPDATE ... WHERE ingestion_job_id
+// IS NULL suspenders — both layers agree on rejection semantics.
+func TestExtractionRequest_LinkToIngestion_RejectsRelinkWithDifferentID(t *testing.T) {
+	t.Parallel()
+
+	req := newExtractionRequest(t)
+	require.NoError(t, req.MarkSubmitted("fetcher-job-123"))
+	require.NoError(t, req.MarkExtracting())
+	require.NoError(t, req.MarkComplete("/data/result.json"))
+
+	firstJobID := uuid.New()
+	require.NoError(t, req.LinkToIngestion(firstJobID))
+
+	secondJobID := uuid.New()
+	err := req.LinkToIngestion(secondJobID)
+
+	// Cross-job collision now surfaces the canonical
+	// sharedPorts.ErrExtractionAlreadyLinked sentinel (Fix 6) so callers
+	// can errors.Is on the same identity used by the atomic SQL guard.
+	require.ErrorIs(t, err, sharedPorts.ErrExtractionAlreadyLinked)
+	assert.Equal(t, firstJobID, req.IngestionJobID,
+		"rejected re-link must not overwrite the existing linkage")
+}
+
+// TestExtractionRequest_LinkToIngestion_IdempotentSameID preserves the
+// adapter-level idempotency semantics at the domain layer: linking with the
+// same id the extraction already has is a no-op success, not an error. This
+// lets the bridge worker retry safely after a partial failure downstream of
+// the link write.
+func TestExtractionRequest_LinkToIngestion_IdempotentSameID(t *testing.T) {
+	t.Parallel()
+
+	req := newExtractionRequest(t)
+	require.NoError(t, req.MarkSubmitted("fetcher-job-123"))
+	require.NoError(t, req.MarkExtracting())
+	require.NoError(t, req.MarkComplete("/data/result.json"))
+
+	jobID := uuid.New()
+	require.NoError(t, req.LinkToIngestion(jobID))
+
+	err := req.LinkToIngestion(jobID)
+
+	require.NoError(t, err, "same-id re-link must be idempotent no-op")
+	assert.Equal(t, jobID, req.IngestionJobID)
 }

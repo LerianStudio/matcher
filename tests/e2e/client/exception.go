@@ -1,5 +1,4 @@
-//go:build e2e
-
+//nolint:perfsprint,varnamelen,wsl_v5 // Test exception client favors concise path composition.
 package client
 
 import (
@@ -197,7 +196,9 @@ func (c *ExceptionClient) ListExceptionsByStatus(
 	ctx context.Context,
 	status string,
 ) (*ListResponse[Exception], error) {
-	return c.ListExceptions(ctx, ExceptionListFilter{Status: status, Limit: 100})
+	const defaultStatusListLimit = 100
+
+	return c.ListExceptions(ctx, ExceptionListFilter{Status: status, Limit: defaultStatusListLimit})
 }
 
 // ListOpenExceptions retrieves all open exceptions.
@@ -399,6 +400,31 @@ func (c *ExceptionClient) GetDispute(
 	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("get dispute: %w", err)
+	}
+	return &resp, nil
+}
+
+// ProcessCallback sends a webhook callback from an external system to update an exception.
+func (c *ExceptionClient) ProcessCallback(
+	ctx context.Context,
+	exceptionID string,
+	req ProcessCallbackRequest,
+) (*ProcessCallbackResponse, error) {
+	return c.ProcessCallbackWithOptions(ctx, exceptionID, req, RequestOptions{})
+}
+
+// ProcessCallbackWithOptions sends a webhook callback with explicit request options.
+func (c *ExceptionClient) ProcessCallbackWithOptions(
+	ctx context.Context,
+	exceptionID string,
+	req ProcessCallbackRequest,
+	opts RequestOptions,
+) (*ProcessCallbackResponse, error) {
+	var resp ProcessCallbackResponse
+	path := fmt.Sprintf("/v1/exceptions/%s/callback", exceptionID)
+	err := c.client.DoJSONWithOptions(ctx, http.MethodPost, path, req, &resp, opts)
+	if err != nil {
+		return nil, fmt.Errorf("process callback: %w", err)
 	}
 	return &resp, nil
 }

@@ -10,10 +10,10 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
-	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
@@ -51,6 +51,14 @@ func (uc *UseCase) ensureLockFresh(
 }
 
 func (uc *UseCase) validateRunMatchDependencies() error {
+	if err := uc.validateCoreRunMatchDependencies(); err != nil {
+		return err
+	}
+
+	return uc.validateFeeRunMatchDependencies()
+}
+
+func (uc *UseCase) validateCoreRunMatchDependencies() error {
 	if uc.contextProvider == nil {
 		return ErrNilContextRepository
 	}
@@ -89,6 +97,22 @@ func (uc *UseCase) validateRunMatchDependencies() error {
 
 	if uc.outboxRepoTx == nil {
 		return ErrOutboxRepoNotConfigured
+	}
+
+	return nil
+}
+
+func (uc *UseCase) validateFeeRunMatchDependencies() error {
+	if uc.feeVarianceRepo == nil {
+		return ErrNilFeeVarianceRepository
+	}
+
+	if uc.feeRuleProvider == nil {
+		return ErrNilFeeRuleProvider
+	}
+
+	if uc.feeScheduleRepo == nil {
+		return ErrNilFeeScheduleRepository
 	}
 
 	return nil
@@ -189,7 +213,7 @@ func (uc *UseCase) startLockRefreshLoop(
 							libOpentelemetry.HandleSpanError(span, "failed to refresh transaction lock", err)
 						}
 
-						logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to refresh transaction lock")
+						logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to refresh transaction lock")
 
 						refreshErrs <- err
 
@@ -245,7 +269,7 @@ func (uc *UseCase) startLockRefreshWatcher(
 						return
 					}
 
-					logger.With(libLog.Any("error", refreshErr.Error())).Log(ctx, libLog.LevelError, "lock refresh failed")
+					logger.With(libLog.Err(refreshErr)).Log(ctx, libLog.LevelError, "lock refresh failed")
 
 					return
 				}
@@ -272,7 +296,7 @@ func (uc *UseCase) releaseMatchLock(
 			libOpentelemetry.HandleSpanError(span, "failed to release transaction lock", releaseErr)
 		}
 
-		logger.With(libLog.Any("error", releaseErr.Error())).Log(ctx, libLog.LevelError, "failed to release transaction lock")
+		logger.With(libLog.Err(releaseErr)).Log(ctx, libLog.LevelError, "failed to release transaction lock")
 	}
 }
 
@@ -293,7 +317,7 @@ func finalizeRunFailure(
 	updateCtx := context.WithoutCancel(ctx)
 	if _, updateErr := uc.matchRunRepo.Update(updateCtx, run); updateErr != nil {
 		logger, _, _, _ := libCommons.NewTrackingFromContext(updateCtx)
-		logger.With(libLog.Any("error", updateErr.Error())).Log(ctx, libLog.LevelError, "failed to update match run after error")
+		logger.With(libLog.Err(updateErr)).Log(ctx, libLog.LevelError, "failed to update match run after error")
 
 		return fmt.Errorf("updating match run failed: %w; original cause: %w", updateErr, cause)
 	}

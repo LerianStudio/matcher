@@ -26,18 +26,25 @@ const (
 // MatchConfirmedEvent represents a confirmed match event for cross-context communication.
 // This shared type allows the outbox context to publish matching events without
 // directly importing the matching context.
+//
+// TruncatedIDCount is set by the outbox-enqueue layer when the full
+// TransactionIDs list would have pushed the serialized event past the
+// broker's payload cap. When set it records the ORIGINAL list length; the
+// TransactionIDs field on the wire then carries the prefix that fit. A
+// zero value means the event was published without truncation.
 type MatchConfirmedEvent struct {
-	EventType      string      `json:"eventType"`
-	TenantID       uuid.UUID   `json:"tenantId"`
-	TenantSlug     string      `json:"tenantSlug"` // Optional: may be empty in single-tenant mode
-	ContextID      uuid.UUID   `json:"contextId"`
-	RunID          uuid.UUID   `json:"runId"`
-	MatchID        uuid.UUID   `json:"matchId"`
-	RuleID         uuid.UUID   `json:"ruleId"`
-	TransactionIDs []uuid.UUID `json:"transactionIds"`
-	Confidence     int         `json:"confidence"`
-	ConfirmedAt    time.Time   `json:"confirmedAt"`
-	Timestamp      time.Time   `json:"timestamp"`
+	EventType        string      `json:"eventType"`
+	TenantID         uuid.UUID   `json:"tenantId"`
+	TenantSlug       string      `json:"tenantSlug"` // Optional: may be empty in single-tenant mode
+	ContextID        uuid.UUID   `json:"contextId"`
+	RunID            uuid.UUID   `json:"runId"`
+	MatchID          uuid.UUID   `json:"matchId"`
+	RuleID           uuid.UUID   `json:"ruleId"`
+	TransactionIDs   []uuid.UUID `json:"transactionIds"`
+	TruncatedIDCount int         `json:"truncatedIdCount,omitempty"`
+	Confidence       int         `json:"confidence"`
+	ConfirmedAt      time.Time   `json:"confirmedAt"`
+	Timestamp        time.Time   `json:"timestamp"`
 }
 
 // ID returns the stable idempotency identifier for this event.
@@ -49,17 +56,22 @@ func (e MatchConfirmedEvent) ID() uuid.UUID {
 // Published so downstream systems can undo any actions taken upon the original confirmation.
 // This shared type allows the outbox context to publish matching events without
 // directly importing the matching context.
+//
+// TruncatedIDCount carries the same semantics as MatchConfirmedEvent: a
+// non-zero value means the ID list was trimmed to fit the broker cap and
+// records the original count for data-loss auditing.
 type MatchUnmatchedEvent struct {
-	EventType      string      `json:"eventType"`
-	TenantID       uuid.UUID   `json:"tenantId"`
-	TenantSlug     string      `json:"tenantSlug"`
-	ContextID      uuid.UUID   `json:"contextId"`
-	RunID          uuid.UUID   `json:"runId"`
-	MatchID        uuid.UUID   `json:"matchId"`
-	RuleID         uuid.UUID   `json:"ruleId"`
-	TransactionIDs []uuid.UUID `json:"transactionIds"`
-	Reason         string      `json:"reason"`
-	Timestamp      time.Time   `json:"timestamp"`
+	EventType        string      `json:"eventType"`
+	TenantID         uuid.UUID   `json:"tenantId"`
+	TenantSlug       string      `json:"tenantSlug"`
+	ContextID        uuid.UUID   `json:"contextId"`
+	RunID            uuid.UUID   `json:"runId"`
+	MatchID          uuid.UUID   `json:"matchId"`
+	RuleID           uuid.UUID   `json:"ruleId"`
+	TransactionIDs   []uuid.UUID `json:"transactionIds"`
+	TruncatedIDCount int         `json:"truncatedIdCount,omitempty"`
+	Reason           string      `json:"reason"`
+	Timestamp        time.Time   `json:"timestamp"`
 }
 
 // ID returns the stable idempotency identifier for this event.

@@ -13,32 +13,34 @@ import (
 )
 
 type feeVarianceTestInputs struct {
-	contextID     uuid.UUID
-	runID         uuid.UUID
-	matchGroupID  uuid.UUID
-	transactionID uuid.UUID
-	rateID        uuid.UUID
-	currency      string
-	expected      decimal.Decimal
-	actual        decimal.Decimal
-	tolAbs        decimal.Decimal
-	tolPct        decimal.Decimal
-	varianceType  string
+	contextID               uuid.UUID
+	runID                   uuid.UUID
+	matchGroupID            uuid.UUID
+	transactionID           uuid.UUID
+	feeScheduleID           uuid.UUID
+	feeScheduleNameSnapshot string
+	currency                string
+	expected                decimal.Decimal
+	actual                  decimal.Decimal
+	tolAbs                  decimal.Decimal
+	tolPct                  decimal.Decimal
+	varianceType            string
 }
 
 func validFeeVarianceInputs() feeVarianceTestInputs {
 	return feeVarianceTestInputs{
-		contextID:     uuid.New(),
-		runID:         uuid.New(),
-		matchGroupID:  uuid.New(),
-		transactionID: uuid.New(),
-		rateID:        uuid.New(),
-		currency:      "USD",
-		expected:      decimal.NewFromFloat(100.00),
-		actual:        decimal.NewFromFloat(95.00),
-		tolAbs:        decimal.NewFromFloat(10.00),
-		tolPct:        decimal.NewFromFloat(0.05),
-		varianceType:  "within_tolerance",
+		contextID:               uuid.New(),
+		runID:                   uuid.New(),
+		matchGroupID:            uuid.New(),
+		transactionID:           uuid.New(),
+		feeScheduleID:           uuid.New(),
+		feeScheduleNameSnapshot: "Visa Domestic",
+		currency:                "USD",
+		expected:                decimal.NewFromFloat(100.00),
+		actual:                  decimal.NewFromFloat(95.00),
+		tolAbs:                  decimal.NewFromFloat(10.00),
+		tolPct:                  decimal.NewFromFloat(0.05),
+		varianceType:            "within_tolerance",
 	}
 }
 
@@ -56,7 +58,8 @@ func TestNewFeeVariance(t *testing.T) {
 			inputs.runID,
 			inputs.matchGroupID,
 			inputs.transactionID,
-			inputs.rateID,
+			inputs.feeScheduleID,
+			inputs.feeScheduleNameSnapshot,
 			inputs.currency,
 			inputs.expected,
 			inputs.actual,
@@ -79,7 +82,8 @@ func TestNewFeeVariance(t *testing.T) {
 			inputs.runID,
 			inputs.matchGroupID,
 			inputs.transactionID,
-			inputs.rateID,
+			inputs.feeScheduleID,
+			inputs.feeScheduleNameSnapshot,
 			inputs.currency,
 			decimal.Zero,
 			decimal.Zero,
@@ -105,7 +109,8 @@ func assertFeeVarianceFields(t *testing.T, fv *FeeVariance, inputs feeVarianceTe
 	assert.Equal(t, inputs.runID, fv.RunID)
 	assert.Equal(t, inputs.matchGroupID, fv.MatchGroupID)
 	assert.Equal(t, inputs.transactionID, fv.TransactionID)
-	assert.Equal(t, inputs.rateID, fv.RateID)
+	assert.Equal(t, inputs.feeScheduleID, fv.FeeScheduleID)
+	assert.Equal(t, inputs.feeScheduleNameSnapshot, fv.FeeScheduleNameSnapshot)
 	assert.Equal(t, inputs.currency, fv.Currency)
 	assert.True(t, inputs.expected.Equal(fv.ExpectedFee))
 	assert.True(t, inputs.actual.Equal(fv.ActualFee))
@@ -131,7 +136,8 @@ func runFeeVarianceValidationTests(t *testing.T, valid feeVarianceTestInputs) {
 			fv, err := NewFeeVariance(
 				context.Background(),
 				tc.inputs.contextID, tc.inputs.runID, tc.inputs.matchGroupID,
-				tc.inputs.transactionID, tc.inputs.rateID,
+				tc.inputs.transactionID, tc.inputs.feeScheduleID,
+				tc.inputs.feeScheduleNameSnapshot,
 				tc.inputs.currency,
 				tc.inputs.expected, tc.inputs.actual,
 				tc.inputs.tolAbs, tc.inputs.tolPct,
@@ -176,9 +182,14 @@ func buildFeeVarianceValidationCases(valid feeVarianceTestInputs) []struct {
 			errContains: "transaction id",
 		},
 		{
-			name:        "nil rate ID returns error",
-			inputs:      withRateID(valid, uuid.Nil),
-			errContains: "rate id",
+			name:        "nil fee schedule ID returns error",
+			inputs:      withFeeScheduleID(valid, uuid.Nil),
+			errContains: "fee schedule id",
+		},
+		{
+			name:        "empty fee schedule name snapshot returns error",
+			inputs:      withFeeScheduleNameSnapshot(valid, ""),
+			errContains: "fee schedule name snapshot",
 		},
 		{
 			name:        "empty currency returns error",
@@ -251,13 +262,18 @@ func withTransactionID(inputs feeVarianceTestInputs, id uuid.UUID) feeVarianceTe
 	return inputs
 }
 
-func withRateID(inputs feeVarianceTestInputs, id uuid.UUID) feeVarianceTestInputs {
-	inputs.rateID = id
+func withFeeScheduleID(inputs feeVarianceTestInputs, id uuid.UUID) feeVarianceTestInputs {
+	inputs.feeScheduleID = id
 	return inputs
 }
 
 func withCurrency(inputs feeVarianceTestInputs, currency string) feeVarianceTestInputs {
 	inputs.currency = currency
+	return inputs
+}
+
+func withFeeScheduleNameSnapshot(inputs feeVarianceTestInputs, snapshot string) feeVarianceTestInputs {
+	inputs.feeScheduleNameSnapshot = snapshot
 	return inputs
 }
 
@@ -313,11 +329,12 @@ func TestNewFeeVarianceGeneratesUniqueIDs(t *testing.T) {
 	runID := uuid.New()
 	matchGroupID := uuid.New()
 	transactionID := uuid.New()
-	rateID := uuid.New()
+	feeScheduleID := uuid.New()
 
 	fv1, err := NewFeeVariance(
 		context.Background(),
-		contextID, runID, matchGroupID, transactionID, rateID,
+		contextID, runID, matchGroupID, transactionID, feeScheduleID,
+		"Visa Domestic",
 		"USD",
 		decimal.NewFromFloat(100.00), decimal.NewFromFloat(95.00),
 		decimal.NewFromFloat(10.00), decimal.NewFromFloat(0.05),
@@ -327,7 +344,8 @@ func TestNewFeeVarianceGeneratesUniqueIDs(t *testing.T) {
 
 	fv2, err := NewFeeVariance(
 		context.Background(),
-		contextID, runID, matchGroupID, transactionID, rateID,
+		contextID, runID, matchGroupID, transactionID, feeScheduleID,
+		"Visa Domestic",
 		"USD",
 		decimal.NewFromFloat(100.00), decimal.NewFromFloat(95.00),
 		decimal.NewFromFloat(10.00), decimal.NewFromFloat(0.05),
@@ -344,6 +362,7 @@ func TestNewFeeVarianceTimestamps(t *testing.T) {
 	fv, err := NewFeeVariance(
 		context.Background(),
 		uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(),
+		"Visa Domestic",
 		"USD",
 		decimal.NewFromFloat(100.00), decimal.NewFromFloat(95.00),
 		decimal.NewFromFloat(10.00), decimal.NewFromFloat(0.05),

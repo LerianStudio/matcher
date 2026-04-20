@@ -16,14 +16,16 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
+	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // errOutbox is a sentinel error for outbox failures.
@@ -64,12 +66,100 @@ func (f fakeDedupe) MarkSeenWithRetry(
 	return f.err
 }
 
+func (f fakeDedupe) MarkSeenBulk(
+	_ context.Context,
+	_ uuid.UUID,
+	hashes []string,
+	_ time.Duration,
+) (map[string]bool, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+
+	result := make(map[string]bool, len(hashes))
+	for _, h := range hashes {
+		result[h] = true
+	}
+
+	return result, nil
+}
+
 func (f fakeDedupe) Clear(_ context.Context, _ uuid.UUID, _ string) error {
 	return nil
 }
 
 func (f fakeDedupe) ClearBatch(_ context.Context, _ uuid.UUID, _ []string) error {
 	return nil
+}
+
+type recordingDedupe struct{ lastTTL time.Duration }
+
+func (r *recordingDedupe) CalculateHash(_ uuid.UUID, _ string) string { return "hash" }
+func (r *recordingDedupe) IsDuplicate(_ context.Context, _ uuid.UUID, _ string) (bool, error) {
+	return false, nil
+}
+
+func (r *recordingDedupe) MarkSeen(_ context.Context, _ uuid.UUID, _ string, ttl time.Duration) error {
+	r.lastTTL = ttl
+	return nil
+}
+
+func (r *recordingDedupe) MarkSeenWithRetry(_ context.Context, _ uuid.UUID, _ string, ttl time.Duration, _ int) error {
+	r.lastTTL = ttl
+	return nil
+}
+
+func (r *recordingDedupe) MarkSeenBulk(
+	_ context.Context,
+	_ uuid.UUID,
+	hashes []string,
+	ttl time.Duration,
+) (map[string]bool, error) {
+	r.lastTTL = ttl
+
+	result := make(map[string]bool, len(hashes))
+	for _, h := range hashes {
+		result[h] = true
+	}
+
+	return result, nil
+}
+
+func (r *recordingDedupe) Clear(_ context.Context, _ uuid.UUID, _ string) error { return nil }
+func (r *recordingDedupe) ClearBatch(_ context.Context, _ uuid.UUID, _ []string) error {
+	return nil
+}
+
+func TestUseCase_CurrentDedupeTTL_PrefersResolver(t *testing.T) {
+	t.Parallel()
+
+	uc := &UseCase{
+		dedupeTTL:         time.Minute,
+		dedupeTTLResolver: func(context.Context) time.Duration { return 2 * time.Minute },
+	}
+
+	require.Equal(t, 2*time.Minute, uc.currentDedupeTTL(context.Background()))
+}
+
+func TestUseCase_FilterAndInsertChunk_UsesResolverTTLForDedupeMarking(t *testing.T) {
+	t.Parallel()
+
+	dedupe := &recordingDedupe{}
+	uc := &UseCase{
+		transactionRepo:   fakeTxRepo{},
+		dedupe:            dedupe,
+		dedupeTTL:         time.Minute,
+		dedupeTTLResolver: func(context.Context) time.Duration { return 2 * time.Minute },
+	}
+
+	job := &entities.IngestionJob{ContextID: uuid.New()}
+	transactions := []*shared.Transaction{{SourceID: uuid.New(), ExternalID: "ext-1"}}
+
+	inserted, markedHashes, err := uc.filterAndInsertChunk(context.Background(), job, transactions)
+	require.NoError(t, err)
+	require.Equal(t, 1, inserted)
+	require.Len(t, markedHashes, 1)
+	require.Equal(t, 2*time.Minute, dedupe.lastTTL)
 }
 
 type fakePublisher struct{ called bool }
@@ -93,11 +183,14 @@ func (f *fakePublisher) PublishIngestionFailed(
 }
 
 type fakeJobRepo struct {
-	createErr error
-	created   *entities.IngestionJob
-	withTxErr error
-	updateErr error
-	updated   *entities.IngestionJob
+	createErr            error
+	created              *entities.IngestionJob
+	withTxErr            error
+	updateErr            error
+	updated              *entities.IngestionJob
+	byExtraction         map[string]*entities.IngestionJob
+	findByExtractionErr  error
+	findByExtractionCall int
 }
 
 func (jobRepo *fakeJobRepo) Create(
@@ -126,6 +219,27 @@ func (jobRepo *fakeJobRepo) Update(
 	_ context.Context,
 	_ *entities.IngestionJob,
 ) (*entities.IngestionJob, error) {
+	return nil, nil
+}
+
+func (jobRepo *fakeJobRepo) FindLatestByExtractionID(
+	_ context.Context,
+	extractionID uuid.UUID,
+) (*entities.IngestionJob, error) {
+	jobRepo.findByExtractionCall++
+
+	if jobRepo.findByExtractionErr != nil {
+		return nil, jobRepo.findByExtractionErr
+	}
+
+	if jobRepo.byExtraction == nil {
+		return nil, nil
+	}
+
+	if existing, ok := jobRepo.byExtraction[extractionID.String()]; ok {
+		return existing, nil
+	}
+
 	return nil, nil
 }
 
@@ -345,6 +459,27 @@ func (f *fakeSourceRepo) FindByID(
 	return f.source, f.err
 }
 
+type fakeContextProvider struct {
+	enabled bool
+	err     error
+}
+
+func (f fakeContextProvider) IsAutoMatchEnabled(_ context.Context, _ uuid.UUID) (bool, error) {
+	return f.enabled, f.err
+}
+
+type fakeMatchTrigger struct {
+	called    bool
+	tenantID  uuid.UUID
+	contextID uuid.UUID
+}
+
+func (f *fakeMatchTrigger) TriggerMatchForContext(_ context.Context, tenantID, contextID uuid.UUID) {
+	f.called = true
+	f.tenantID = tenantID
+	f.contextID = contextID
+}
+
 func newTestDeps() UseCaseDeps {
 	return UseCaseDeps{
 		JobRepo:         &fakeJobRepo{},
@@ -404,6 +539,59 @@ func TestNewUseCaseRequiresDependencies(t *testing.T) {
 	require.ErrorIs(t, err, ErrNilSourceRepository)
 }
 
+func TestNewUseCase_NormalizesTypedNilOptionalDeps(t *testing.T) {
+	t.Parallel()
+
+	deps := newTestDeps()
+
+	var typedNilTrigger *fakeMatchTrigger
+	var typedNilProvider *fakeContextProvider
+
+	deps.MatchTrigger = sharedPorts.MatchTrigger(typedNilTrigger)
+	deps.ContextProvider = sharedPorts.ContextProvider(typedNilProvider)
+
+	uc, err := NewUseCase(deps)
+	require.NoError(t, err)
+	require.Nil(t, uc.matchTrigger)
+	require.Nil(t, uc.contextProvider)
+}
+
+func TestTriggerAutoMatchIfEnabled_IgnoresTypedNilMatchTrigger(t *testing.T) {
+	t.Parallel()
+
+	contextID := uuid.New()
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, uuid.NewString())
+
+	var typedNilTrigger *fakeMatchTrigger
+	uc := &UseCase{
+		contextProvider: fakeContextProvider{enabled: true},
+		matchTrigger:    sharedPorts.MatchTrigger(typedNilTrigger),
+	}
+
+	require.NotPanics(t, func() {
+		uc.triggerAutoMatchIfEnabled(ctx, contextID)
+	})
+}
+
+func TestTriggerAutoMatchIfEnabled_IgnoresTypedNilContextProvider(t *testing.T) {
+	t.Parallel()
+
+	contextID := uuid.New()
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, uuid.NewString())
+	trigger := &fakeMatchTrigger{}
+
+	var typedNilProvider *fakeContextProvider
+	uc := &UseCase{
+		contextProvider: sharedPorts.ContextProvider(typedNilProvider),
+		matchTrigger:    trigger,
+	}
+
+	require.NotPanics(t, func() {
+		uc.triggerAutoMatchIfEnabled(ctx, contextID)
+	})
+	require.False(t, trigger.called)
+}
+
 type noTxJobRepo struct{}
 
 func (noTxJobRepo) Create(
@@ -428,6 +616,13 @@ func (noTxJobRepo) FindByContextID(
 func (noTxJobRepo) Update(
 	_ context.Context,
 	_ *entities.IngestionJob,
+) (*entities.IngestionJob, error) {
+	return nil, nil
+}
+
+func (noTxJobRepo) FindLatestByExtractionID(
+	_ context.Context,
+	_ uuid.UUID,
 ) (*entities.IngestionJob, error) {
 	return nil, nil
 }
@@ -1371,6 +1566,20 @@ func (f fakeDedupeWithDuplicate) MarkSeenWithRetry(
 	}
 
 	return nil
+}
+
+func (f fakeDedupeWithDuplicate) MarkSeenBulk(
+	_ context.Context,
+	_ uuid.UUID,
+	hashes []string,
+	_ time.Duration,
+) (map[string]bool, error) {
+	result := make(map[string]bool, len(hashes))
+	for _, h := range hashes {
+		result[h] = h != f.duplicateHash
+	}
+
+	return result, nil
 }
 
 func (f fakeDedupeWithDuplicate) Clear(_ context.Context, _ uuid.UUID, _ string) error {

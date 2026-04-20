@@ -27,6 +27,8 @@ func validConnectionModel() *ConnectionModel {
 		Port:             5432,
 		DatabaseName:     "ledger",
 		ProductName:      "PostgreSQL 17.2",
+		Schema:           "public",
+		UserName:         "app_user",
 		Status:           "AVAILABLE",
 		LastSeenAt:       now,
 		SchemaDiscovered: true,
@@ -48,6 +50,8 @@ func validConnectionEntity() *entities.FetcherConnection {
 		Port:             5432,
 		DatabaseName:     "ledger",
 		ProductName:      "PostgreSQL 17.2",
+		Schema:           "public",
+		UserName:         "app_user",
 		Status:           vo.ConnectionStatusAvailable,
 		LastSeenAt:       now,
 		SchemaDiscovered: true,
@@ -71,6 +75,8 @@ func TestConnectionModel_ToDomain_ValidModel(t *testing.T) {
 	assert.Equal(t, model.Port, entity.Port)
 	assert.Equal(t, model.DatabaseName, entity.DatabaseName)
 	assert.Equal(t, model.ProductName, entity.ProductName)
+	assert.Equal(t, model.Schema, entity.Schema)
+	assert.Equal(t, model.UserName, entity.UserName)
 	assert.Equal(t, vo.ConnectionStatusAvailable, entity.Status)
 	assert.True(t, entity.SchemaDiscovered)
 	assert.Equal(t, model.LastSeenAt, entity.LastSeenAt)
@@ -146,6 +152,8 @@ func TestFromDomain_ValidEntity(t *testing.T) {
 	assert.Equal(t, entity.Port, model.Port)
 	assert.Equal(t, entity.DatabaseName, model.DatabaseName)
 	assert.Equal(t, entity.ProductName, model.ProductName)
+	assert.Equal(t, entity.Schema, model.Schema)
+	assert.Equal(t, entity.UserName, model.UserName)
 	assert.Equal(t, "AVAILABLE", model.Status)
 	assert.Equal(t, entity.SchemaDiscovered, model.SchemaDiscovered)
 	assert.Equal(t, entity.LastSeenAt, model.LastSeenAt)
@@ -180,6 +188,8 @@ func TestConnectionModel_RoundTrip_Preserves_All_Fields(t *testing.T) {
 	assert.Equal(t, original.Port, roundTripped.Port)
 	assert.Equal(t, original.DatabaseName, roundTripped.DatabaseName)
 	assert.Equal(t, original.ProductName, roundTripped.ProductName)
+	assert.Equal(t, original.Schema, roundTripped.Schema)
+	assert.Equal(t, original.UserName, roundTripped.UserName)
 	assert.Equal(t, original.Status, roundTripped.Status)
 	assert.Equal(t, original.SchemaDiscovered, roundTripped.SchemaDiscovered)
 	assert.Equal(t, original.LastSeenAt, roundTripped.LastSeenAt)

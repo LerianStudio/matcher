@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
@@ -37,6 +37,21 @@ var _ repositories.ExceptionRepository = (*stubExceptionRepo)(nil)
 
 func (s *stubExceptionRepo) FindByID(_ context.Context, _ uuid.UUID) (*entities.Exception, error) {
 	return s.exception, s.err
+}
+
+func (s *stubExceptionRepo) FindByIDs(
+	_ context.Context,
+	_ []uuid.UUID,
+) ([]*entities.Exception, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+
+	if s.exception == nil {
+		return []*entities.Exception{}, nil
+	}
+
+	return []*entities.Exception{s.exception}, nil
 }
 
 func (s *stubExceptionRepo) List(

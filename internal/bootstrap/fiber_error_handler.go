@@ -8,14 +8,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"unicode"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+
+	matcherAuth "github.com/LerianStudio/matcher/internal/auth"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
+	matchererrors "github.com/LerianStudio/matcher/pkg"
+	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
 func customErrorHandlerWithEnv(logger libLog.Logger, envName string) fiber.ErrorHandler {
@@ -50,15 +55,51 @@ func customErrorHandlerWithEnv(logger libLog.Logger, envName string) fiber.Error
 			}
 		}
 
-		title := "internal_error"
-		message := "internal server error"
+		return respondFallbackError(fiberCtx, err)
+	}
+}
 
-		if code < fiber.StatusInternalServerError {
-			title = clientErrorMessageForStatus(code)
-			message = title
-		}
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
+func respondFallbackError(fiberCtx *fiber.Ctx, err error) error {
+	if apiError, ok := authFallbackError(err); ok {
+		return sharedhttp.RespondProductError(fiberCtx, apiError)
+	}
 
-		return sharedhttp.RespondError(fiberCtx, code, title, message)
+	return sharedhttp.RespondProductError(fiberCtx, sharedhttp.ValidateFallbackError(err))
+}
+
+func authFallbackError(err error) (matchererrors.APIError, bool) {
+	var fiberErr *fiber.Error
+	if !errors.As(err, &fiberErr) || !isSafeAuthFallbackMessage(fiberErr.Message) {
+		return nil, false
+	}
+
+	var definition matchererrors.Definition
+
+	switch fiberErr.Code {
+	case fiber.StatusUnauthorized:
+		definition = matchererrors.Definition{Code: constant.CodeUnauthorized, Title: http.StatusText(http.StatusUnauthorized), HTTPStatus: http.StatusUnauthorized}
+	case fiber.StatusForbidden:
+		definition = matchererrors.Definition{Code: constant.CodeForbidden, Title: http.StatusText(http.StatusForbidden), HTTPStatus: http.StatusForbidden}
+	case fiber.StatusInternalServerError:
+		definition = matchererrors.Definition{Code: constant.CodeInternalServerError, Title: http.StatusText(http.StatusInternalServerError), HTTPStatus: http.StatusInternalServerError}
+	default:
+		return nil, false
+	}
+
+	return matchererrors.NewError(definition, fiberErr.Message, nil, err), true
+}
+
+func isSafeAuthFallbackMessage(message string) bool {
+	switch message {
+	case matcherAuth.ErrMissingToken.Error(), matcherAuth.ErrInvalidToken.Error(),
+		"tenant claim required",
+		"authentication service unavailable",
+		"tenant extractor not initialized",
+		"auth client not initialized":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -123,25 +164,6 @@ func findValueEnd(msg string, start int) int {
 	}
 
 	return len(msg)
-}
-
-func clientErrorMessageForStatus(code int) string {
-	switch code {
-	case fiber.StatusBadRequest:
-		return "invalid_request"
-	case fiber.StatusUnauthorized:
-		return "unauthorized"
-	case fiber.StatusForbidden:
-		return "forbidden"
-	case fiber.StatusNotFound:
-		return "not_found"
-	case fiber.StatusTooManyRequests:
-		return "rate_limited"
-	case fiber.StatusRequestEntityTooLarge:
-		return "request_entity_too_large"
-	default:
-		return "request_failed"
-	}
 }
 
 func sanitizeHeaderID(headerID string) string {

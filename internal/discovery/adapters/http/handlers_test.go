@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,7 +20,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 
 	"github.com/LerianStudio/matcher/internal/discovery/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
@@ -28,6 +29,7 @@ import (
 	discoveryCommand "github.com/LerianStudio/matcher/internal/discovery/services/command"
 	discoveryQuery "github.com/LerianStudio/matcher/internal/discovery/services/query"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
 // --- Mocks ---
@@ -216,6 +218,70 @@ func (r *mockExtractionRepo) FindByID(_ context.Context, _ uuid.UUID) (*entities
 	return r.findByIDReq, nil
 }
 
+func (r *mockExtractionRepo) LinkIfUnlinked(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+
+func (r *mockExtractionRepo) MarkBridgeFailed(_ context.Context, _ *entities.ExtractionRequest) error {
+	return nil
+}
+
+func (r *mockExtractionRepo) MarkBridgeFailedWithTx(_ context.Context, _ sharedPorts.Tx, _ *entities.ExtractionRequest) error {
+	return nil
+}
+
+func (r *mockExtractionRepo) IncrementBridgeAttempts(_ context.Context, _ uuid.UUID, _ int) error {
+	return nil
+}
+
+func (r *mockExtractionRepo) IncrementBridgeAttemptsWithTx(_ context.Context, _ sharedPorts.Tx, _ uuid.UUID, _ int) error {
+	return nil
+}
+
+func (r *mockExtractionRepo) FindEligibleForBridge(_ context.Context, _ int) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
+func (r *mockExtractionRepo) CountBridgeReadiness(_ context.Context, _ time.Duration) (repositories.BridgeReadinessCounts, error) {
+	return repositories.BridgeReadinessCounts{}, nil
+}
+
+func (r *mockExtractionRepo) ListBridgeCandidates(
+	_ context.Context,
+	_ string,
+	_ time.Duration,
+	_ time.Time,
+	_ uuid.UUID,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
+func (r *mockExtractionRepo) FindBridgeRetentionCandidates(
+	_ context.Context,
+	_ time.Duration,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
+func (r *mockExtractionRepo) MarkCustodyDeleted(
+	_ context.Context,
+	_ uuid.UUID,
+	_ time.Time,
+) error {
+	return nil
+}
+
+func (r *mockExtractionRepo) MarkCustodyDeletedWithTx(
+	_ context.Context,
+	_ sharedPorts.Tx,
+	_ uuid.UUID,
+	_ time.Time,
+) error {
+	return nil
+}
+
 // --- Test Helpers ---
 
 type handlerFixture struct {
@@ -296,15 +362,49 @@ func assertStructuredErrorResponse(t *testing.T, resp *http.Response, expectedSt
 
 	assert.Equal(t, expectedStatus, resp.StatusCode)
 
-	var body struct {
-		Code    int    `json:"code"`
-		Title   string `json:"title"`
-		Message string `json:"message"`
-	}
+	var body ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	assert.Equal(t, expectedStatus, body.Code)
-	assert.Equal(t, expectedType, body.Title)
+	assert.Equal(t, expectedDiscoveryCode(expectedType, expectedMessage), body.Code)
+	assert.Equal(t, http.StatusText(expectedStatus), body.Title)
 	assert.Equal(t, expectedMessage, body.Message)
+}
+
+func expectedDiscoveryCode(expectedType, expectedMessage string) string {
+	switch expectedMessage {
+	case "connection not found":
+		return constant.CodeDiscoveryConnectionNotFound
+	case "extraction not found":
+		return constant.CodeDiscoveryExtractionNotFound
+	case "fetcher service unavailable":
+		return constant.CodeDiscoveryFetcherUnavailable
+	case "discovery refresh already in progress":
+		return constant.CodeDiscoveryRefreshInProgress
+	}
+
+	if expectedType == "invalid_request" && strings.HasPrefix(expectedMessage, "invalid extraction request:") {
+		return constant.CodeDiscoveryInvalidExtraction
+	}
+
+	switch expectedType {
+	case "invalid_request":
+		return constant.CodeInvalidRequest
+	case "not_found":
+		return constant.CodeNotFound
+	case "conflict":
+		return constant.CodeConflict
+	case "discovery_connection_not_found":
+		return constant.CodeDiscoveryConnectionNotFound
+	case "discovery_extraction_not_found":
+		return constant.CodeDiscoveryExtractionNotFound
+	case "discovery_invalid_extraction":
+		return constant.CodeDiscoveryInvalidExtraction
+	case "discovery_fetcher_unavailable":
+		return constant.CodeDiscoveryFetcherUnavailable
+	case "refresh_in_progress":
+		return constant.CodeDiscoveryRefreshInProgress
+	default:
+		return constant.CodeInternalServerError
+	}
 }
 
 func (f *handlerFixture) seedExtraction(t *testing.T, connectionID uuid.UUID) *entities.ExtractionRequest {
@@ -561,9 +661,8 @@ func TestTestConnection_Success(t *testing.T) {
 	fixture := newHandlerFixture(t)
 	conn := fixture.seedConnection(t)
 	fixture.fetcherMock.testResult = &sharedPorts.FetcherTestResult{
-		ConnectionID: conn.FetcherConnID,
-		Healthy:      true,
-		LatencyMs:    42,
+		Status:    "success",
+		LatencyMs: 42,
 	}
 
 	app := setupTestApp(t, fixture.handler)
@@ -587,10 +686,9 @@ func TestTestConnection_UnhealthyResponseSanitizesErrorMessage(t *testing.T) {
 	fixture := newHandlerFixture(t)
 	conn := fixture.seedConnection(t)
 	fixture.fetcherMock.testResult = &sharedPorts.FetcherTestResult{
-		ConnectionID: conn.FetcherConnID,
-		Healthy:      false,
-		LatencyMs:    7,
-		ErrorMessage: "dial tcp 10.0.0.8:5432: connection refused",
+		Status:    "failed",
+		Message:   "dial tcp 10.0.0.8:5432: connection refused",
+		LatencyMs: 7,
 	}
 
 	app := setupTestApp(t, fixture.handler)
@@ -620,7 +718,7 @@ func TestTestConnection_FetcherUnavailable(t *testing.T) {
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 
-	assertStructuredErrorResponse(t, resp, http.StatusServiceUnavailable, "service_unavailable", "fetcher service unavailable")
+	assertStructuredErrorResponse(t, resp, http.StatusServiceUnavailable, "discovery_fetcher_unavailable", "fetcher service unavailable")
 }
 
 func TestRefreshDiscovery_Success(t *testing.T) {

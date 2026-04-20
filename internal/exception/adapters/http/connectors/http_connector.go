@@ -21,11 +21,11 @@ import (
 	"github.com/sony/gobreaker"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	"github.com/LerianStudio/lib-commons/v4/commons/backoff"
-	"github.com/LerianStudio/lib-commons/v4/commons/circuitbreaker"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	"github.com/LerianStudio/lib-commons/v5/commons/backoff"
+	"github.com/LerianStudio/lib-commons/v5/commons/circuitbreaker"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/services"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
@@ -36,7 +36,7 @@ var (
 	ErrNonRetryableStatus             = errors.New("non-retryable HTTP status")
 	ErrMaxRetriesExceeded             = errors.New("max retries exceeded")
 	ErrUnsupportedTarget              = errors.New("unsupported routing target")
-	ErrConnectorNotConfigured         = errors.New("connector not configured for target")
+	ErrConnectorNotConfigured         = ports.ErrConnectorNotConfigured
 	ErrRetryableHTTPStatus            = errors.New("retryable HTTP status")
 	ErrCircuitBreakerOpen             = errors.New("circuit breaker is open for target")
 	ErrServerError                    = errors.New("server error")
@@ -62,10 +62,10 @@ const connectorCircuitBreakerPrefix = "webhook-"
 
 // HTTPConnector dispatches exceptions to external systems via HTTP.
 type HTTPConnector struct {
-	client               *http.Client
-	config               ConnectorConfig
-	webhookTimeoutGetter func() time.Duration
-	breaker              circuitbreaker.Manager
+	client                 *http.Client
+	config                 ConnectorConfig
+	webhookTimeoutResolver func(context.Context) time.Duration
+	breaker                circuitbreaker.Manager
 }
 
 // NewHTTPConnector creates a new HTTP connector with the given configuration.
@@ -94,13 +94,13 @@ func NewHTTPConnector(config ConnectorConfig, breaker ...circuitbreaker.Manager)
 	return connector, nil
 }
 
-// SetWebhookTimeoutGetter injects a live config-backed webhook timeout source.
-func (conn *HTTPConnector) SetWebhookTimeoutGetter(getter func() time.Duration) {
+// SetWebhookTimeoutResolver injects a context-aware runtime webhook timeout source.
+func (conn *HTTPConnector) SetWebhookTimeoutResolver(resolver func(context.Context) time.Duration) {
 	if conn == nil {
 		return
 	}
 
-	conn.webhookTimeoutGetter = getter
+	conn.webhookTimeoutResolver = resolver
 }
 
 // newSSRFSafeTransport returns an *http.Transport with a ControlContext hook
@@ -282,10 +282,27 @@ func (conn *HTTPConnector) dispatchToWebhook(
 	}
 
 	webhookConfig := conn.config.Webhook
+
+	// SEC-27: fail closed when the deployment has opted in to signed
+	// payloads but has not configured a shared secret. Without this check
+	// the earlier warn-log path would silently dispatch unsigned payloads
+	// — the whole point of RequireSignedPayloads is to make that
+	// combination refuse to send rather than only log about it.
+	if webhookConfig.RequireSignedPayloads && strings.TrimSpace(webhookConfig.SharedSecret) == "" {
+		err := ErrWebhookMissingSharedSecret
+		libOpentelemetry.HandleSpanError(span, "webhook missing shared secret", err)
+		logger.With(
+			libLog.String("exception_id", exceptionID),
+			libLog.String("target", string(decision.Target)),
+		).Log(ctx, libLog.LevelError, "refusing unsigned webhook dispatch: RequireSignedPayloads is true but SharedSecret is empty")
+
+		return ports.DispatchResult{}, fmt.Errorf("dispatch to webhook: %w", err)
+	}
+
 	timeout := webhookConfig.TimeoutOrDefault()
 
-	if conn.webhookTimeoutGetter != nil {
-		if runtimeTimeout := conn.webhookTimeoutGetter(); runtimeTimeout > 0 {
+	if conn.webhookTimeoutResolver != nil {
+		if runtimeTimeout := conn.webhookTimeoutResolver(ctx); runtimeTimeout > 0 {
 			timeout = runtimeTimeout
 		}
 	}

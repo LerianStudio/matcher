@@ -146,6 +146,28 @@ func TestExtractionRequestFromEntity_HidesInternalResultPath(t *testing.T) {
 	assert.NotContains(t, string(encoded), "resultPath")
 }
 
+func TestSchemaColumnResponse_JSON_OmitsEmptyTypeAndNullable(t *testing.T) {
+	t.Parallel()
+
+	t.Run("name only omits type and nullable", func(t *testing.T) {
+		t.Parallel()
+
+		col := SchemaColumnResponse{Name: "id"}
+		data, err := json.Marshal(col)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"name":"id"}`, string(data))
+	})
+
+	t.Run("all fields present", func(t *testing.T) {
+		t.Parallel()
+
+		col := SchemaColumnResponse{Name: "id", Type: "uuid", Nullable: true}
+		data, err := json.Marshal(col)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"name":"id","type":"uuid","nullable":true}`, string(data))
+	})
+}
+
 func TestDiscoveryStatusResponse_OmitsZeroLastSyncAt(t *testing.T) {
 	t.Parallel()
 
@@ -158,4 +180,139 @@ func TestDiscoveryStatusResponse_OmitsZeroLastSyncAt(t *testing.T) {
 	var body map[string]any
 	require.NoError(t, json.Unmarshal(encoded, &body))
 	assert.NotContains(t, body, "lastSyncAt")
+}
+
+// TestExtractionRequestResponse_BridgeFieldsOmitEmpty asserts that the five
+// bridge/custody fields stay out of the JSON payload for extractions with no
+// bridge state. Important because the bulk of production rows never hit the
+// failure path — leaking zero-valued fields into every response would add
+// noise and churn for dashboards that key off field presence.
+func TestExtractionRequestResponse_BridgeFieldsOmitEmpty(t *testing.T) {
+	t.Parallel()
+
+	entity := &entities.ExtractionRequest{
+		ID:           uuid.New(),
+		ConnectionID: uuid.New(),
+		Tables:       map[string]any{},
+		Status:       vo.ExtractionStatusPending,
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
+	}
+
+	resp := ExtractionRequestFromEntity(entity)
+
+	encoded, err := json.Marshal(resp)
+	require.NoError(t, err)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &body))
+	assert.NotContains(t, body, "bridgeAttempts")
+	assert.NotContains(t, body, "bridgeLastError")
+	assert.NotContains(t, body, "bridgeLastErrorMessage")
+	assert.NotContains(t, body, "bridgeFailedAt")
+	assert.NotContains(t, body, "custodyDeletedAt")
+}
+
+// TestExtractionRequestResponse_BridgeFieldsSerializeWhenSet asserts that a
+// terminally-failed extraction surfaces the full bridge/custody state so the
+// operator drilling into the detail endpoint sees the failure class, message,
+// attempt count, failure timestamp, and custody-deletion timestamp without a
+// second call.
+func TestExtractionRequestResponse_BridgeFieldsSerializeWhenSet(t *testing.T) {
+	t.Parallel()
+
+	failedAt := time.Date(2026, 4, 17, 10, 0, 0, 0, time.UTC)
+	custodyDeletedAt := failedAt.Add(5 * time.Minute)
+
+	entity := &entities.ExtractionRequest{
+		ID:                     uuid.New(),
+		ConnectionID:           uuid.New(),
+		Tables:                 map[string]any{},
+		Status:                 vo.ExtractionStatusComplete,
+		CreatedAt:              failedAt.Add(-time.Hour),
+		UpdatedAt:              failedAt,
+		BridgeAttempts:         3,
+		BridgeLastError:        vo.BridgeErrorClassIntegrityFailed,
+		BridgeLastErrorMessage: "hmac mismatch",
+		BridgeFailedAt:         failedAt,
+		CustodyDeletedAt:       &custodyDeletedAt,
+	}
+
+	resp := ExtractionRequestFromEntity(entity)
+
+	assert.Equal(t, 3, resp.BridgeAttempts)
+	assert.Equal(t, "integrity_failed", resp.BridgeLastError)
+	assert.Equal(t, "hmac mismatch", resp.BridgeLastErrorMessage)
+	require.NotNil(t, resp.BridgeFailedAt, "entity carries terminal failure; DTO must surface pointer")
+	assert.Equal(t, failedAt, *resp.BridgeFailedAt)
+	require.NotNil(t, resp.CustodyDeletedAt, "custody deleted timestamp must flow through")
+	assert.Equal(t, custodyDeletedAt, *resp.CustodyDeletedAt)
+
+	encoded, err := json.Marshal(resp)
+	require.NoError(t, err)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &body))
+	assert.Equal(t, float64(3), body["bridgeAttempts"])
+	assert.Equal(t, "integrity_failed", body["bridgeLastError"])
+	assert.Equal(t, "hmac mismatch", body["bridgeLastErrorMessage"])
+	assert.Contains(t, body, "bridgeFailedAt")
+	assert.Contains(t, body, "custodyDeletedAt")
+}
+
+// TestBridgeCandidateResponse_BridgeLastErrorOmitEmpty guards the drilldown
+// DTO: non-failed rows keep the field out of the payload so dashboard clients
+// can use field presence as a first-class "is this row in the failed bucket?"
+// signal.
+func TestBridgeCandidateResponse_BridgeLastErrorOmitEmpty(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	resp := NewBridgeCandidateResponse(
+		uuid.New(),
+		uuid.New(),
+		"COMPLETE",
+		"pending",
+		nil,
+		"",
+		now,
+		now,
+		0,
+		"",
+	)
+
+	encoded, err := json.Marshal(resp)
+	require.NoError(t, err)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &body))
+	assert.NotContains(t, body, "bridgeLastError")
+}
+
+// TestBridgeCandidateResponse_BridgeLastErrorSerializes confirms the failed-
+// bucket drilldown surface carries the failure class inline so operators
+// don't need a second call for the single field they triage against most.
+func TestBridgeCandidateResponse_BridgeLastErrorSerializes(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	resp := NewBridgeCandidateResponse(
+		uuid.New(),
+		uuid.New(),
+		"COMPLETE",
+		"failed",
+		nil,
+		"",
+		now,
+		now,
+		120,
+		"max_attempts_exceeded",
+	)
+
+	encoded, err := json.Marshal(resp)
+	require.NoError(t, err)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &body))
+	assert.Equal(t, "max_attempts_exceeded", body["bridgeLastError"])
 }

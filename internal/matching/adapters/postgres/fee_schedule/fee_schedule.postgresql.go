@@ -10,9 +10,9 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	matchingRepos "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
@@ -50,12 +50,7 @@ func (repo *Repository) CreateWithTx(ctx context.Context, tx matchingRepos.Tx, s
 		return nil, ErrInvalidTx
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if !ok || sqlTx == nil {
-		return nil, ErrInvalidTx
-	}
-
-	return repo.createInternal(ctx, sqlTx, schedule)
+	return repo.createInternal(ctx, tx, schedule)
 }
 
 // createInternal is the shared implementation for Create and CreateWithTx.
@@ -125,7 +120,7 @@ func (repo *Repository) createInternal(ctx context.Context, tx *sql.Tx, schedule
 		wrappedErr := fmt.Errorf("create fee schedule: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create fee schedule", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to create fee schedule")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to create fee schedule")
 
 		return nil, wrappedErr
 	}
@@ -172,7 +167,7 @@ func (repo *Repository) GetByID(ctx context.Context, id uuid.UUID) (*fee.FeeSche
 		wrappedErr := fmt.Errorf("get fee schedule by id: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to get fee schedule by id", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to get fee schedule by id")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to get fee schedule by id")
 
 		return nil, wrappedErr
 	}
@@ -195,12 +190,7 @@ func (repo *Repository) UpdateWithTx(ctx context.Context, tx matchingRepos.Tx, s
 		return nil, ErrInvalidTx
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if !ok || sqlTx == nil {
-		return nil, ErrInvalidTx
-	}
-
-	return repo.updateInternal(ctx, sqlTx, schedule)
+	return repo.updateInternal(ctx, tx, schedule)
 }
 
 // updateInternal is the shared implementation for Update and UpdateWithTx.
@@ -290,7 +280,7 @@ func (repo *Repository) updateInternal(ctx context.Context, tx *sql.Tx, schedule
 		wrappedErr := fmt.Errorf("update fee schedule: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to update fee schedule", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to update fee schedule")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to update fee schedule")
 
 		return nil, wrappedErr
 	}
@@ -313,12 +303,7 @@ func (repo *Repository) DeleteWithTx(ctx context.Context, tx matchingRepos.Tx, i
 		return ErrInvalidTx
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if !ok || sqlTx == nil {
-		return ErrInvalidTx
-	}
-
-	return repo.deleteInternal(ctx, sqlTx, id)
+	return repo.deleteInternal(ctx, tx, id)
 }
 
 // deleteInternal is the shared implementation for Delete and DeleteWithTx.
@@ -360,7 +345,7 @@ func (repo *Repository) deleteInternal(ctx context.Context, tx *sql.Tx, id uuid.
 		wrappedErr := fmt.Errorf("delete fee schedule: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to delete fee schedule", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to delete fee schedule")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to delete fee schedule")
 
 		return wrappedErr
 	}
@@ -436,7 +421,7 @@ func (repo *Repository) List(ctx context.Context, limit int) ([]*fee.FeeSchedule
 		wrappedErr := fmt.Errorf("list fee schedules: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list fee schedules", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to list fee schedules")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to list fee schedules")
 
 		return nil, wrappedErr
 	}
@@ -520,7 +505,7 @@ func (repo *Repository) GetByIDs(ctx context.Context, ids []uuid.UUID) (map[uuid
 		wrappedErr := fmt.Errorf("get fee schedules by ids: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to get fee schedules by ids", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to get fee schedules by ids")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to get fee schedules by ids")
 
 		return nil, wrappedErr
 	}

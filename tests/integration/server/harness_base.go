@@ -16,13 +16,13 @@ import (
 	"testing"
 	"time"
 
-	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
+	libRabbitmq "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 
+	outboxServices "github.com/LerianStudio/lib-commons/v5/commons/outbox"
 	"github.com/LerianStudio/matcher/internal/auth"
-	outboxServices "github.com/LerianStudio/matcher/internal/outbox/services"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -203,6 +203,10 @@ func (sh *serverHarnessBase) setEnvFromContainers(t *testing.T) error {
 		return fmt.Errorf("failed to parse postgres DSN: %w", err)
 	}
 
+	if pgURL.User == nil {
+		return fmt.Errorf("invalid postgres DSN (missing user info): %q", sh.PostgresDSN)
+	}
+
 	pgHost, pgPort, _ := strings.Cut(pgURL.Host, ":")
 	if pgPort == "" {
 		pgPort = "5432"
@@ -216,6 +220,11 @@ func (sh *serverHarnessBase) setEnvFromContainers(t *testing.T) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse redis address: %w", err)
 	}
+
+	if redisURL.Host == "" {
+		return fmt.Errorf("invalid redis DSN (empty host): %q", sh.RedisAddr)
+	}
+
 	redisHost := redisURL.Host
 
 	// Set environment variables
@@ -247,7 +256,8 @@ func (sh *serverHarnessBase) setEnvFromContainers(t *testing.T) error {
 		"RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK": "true",
 
 		// Auth disabled for tests
-		"AUTH_ENABLED": "false",
+		"AUTH_ENABLED":        "false",
+		"PLUGIN_AUTH_ENABLED": "false",
 
 		// Body limit: 110 MiB / 115343360 bytes to allow 100MB test files
 		// through Fiber, while the application handler enforces a 100MB limit

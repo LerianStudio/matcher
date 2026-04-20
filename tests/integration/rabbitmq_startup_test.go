@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	dockercontainer "github.com/docker/docker/api/types/container"
-	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -22,7 +22,7 @@ type fakeRabbitMQStartupContainer struct {
 	hostCalls     int
 	mappedPorts   map[string][]portResult
 	mappedCalls   map[string]int
-	inspectResult *dockercontainer.InspectResponse
+	inspectResult *container.InspectResponse
 	inspectErr    error
 }
 
@@ -37,40 +37,49 @@ type hostResult struct {
 }
 
 type portResult struct {
-	port nat.Port
+	port network.Port
 	err  error
 }
 
-func (container *fakeRabbitMQStartupContainer) Host(_ context.Context) (string, error) {
-	if container.hostCalls >= len(container.hostResults) {
+func (c *fakeRabbitMQStartupContainer) Host(_ context.Context) (string, error) {
+	if c.hostCalls >= len(c.hostResults) {
 		return "", errors.New("unexpected host call")
 	}
 
-	result := container.hostResults[container.hostCalls]
-	container.hostCalls++
+	result := c.hostResults[c.hostCalls]
+	c.hostCalls++
 
 	return result.host, result.err
 }
 
-func (container *fakeRabbitMQStartupContainer) MappedPort(_ context.Context, port nat.Port) (nat.Port, error) {
-	if container.mappedCalls == nil {
-		container.mappedCalls = make(map[string]int)
+func (c *fakeRabbitMQStartupContainer) MappedPort(_ context.Context, port string) (network.Port, error) {
+	if c.mappedCalls == nil {
+		c.mappedCalls = make(map[string]int)
 	}
 
-	key := string(port)
-	results := container.mappedPorts[key]
-	callIndex := container.mappedCalls[key]
-	container.mappedCalls[key] = callIndex + 1
+	results := c.mappedPorts[port]
+	callIndex := c.mappedCalls[port]
+	c.mappedCalls[port] = callIndex + 1
 
 	if callIndex >= len(results) {
-		return "", errors.New("unexpected mapped port call")
+		return network.Port{}, errors.New("unexpected mapped port call")
 	}
 
 	return results[callIndex].port, results[callIndex].err
 }
 
-func (container *fakeRabbitMQStartupContainer) Inspect(_ context.Context) (*dockercontainer.InspectResponse, error) {
-	return container.inspectResult, container.inspectErr
+func (c *fakeRabbitMQStartupContainer) Inspect(_ context.Context) (*container.InspectResponse, error) {
+	return c.inspectResult, c.inspectErr
+}
+
+// mustParsePort is a test helper that parses a port string, fataling on error.
+func mustParsePort(t *testing.T, s string) network.Port {
+	t.Helper()
+
+	p, err := network.ParsePort(s)
+	require.NoError(t, err, "parsing port %q", s)
+
+	return p
 }
 
 func TestRabbitMQContainerRequest(t *testing.T) {
@@ -207,7 +216,7 @@ func TestResolveMappedPort_FallsBackToRawPortLookup(t *testing.T) {
 	fake := &fakeRabbitMQStartupContainer{
 		mappedPorts: map[string][]portResult{
 			"5672/tcp": {{err: errors.New("protocol lookup failed")}},
-			"5672":     {{port: nat.Port("5673/tcp")}},
+			"5672":     {{port: mustParsePort(t, "5673/tcp")}},
 		},
 	}
 
@@ -247,11 +256,11 @@ func TestResolveMappedPort_FallsBackToInspectBindings(t *testing.T) {
 			"5672/tcp": {{err: errors.New("protocol lookup failed")}},
 			"5672":     {{err: errors.New("raw lookup failed")}},
 		},
-		inspectResult: &dockercontainer.InspectResponse{
-			NetworkSettings: &dockercontainer.NetworkSettings{
-				NetworkSettingsBase: dockercontainer.NetworkSettingsBase{Ports: nat.PortMap{
-					"5672/tcp": []nat.PortBinding{{HostPort: "5673"}},
-				}},
+		inspectResult: &container.InspectResponse{
+			NetworkSettings: &container.NetworkSettings{
+				Ports: network.PortMap{
+					mustParsePort(t, "5672/tcp"): {{HostPort: "5673"}},
+				},
 			},
 		},
 	}
@@ -269,10 +278,8 @@ func TestResolveMappedPort_FallsBackToHostNetworkMode(t *testing.T) {
 			"5672/tcp": {{err: errors.New("protocol lookup failed")}},
 			"5672":     {{err: errors.New("raw lookup failed")}},
 		},
-		inspectResult: &dockercontainer.InspectResponse{
-			ContainerJSONBase: &dockercontainer.ContainerJSONBase{
-				HostConfig: &dockercontainer.HostConfig{NetworkMode: "host"},
-			},
+		inspectResult: &container.InspectResponse{
+			HostConfig: &container.HostConfig{NetworkMode: "host"},
 		},
 	}
 
@@ -303,9 +310,9 @@ func TestStartRabbitMQContainer_RetriesUntilSuccess(t *testing.T) {
 		rabbitMQRetryWait = originalWait
 	})
 
-	container, err := startRabbitMQContainer(context.Background())
+	c, err := startRabbitMQContainer(context.Background())
 	require.NoError(t, err)
-	assert.NotNil(t, container)
+	assert.NotNil(t, c)
 	assert.Equal(t, 3, callCount)
 	assert.Equal(t, []time.Duration{2 * time.Second, 4 * time.Second}, waits)
 }
@@ -423,31 +430,34 @@ type fakeStartedContainer struct{ terminateErr error }
 
 func (*fakeStartedContainer) GetContainerID() string                           { return "" }
 func (*fakeStartedContainer) Endpoint(context.Context, string) (string, error) { return "", nil }
-func (*fakeStartedContainer) PortEndpoint(context.Context, nat.Port, string) (string, error) {
+func (*fakeStartedContainer) PortEndpoint(context.Context, string, string) (string, error) {
 	return "", nil
 }
 func (*fakeStartedContainer) Host(context.Context) (string, error) { return "", nil }
-func (*fakeStartedContainer) Inspect(context.Context) (*dockercontainer.InspectResponse, error) {
-	return &dockercontainer.InspectResponse{}, nil
+func (*fakeStartedContainer) Inspect(context.Context) (*container.InspectResponse, error) {
+	return &container.InspectResponse{}, nil
 }
-func (*fakeStartedContainer) MappedPort(context.Context, nat.Port) (nat.Port, error) { return "", nil }
-func (*fakeStartedContainer) Ports(context.Context) (nat.PortMap, error)             { return nil, nil }
-func (*fakeStartedContainer) SessionID() string                                      { return "" }
-func (*fakeStartedContainer) IsRunning() bool                                        { return true }
-func (*fakeStartedContainer) Start(context.Context) error                            { return nil }
-func (*fakeStartedContainer) Stop(context.Context, *time.Duration) error             { return nil }
-func (container *fakeStartedContainer) Terminate(context.Context, ...testcontainers.TerminateOption) error {
-	return container.terminateErr
+
+func (*fakeStartedContainer) MappedPort(context.Context, string) (network.Port, error) {
+	return network.Port{}, nil
+}
+func (*fakeStartedContainer) Ports(context.Context) (network.PortMap, error) { return nil, nil }
+func (*fakeStartedContainer) SessionID() string                              { return "" }
+func (*fakeStartedContainer) IsRunning() bool                                { return true }
+func (*fakeStartedContainer) Start(context.Context) error                    { return nil }
+func (*fakeStartedContainer) Stop(context.Context, *time.Duration) error     { return nil }
+func (c *fakeStartedContainer) Terminate(context.Context, ...testcontainers.TerminateOption) error {
+	return c.terminateErr
 }
 func (*fakeStartedContainer) Logs(context.Context) (io.ReadCloser, error) { return nil, nil }
 func (*fakeStartedContainer) FollowOutput(testcontainers.LogConsumer)     {}
 func (*fakeStartedContainer) StartLogProducer(context.Context, ...testcontainers.LogProductionOption) error {
 	return nil
 }
-func (*fakeStartedContainer) StopLogProducer() error                                { return nil }
-func (*fakeStartedContainer) Name(context.Context) (string, error)                  { return "", nil }
-func (*fakeStartedContainer) State(context.Context) (*dockercontainer.State, error) { return nil, nil }
-func (*fakeStartedContainer) Networks(context.Context) ([]string, error)            { return nil, nil }
+func (*fakeStartedContainer) StopLogProducer() error                          { return nil }
+func (*fakeStartedContainer) Name(context.Context) (string, error)            { return "", nil }
+func (*fakeStartedContainer) State(context.Context) (*container.State, error) { return nil, nil }
+func (*fakeStartedContainer) Networks(context.Context) ([]string, error)      { return nil, nil }
 func (*fakeStartedContainer) NetworkAliases(context.Context) (map[string][]string, error) {
 	return nil, nil
 }
@@ -473,7 +483,4 @@ func (*fakeStartedContainer) CopyFileFromContainer(context.Context, string) (io.
 	return nil, nil
 }
 
-func (*fakeStartedContainer) CopyDirFromContainer(context.Context, string) (io.ReadCloser, error) {
-	return nil, nil
-}
 func (*fakeStartedContainer) GetLogProductionErrorChannel() <-chan error { return nil }

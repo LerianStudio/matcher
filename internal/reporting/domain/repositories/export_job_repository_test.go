@@ -96,9 +96,10 @@ func TestExportJobRepository_ListOperations(t *testing.T) {
 			assert.True(t, exists, "list method %s must exist", methodName)
 
 			numOut := method.Type.NumOut()
-			if methodName == "List" {
+			switch methodName {
+			case "List", "ListByContext":
 				assert.Equal(t, 3, numOut, "list method %s should return slice, pagination, and error", methodName)
-			} else {
+			default:
 				assert.Equal(t, 2, numOut, "list method %s should return slice and error", methodName)
 			}
 		})

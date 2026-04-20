@@ -1,0 +1,969 @@
+{
+  "organizations": [
+    {
+      "name": "lerian",
+      "displayName": "Lerian"
+    }
+  ],
+  "applications": [
+    {
+      "name": "matcher",
+      "displayName": "Matcher",
+      "organization": "lerian"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "configuration-context-create",
+      "displayName": "Configuration Context Create",
+      "description": "Allows context:create on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "context:create"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-context-read",
+      "displayName": "Configuration Context Read",
+      "description": "Allows context:read on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "context:read"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-context-update",
+      "displayName": "Configuration Context Update",
+      "description": "Allows context:update on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "context:update"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-context-delete",
+      "displayName": "Configuration Context Delete",
+      "description": "Allows context:delete on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "context:delete"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-source-create",
+      "displayName": "Configuration Source Create",
+      "description": "Allows source:create on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "source:create"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-source-read",
+      "displayName": "Configuration Source Read",
+      "description": "Allows source:read on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "source:read"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-source-update",
+      "displayName": "Configuration Source Update",
+      "description": "Allows source:update on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "source:update"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-source-delete",
+      "displayName": "Configuration Source Delete",
+      "description": "Allows source:delete on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "source:delete"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-field-map-create",
+      "displayName": "Configuration Field Map Create",
+      "description": "Allows field-map:create on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "field-map:create"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-field-map-read",
+      "displayName": "Configuration Field Map Read",
+      "description": "Allows field-map:read on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "field-map:read"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-field-map-update",
+      "displayName": "Configuration Field Map Update",
+      "description": "Allows field-map:update on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "field-map:update"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-field-map-delete",
+      "displayName": "Configuration Field Map Delete",
+      "description": "Allows field-map:delete on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "field-map:delete"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-rule-create",
+      "displayName": "Configuration Rule Create",
+      "description": "Allows rule:create on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "rule:create"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-rule-read",
+      "displayName": "Configuration Rule Read",
+      "description": "Allows rule:read on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "rule:read"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-rule-update",
+      "displayName": "Configuration Rule Update",
+      "description": "Allows rule:update on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "rule:update"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-rule-delete",
+      "displayName": "Configuration Rule Delete",
+      "description": "Allows rule:delete on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "rule:delete"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-fee-schedule-create",
+      "displayName": "Configuration Fee Schedule Create",
+      "description": "Allows fee-schedule:create on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "fee-schedule:create"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-fee-schedule-read",
+      "displayName": "Configuration Fee Schedule Read",
+      "description": "Allows fee-schedule:read on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "fee-schedule:read"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-fee-schedule-update",
+      "displayName": "Configuration Fee Schedule Update",
+      "description": "Allows fee-schedule:update on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "fee-schedule:update"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-fee-schedule-delete",
+      "displayName": "Configuration Fee Schedule Delete",
+      "description": "Allows fee-schedule:delete on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "fee-schedule:delete"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-schedule-create",
+      "displayName": "Configuration Schedule Create",
+      "description": "Allows schedule:create on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "schedule:create"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-schedule-read",
+      "displayName": "Configuration Schedule Read",
+      "description": "Allows schedule:read on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "schedule:read"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-schedule-update",
+      "displayName": "Configuration Schedule Update",
+      "description": "Allows schedule:update on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "schedule:update"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-schedule-delete",
+      "displayName": "Configuration Schedule Delete",
+      "description": "Allows schedule:delete on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "schedule:delete"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-fee-rule-create",
+      "displayName": "Configuration Fee Rule Create",
+      "description": "Allows fee-rule:create on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "fee-rule:create"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-fee-rule-read",
+      "displayName": "Configuration Fee Rule Read",
+      "description": "Allows fee-rule:read on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "fee-rule:read"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-fee-rule-update",
+      "displayName": "Configuration Fee Rule Update",
+      "description": "Allows fee-rule:update on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "fee-rule:update"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "configuration-fee-rule-delete",
+      "displayName": "Configuration Fee Rule Delete",
+      "description": "Allows fee-rule:delete on configuration.",
+      "resources": [
+        "configuration"
+      ],
+      "actions": [
+        "fee-rule:delete"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "ingestion-import-create",
+      "displayName": "Ingestion Import Create",
+      "description": "Allows import:create on ingestion.",
+      "resources": [
+        "ingestion"
+      ],
+      "actions": [
+        "import:create"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "ingestion-job-read",
+      "displayName": "Ingestion Job Read",
+      "description": "Allows job:read on ingestion.",
+      "resources": [
+        "ingestion"
+      ],
+      "actions": [
+        "job:read"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "ingestion-transaction-ignore",
+      "displayName": "Ingestion Transaction Ignore",
+      "description": "Allows transaction:ignore on ingestion.",
+      "resources": [
+        "ingestion"
+      ],
+      "actions": [
+        "transaction:ignore"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "ingestion-transaction-search",
+      "displayName": "Ingestion Transaction Search",
+      "description": "Allows transaction:search on ingestion.",
+      "resources": [
+        "ingestion"
+      ],
+      "actions": [
+        "transaction:search"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "matching-job-run",
+      "displayName": "Matching Job Run",
+      "description": "Allows job:run on matching.",
+      "resources": [
+        "matching"
+      ],
+      "actions": [
+        "job:run"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "matching-job-read",
+      "displayName": "Matching Job Read",
+      "description": "Allows job:read on matching.",
+      "resources": [
+        "matching"
+      ],
+      "actions": [
+        "job:read"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "matching-job-delete",
+      "displayName": "Matching Job Delete",
+      "description": "Allows job:delete on matching.",
+      "resources": [
+        "matching"
+      ],
+      "actions": [
+        "job:delete"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "matching-manual-create",
+      "displayName": "Matching Manual Create",
+      "description": "Allows manual:create on matching.",
+      "resources": [
+        "matching"
+      ],
+      "actions": [
+        "manual:create"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "matching-adjustment-create",
+      "displayName": "Matching Adjustment Create",
+      "description": "Allows adjustment:create on matching.",
+      "resources": [
+        "matching"
+      ],
+      "actions": [
+        "adjustment:create"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "governance-audit-read",
+      "displayName": "Governance Audit Read",
+      "description": "Allows audit:read on governance.",
+      "resources": [
+        "governance"
+      ],
+      "actions": [
+        "audit:read"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "governance-archive-read",
+      "displayName": "Governance Archive Read",
+      "description": "Allows archive:read on governance.",
+      "resources": [
+        "governance"
+      ],
+      "actions": [
+        "archive:read"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "governance-actor-mapping-read",
+      "displayName": "Governance Actor Mapping Read",
+      "description": "Allows actor-mapping:read on governance.",
+      "resources": [
+        "governance"
+      ],
+      "actions": [
+        "actor-mapping:read"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "governance-actor-mapping-write",
+      "displayName": "Governance Actor Mapping Write",
+      "description": "Allows actor-mapping:write on governance.",
+      "resources": [
+        "governance"
+      ],
+      "actions": [
+        "actor-mapping:write"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "governance-actor-mapping-delete",
+      "displayName": "Governance Actor Mapping Delete",
+      "description": "Allows actor-mapping:delete on governance.",
+      "resources": [
+        "governance"
+      ],
+      "actions": [
+        "actor-mapping:delete"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "reporting-dashboard-read",
+      "displayName": "Reporting Dashboard Read",
+      "description": "Allows dashboard:read on reporting.",
+      "resources": [
+        "reporting"
+      ],
+      "actions": [
+        "dashboard:read"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "reporting-export-read",
+      "displayName": "Reporting Export Read",
+      "description": "Allows export:read on reporting.",
+      "resources": [
+        "reporting"
+      ],
+      "actions": [
+        "export:read"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "reporting-export-job-write",
+      "displayName": "Reporting Export Job Write",
+      "description": "Allows export-job:write on reporting.",
+      "resources": [
+        "reporting"
+      ],
+      "actions": [
+        "export-job:write"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "reporting-export-job-read",
+      "displayName": "Reporting Export Job Read",
+      "description": "Allows export-job:read on reporting.",
+      "resources": [
+        "reporting"
+      ],
+      "actions": [
+        "export-job:read"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "exception-exception-read",
+      "displayName": "Exception Exception Read",
+      "description": "Allows exception:read on exception.",
+      "resources": [
+        "exception"
+      ],
+      "actions": [
+        "exception:read"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "exception-exception-resolve",
+      "displayName": "Exception Exception Resolve",
+      "description": "Allows exception:resolve on exception.",
+      "resources": [
+        "exception"
+      ],
+      "actions": [
+        "exception:resolve"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "exception-exception-dispatch",
+      "displayName": "Exception Exception Dispatch",
+      "description": "Allows exception:dispatch on exception.",
+      "resources": [
+        "exception"
+      ],
+      "actions": [
+        "exception:dispatch"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "exception-callback-process",
+      "displayName": "Exception Callback Process",
+      "description": "Allows callback:process on exception.",
+      "resources": [
+        "exception"
+      ],
+      "actions": [
+        "callback:process"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "exception-dispute-read",
+      "displayName": "Exception Dispute Read",
+      "description": "Allows dispute:read on exception.",
+      "resources": [
+        "exception"
+      ],
+      "actions": [
+        "dispute:read"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "exception-dispute-write",
+      "displayName": "Exception Dispute Write",
+      "description": "Allows dispute:write on exception.",
+      "resources": [
+        "exception"
+      ],
+      "actions": [
+        "dispute:write"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "exception-comment-write",
+      "displayName": "Exception Comment Write",
+      "description": "Allows comment:write on exception.",
+      "resources": [
+        "exception"
+      ],
+      "actions": [
+        "comment:write"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "discovery-discovery-read",
+      "displayName": "Discovery Discovery Read",
+      "description": "Allows discovery:read on discovery.",
+      "resources": [
+        "discovery"
+      ],
+      "actions": [
+        "discovery:read"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "discovery-discovery-write",
+      "displayName": "Discovery Discovery Write",
+      "description": "Allows discovery:write on discovery.",
+      "resources": [
+        "discovery"
+      ],
+      "actions": [
+        "discovery:write"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "system-admin",
+      "displayName": "System Admin",
+      "description": "Allows admin on system.",
+      "resources": [
+        "system"
+      ],
+      "actions": [
+        "admin"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
+      "name": "governance-actor-mapping-deanonymize",
+      "displayName": "Governance Actor Mapping Deanonymize",
+      "description": "Allows actor-mapping:deanonymize on governance.",
+      "resources": [
+        "governance"
+      ],
+      "actions": [
+        "actor-mapping:deanonymize"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    }
+  ],
+  "roles": [
+    {
+      "name": "matcher-admin-role",
+      "displayName": "Matcher Admin",
+      "description": "Full access to all Matcher resources and actions.",
+      "isEnabled": true,
+      "permissions": [
+        "configuration-context-create",
+        "configuration-context-read",
+        "configuration-context-update",
+        "configuration-context-delete",
+        "configuration-source-create",
+        "configuration-source-read",
+        "configuration-source-update",
+        "configuration-source-delete",
+        "configuration-field-map-create",
+        "configuration-field-map-read",
+        "configuration-field-map-update",
+        "configuration-field-map-delete",
+        "configuration-rule-create",
+        "configuration-rule-read",
+        "configuration-rule-update",
+        "configuration-rule-delete",
+        "configuration-fee-schedule-create",
+        "configuration-fee-schedule-read",
+        "configuration-fee-schedule-update",
+        "configuration-fee-schedule-delete",
+        "configuration-schedule-create",
+        "configuration-schedule-read",
+        "configuration-schedule-update",
+        "configuration-schedule-delete",
+        "configuration-fee-rule-create",
+        "configuration-fee-rule-read",
+        "configuration-fee-rule-update",
+        "configuration-fee-rule-delete",
+        "ingestion-import-create",
+        "ingestion-job-read",
+        "ingestion-transaction-ignore",
+        "ingestion-transaction-search",
+        "matching-job-run",
+        "matching-job-read",
+        "matching-job-delete",
+        "matching-manual-create",
+        "matching-adjustment-create",
+        "governance-audit-read",
+        "governance-archive-read",
+        "governance-actor-mapping-read",
+        "governance-actor-mapping-write",
+        "governance-actor-mapping-delete",
+        "reporting-dashboard-read",
+        "reporting-export-read",
+        "reporting-export-job-write",
+        "reporting-export-job-read",
+        "exception-exception-read",
+        "exception-exception-resolve",
+        "exception-exception-dispatch",
+        "exception-callback-process",
+        "exception-dispute-read",
+        "exception-dispute-write",
+        "exception-comment-write",
+        "discovery-discovery-read",
+        "discovery-discovery-write",
+        "system-admin"
+      ]
+    },
+    {
+      "name": "matcher-operator-role",
+      "displayName": "Matcher Operator",
+      "description": "Operational access to configuration, ingestion, matching, reporting, exceptions, discovery, and governance read actions.",
+      "isEnabled": true,
+      "permissions": [
+        "configuration-context-create",
+        "configuration-context-read",
+        "configuration-context-update",
+        "configuration-context-delete",
+        "configuration-source-create",
+        "configuration-source-read",
+        "configuration-source-update",
+        "configuration-source-delete",
+        "configuration-field-map-create",
+        "configuration-field-map-read",
+        "configuration-field-map-update",
+        "configuration-field-map-delete",
+        "configuration-rule-create",
+        "configuration-rule-read",
+        "configuration-rule-update",
+        "configuration-rule-delete",
+        "configuration-fee-schedule-create",
+        "configuration-fee-schedule-read",
+        "configuration-fee-schedule-update",
+        "configuration-fee-schedule-delete",
+        "configuration-schedule-create",
+        "configuration-schedule-read",
+        "configuration-schedule-update",
+        "configuration-schedule-delete",
+        "configuration-fee-rule-create",
+        "configuration-fee-rule-read",
+        "configuration-fee-rule-update",
+        "configuration-fee-rule-delete",
+        "ingestion-import-create",
+        "ingestion-job-read",
+        "ingestion-transaction-ignore",
+        "ingestion-transaction-search",
+        "matching-job-run",
+        "matching-job-read",
+        "matching-job-delete",
+        "matching-manual-create",
+        "matching-adjustment-create",
+        "governance-audit-read",
+        "governance-archive-read",
+        "governance-actor-mapping-read",
+        "reporting-dashboard-read",
+        "reporting-export-read",
+        "reporting-export-job-write",
+        "reporting-export-job-read",
+        "exception-exception-read",
+        "exception-exception-resolve",
+        "exception-exception-dispatch",
+        "exception-callback-process",
+        "exception-dispute-read",
+        "exception-dispute-write",
+        "exception-comment-write",
+        "discovery-discovery-read",
+        "discovery-discovery-write"
+      ]
+    },
+    {
+      "name": "matcher-analyst-role",
+      "displayName": "Matcher Analyst",
+      "description": "Analytical access to reporting and exception workflows with read-only access to operational configuration and governance data.",
+      "isEnabled": true,
+      "permissions": [
+        "configuration-context-read",
+        "configuration-source-read",
+        "configuration-field-map-read",
+        "configuration-rule-read",
+        "configuration-fee-schedule-read",
+        "configuration-schedule-read",
+        "configuration-fee-rule-read",
+        "ingestion-job-read",
+        "ingestion-transaction-search",
+        "matching-job-read",
+        "matching-adjustment-create",
+        "governance-audit-read",
+        "governance-archive-read",
+        "governance-actor-mapping-read",
+        "reporting-dashboard-read",
+        "reporting-export-read",
+        "reporting-export-job-write",
+        "reporting-export-job-read",
+        "exception-exception-read",
+        "exception-exception-resolve",
+        "exception-exception-dispatch",
+        "exception-dispute-read",
+        "exception-dispute-write",
+        "exception-comment-write",
+        "discovery-discovery-read"
+      ]
+    },
+    {
+      "name": "matcher-viewer-role",
+      "displayName": "Matcher Viewer",
+      "description": "Read-only access to Matcher resources, reports, and system metadata.",
+      "isEnabled": true,
+      "permissions": [
+        "configuration-context-read",
+        "configuration-source-read",
+        "configuration-field-map-read",
+        "configuration-rule-read",
+        "configuration-fee-schedule-read",
+        "configuration-schedule-read",
+        "configuration-fee-rule-read",
+        "ingestion-job-read",
+        "ingestion-transaction-search",
+        "matching-job-read",
+        "governance-audit-read",
+        "governance-archive-read",
+        "governance-actor-mapping-read",
+        "reporting-dashboard-read",
+        "reporting-export-read",
+        "reporting-export-job-read",
+        "exception-exception-read",
+        "exception-dispute-read",
+        "discovery-discovery-read"
+      ]
+    },
+    {
+      "name": "matcher-system-role",
+      "displayName": "Matcher System",
+      "description": "System-level access to runtime configuration, governance administration, configuration reads, and reporting reads.",
+      "isEnabled": true,
+      "permissions": [
+        "configuration-context-read",
+        "configuration-source-read",
+        "configuration-field-map-read",
+        "configuration-rule-read",
+        "configuration-fee-schedule-read",
+        "configuration-schedule-read",
+        "configuration-fee-rule-read",
+        "governance-audit-read",
+        "governance-archive-read",
+        "governance-actor-mapping-read",
+        "governance-actor-mapping-write",
+        "governance-actor-mapping-delete",
+        "reporting-dashboard-read",
+        "reporting-export-read",
+        "reporting-export-job-read",
+        "system-admin"
+      ]
+    }
+  ]
+}

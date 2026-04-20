@@ -14,9 +14,9 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
@@ -114,38 +114,40 @@ type transactionCleanupTxUpdater interface {
 
 // UseCase implements ingestion command operations.
 type UseCase struct {
-	jobRepo         ingestionRepositories.JobRepository
-	transactionRepo ingestionRepositories.TransactionRepository
-	dedupe          ports.DedupeService
-	dedupeTTL       time.Duration
-	dedupeTTLGetter func() time.Duration
-	publisher       ports.EventPublisher
-	outboxRepo      sharedPorts.OutboxRepository
-	jobTxRunner     jobTxRunner
-	jobRepoTx       jobTxUpdater
-	txCleanupRepoTx transactionCleanupTxUpdater
-	outboxRepoTx    outboxTxCreator
-	parsers         ports.ParserRegistry
-	fieldMapRepo    ports.FieldMapRepository
-	sourceRepo      ports.SourceRepository
-	matchTrigger    ports.MatchTrigger
-	contextProvider ports.ContextProvider
+	jobRepo           ingestionRepositories.JobRepository
+	transactionRepo   ingestionRepositories.TransactionRepository
+	dedupe            ports.DedupeService
+	dedupeTTL         time.Duration
+	dedupeTTLResolver func(context.Context) time.Duration
+	dedupeTTLGetter   func() time.Duration
+	publisher         sharedPorts.IngestionEventPublisher
+	outboxRepo        sharedPorts.OutboxRepository
+	jobTxRunner       jobTxRunner
+	jobRepoTx         jobTxUpdater
+	txCleanupRepoTx   transactionCleanupTxUpdater
+	outboxRepoTx      outboxTxCreator
+	parsers           ports.ParserRegistry
+	fieldMapRepo      ports.FieldMapRepository
+	sourceRepo        ports.SourceRepository
+	matchTrigger      sharedPorts.MatchTrigger
+	contextProvider   sharedPorts.ContextProvider
 }
 
 // UseCaseDeps groups all dependencies required by the ingestion UseCase.
 type UseCaseDeps struct {
-	JobRepo         ingestionRepositories.JobRepository
-	TransactionRepo ingestionRepositories.TransactionRepository
-	Dedupe          ports.DedupeService
-	Publisher       ports.EventPublisher
-	OutboxRepo      sharedPorts.OutboxRepository
-	Parsers         ports.ParserRegistry
-	FieldMapRepo    ports.FieldMapRepository
-	SourceRepo      ports.SourceRepository
-	DedupeTTL       time.Duration
-	DedupeTTLGetter func() time.Duration
-	MatchTrigger    ports.MatchTrigger
-	ContextProvider ports.ContextProvider
+	JobRepo           ingestionRepositories.JobRepository
+	TransactionRepo   ingestionRepositories.TransactionRepository
+	Dedupe            ports.DedupeService
+	Publisher         sharedPorts.IngestionEventPublisher
+	OutboxRepo        sharedPorts.OutboxRepository
+	Parsers           ports.ParserRegistry
+	FieldMapRepo      ports.FieldMapRepository
+	SourceRepo        ports.SourceRepository
+	DedupeTTL         time.Duration
+	DedupeTTLResolver func(context.Context) time.Duration
+	DedupeTTLGetter   func() time.Duration
+	MatchTrigger      sharedPorts.MatchTrigger
+	ContextProvider   sharedPorts.ContextProvider
 }
 
 func (deps *UseCaseDeps) validate() error {
@@ -179,6 +181,14 @@ func NewUseCase(deps UseCaseDeps) (*UseCase, error) {
 		return nil, err
 	}
 
+	if sharedPorts.IsNilValue(deps.MatchTrigger) {
+		deps.MatchTrigger = nil
+	}
+
+	if sharedPorts.IsNilValue(deps.ContextProvider) {
+		deps.ContextProvider = nil
+	}
+
 	if deps.DedupeTTL == 0 {
 		deps.DedupeTTL = defaultDedupeTTL
 	}
@@ -208,22 +218,23 @@ func NewUseCase(deps UseCaseDeps) (*UseCase, error) {
 	}
 
 	return &UseCase{
-		jobRepo:         deps.JobRepo,
-		transactionRepo: deps.TransactionRepo,
-		dedupe:          deps.Dedupe,
-		dedupeTTL:       deps.DedupeTTL,
-		dedupeTTLGetter: deps.DedupeTTLGetter,
-		publisher:       deps.Publisher,
-		outboxRepo:      deps.OutboxRepo,
-		jobTxRunner:     jobTx,
-		jobRepoTx:       jobRepoTx,
-		txCleanupRepoTx: txCleanupRepoTx,
-		outboxRepoTx:    outboxRepoTx,
-		parsers:         deps.Parsers,
-		fieldMapRepo:    deps.FieldMapRepo,
-		sourceRepo:      deps.SourceRepo,
-		matchTrigger:    deps.MatchTrigger,
-		contextProvider: deps.ContextProvider,
+		jobRepo:           deps.JobRepo,
+		transactionRepo:   deps.TransactionRepo,
+		dedupe:            deps.Dedupe,
+		dedupeTTL:         deps.DedupeTTL,
+		dedupeTTLResolver: deps.DedupeTTLResolver,
+		dedupeTTLGetter:   deps.DedupeTTLGetter,
+		publisher:         deps.Publisher,
+		outboxRepo:        deps.OutboxRepo,
+		jobTxRunner:       jobTx,
+		jobRepoTx:         jobRepoTx,
+		txCleanupRepoTx:   txCleanupRepoTx,
+		outboxRepoTx:      outboxRepoTx,
+		parsers:           deps.Parsers,
+		fieldMapRepo:      deps.FieldMapRepo,
+		sourceRepo:        deps.SourceRepo,
+		matchTrigger:      deps.MatchTrigger,
+		contextProvider:   deps.ContextProvider,
 	}, nil
 }
 
@@ -243,13 +254,20 @@ type ingestionState struct {
 }
 
 // StartIngestionInput contains the data required to start an ingestion.
+//
+// ExtractionID is the optional originating Fetcher extraction id (T-005 P1 +
+// Polish Fix 4). When non-empty, the ingestion job's metadata is stamped with
+// this id atomically as part of the initial INSERT — closing the orphan-job
+// window where a follow-up Update could fail and leave a stamp-less job.
+// Empty string is the upload path (no bridge involved).
 type StartIngestionInput struct {
-	ContextID uuid.UUID
-	SourceID  uuid.UUID
-	FileName  string
-	FileSize  int64
-	Format    string
-	Reader    io.Reader
+	ContextID    uuid.UUID
+	SourceID     uuid.UUID
+	FileName     string
+	FileSize     int64
+	Format       string
+	Reader       io.Reader
+	ExtractionID string
 }
 
 // StartIngestion begins the ingestion process for a file.
@@ -368,6 +386,7 @@ func (uc *UseCase) prepareIngestion(
 		input.SourceID,
 		input.FileName,
 		input.FileSize,
+		input.ExtractionID,
 	)
 	if err != nil {
 		return nil, err
@@ -421,11 +440,21 @@ func (uc *UseCase) loadFieldMap(
 }
 
 // createAndStartJob creates a new ingestion job and starts it.
+//
+// extractionID, when non-empty, is stamped onto the job's metadata BEFORE the
+// Create round-trip so the INSERT carries the extraction-id link atomically
+// (Polish Fix 4). Stamping atomically (not via a follow-up Update) closes the
+// orphan-job window where a transient Update failure on Tick 1 would cause
+// Tick 2's FindLatestByExtractionID to miss and create a duplicate job.
+//
+// Empty extractionID is the upload path — the metadata is left clean and the
+// JSONB index's partial WHERE predicate excludes the row.
 func (uc *UseCase) createAndStartJob(
 	ctx context.Context,
 	contextID, sourceID uuid.UUID,
 	fileName string,
 	fileSize int64,
+	extractionID string,
 ) (*entities.IngestionJob, error) {
 	job, err := entities.NewIngestionJob(ctx, contextID, sourceID, fileName, fileSize)
 	if err != nil {
@@ -434,6 +463,11 @@ func (uc *UseCase) createAndStartJob(
 
 	if err := job.Start(ctx); err != nil {
 		return nil, fmt.Errorf("failed to start job: %w", err)
+	}
+
+	// Polish Fix 4: stamp extraction id atomically with the INSERT.
+	if extractionID != "" {
+		stampExtractionIDOnJob(job, extractionID)
 	}
 
 	createdJob, err := uc.jobRepo.Create(ctx, job)
@@ -456,7 +490,7 @@ func (uc *UseCase) cleanupOnFailure(ctx context.Context, state *ingestionState) 
 
 	if clearErr := uc.dedupe.ClearBatch(ctx, state.job.ContextID, state.markedHashes); clearErr != nil {
 		logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
-		logger.With(libLog.Any("error", clearErr.Error())).Log(ctx, libLog.LevelWarn, "failed to clear dedup keys on failure")
+		logger.With(libLog.Err(clearErr)).Log(ctx, libLog.LevelWarn, "failed to clear dedup keys on failure")
 	}
 }
 
@@ -470,7 +504,7 @@ func (uc *UseCase) clearDedupKeys(ctx context.Context, state *ingestionState) {
 
 	if clearErr := uc.dedupe.ClearBatch(ctx, state.job.ContextID, state.markedHashes); clearErr != nil {
 		logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
-		logger.With(libLog.Any("error", clearErr.Error())).Log(ctx, libLog.LevelWarn, "failed to clear dedup keys after successful ingestion")
+		logger.With(libLog.Err(clearErr)).Log(ctx, libLog.LevelWarn, "failed to clear dedup keys after successful ingestion")
 	}
 }
 
@@ -671,11 +705,14 @@ func (uc *UseCase) filterAndInsertChunk(
 	}
 
 	keys := make([]ingestionRepositories.ExternalIDKey, 0, len(transactions))
+	hashes := make([]string, 0, len(transactions))
+
 	for _, tx := range transactions {
 		keys = append(keys, ingestionRepositories.ExternalIDKey{
 			SourceID:   tx.SourceID,
 			ExternalID: tx.ExternalID,
 		})
+		hashes = append(hashes, uc.dedupe.CalculateHash(tx.SourceID, tx.ExternalID))
 	}
 
 	existsMap, err := uc.transactionRepo.ExistsBulkBySourceAndExternalID(ctx, keys)
@@ -683,17 +720,19 @@ func (uc *UseCase) filterAndInsertChunk(
 		return 0, nil, fmt.Errorf("failed to check existing transactions: %w", err)
 	}
 
+	markedByHash, err := uc.dedupe.MarkSeenBulk(ctx, job.ContextID, hashes, uc.currentDedupeTTL(ctx))
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed to mark transactions seen: %w", err)
+	}
+
 	filtered := make([]*shared.Transaction, 0, len(transactions))
 	markedHashes := make([]string, 0, len(transactions))
 
-	for _, tx := range transactions {
-		hash := uc.dedupe.CalculateHash(tx.SourceID, tx.ExternalID)
-		if err := uc.dedupe.MarkSeenWithRetry(ctx, job.ContextID, hash, uc.currentDedupeTTL(), defaultDedupeRetries); err != nil {
-			if errors.Is(err, ports.ErrDuplicateTransaction) {
-				continue
-			}
-
-			return 0, markedHashes, err
+	for i, tx := range transactions {
+		hash := hashes[i]
+		if !markedByHash[hash] {
+			// Already present in Redis — treat as duplicate.
+			continue
 		}
 
 		markedHashes = append(markedHashes, hash)
@@ -809,7 +848,7 @@ func (uc *UseCase) failJob(
 	// Clean up dedup keys to allow retries
 	if job != nil && len(markedHashes) > 0 {
 		if clearErr := uc.dedupe.ClearBatch(persistCtx, job.ContextID, markedHashes); clearErr != nil {
-			logger.With(libLog.Any("error", clearErr.Error())).Log(persistCtx, libLog.LevelWarn, "failed to clear dedup keys on job failure")
+			logger.With(libLog.Err(clearErr)).Log(persistCtx, libLog.LevelWarn, "failed to clear dedup keys on job failure")
 		}
 	}
 
@@ -886,7 +925,7 @@ func (uc *UseCase) cleanupPartialTransactionsBestEffort(ctx context.Context, job
 			logger.With(
 				libLog.String("job_id", jobID.String()),
 				libLog.Any("header_id", headerID),
-				libLog.Any("error", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelWarn, "failed to execute best-effort partial transaction cleanup")
 		}
 	}
@@ -896,7 +935,7 @@ func (uc *UseCase) cleanupPartialTransactionsBestEffort(ctx context.Context, job
 // for the context and triggers an asynchronous match run if so.
 // This is fire-and-forget; errors are logged but do not affect ingestion.
 func (uc *UseCase) triggerAutoMatchIfEnabled(ctx context.Context, contextID uuid.UUID) {
-	if uc.contextProvider == nil || uc.matchTrigger == nil {
+	if sharedPorts.IsNilValue(uc.contextProvider) || sharedPorts.IsNilValue(uc.matchTrigger) {
 		return
 	}
 
@@ -910,7 +949,7 @@ func (uc *UseCase) triggerAutoMatchIfEnabled(ctx context.Context, contextID uuid
 		logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
 		logger.With(
 			libLog.String("context_id", contextID.String()),
-			libLog.Any("error", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelWarn, "failed to check auto-match status")
 
 		return
@@ -927,7 +966,7 @@ func (uc *UseCase) triggerAutoMatchIfEnabled(ctx context.Context, contextID uuid
 		logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
 		logger.With(
 			libLog.String("tenant_id", tenantIDStr),
-			libLog.Any("error", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelWarn, "auto-match skipped: invalid tenant ID")
 
 		return
@@ -960,9 +999,15 @@ func convertParseErrors(errs []ports.ParseError) []entities.RowError {
 	return result
 }
 
-func (uc *UseCase) currentDedupeTTL() time.Duration {
+func (uc *UseCase) currentDedupeTTL(ctx context.Context) time.Duration {
 	if uc == nil {
 		return 0
+	}
+
+	if uc.dedupeTTLResolver != nil {
+		if ttl := uc.dedupeTTLResolver(ctx); ttl > 0 {
+			return ttl
+		}
 	}
 
 	if uc.dedupeTTLGetter != nil {

@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
@@ -55,7 +55,7 @@ func (repo *Repository) Create(ctx stdctx.Context, rule *fee.FeeRule) error {
 		wrappedErr := fmt.Errorf("create fee rule: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create fee rule", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to create fee rule")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to create fee rule")
 
 		return wrappedErr
 	}
@@ -94,7 +94,7 @@ func (repo *Repository) CreateWithTx(ctx stdctx.Context, tx *sql.Tx, rule *fee.F
 		wrappedErr := fmt.Errorf("create fee rule with tx: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create fee rule", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to create fee rule")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to create fee rule")
 
 		return wrappedErr
 	}
@@ -168,7 +168,7 @@ func (repo *Repository) FindByID(
 
 		libOpentelemetry.HandleSpanError(span, "failed to find fee rule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find fee rule by id")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to find fee rule by id")
 
 		return nil, fmt.Errorf("find fee rule by id: %w", err)
 	}
@@ -226,7 +226,7 @@ func (repo *Repository) FindByContextID(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list fee rules", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list fee rules by context")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list fee rules by context")
 
 		return nil, fmt.Errorf("find fee rules by context: %w", err)
 	}
@@ -292,7 +292,7 @@ func (repo *Repository) FindByContextIDWithTx(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list fee rules with tx", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list fee rules by context with tx")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list fee rules by context with tx")
 
 		return nil, fmt.Errorf("find fee rules by context with tx: %w", err)
 	}
@@ -330,7 +330,7 @@ func (repo *Repository) Update(ctx stdctx.Context, rule *fee.FeeRule) error {
 		wrappedErr := fmt.Errorf("update fee rule: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to update fee rule", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to update fee rule")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to update fee rule")
 
 		return wrappedErr
 	}
@@ -370,7 +370,7 @@ func (repo *Repository) UpdateWithTx(ctx stdctx.Context, tx *sql.Tx, rule *fee.F
 			wrappedErr := fmt.Errorf("update fee rule with tx: %w", err)
 			libOpentelemetry.HandleSpanError(span, "failed to update fee rule", wrappedErr)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to update fee rule")
+			logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to update fee rule")
 
 			return wrappedErr
 		}
@@ -444,7 +444,7 @@ func (repo *Repository) Delete(ctx stdctx.Context, contextID, id uuid.UUID) erro
 		wrappedErr := fmt.Errorf("delete fee rule: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to delete fee rule", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to delete fee rule")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to delete fee rule")
 
 		return wrappedErr
 	}
@@ -475,7 +475,7 @@ func (repo *Repository) DeleteWithTx(ctx stdctx.Context, tx *sql.Tx, contextID, 
 			wrappedErr := fmt.Errorf("delete fee rule with tx: %w", err)
 			libOpentelemetry.HandleSpanError(span, "failed to delete fee rule", wrappedErr)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to delete fee rule")
+			logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to delete fee rule")
 
 			return wrappedErr
 		}

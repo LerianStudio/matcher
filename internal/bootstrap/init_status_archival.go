@@ -6,6 +6,7 @@ package bootstrap
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"fmt"
 	"sync"
@@ -13,13 +14,12 @@ import (
 
 	"go.opentelemetry.io/otel"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	governanceHTTP "github.com/LerianStudio/matcher/internal/governance/adapters/http"
 	archiveMetadataRepo "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/archive_metadata"
 	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
 	reportingStorage "github.com/LerianStudio/matcher/internal/reporting/adapters/storage"
-	reportingPorts "github.com/LerianStudio/matcher/internal/reporting/ports"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -158,39 +158,55 @@ func formatWorkerStatus(enabled bool, interval time.Duration) string {
 	return statusDisabled
 }
 
-func newArchivalPresignExpiryGetter(cfg *Config, configGetter func() *Config) func() time.Duration {
-	if configGetter == nil {
+func newArchivalPresignExpiryResolver(
+	cfg *Config,
+	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
+) func(context.Context) time.Duration {
+	if configGetter == nil && settingsResolver == nil {
 		return nil
 	}
 
-	return func() time.Duration {
-		runtimeCfg := configGetter()
-		if runtimeCfg == nil {
-			return cfg.ArchivalPresignExpiry()
+	return func(ctx context.Context) time.Duration {
+		runtimeCfg := runtimeConfigOrFallback(cfg, configGetter)
+		fallback := configuredArchivalPresignExpiry(ctx, cfg)
+
+		if runtimeCfg != nil {
+			fallback = configuredArchivalPresignExpiry(ctx, runtimeCfg)
 		}
 
-		return runtimeCfg.ArchivalPresignExpiry()
+		if settingsResolver == nil {
+			return fallback
+		}
+
+		return settingsResolver.archivalPresignExpiry(fallback)
 	}
+}
+
+func configuredArchivalPresignExpiry(ctx context.Context, cfg *Config) time.Duration {
+	return normalizedArchivalPresignExpiry(ctx, cfg)
 }
 
 func registerArchiveRoutesIfAvailable(
 	routes *Routes,
 	cfg *Config,
 	archiveRepo *archiveMetadataRepo.Repository,
-	archivalStorage reportingPorts.ObjectStorageClient,
+	archivalStorage sharedPorts.ObjectStorageClient,
 	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
+	production bool,
 ) error {
 	if archivalStorage == nil {
 		return nil
 	}
 
-	archiveHandler, err := governanceHTTP.NewArchiveHandler(archiveRepo, archivalStorage, cfg.ArchivalPresignExpiry())
+	archiveHandler, err := governanceHTTP.NewArchiveHandler(archiveRepo, archivalStorage, configuredArchivalPresignExpiry(context.Background(), cfg), production)
 	if err != nil {
 		return fmt.Errorf("create archive handler: %w", err)
 	}
 
-	if expiryGetter := newArchivalPresignExpiryGetter(cfg, configGetter); expiryGetter != nil {
-		archiveHandler.SetRuntimePresignExpiryGetter(expiryGetter)
+	if expiryResolver := newArchivalPresignExpiryResolver(cfg, configGetter, settingsResolver); expiryResolver != nil {
+		archiveHandler.SetRuntimePresignExpiryResolver(expiryResolver)
 	}
 
 	if err := governanceHTTP.RegisterArchiveRoutes(routes.Protected, archiveHandler); err != nil {
@@ -223,9 +239,11 @@ func initArchivalComponents(
 	routes *Routes,
 	cfg *Config,
 	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
 	provider sharedPorts.InfrastructureProvider,
 	logger libLog.Logger,
 	cleanups *[]func(),
+	production bool,
 ) (*governanceWorker.ArchivalWorker, error) {
 	archiveRepo := archiveMetadataRepo.NewRepository(provider)
 
@@ -239,7 +257,7 @@ func initArchivalComponents(
 		archivalStorage = newRuntimeArchivalStorageClient(cfg, configGetter, archivalStorage)
 	}
 
-	if err := registerArchiveRoutesIfAvailable(routes, cfg, archiveRepo, archivalStorage, configGetter); err != nil {
+	if err := registerArchiveRoutesIfAvailable(routes, cfg, archiveRepo, archivalStorage, configGetter, settingsResolver, production); err != nil {
 		return nil, err
 	}
 
@@ -301,7 +319,7 @@ func createArchivalStorageAvailable(cfg *Config) bool {
 }
 
 // createArchivalStorage creates an S3-compatible object storage client for the archival bucket.
-func createArchivalStorage(ctx context.Context, cfg *Config) (reportingPorts.ObjectStorageClient, error) {
+func createArchivalStorage(ctx context.Context, cfg *Config) (sharedPorts.ObjectStorageClient, error) {
 	if cfg.Archival.StorageBucket == "" || cfg.ObjectStorage.Endpoint == "" {
 		return nil, nil
 	}
@@ -313,6 +331,7 @@ func createArchivalStorage(ctx context.Context, cfg *Config) (reportingPorts.Obj
 		AccessKeyID:     cfg.ObjectStorage.AccessKeyID,
 		SecretAccessKey: cfg.ObjectStorage.SecretAccessKey,
 		UsePathStyle:    cfg.ObjectStorage.UsePathStyle,
+		AllowInsecure:   allowInsecureObjectStorageEndpoint(cfg),
 	}
 
 	client, err := newS3ClientFn(detachedContext(ctx), s3Cfg)
@@ -326,11 +345,11 @@ func createArchivalStorage(ctx context.Context, cfg *Config) (reportingPorts.Obj
 func newRuntimeArchivalStorageClient(
 	initialCfg *Config,
 	configGetter func() *Config,
-	fallback reportingPorts.ObjectStorageClient,
-) reportingPorts.ObjectStorageClient {
+	fallback sharedPorts.ObjectStorageClient,
+) sharedPorts.ObjectStorageClient {
 	var (
 		mu           sync.Mutex
-		activeClient reportingPorts.ObjectStorageClient
+		activeClient sharedPorts.ObjectStorageClient
 		activeKey    string
 	)
 
@@ -357,7 +376,7 @@ func newRuntimeArchivalStorageClient(
 
 		client, err := createArchivalStorage(context.TODO(), cfg)
 		if err != nil || client == nil {
-			return nil
+			return activeClient
 		}
 
 		activeClient = client
@@ -372,5 +391,7 @@ func archivalStorageCacheKey(cfg *Config) string {
 		return ""
 	}
 
-	return fmt.Sprintf("%s|%s|%s|%s|%s|%t", cfg.ObjectStorage.Endpoint, cfg.ObjectStorage.Region, cfg.Archival.StorageBucket, cfg.ObjectStorage.AccessKeyID, cfg.ObjectStorage.SecretAccessKey, cfg.ObjectStorage.UsePathStyle)
+	secretHash := sha256.Sum256([]byte(cfg.ObjectStorage.SecretAccessKey))
+
+	return fmt.Sprintf("%s|%s|%s|%s|%x|%t|%t", cfg.ObjectStorage.Endpoint, cfg.ObjectStorage.Region, cfg.Archival.StorageBucket, cfg.ObjectStorage.AccessKeyID, secretHash[:8], cfg.ObjectStorage.UsePathStyle, allowInsecureObjectStorageEndpoint(cfg))
 }

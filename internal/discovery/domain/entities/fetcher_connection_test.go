@@ -77,46 +77,6 @@ func TestNewFetcherConnection_AllFieldsEmpty(t *testing.T) {
 	assert.Nil(t, conn)
 }
 
-func TestFetcherConnection_ApplyFetcherStatus(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-
-	conn, err := entities.NewFetcherConnection(ctx, "fetcher-123", "primary-db", "POSTGRESQL")
-	require.NoError(t, err)
-
-	originalUpdatedAt := conn.UpdatedAt
-	originalLastSeenAt := conn.LastSeenAt
-
-	recognized := conn.ApplyFetcherStatus("UNREACHABLE")
-
-	assert.True(t, recognized)
-	assert.Equal(t, vo.ConnectionStatusUnreachable, conn.Status)
-	assert.False(t, conn.LastSeenAt.Before(originalLastSeenAt))
-	assert.True(t, conn.UpdatedAt.After(originalUpdatedAt) || conn.UpdatedAt.Equal(originalUpdatedAt))
-}
-
-func TestFetcherConnection_ApplyFetcherStatus_InvalidStatusFallsBackToUnknown(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-
-	conn, err := entities.NewFetcherConnection(ctx, "fetcher-123", "primary-db", "POSTGRESQL")
-	require.NoError(t, err)
-
-	recognized := conn.ApplyFetcherStatus("BROKEN")
-
-	assert.False(t, recognized)
-	assert.Equal(t, vo.ConnectionStatusUnknown, conn.Status)
-}
-
-func TestFetcherConnection_ApplyFetcherStatus_NilReceiverReturnsFalse(t *testing.T) {
-	t.Parallel()
-
-	var conn *entities.FetcherConnection
-	assert.False(t, conn.ApplyFetcherStatus("AVAILABLE"))
-}
-
 func TestFetcherConnection_MarkUnreachable(t *testing.T) {
 	t.Parallel()
 
@@ -125,7 +85,7 @@ func TestFetcherConnection_MarkUnreachable(t *testing.T) {
 	conn, err := entities.NewFetcherConnection(ctx, "fetcher-123", "primary-db", "POSTGRESQL")
 	require.NoError(t, err)
 
-	conn.ApplyFetcherStatus("AVAILABLE")
+	conn.MarkAvailable()
 	conn.MarkUnreachable()
 
 	assert.Equal(t, vo.ConnectionStatusUnreachable, conn.Status)
@@ -164,6 +124,32 @@ func TestFetcherConnection_MarkSchemaDiscovered_NilReceiver(t *testing.T) {
 	})
 }
 
+func TestFetcherConnection_MarkAvailable(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	conn, err := entities.NewFetcherConnection(ctx, "fetcher-123", "primary-db", "POSTGRESQL")
+	require.NoError(t, err)
+
+	assert.Equal(t, vo.ConnectionStatusUnknown, conn.Status)
+
+	conn.MarkAvailable()
+
+	assert.Equal(t, vo.ConnectionStatusAvailable, conn.Status)
+	assert.False(t, conn.LastSeenAt.IsZero())
+	assert.False(t, conn.UpdatedAt.IsZero())
+}
+
+func TestFetcherConnection_MarkAvailable_NilReceiver(t *testing.T) {
+	t.Parallel()
+
+	var conn *entities.FetcherConnection
+	assert.NotPanics(t, func() {
+		conn.MarkAvailable()
+	})
+}
+
 func TestFetcherConnection_UpdateDetails(t *testing.T) {
 	t.Parallel()
 
@@ -172,12 +158,14 @@ func TestFetcherConnection_UpdateDetails(t *testing.T) {
 	conn, err := entities.NewFetcherConnection(ctx, "fetcher-123", "primary-db", "POSTGRESQL")
 	require.NoError(t, err)
 
-	require.NoError(t, conn.UpdateDetails("db.example.com", 5432, "transactions", "PostgreSQL 17.1"))
+	require.NoError(t, conn.UpdateDetails("db.example.com", 5432, "transactions", "PostgreSQL 17.1", "public", "admin"))
 
 	assert.Equal(t, "db.example.com", conn.Host)
 	assert.Equal(t, 5432, conn.Port)
 	assert.Equal(t, "transactions", conn.DatabaseName)
 	assert.Equal(t, "PostgreSQL 17.1", conn.ProductName)
+	assert.Equal(t, "public", conn.Schema)
+	assert.Equal(t, "admin", conn.UserName)
 }
 
 func TestFetcherConnection_UpdateDetails_NilReceiver(t *testing.T) {
@@ -187,7 +175,7 @@ func TestFetcherConnection_UpdateDetails_NilReceiver(t *testing.T) {
 
 	var err error
 	assert.NotPanics(t, func() {
-		err = conn.UpdateDetails("db.example.com", 5432, "transactions", "PostgreSQL 17.1")
+		err = conn.UpdateDetails("db.example.com", 5432, "transactions", "PostgreSQL 17.1", "public", "admin")
 	})
 	assert.NoError(t, err)
 }
@@ -200,7 +188,7 @@ func TestFetcherConnection_UpdateDetails_InvalidPort(t *testing.T) {
 	conn, err := entities.NewFetcherConnection(ctx, "fetcher-123", "primary-db", "POSTGRESQL")
 	require.NoError(t, err)
 
-	err = conn.UpdateDetails("db.example.com", 70000, "transactions", "PostgreSQL 17.1")
+	err = conn.UpdateDetails("db.example.com", 70000, "transactions", "PostgreSQL 17.1", "public", "admin")
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, entities.ErrInvalidConnectionPort)
@@ -216,7 +204,7 @@ func TestFetcherConnection_UpdateDetails_NegativePort(t *testing.T) {
 	conn, err := entities.NewFetcherConnection(ctx, "fetcher-123", "primary-db", "POSTGRESQL")
 	require.NoError(t, err)
 
-	err = conn.UpdateDetails("db.example.com", -1, "transactions", "PostgreSQL 17.1")
+	err = conn.UpdateDetails("db.example.com", -1, "transactions", "PostgreSQL 17.1", "public", "admin")
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, entities.ErrInvalidConnectionPort)
@@ -241,7 +229,7 @@ func TestFetcherConnection_UpdateDetails_PortBoundariesAccepted(t *testing.T) {
 			conn, err := entities.NewFetcherConnection(context.Background(), "fetcher-123", "primary-db", "POSTGRESQL")
 			require.NoError(t, err)
 
-			err = conn.UpdateDetails("db.example.com", tt.port, "transactions", "PostgreSQL 17.1")
+			err = conn.UpdateDetails("db.example.com", tt.port, "transactions", "PostgreSQL 17.1", "public", "admin")
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.port, conn.Port)
@@ -260,13 +248,13 @@ func TestFetcherConnection_StatusTransitions(t *testing.T) {
 
 	assert.Equal(t, vo.ConnectionStatusUnknown, conn.Status)
 
-	conn.ApplyFetcherStatus("AVAILABLE")
+	conn.MarkAvailable()
 	assert.Equal(t, vo.ConnectionStatusAvailable, conn.Status)
 
 	conn.MarkUnreachable()
 	assert.Equal(t, vo.ConnectionStatusUnreachable, conn.Status)
 
-	conn.ApplyFetcherStatus("AVAILABLE")
+	conn.MarkAvailable()
 	assert.Equal(t, vo.ConnectionStatusAvailable, conn.Status)
 }
 
@@ -280,7 +268,7 @@ func TestFetcherConnection_UpdateDetailsUpdatesTimestamp(t *testing.T) {
 
 	originalUpdatedAt := conn.UpdatedAt
 
-	require.NoError(t, conn.UpdateDetails("host", 3306, "mydb", "MySQL 8.0"))
+	require.NoError(t, conn.UpdateDetails("host", 3306, "mydb", "MySQL 8.0", "myschema", "root"))
 
 	assert.True(t, conn.UpdatedAt.After(originalUpdatedAt) || conn.UpdatedAt.Equal(originalUpdatedAt))
 }

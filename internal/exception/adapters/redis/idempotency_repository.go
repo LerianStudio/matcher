@@ -11,12 +11,11 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
-	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -51,13 +50,13 @@ var (
 
 // IdempotencyRepository manages callback idempotency using Redis.
 type IdempotencyRepository struct {
-	provider                ports.InfrastructureProvider
-	failedRetryWindow       time.Duration
-	successTTL              time.Duration
-	hmacSecret              string
-	failedRetryWindowGetter func() time.Duration
-	successTTLGetter        func() time.Duration
-	hmacSecretGetter        func() string
+	provider                  ports.InfrastructureProvider
+	failedRetryWindow         time.Duration
+	successTTL                time.Duration
+	hmacSecret                string
+	failedRetryWindowResolver func(context.Context) time.Duration
+	successTTLResolver        func(context.Context) time.Duration
+	hmacSecretResolver        func(context.Context) string
 }
 
 // NewIdempotencyRepository creates a new callback idempotency repository
@@ -74,29 +73,28 @@ func NewIdempotencyRepository(provider ports.InfrastructureProvider) (*Idempoten
 	}, nil
 }
 
-// SetRuntimeConfigGetters injects live config-backed sources for retry window,
-// success TTL, and HMAC secret.
-func (repo *IdempotencyRepository) SetRuntimeConfigGetters(
-	failedRetryWindowGetter func() time.Duration,
-	successTTLGetter func() time.Duration,
-	hmacSecretGetter func() string,
+// SetRuntimeConfigResolvers injects context-aware sources for tenant/global runtime settings.
+func (repo *IdempotencyRepository) SetRuntimeConfigResolvers(
+	failedRetryWindowResolver func(context.Context) time.Duration,
+	successTTLResolver func(context.Context) time.Duration,
+	hmacSecretResolver func(context.Context) string,
 ) {
 	if repo == nil {
 		return
 	}
 
-	repo.failedRetryWindowGetter = failedRetryWindowGetter
-	repo.successTTLGetter = successTTLGetter
-	repo.hmacSecretGetter = hmacSecretGetter
+	repo.failedRetryWindowResolver = failedRetryWindowResolver
+	repo.successTTLResolver = successTTLResolver
+	repo.hmacSecretResolver = hmacSecretResolver
 }
 
-func (repo *IdempotencyRepository) currentFailedRetryWindow() time.Duration {
+func (repo *IdempotencyRepository) currentFailedRetryWindow(ctx context.Context) time.Duration {
 	if repo == nil {
 		return DefaultFailedRetryWindow
 	}
 
-	if repo.failedRetryWindowGetter != nil {
-		if window := repo.failedRetryWindowGetter(); window > 0 {
+	if repo.failedRetryWindowResolver != nil {
+		if window := repo.failedRetryWindowResolver(ctx); window > 0 {
 			return window
 		}
 	}
@@ -108,13 +106,13 @@ func (repo *IdempotencyRepository) currentFailedRetryWindow() time.Duration {
 	return DefaultFailedRetryWindow
 }
 
-func (repo *IdempotencyRepository) currentSuccessTTL() time.Duration {
+func (repo *IdempotencyRepository) currentSuccessTTL(ctx context.Context) time.Duration {
 	if repo == nil {
 		return DefaultSuccessTTL
 	}
 
-	if repo.successTTLGetter != nil {
-		if ttl := repo.successTTLGetter(); ttl > 0 {
+	if repo.successTTLResolver != nil {
+		if ttl := repo.successTTLResolver(ctx); ttl > 0 {
 			return ttl
 		}
 	}
@@ -126,13 +124,13 @@ func (repo *IdempotencyRepository) currentSuccessTTL() time.Duration {
 	return DefaultSuccessTTL
 }
 
-func (repo *IdempotencyRepository) currentHMACSecret() string {
+func (repo *IdempotencyRepository) currentHMACSecret(ctx context.Context) string {
 	if repo == nil {
 		return ""
 	}
 
-	if repo.hmacSecretGetter != nil {
-		return repo.hmacSecretGetter()
+	if repo.hmacSecretResolver != nil {
+		return repo.hmacSecretResolver(ctx)
 	}
 
 	return repo.hmacSecret
@@ -172,7 +170,7 @@ func NewIdempotencyRepositoryWithConfig(
 // optionally HMAC-signed if a secret is configured.
 func (repo *IdempotencyRepository) storageKey(ctx context.Context, key value_objects.IdempotencyKey) string {
 	tenantID := strings.TrimSpace(auth.GetTenantID(ctx))
-	signedKey := key.SignKey(repo.currentHMACSecret())
+	signedKey := key.SignKey(repo.currentHMACSecret(ctx))
 
 	if tenantID == "" {
 		tenantID = auth.DefaultTenantID
@@ -220,7 +218,7 @@ func (repo *IdempotencyRepository) TryAcquire(
 	// the key auto-expires after this shorter window instead of blocking retries
 	// for the full successTTL (typically 7 days). MarkComplete extends the TTL
 	// to successTTL when it overwrites the pending marker with the cached response.
-	ok, err := rdb.SetNX(ctx, redisKey, statusPending, repo.currentFailedRetryWindow()).Result()
+	ok, err := rdb.SetNX(ctx, redisKey, statusPending, repo.currentFailedRetryWindow(ctx)).Result()
 	if err != nil {
 		wrappedErr := fmt.Errorf("failed to acquire idempotency lock: %w", err)
 		libOpentelemetry.HandleSpanError(span, "redis setnx failed", wrappedErr)
@@ -268,7 +266,7 @@ func (repo *IdempotencyRepository) TryReacquireFromFailed(
 
 	redisKey := repo.storageKey(ctx, key)
 
-	retryTTLSeconds := int64(repo.currentFailedRetryWindow() / time.Second)
+	retryTTLSeconds := int64(repo.currentFailedRetryWindow(ctx) / time.Second)
 	if retryTTLSeconds <= 0 {
 		retryTTLSeconds = int64(DefaultFailedRetryWindow / time.Second)
 	}
@@ -360,7 +358,7 @@ func (repo *IdempotencyRepository) MarkComplete(
 
 	redisKey := repo.storageKey(ctx, key)
 
-	if err := rdb.Set(ctx, redisKey, data, repo.currentSuccessTTL()).Err(); err != nil {
+	if err := rdb.Set(ctx, redisKey, data, repo.currentSuccessTTL(ctx)).Err(); err != nil {
 		wrappedErr := fmt.Errorf("failed to mark idempotency complete: %w", err)
 		libOpentelemetry.HandleSpanError(span, "redis set failed", wrappedErr)
 
@@ -416,7 +414,7 @@ func (repo *IdempotencyRepository) MarkFailed(
 
 	redisKey := repo.storageKey(ctx, key)
 
-	if err := rdb.Set(ctx, redisKey, data, repo.currentFailedRetryWindow()).Err(); err != nil {
+	if err := rdb.Set(ctx, redisKey, data, repo.currentFailedRetryWindow(ctx)).Err(); err != nil {
 		wrappedErr := fmt.Errorf("failed to mark idempotency as failed: %w", err)
 		libOpentelemetry.HandleSpanError(span, "redis set failed status failed", wrappedErr)
 
@@ -503,4 +501,4 @@ func (repo *IdempotencyRepository) GetCachedResult(
 	}, nil
 }
 
-var _ repositories.CallbackIdempotencyRepository = (*IdempotencyRepository)(nil)
+var _ ports.IdempotencyRepository = (*IdempotencyRepository)(nil)

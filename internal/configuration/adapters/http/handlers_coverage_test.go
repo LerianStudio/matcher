@@ -16,13 +16,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/shopspring/decimal"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
@@ -65,13 +65,13 @@ func TestHandleContextVerificationError_AllBranches(t *testing.T) {
 			name:           "ErrMissingContextID returns 400",
 			err:            libHTTP.ErrMissingContextID,
 			expectedStatus: fiber.StatusBadRequest,
-			expectedCode:   "invalid_request",
+			expectedCode:   "invalid_context_id",
 		},
 		{
 			name:           "ErrInvalidContextID returns 400",
 			err:            libHTTP.ErrInvalidContextID,
 			expectedStatus: fiber.StatusBadRequest,
-			expectedCode:   "invalid_request",
+			expectedCode:   "invalid_context_id",
 		},
 		{
 			name:           "ErrTenantIDNotFound returns 401",
@@ -89,7 +89,7 @@ func TestHandleContextVerificationError_AllBranches(t *testing.T) {
 			name:           "ErrContextNotFound returns 404",
 			err:            libHTTP.ErrContextNotFound,
 			expectedStatus: fiber.StatusNotFound,
-			expectedCode:   "not_found",
+			expectedCode:   "configuration_context_not_found",
 		},
 		{
 			name:           "libHTTP.ErrContextNotActive returns 403",
@@ -127,7 +127,7 @@ func TestHandleContextVerificationError_AllBranches(t *testing.T) {
 
 			app := fiber.New()
 			app.Get("/test", func(c *fiber.Ctx) error {
-				return handleContextVerificationError(c.UserContext(), c, span, &libLog.NopLogger{}, tt.err)
+				return (&Handler{}).handleContextVerificationError(c.UserContext(), c, span, &libLog.NopLogger{}, tt.err)
 			})
 
 			resp := performRequest(t, app, http.MethodGet, "/test", nil)
@@ -138,7 +138,8 @@ func TestHandleContextVerificationError_AllBranches(t *testing.T) {
 			if tt.expectedCode != "" {
 				var payload map[string]any
 				require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
-				assert.Equal(t, tt.expectedCode, payload["title"])
+				assert.Equal(t, expectedConfigurationCode(tt.expectedCode), payload["code"])
+				assert.Equal(t, http.StatusText(tt.expectedStatus), payload["title"])
 			}
 		})
 	}
@@ -159,13 +160,19 @@ func TestHandleOwnershipVerificationError_AllBranches(t *testing.T) {
 			name:           "ErrContextNotFound returns 404",
 			err:            libHTTP.ErrContextNotFound,
 			expectedStatus: fiber.StatusNotFound,
-			expectedCode:   "not_found",
+			expectedCode:   "configuration_field_map_not_found",
 		},
 		{
 			name:           "libHTTP.ErrContextNotOwned returns 404",
 			err:            libHTTP.ErrContextNotOwned,
 			expectedStatus: fiber.StatusNotFound,
-			expectedCode:   "not_found",
+			expectedCode:   "configuration_field_map_not_found",
+		},
+		{
+			name:           "libHTTP.ErrContextAccessDenied returns 403",
+			err:            libHTTP.ErrContextAccessDenied,
+			expectedStatus: fiber.StatusForbidden,
+			expectedCode:   "forbidden",
 		},
 		{
 			name:           "generic error returns 500",
@@ -185,7 +192,7 @@ func TestHandleOwnershipVerificationError_AllBranches(t *testing.T) {
 
 			app := fiber.New()
 			app.Get("/test", func(c *fiber.Ctx) error {
-				return handleOwnershipVerificationError(c.UserContext(), c, span, &libLog.NopLogger{}, tt.err)
+				return (&Handler{}).handleOwnershipVerificationError(c.UserContext(), c, span, &libLog.NopLogger{}, tt.err, "configuration_field_map_not_found", "field map not found")
 			})
 
 			resp := performRequest(t, app, http.MethodGet, "/test", nil)
@@ -196,7 +203,8 @@ func TestHandleOwnershipVerificationError_AllBranches(t *testing.T) {
 			if tt.expectedCode != "" {
 				var payload map[string]any
 				require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
-				assert.Equal(t, tt.expectedCode, payload["title"])
+				assert.Equal(t, expectedConfigurationCode(tt.expectedCode), payload["code"])
+				assert.Equal(t, http.StatusText(tt.expectedStatus), payload["title"])
 			}
 		})
 	}
@@ -454,7 +462,7 @@ func TestUpdateFieldMap_NotFound(t *testing.T) {
 
 	require.Equal(t, fiber.StatusNotFound, resp.StatusCode)
 	requireSpanName(t, recorder, "handler.fieldmap.update")
-	requireNotFoundResponse(t, resp, "resource not found")
+	requireNotFoundResponse(t, resp, "field map not found")
 }
 
 func TestUpdateFieldMap_InvalidPayload(t *testing.T) {
@@ -532,7 +540,7 @@ func TestUpdateFieldMap_OwnershipDenied(t *testing.T) {
 
 	require.Equal(t, fiber.StatusNotFound, resp.StatusCode)
 	requireSpanName(t, recorder, "handler.fieldmap.update")
-	requireNotFoundResponse(t, resp, "resource not found")
+	requireResourceNotFoundResponse(t, resp, "field map not found")
 }
 
 // ─── DeleteFieldMap error path tests ──────────────────────────
@@ -554,7 +562,7 @@ func TestDeleteFieldMap_NotFound(t *testing.T) {
 
 	require.Equal(t, fiber.StatusNotFound, resp.StatusCode)
 	requireSpanName(t, recorder, "handler.fieldmap.delete")
-	requireNotFoundResponse(t, resp, "resource not found")
+	requireNotFoundResponse(t, resp, "field map not found")
 }
 
 func TestDeleteFieldMap_InvalidUUID(t *testing.T) {
@@ -617,7 +625,7 @@ func TestDeleteFieldMap_OwnershipDenied(t *testing.T) {
 
 	require.Equal(t, fiber.StatusNotFound, resp.StatusCode)
 	requireSpanName(t, recorder, "handler.fieldmap.delete")
-	requireNotFoundResponse(t, resp, "resource not found")
+	requireResourceNotFoundResponse(t, resp, "field map not found")
 }
 
 // ─── NewHandler tests ─────────────────────────────────────────
@@ -711,6 +719,7 @@ func TestIsClientSafeError_Comprehensive(t *testing.T) {
 	t.Parallel()
 
 	safeErrors := []error{
+		dto.ErrDeprecatedRateID,
 		entities.ErrNilReconciliationContext,
 		entities.ErrContextNameRequired,
 		entities.ErrContextNameTooLong,
@@ -1656,6 +1665,59 @@ func TestUpdateContext_InvalidPayload(t *testing.T) {
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	requireSpanName(t, recorder, "handler.context.update")
+}
+
+func TestCreateContext_DeprecatedRateID_ReturnsExplicitBadRequest(t *testing.T) {
+	t.Parallel()
+
+	tracer, recorder := newTestTracer(t)
+	tenantID := uuid.New()
+	ctx := newRequestContext(tracer, tenantID)
+	app := newTestApp(ctx)
+	fixture := newHandlerFixture(t)
+
+	app.Post("/v1/config/contexts", fixture.handler.CreateContext)
+
+	payload := []byte(`{"name":"Context","type":"1:1","interval":"daily","rateId":"550e8400-e29b-41d4-a716-446655440000"}`)
+	resp := performRequest(t, app, http.MethodPost, "/v1/config/contexts", payload)
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	var responsePayload map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&responsePayload))
+	require.Equal(t, expectedConfigurationCode("invalid_request"), responsePayload["code"])
+	require.Equal(t, http.StatusText(http.StatusBadRequest), responsePayload["title"])
+	assert.Contains(t, responsePayload["message"], dto.ErrDeprecatedRateID.Error())
+	requireSpanName(t, recorder, "handler.context.create")
+}
+
+func TestUpdateContext_DeprecatedRateID_ReturnsExplicitBadRequest(t *testing.T) {
+	t.Parallel()
+
+	tracer, recorder := newTestTracer(t)
+	tenantID := uuid.New()
+	ctx := newRequestContext(tracer, tenantID)
+	app := newTestApp(ctx)
+	fixture := newHandlerFixture(t)
+	contextEntity := fixture.seedContext(t, tenantID)
+
+	app.Patch("/v1/config/contexts/:contextId", fixture.handler.UpdateContext)
+
+	requestPath := replacePathParams(
+		"/v1/config/contexts/:contextId",
+		contextEntity.ID.String(),
+	)
+	payload := []byte(`{"status":"ACTIVE","rateId":"550e8400-e29b-41d4-a716-446655440000"}`)
+	resp := performRequest(t, app, http.MethodPatch, requestPath, payload)
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	var responsePayload map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&responsePayload))
+	require.Equal(t, expectedConfigurationCode("invalid_request"), responsePayload["code"])
+	require.Equal(t, http.StatusText(http.StatusBadRequest), responsePayload["title"])
+	assert.Contains(t, responsePayload["message"], dto.ErrDeprecatedRateID.Error())
 	requireSpanName(t, recorder, "handler.context.update")
 }
 

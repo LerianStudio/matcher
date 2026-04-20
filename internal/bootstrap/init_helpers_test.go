@@ -9,7 +9,7 @@ package bootstrap
 import (
 	amqp "github.com/rabbitmq/amqp091-go"
 
-	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
+	libRabbitmq "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
 
 	ingestionRabbitmq "github.com/LerianStudio/matcher/internal/ingestion/adapters/rabbitmq"
 	matchingRabbitmq "github.com/LerianStudio/matcher/internal/matching/adapters/rabbitmq"

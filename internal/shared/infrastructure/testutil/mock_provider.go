@@ -13,8 +13,8 @@ import (
 	"github.com/bxcodec/dbresolver/v2"
 	"github.com/redis/go-redis/v9"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
@@ -41,17 +41,6 @@ type MockInfrastructureProvider struct {
 	TxErr        error
 	ReplicaDB    *sql.DB
 	ReplicaDBErr error
-}
-
-// GetPostgresConnection returns the mocked postgres connection or error.
-func (provider *MockInfrastructureProvider) GetPostgresConnection(
-	_ context.Context,
-) (*ports.PostgresConnectionLease, error) {
-	if provider.PostgresErr != nil {
-		return nil, provider.PostgresErr
-	}
-
-	return ports.NewPostgresConnectionLease(provider.PostgresConn, nil), nil
 }
 
 // GetRedisConnection returns the mocked redis connection or error.
@@ -132,18 +121,18 @@ func (provider *MockInfrastructureProvider) BeginTx(ctx context.Context) (*ports
 // GetReplicaDB returns the mocked replica database or error.
 // If ReplicaDB is set, returns it.
 // If PostgresConn is set, attempts to get the replica from it.
-// Falls back to primary if no replica is configured.
-func (provider *MockInfrastructureProvider) GetReplicaDB(ctx context.Context) (*ports.ReplicaDBLease, error) {
+// Returns nil when no replica is configured.
+func (provider *MockInfrastructureProvider) GetReplicaDB(ctx context.Context) (*ports.DBLease, error) {
 	if provider.ReplicaDBErr != nil {
 		return nil, provider.ReplicaDBErr
 	}
 
 	if provider.ReplicaDB != nil {
-		return ports.NewReplicaDBLease(provider.ReplicaDB, nil), nil
+		return ports.NewDBLease(provider.ReplicaDB, nil), nil
 	}
 
 	if provider.PostgresConn == nil {
-		return nil, ErrNoPostgresConnection
+		return nil, nil
 	}
 
 	resolver, err := provider.PostgresConn.Resolver(ctx)
@@ -153,7 +142,25 @@ func (provider *MockInfrastructureProvider) GetReplicaDB(ctx context.Context) (*
 
 	replicaDBs := resolver.ReplicaDBs()
 	if len(replicaDBs) > 0 {
-		return ports.NewReplicaDBLease(replicaDBs[0], nil), nil
+		return ports.NewDBLease(replicaDBs[0], nil), nil
+	}
+
+	return nil, nil
+}
+
+// GetPrimaryDB returns the mocked primary database or error.
+func (provider *MockInfrastructureProvider) GetPrimaryDB(ctx context.Context) (*ports.DBLease, error) {
+	if provider.PostgresErr != nil {
+		return nil, provider.PostgresErr
+	}
+
+	if provider.PostgresConn == nil {
+		return nil, ErrNoPostgresConnection
+	}
+
+	resolver, err := provider.PostgresConn.Resolver(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get primary postgres db: %w", err)
 	}
 
 	primaryDBs := resolver.PrimaryDBs()
@@ -161,7 +168,7 @@ func (provider *MockInfrastructureProvider) GetReplicaDB(ctx context.Context) (*
 		return nil, ErrNoDatabase
 	}
 
-	return ports.NewReplicaDBLease(primaryDBs[0], nil), nil
+	return ports.NewDBLease(primaryDBs[0], nil), nil
 }
 
 // NewClientWithResolver creates a *libPostgres.Client with a pre-injected resolver
@@ -277,6 +284,19 @@ func NewRedisClientConnected() *libRedis.Client {
 	*(*bool)(cPtr) = true
 
 	return client
+}
+
+// NewSingleTenantInfrastructureProvider creates an InfrastructureProvider that wraps
+// singleton postgres and redis connections for integration and chaos tests that
+// need a real InfrastructureProvider without multi-tenant routing.
+func NewSingleTenantInfrastructureProvider(
+	postgres *libPostgres.Client,
+	redisClient *libRedis.Client,
+) *MockInfrastructureProvider {
+	return &MockInfrastructureProvider{
+		PostgresConn: postgres,
+		RedisConn:    redisClient,
+	}
 }
 
 // NewMockProviderFromDB creates a MockInfrastructureProvider that wraps a *sql.DB

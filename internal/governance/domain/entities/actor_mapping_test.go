@@ -85,45 +85,6 @@ func TestNewActorMapping_ActorIDAtMaxLength(t *testing.T) {
 	assert.Equal(t, exactActorID, mapping.ActorID)
 }
 
-func TestActorMapping_Pseudonymize(t *testing.T) {
-	t.Parallel()
-
-	displayName := "Jane Doe"
-	email := "jane@example.com"
-
-	mapping, err := NewActorMapping(context.Background(), "actor-001", &displayName, &email)
-	require.NoError(t, err)
-
-	originalUpdatedAt := mapping.UpdatedAt
-
-	assert.False(t, mapping.IsRedacted())
-
-	mapping.Pseudonymize()
-
-	require.NotNil(t, mapping.DisplayName)
-	assert.Equal(t, "[REDACTED]", *mapping.DisplayName)
-	require.NotNil(t, mapping.Email)
-	assert.Equal(t, "[REDACTED]", *mapping.Email)
-	assert.Equal(t, "actor-001", mapping.ActorID, "actor ID must not be changed by pseudonymization")
-	assert.True(t, mapping.IsRedacted())
-	assert.True(t, mapping.UpdatedAt.After(originalUpdatedAt) || mapping.UpdatedAt.Equal(originalUpdatedAt))
-}
-
-func TestActorMapping_Pseudonymize_NilFields(t *testing.T) {
-	t.Parallel()
-
-	mapping, err := NewActorMapping(context.Background(), "actor-002", nil, nil)
-	require.NoError(t, err)
-
-	mapping.Pseudonymize()
-
-	require.NotNil(t, mapping.DisplayName)
-	assert.Equal(t, "[REDACTED]", *mapping.DisplayName)
-	require.NotNil(t, mapping.Email)
-	assert.Equal(t, "[REDACTED]", *mapping.Email)
-	assert.True(t, mapping.IsRedacted())
-}
-
 func TestActorMapping_IsRedacted_BeforePseudonymization(t *testing.T) {
 	t.Parallel()
 
@@ -133,6 +94,16 @@ func TestActorMapping_IsRedacted_BeforePseudonymization(t *testing.T) {
 	mapping, err := NewActorMapping(context.Background(), "actor-003", &displayName, &email)
 	require.NoError(t, err)
 	assert.False(t, mapping.IsRedacted())
+}
+
+func TestActorMapping_IsRedacted_BothFieldsRedacted(t *testing.T) {
+	t.Parallel()
+
+	redacted := "[REDACTED]"
+
+	mapping, err := NewActorMapping(context.Background(), "actor-001", &redacted, &redacted)
+	require.NoError(t, err)
+	assert.True(t, mapping.IsRedacted())
 }
 
 func TestActorMapping_IsRedacted_NilFields(t *testing.T) {

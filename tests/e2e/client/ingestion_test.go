@@ -1,5 +1,6 @@
-//go:build e2e
+//go:build unit
 
+//nolint:varnamelen,wsl_v5 // Ingestion client tests use compact handler fixtures.
 package client
 
 import (
@@ -133,7 +134,7 @@ func TestIngestionClient_UploadFile_NonAcceptedStatus(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error":"invalid file"}`))
+		w.Write([]byte(`{"code":"MTCH-0001","title":"Bad Request","message":"invalid file"}`))
 	}))
 	defer server.Close()
 
@@ -147,11 +148,11 @@ func TestIngestionClient_UploadFile_NonAcceptedStatus(t *testing.T) {
 		"csv",
 	)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, result)
 
 	var apiErr *APIError
-	assert.ErrorAs(t, err, &apiErr)
+	require.ErrorAs(t, err, &apiErr)
 	assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
 }
 
@@ -282,7 +283,8 @@ func TestIngestionClient_ListTransactionsByJob_Pagination(t *testing.T) {
 			HasMore    bool          `json:"hasMore"`
 		}
 
-		if cursor == "" {
+		switch cursor {
+		case "":
 			resp.Items = []Transaction{
 				{
 					ID:         "tx-1",
@@ -305,7 +307,7 @@ func TestIngestionClient_ListTransactionsByJob_Pagination(t *testing.T) {
 			}
 			resp.NextCursor = "cursor-page-2"
 			resp.HasMore = true
-		} else if cursor == "cursor-page-2" {
+		case "cursor-page-2":
 			resp.Items = []Transaction{
 				{ID: "tx-3", JobID: "job-456", ExternalID: "ext-003", Amount: "300.00", Currency: "USD", Date: now, Status: "MATCHED"},
 			}
@@ -333,14 +335,14 @@ func TestIngestionClient_ErrorHandling(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`{"error":"job not found"}`))
+		w.Write([]byte(`{"code":"MTCH-0306","title":"Not Found","message":"job not found"}`))
 	}))
 	defer server.Close()
 
 	client := NewIngestionClient(NewClient(server.URL, "tenant-123", 5*time.Second))
 
 	_, err := client.GetJob(context.Background(), "ctx-123", "nonexistent")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "get job")
 }
 

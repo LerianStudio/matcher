@@ -118,31 +118,6 @@ func TestNewContextPostgreSQLModel_GeneratesIDWhenNil(t *testing.T) {
 	require.NotEqual(t, uuid.Nil, parsedID)
 }
 
-func TestNewContextPostgreSQLModel_WithRateID(t *testing.T) {
-	t.Parallel()
-
-	rateID := uuid.New()
-	now := time.Now().UTC()
-	ctxEntity := &entities.ReconciliationContext{
-		ID:        uuid.New(),
-		TenantID:  uuid.New(),
-		Name:      "Test",
-		Type:      value_objects.ContextTypeOneToMany,
-		Interval:  "weekly",
-		Status:    value_objects.ContextStatusActive,
-		RateID:    &rateID,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-
-	model, err := NewContextPostgreSQLModel(ctxEntity)
-
-	require.NoError(t, err)
-	require.NotNil(t, model)
-	require.NotNil(t, model.RateID)
-	assert.Equal(t, rateID.String(), *model.RateID)
-}
-
 func TestNewContextPostgreSQLModel_WithFeeTolerances(t *testing.T) {
 	t.Parallel()
 
@@ -247,25 +222,6 @@ func TestToEntity_InvalidStatus(t *testing.T) {
 	require.Contains(t, err.Error(), "parsing Status")
 }
 
-func TestToEntity_InvalidRateID(t *testing.T) {
-	t.Parallel()
-
-	invalidRateID := "not-a-uuid"
-	model := &ContextPostgreSQLModel{
-		ID:       uuid.New().String(),
-		TenantID: uuid.New().String(),
-		Type:     "1:1",
-		Status:   "ACTIVE",
-		RateID:   &invalidRateID,
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parsing RateID")
-}
-
 func TestToEntity_InvalidFeeToleranceAbs(t *testing.T) {
 	t.Parallel()
 
@@ -303,11 +259,29 @@ func TestToEntity_InvalidFeeTolerancePct(t *testing.T) {
 	require.Contains(t, err.Error(), "parsing FeeTolerancePct")
 }
 
+func TestToEntity_InvalidFeeNormalization(t *testing.T) {
+	t.Parallel()
+
+	invalidNormalization := "INVALID"
+	model := &ContextPostgreSQLModel{
+		ID:               uuid.New().String(),
+		TenantID:         uuid.New().String(),
+		Type:             "1:1",
+		Status:           "ACTIVE",
+		FeeNormalization: &invalidNormalization,
+	}
+
+	entity, err := model.ToEntity()
+
+	require.Error(t, err)
+	require.Nil(t, entity)
+	require.ErrorIs(t, err, entities.ErrFeeNormalizationInvalid)
+}
+
 func TestToEntity_ValidWithOptionalFields(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC()
-	rateID := uuid.New().String()
 	model := &ContextPostgreSQLModel{
 		ID:              uuid.New().String(),
 		TenantID:        uuid.New().String(),
@@ -315,7 +289,6 @@ func TestToEntity_ValidWithOptionalFields(t *testing.T) {
 		Type:            "1:N",
 		Interval:        "weekly",
 		Status:          "PAUSED",
-		RateID:          &rateID,
 		FeeToleranceAbs: "25.50",
 		FeeTolerancePct: "2.5",
 		CreatedAt:       now,
@@ -330,33 +303,8 @@ func TestToEntity_ValidWithOptionalFields(t *testing.T) {
 	assert.Equal(t, value_objects.ContextTypeOneToMany, entity.Type)
 	assert.Equal(t, "weekly", entity.Interval)
 	assert.Equal(t, value_objects.ContextStatusPaused, entity.Status)
-	require.NotNil(t, entity.RateID)
 	assert.True(t, entity.FeeToleranceAbs.Equal(decimal.NewFromFloat(25.50)))
 	assert.True(t, entity.FeeTolerancePct.Equal(decimal.NewFromFloat(2.5)))
-}
-
-func TestToEntity_EmptyRateID(t *testing.T) {
-	t.Parallel()
-
-	now := time.Now().UTC()
-	emptyRateID := ""
-	model := &ContextPostgreSQLModel{
-		ID:        uuid.New().String(),
-		TenantID:  uuid.New().String(),
-		Name:      "Test",
-		Type:      "1:1",
-		Interval:  "daily",
-		Status:    "ACTIVE",
-		RateID:    &emptyRateID,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-
-	entity, err := model.ToEntity()
-
-	require.NoError(t, err)
-	require.NotNil(t, entity)
-	require.Nil(t, entity.RateID)
 }
 
 func TestParseDecimalField(t *testing.T) {
@@ -526,52 +474,6 @@ func TestNewContextPostgreSQLModel_AllStatuses(t *testing.T) {
 	}
 }
 
-func TestNewContextPostgreSQLModel_NilRateID(t *testing.T) {
-	t.Parallel()
-
-	now := time.Now().UTC()
-	ctxEntity := &entities.ReconciliationContext{
-		ID:        uuid.New(),
-		TenantID:  uuid.New(),
-		Name:      "Test",
-		Type:      value_objects.ContextTypeOneToOne,
-		Interval:  "daily",
-		Status:    value_objects.ContextStatusActive,
-		RateID:    nil,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-
-	model, err := NewContextPostgreSQLModel(ctxEntity)
-
-	require.NoError(t, err)
-	require.NotNil(t, model)
-	require.Nil(t, model.RateID)
-}
-
-func TestToEntity_NilRateIDPointer(t *testing.T) {
-	t.Parallel()
-
-	now := time.Now().UTC()
-	model := &ContextPostgreSQLModel{
-		ID:        uuid.New().String(),
-		TenantID:  uuid.New().String(),
-		Name:      "Test",
-		Type:      "1:1",
-		Interval:  "daily",
-		Status:    "ACTIVE",
-		RateID:    nil,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-
-	entity, err := model.ToEntity()
-
-	require.NoError(t, err)
-	require.NotNil(t, entity)
-	require.Nil(t, entity.RateID)
-}
-
 func TestToEntity_EmptyFeeTolerances(t *testing.T) {
 	t.Parallel()
 
@@ -604,7 +506,6 @@ func TestModelPreservesAllFields(t *testing.T) {
 	updatedAt := time.Date(2024, 8, 20, 14, 45, 30, 0, time.UTC)
 	entityID := uuid.New()
 	tenantID := uuid.New()
-	rateID := uuid.New()
 
 	ctxEntity := &entities.ReconciliationContext{
 		ID:              entityID,
@@ -613,7 +514,6 @@ func TestModelPreservesAllFields(t *testing.T) {
 		Type:            value_objects.ContextTypeManyToMany,
 		Interval:        "monthly",
 		Status:          value_objects.ContextStatusPaused,
-		RateID:          &rateID,
 		FeeToleranceAbs: decimal.NewFromFloat(100.25),
 		FeeTolerancePct: decimal.NewFromFloat(5.5),
 		CreatedAt:       createdAt,
@@ -632,8 +532,6 @@ func TestModelPreservesAllFields(t *testing.T) {
 	require.Equal(t, value_objects.ContextTypeManyToMany, resultEntity.Type)
 	require.Equal(t, "monthly", resultEntity.Interval)
 	require.Equal(t, value_objects.ContextStatusPaused, resultEntity.Status)
-	require.NotNil(t, resultEntity.RateID)
-	require.Equal(t, rateID, *resultEntity.RateID)
 	assert.True(t, resultEntity.FeeToleranceAbs.Equal(decimal.NewFromFloat(100.25)))
 	assert.True(t, resultEntity.FeeTolerancePct.Equal(decimal.NewFromFloat(5.5)))
 	require.Equal(t, createdAt, resultEntity.CreatedAt)
@@ -677,32 +575,4 @@ func TestParseDecimalField_ScientificNotation(t *testing.T) {
 	require.NoError(t, err)
 	expected := decimal.NewFromFloat(150)
 	assert.True(t, result.Equal(expected))
-}
-
-func TestToEntity_ValidRateIDWithOtherEmptyFields(t *testing.T) {
-	t.Parallel()
-
-	now := time.Now().UTC()
-	rateIDStr := uuid.New().String()
-	model := &ContextPostgreSQLModel{
-		ID:              uuid.New().String(),
-		TenantID:        uuid.New().String(),
-		Name:            "",
-		Type:            "1:N",
-		Interval:        "",
-		Status:          "ACTIVE",
-		RateID:          &rateIDStr,
-		FeeToleranceAbs: "",
-		FeeTolerancePct: "",
-		CreatedAt:       now,
-		UpdatedAt:       now,
-	}
-
-	entity, err := model.ToEntity()
-
-	require.NoError(t, err)
-	require.NotNil(t, entity)
-	require.Empty(t, entity.Name)
-	require.Empty(t, entity.Interval)
-	require.NotNil(t, entity.RateID)
 }

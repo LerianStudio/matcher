@@ -12,9 +12,9 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	ingestionTxRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/transaction"
 	matchingRepos "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
@@ -56,7 +56,6 @@ type TransactionRepositoryAdapter struct {
 var (
 	ErrAdapterNotInitialized = errors.New("transaction repository adapter not initialized")
 	ErrContextIDRequired     = errors.New("context id is required")
-	ErrInvalidTransaction    = errors.New("invalid transaction")
 	ErrNilProvider           = errors.New("infrastructure provider is required")
 	ErrNilBaseRepo           = errors.New("base transaction repository is required")
 )
@@ -191,11 +190,6 @@ func (adapter *TransactionRepositoryAdapter) MarkMatchedWithTx(
 		return nil
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if tx != nil && !ok {
-		return ErrInvalidTransaction
-	}
-
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 	if tracer == nil {
 		tracer = otel.Tracer("commons.default")
@@ -207,7 +201,7 @@ func (adapter *TransactionRepositoryAdapter) MarkMatchedWithTx(
 	_, err := pgcommon.WithTenantTxOrExistingProvider(
 		ctx,
 		adapter.provider,
-		sqlTx,
+		tx,
 		func(execTx *sql.Tx) (struct{}, error) {
 			if err := adapter.baseRepo.MarkMatchedWithTx(ctx, execTx, contextID, transactionIDs); err != nil {
 				return struct{}{}, fmt.Errorf("delegate mark matched: %w", err)
@@ -247,11 +241,6 @@ func (adapter *TransactionRepositoryAdapter) MarkPendingReviewWithTx(
 		return nil
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if tx != nil && !ok {
-		return ErrInvalidTransaction
-	}
-
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 	if tracer == nil {
 		tracer = otel.Tracer("commons.default")
@@ -263,7 +252,7 @@ func (adapter *TransactionRepositoryAdapter) MarkPendingReviewWithTx(
 	_, err := pgcommon.WithTenantTxOrExistingProvider(
 		ctx,
 		adapter.provider,
-		sqlTx,
+		tx,
 		func(execTx *sql.Tx) (struct{}, error) {
 			if err := adapter.baseRepo.MarkPendingReviewWithTx(ctx, execTx, contextID, transactionIDs); err != nil {
 				return struct{}{}, fmt.Errorf("delegate mark pending review: %w", err)
@@ -371,11 +360,6 @@ func (adapter *TransactionRepositoryAdapter) MarkUnmatchedWithTx(
 		return nil
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if tx != nil && !ok {
-		return ErrInvalidTransaction
-	}
-
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 	if tracer == nil {
 		tracer = otel.Tracer("commons.default")
@@ -387,7 +371,7 @@ func (adapter *TransactionRepositoryAdapter) MarkUnmatchedWithTx(
 	_, err := pgcommon.WithTenantTxOrExistingProvider(
 		ctx,
 		adapter.provider,
-		sqlTx,
+		tx,
 		func(execTx *sql.Tx) (struct{}, error) {
 			if err := adapter.baseRepo.MarkUnmatchedWithTx(ctx, execTx, contextID, transactionIDs); err != nil {
 				return struct{}{}, fmt.Errorf("delegate mark unmatched: %w", err)

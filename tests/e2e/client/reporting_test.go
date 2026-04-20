@@ -1,5 +1,6 @@
-//go:build e2e
+//go:build unit
 
+//nolint:varnamelen,wsl_v5 // Reporting client tests use compact handler fixtures.
 package client
 
 import (
@@ -70,7 +71,7 @@ func TestReportingClient_GetDashboardAggregates(t *testing.T) {
 	require.NotNil(t, result.Volume)
 	assert.Equal(t, 1000, result.Volume.TotalTransactions)
 	require.NotNil(t, result.MatchRate)
-	assert.Equal(t, 0.90, result.MatchRate.MatchRate)
+	assert.InEpsilon(t, 0.90, result.MatchRate.MatchRate, 0.0001)
 }
 
 func TestReportingClient_GetDashboardMetrics(t *testing.T) {
@@ -99,8 +100,8 @@ func TestReportingClient_GetDashboardMetrics(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result.Summary)
-	assert.Equal(t, float64(500), result.Summary["total"])
-	assert.Equal(t, float64(450), result.Summary["matched"])
+	assert.InEpsilon(t, float64(500), result.Summary["total"], 0.0001)
+	assert.InEpsilon(t, float64(450), result.Summary["matched"], 0.0001)
 	assert.Equal(t, "2026-01-15T00:00:00Z", result.UpdatedAt)
 }
 
@@ -158,7 +159,7 @@ func TestReportingClient_GetMatchRateStats(t *testing.T) {
 	)
 
 	require.NoError(t, err)
-	assert.Equal(t, 0.95, result.MatchRate)
+	assert.InEpsilon(t, 0.95, result.MatchRate, 0.0001)
 }
 
 func TestReportingClient_GetSLAStats(t *testing.T) {
@@ -182,7 +183,7 @@ func TestReportingClient_GetSLAStats(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "2h30m", result.AverageMatchTime)
-	assert.Equal(t, 0.98, result.SLAComplianceRate)
+	assert.InEpsilon(t, 0.98, result.SLAComplianceRate, 0.0001)
 }
 
 func TestReportingClient_ExportMatchedReport(t *testing.T) {
@@ -350,6 +351,32 @@ func TestReportingClient_ListExportJobs(t *testing.T) {
 	assert.Len(t, result, 2)
 }
 
+func TestReportingClient_ListExportJobsByContext(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/contexts/ctx-123/export-jobs", r.URL.Path)
+		assert.Equal(t, "1", r.URL.Query().Get("limit"))
+
+		resp := ExportJobListPage{
+			Items:   []ExportJob{{ID: "job-1", Status: "QUEUED"}},
+			Limit:   1,
+			HasMore: true,
+		}
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
+	}))
+	defer server.Close()
+
+	client := NewReportingClient(NewClient(server.URL, "tenant-123", 5*time.Second))
+	result, err := client.ListExportJobsByContext(context.Background(), "ctx-123", map[string]string{"limit": "1"})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Len(t, result.Items, 1)
+	assert.Equal(t, 1, result.Limit)
+	assert.True(t, result.HasMore)
+}
+
 func TestReportingClient_CancelExportJob(t *testing.T) {
 	t.Parallel()
 
@@ -389,7 +416,7 @@ func TestReportingClient_ErrorHandling(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error":"internal error"}`))
+		w.Write([]byte(`{"code":"MTCH-0002","title":"Internal Server Error","message":"internal error"}`))
 	}))
 	defer server.Close()
 
@@ -401,6 +428,6 @@ func TestReportingClient_ErrorHandling(t *testing.T) {
 		"2024-01-01",
 		"2024-12-31",
 	)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "get dashboard aggregates")
 }

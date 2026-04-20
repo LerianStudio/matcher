@@ -11,7 +11,7 @@ import (
 	"errors"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 )
 
 const (
@@ -30,10 +30,35 @@ const (
 	// maxInfraConnectTimeoutSec caps infrastructure startup timeout to prevent
 	// pathological values from causing startup hangs.
 	maxInfraConnectTimeoutSec = 300
+
+	// defaultFetcherMaxExtractionBytes is the 2 GiB default cap on Fetcher
+	// extraction payload size. Mirrors the envDefault tag on
+	// FetcherConfig.MaxExtractionBytes and the systemplane KeyDef DefaultValue
+	// so env-driven and snapshot-driven hydration agree.
+	defaultFetcherMaxExtractionBytes int64 = 2 << 30
+
+	// defaultFetcherBridgeIntervalSec is the default bridge worker poll
+	// cadence in seconds. Mirrors FetcherConfig.BridgeIntervalSec envDefault.
+	defaultFetcherBridgeIntervalSec = 30
+
+	// defaultFetcherBridgeBatchSize is the default per-tenant batch size for
+	// the bridge worker. Mirrors FetcherConfig.BridgeBatchSize envDefault.
+	defaultFetcherBridgeBatchSize = 50
+
+	// defaultFetcherBridgeTenantConcurrency mirrors
+	// FetcherConfig.BridgeTenantConcurrency envDefault and
+	// discoveryWorker.bridgeDefaultTenantConcurrency so env-driven,
+	// snapshot-driven, and worker-internal fallbacks all agree.
+	defaultFetcherBridgeTenantConcurrency = 4
 )
 
 // ErrConfigNil indicates a nil configuration struct was provided.
 var ErrConfigNil = errors.New("config must be provided")
+
+// ErrSystemplaneClientNil indicates a nil systemplane Client was passed to
+// RegisterMatcherKeys. Defensive guard against a bootstrap wiring bug that
+// would otherwise panic on the first Client.Register call.
+var ErrSystemplaneClientNil = errors.New("systemplane client must be provided")
 
 // AppConfig holds core application metadata.
 type AppConfig struct {
@@ -59,19 +84,21 @@ type TenancyConfig struct {
 	DefaultTenantID   string `env:"DEFAULT_TENANT_ID"   envDefault:"11111111-1111-1111-1111-111111111111" mapstructure:"default_tenant_id"`
 	DefaultTenantSlug string `env:"DEFAULT_TENANT_SLUG" envDefault:"default"                             mapstructure:"default_tenant_slug"`
 
-	MultiTenantEnabled                  bool   `env:"MULTI_TENANT_ENABLED"                         envDefault:"false"   mapstructure:"multi_tenant_enabled"`
-	MultiTenantURL                      string `env:"MULTI_TENANT_URL"                                                     mapstructure:"multi_tenant_url"`
-	MultiTenantEnvironment              string `env:"MULTI_TENANT_ENVIRONMENT"                                             mapstructure:"multi_tenant_environment"`
-	MultiTenantMaxTenantPools           int    `env:"MULTI_TENANT_MAX_TENANT_POOLS"                envDefault:"100"     mapstructure:"multi_tenant_max_tenant_pools"`
-	MultiTenantIdleTimeoutSec           int    `env:"MULTI_TENANT_IDLE_TIMEOUT_SEC"                envDefault:"300"     mapstructure:"multi_tenant_idle_timeout_sec"`
-	MultiTenantCircuitBreakerThreshold  int    `env:"MULTI_TENANT_CIRCUIT_BREAKER_THRESHOLD"       envDefault:"5"       mapstructure:"multi_tenant_circuit_breaker_threshold"`
-	MultiTenantCircuitBreakerTimeoutSec int    `env:"MULTI_TENANT_CIRCUIT_BREAKER_TIMEOUT_SEC"     envDefault:"30"      mapstructure:"multi_tenant_circuit_breaker_timeout_sec"`
-	MultiTenantServiceAPIKey            string `env:"MULTI_TENANT_SERVICE_API_KEY"                                         mapstructure:"multi_tenant_service_api_key"`
-
-	// MultiTenantInfraEnabled is a deprecated backward-compatible alias for the
-	// previous matcher-specific flag. The primary control surface is now
-	// MultiTenantEnabled. Keep this field until callers fully migrate.
-	MultiTenantInfraEnabled bool `env:"MULTI_TENANT_INFRA_ENABLED" envDefault:"false" mapstructure:"multi_tenant_infra_enabled"`
+	MultiTenantEnabled                     bool   `env:"MULTI_TENANT_ENABLED"                             envDefault:"false"   mapstructure:"multi_tenant_enabled"`
+	MultiTenantURL                         string `env:"MULTI_TENANT_URL"                                                     mapstructure:"multi_tenant_url"`
+	MultiTenantEnvironment                 string `env:"MULTI_TENANT_ENVIRONMENT"                                             mapstructure:"multi_tenant_environment"`
+	MultiTenantRedisHost                   string `env:"MULTI_TENANT_REDIS_HOST"                                              mapstructure:"multi_tenant_redis_host"`
+	MultiTenantRedisPort                   string `env:"MULTI_TENANT_REDIS_PORT"                       envDefault:"6379"    mapstructure:"multi_tenant_redis_port"`
+	MultiTenantRedisPassword               string `env:"MULTI_TENANT_REDIS_PASSWORD"                   json:"-"             mapstructure:"multi_tenant_redis_password"`
+	MultiTenantRedisTLS                    bool   `env:"MULTI_TENANT_REDIS_TLS"                        envDefault:"false"   mapstructure:"multi_tenant_redis_tls"`
+	MultiTenantMaxTenantPools              int    `env:"MULTI_TENANT_MAX_TENANT_POOLS"                 envDefault:"100"     mapstructure:"multi_tenant_max_tenant_pools"`
+	MultiTenantIdleTimeoutSec              int    `env:"MULTI_TENANT_IDLE_TIMEOUT_SEC"                 envDefault:"300"     mapstructure:"multi_tenant_idle_timeout_sec"`
+	MultiTenantTimeout                     int    `env:"MULTI_TENANT_TIMEOUT"                          envDefault:"30"      mapstructure:"multi_tenant_timeout"`
+	MultiTenantCircuitBreakerThreshold     int    `env:"MULTI_TENANT_CIRCUIT_BREAKER_THRESHOLD"        envDefault:"5"       mapstructure:"multi_tenant_circuit_breaker_threshold"`
+	MultiTenantCircuitBreakerTimeoutSec    int    `env:"MULTI_TENANT_CIRCUIT_BREAKER_TIMEOUT_SEC"      envDefault:"30"      mapstructure:"multi_tenant_circuit_breaker_timeout_sec"`
+	MultiTenantServiceAPIKey               string `env:"MULTI_TENANT_SERVICE_API_KEY"                  json:"-"             mapstructure:"multi_tenant_service_api_key"`
+	MultiTenantCacheTTLSec                 int    `env:"MULTI_TENANT_CACHE_TTL_SEC"                    envDefault:"120"     mapstructure:"multi_tenant_cache_ttl_sec"`
+	MultiTenantConnectionsCheckIntervalSec int    `env:"MULTI_TENANT_CONNECTIONS_CHECK_INTERVAL_SEC"   envDefault:"30"      mapstructure:"multi_tenant_connections_check_interval_sec"`
 }
 
 // PostgresConfig configures primary/replica connections and pooling.
@@ -129,8 +156,8 @@ type RabbitMQConfig struct {
 
 // AuthConfig configures authentication and authorization.
 type AuthConfig struct {
-	Enabled     bool   `env:"AUTH_ENABLED"         envDefault:"false" mapstructure:"enabled"`
-	Host        string `env:"AUTH_SERVICE_ADDRESS"                    mapstructure:"host"`
+	Enabled     bool   `env:"PLUGIN_AUTH_ENABLED"  envDefault:"false" mapstructure:"enabled"`
+	Host        string `env:"PLUGIN_AUTH_ADDRESS"                     mapstructure:"host"`
 	TokenSecret string `env:"AUTH_JWT_SECRET"                         mapstructure:"token_secret"`
 }
 
@@ -163,7 +190,13 @@ type TelemetryConfig struct {
 	DBMetricsIntervalSec int `env:"DB_METRICS_INTERVAL_SEC"              envDefault:"15"                             mapstructure:"db_metrics_interval_sec"`
 }
 
-// RateLimitConfig configures global and export rate limiting.
+// RateLimitConfig configures global, export, dispatch, and admin rate limiting.
+//
+// AdminMax / AdminExpirySec apply to the /system admin plane ONLY. Before this
+// tier existed, /system shared the global quota — which, combined with
+// fail-open behavior on Redis outage, meant an admin action storm could starve
+// tenant traffic (and vice versa). The admin tier defaults are intentionally
+// low because this surface is operator-only.
 type RateLimitConfig struct {
 	Enabled           bool `env:"RATE_LIMIT_ENABLED"             envDefault:"true" mapstructure:"enabled"`
 	Max               int  `env:"RATE_LIMIT_MAX"                 envDefault:"100"  mapstructure:"max"`
@@ -172,12 +205,25 @@ type RateLimitConfig struct {
 	ExportExpirySec   int  `env:"EXPORT_RATE_LIMIT_EXPIRY_SEC"   envDefault:"60"   mapstructure:"export_expiry_sec"`
 	DispatchMax       int  `env:"DISPATCH_RATE_LIMIT_MAX"        envDefault:"50"   mapstructure:"dispatch_max"`
 	DispatchExpirySec int  `env:"DISPATCH_RATE_LIMIT_EXPIRY_SEC" envDefault:"60"   mapstructure:"dispatch_expiry_sec"`
+	AdminMax          int  `env:"ADMIN_RATE_LIMIT_MAX"           envDefault:"30"   mapstructure:"admin_max"`
+	AdminExpirySec    int  `env:"ADMIN_RATE_LIMIT_EXPIRY_SEC"    envDefault:"60"   mapstructure:"admin_expiry_sec"`
 }
 
 // InfrastructureConfig configures infrastructure-level behavior.
 type InfrastructureConfig struct {
 	ConnectTimeoutSec     int `env:"INFRA_CONNECT_TIMEOUT_SEC"  envDefault:"30" mapstructure:"connect_timeout_sec"`
 	HealthCheckTimeoutSec int `env:"HEALTH_CHECK_TIMEOUT_SEC"   envDefault:"5"  mapstructure:"health_check_timeout_sec"`
+}
+
+// OutboxConfig configures the outbox dispatcher behavior.
+type OutboxConfig struct {
+	// RetryWindowSec configures the cooldown window before failed outbox events
+	// are retried by the dispatcher. Default: 300 seconds (5 minutes).
+	RetryWindowSec int `env:"OUTBOX_RETRY_WINDOW_SEC" envDefault:"300" mapstructure:"retry_window_sec"`
+
+	// DispatchIntervalSec configures how frequently the outbox dispatcher polls
+	// for new events to dispatch. Default: 2 seconds.
+	DispatchIntervalSec int `env:"OUTBOX_DISPATCH_INTERVAL_SEC" envDefault:"2" mapstructure:"dispatch_interval_sec"`
 }
 
 // IdempotencyConfig configures idempotency behavior.
@@ -218,6 +264,125 @@ type FetcherConfig struct {
 	SchemaCacheTTLSec    int    `env:"FETCHER_SCHEMA_CACHE_TTL_SEC"   envDefault:"300"                   mapstructure:"schema_cache_ttl_sec"`
 	ExtractionPollSec    int    `env:"FETCHER_EXTRACTION_POLL_INTERVAL_SEC" envDefault:"5"              mapstructure:"extraction_poll_sec"`
 	ExtractionTimeoutSec int    `env:"FETCHER_EXTRACTION_TIMEOUT_SEC" envDefault:"600"                   mapstructure:"extraction_timeout_sec"`
+
+	// AppEncKey is the base64-encoded master key shared with Fetcher. Used
+	// to derive HMAC-SHA256 and AES-256-GCM keys via HKDF (context strings
+	// "fetcher-external-hmac-v1" and "fetcher-external-aes-v1") for
+	// verifying completed-artifact integrity in the Fetcher bridge (T-002).
+	//
+	// Bootstrap-only (changes require restart because derived keys are
+	// cached for the process lifetime). Empty disables verified-artifact
+	// retrieval; the bridge refuses to start without it.
+	//
+	// Marked json:"-" so it never leaks into JSON config dumps; log
+	// plumbing must never record this value.
+	AppEncKey string `env:"APP_ENC_KEY" json:"-" mapstructure:"app_enc_key"`
+
+	// MaxExtractionBytes caps the size (in bytes) of a Fetcher extraction
+	// payload that FlattenFetcherJSON will materialise. Anything larger
+	// surfaces as ErrFetcherPayloadTooLarge and aborts the bridge cycle
+	// for that extraction. Default 2 GiB matches Fetcher's S3 single-
+	// object headroom; tighten for smaller working-set deployments.
+	//
+	// T-003 P2-T001 hardening: eliminates the OOM attack surface that
+	// the un-wrapped io.Reader form exposed.
+	MaxExtractionBytes int64 `env:"FETCHER_MAX_EXTRACTION_BYTES" envDefault:"2147483648" mapstructure:"max_extraction_bytes"`
+
+	// BridgeInterval governs how often the bridge worker polls for
+	// COMPLETE + unlinked extractions. Default 30s is a balance between
+	// responsiveness for a freshly-completed extraction and DB load.
+	BridgeIntervalSec int `env:"FETCHER_BRIDGE_INTERVAL_SEC" envDefault:"30" mapstructure:"bridge_interval_sec"`
+
+	// BridgeBatchSize caps how many extractions the bridge worker
+	// attempts per tenant per cycle. Default 50 keeps per-cycle runtime
+	// bounded; raise for large backlog drain, lower for predictable
+	// latency under load.
+	BridgeBatchSize int `env:"FETCHER_BRIDGE_BATCH_SIZE" envDefault:"50" mapstructure:"bridge_batch_size"`
+
+	// BridgeTenantConcurrency caps the number of tenants the bridge worker
+	// processes in parallel per pollCycle. Extractions inside a tenant stay
+	// sequential so each tenant's downstream load (Fetcher, object storage,
+	// ingestion) remains bounded; raising this knob only widens the
+	// tenant-level fan-out. Default 4 is the smallest value that keeps
+	// cycle time under the 30s tick for deployments with several tenants.
+	BridgeTenantConcurrency int `env:"FETCHER_BRIDGE_TENANT_CONCURRENCY" envDefault:"4" mapstructure:"bridge_tenant_concurrency"`
+
+	// BridgeStaleThresholdSec partitions the operational dashboard's
+	// bridge readiness counts. COMPLETE+unlinked extractions newer than
+	// this many seconds count as "pending" (worker is expected to drain);
+	// older rows count as "stale" (operator should investigate). Default
+	// 3600s aligns with a one-hour SLO for bridge completion. T-004 read
+	// model uses this threshold; the bridge worker itself does not read
+	// it. Bounded validator caps the value at one day.
+	BridgeStaleThresholdSec int `env:"FETCHER_BRIDGE_STALE_THRESHOLD_SEC" envDefault:"3600" mapstructure:"bridge_stale_threshold_sec"`
+
+	// BridgeRetryMaxAttempts caps how many transient failures a single
+	// extraction may accumulate before the bridge worker escalates the
+	// failure to terminal (T-005). Once the cap is reached the worker
+	// persists max_attempts_exceeded (or source_unresolved when applicable)
+	// and the extraction exits the eligibility queue.
+	BridgeRetryMaxAttempts int `env:"FETCHER_BRIDGE_RETRY_MAX_ATTEMPTS" envDefault:"5" mapstructure:"bridge_retry_max_attempts"`
+
+	// CustodyRetentionSweepIntervalSec governs how often the custody
+	// retention sweep worker (T-006) iterates orphan custody objects.
+	// Default 900s (15 minutes) balances orphan-drain responsiveness
+	// against log/metric noise on idle deployments. Bounded validator
+	// caps the value at one day. Runtime-mutable.
+	CustodyRetentionSweepIntervalSec int `env:"FETCHER_CUSTODY_RETENTION_SWEEP_INTERVAL_SEC" envDefault:"900" mapstructure:"custody_retention_sweep_interval_sec"`
+
+	// CustodyRetentionGracePeriodSec is the delay applied to LATE-LINKED
+	// retention candidates before the sweep deletes their custody object
+	// (T-006). Protects the bridge orchestrator's happy-path
+	// cleanupCustody hook from racing the sweep on freshly-linked
+	// extractions. Default 3600s (1 hour) tolerates a typical S3 outage
+	// while keeping orphan window bounded. Runtime-mutable.
+	CustodyRetentionGracePeriodSec int `env:"FETCHER_CUSTODY_RETENTION_GRACE_PERIOD_SEC" envDefault:"3600" mapstructure:"custody_retention_grace_period_sec"`
+}
+
+// defaultFetcherBridgeStaleThreshold is the bootstrap-side fallback for the
+// staleness window. Mirrors defaultBridgeStaleThreshold in
+// internal/discovery/adapters/http/handlers_bridge_readiness.go; the two must
+// stay in sync so config-load fallbacks and handler fallbacks land on the
+// same value when the systemplane is silent. We cannot import the http
+// package here (would create a bootstrap → adapter cycle) so the constant is
+// duplicated with this guardrail comment.
+const defaultFetcherBridgeStaleThreshold = time.Hour
+
+// Bridge retry policy default. Mirrors BridgeRetryBackoff.Normalize's
+// fallback so a config-load with a zero MaxAttempts gets the same ceiling
+// operators expect from the worker.
+//
+// Polish Fix 2: the prior Initial/Max-Backoff defaults were deleted along
+// with the dead exponential-backoff helpers. The worker enforces backoff
+// passively via FindEligibleForBridge ordering by updated_at — the tick
+// cadence (FetcherBridgeInterval) IS the retry cadence.
+const defaultFetcherBridgeRetryMaxAttempts = 5
+
+// defaultCustodyRetentionSweepInterval mirrors the worker's
+// custodyRetentionDefaultInterval so the bootstrap-side fallback and the
+// worker-side fallback agree.
+const defaultCustodyRetentionSweepInterval = 15 * time.Minute
+
+// defaultCustodyRetentionGracePeriod mirrors the worker's
+// custodyRetentionDefaultGracePeriod so the bootstrap-side fallback and
+// the worker-side fallback agree.
+const defaultCustodyRetentionGracePeriod = time.Hour
+
+// M2MConfig configures machine-to-machine credential retrieval from AWS Secrets Manager.
+// Used when multi-tenant mode is enabled and the service needs to authenticate
+// with target service APIs (e.g., Fetcher) per tenant.
+type M2MConfig struct {
+	// M2MTargetService is the target service name used to build the Secrets Manager path.
+	// Path: tenants/{env}/{tenantOrgID}/{applicationName}/m2m/{targetService}/credentials
+	M2MTargetService string `env:"M2M_TARGET_SERVICE" envDefault:"fetcher" mapstructure:"m2m_target_service"`
+
+	// M2MCredentialCacheTTLSec configures the L2 (Redis) cache TTL for M2M credentials.
+	// Default: 300 seconds (5 minutes).
+	M2MCredentialCacheTTLSec int `env:"M2M_CREDENTIAL_CACHE_TTL_SEC" envDefault:"300" mapstructure:"m2m_credential_cache_ttl_sec"`
+
+	// AWSRegion is the AWS region for Secrets Manager API calls.
+	// When empty, the AWS SDK uses its default chain (env, config file, instance metadata).
+	AWSRegion string `env:"AWS_REGION" mapstructure:"aws_region"`
 }
 
 // DedupeConfig configures deduplication behavior.
@@ -234,6 +399,7 @@ type ObjectStorageConfig struct {
 	AccessKeyID     string `env:"OBJECT_STORAGE_ACCESS_KEY_ID"                                       mapstructure:"access_key_id"`
 	SecretAccessKey string `env:"OBJECT_STORAGE_SECRET_ACCESS_KEY"                                   mapstructure:"secret_access_key"`
 	UsePathStyle    bool   `env:"OBJECT_STORAGE_USE_PATH_STYLE"    envDefault:"true"                 mapstructure:"use_path_style"`
+	AllowInsecure   bool   `env:"OBJECT_STORAGE_ALLOW_INSECURE_ENDPOINT" envDefault:"false"          mapstructure:"allow_insecure_endpoint"`
 }
 
 // ExportWorkerConfig configures reporting export workers.
@@ -295,6 +461,7 @@ type Config struct {
 	RateLimit         RateLimitConfig         `mapstructure:"rate_limit"`
 	Infrastructure    InfrastructureConfig    `mapstructure:"infrastructure"`
 	Idempotency       IdempotencyConfig       `mapstructure:"idempotency"`
+	Outbox            OutboxConfig            `mapstructure:"outbox"`
 	Dedupe            DedupeConfig            `mapstructure:"deduplication"`
 	ObjectStorage     ObjectStorageConfig     `mapstructure:"object_storage"`
 	ExportWorker      ExportWorkerConfig      `mapstructure:"export_worker"`
@@ -304,6 +471,7 @@ type Config struct {
 	Webhook           WebhookConfig           `mapstructure:"webhook"`
 	CallbackRateLimit CallbackRateLimitConfig `mapstructure:"callback_rate_limit"`
 	Fetcher           FetcherConfig           `mapstructure:"fetcher"`
+	M2M               M2MConfig               `mapstructure:"m2m"`
 
 	// ShutdownGracePeriod is the time to wait for background workers to finish
 	// after requesting stop, before closing infrastructure connections.
@@ -318,4 +486,94 @@ type Config struct {
 // Options provides optional configuration overrides for server initialization.
 type Options struct {
 	Logger libLog.Logger
+}
+
+// FetcherMaxExtractionBytes returns the effective size cap for Fetcher
+// extraction payloads. Falls back to the FlattenFetcherJSON default when
+// the config value is non-positive so misconfiguration can't disable the
+// DoS guard by setting a negative number.
+func (cfg *Config) FetcherMaxExtractionBytes() int64 {
+	if cfg == nil || cfg.Fetcher.MaxExtractionBytes <= 0 {
+		return defaultFetcherMaxExtractionBytes
+	}
+
+	return cfg.Fetcher.MaxExtractionBytes
+}
+
+// FetcherBridgeInterval returns the poll interval for the bridge worker.
+func (cfg *Config) FetcherBridgeInterval() time.Duration {
+	if cfg == nil || cfg.Fetcher.BridgeIntervalSec <= 0 {
+		return time.Duration(defaultFetcherBridgeIntervalSec) * time.Second
+	}
+
+	return time.Duration(cfg.Fetcher.BridgeIntervalSec) * time.Second
+}
+
+// FetcherBridgeBatchSize returns the per-tenant batch size for the bridge worker.
+func (cfg *Config) FetcherBridgeBatchSize() int {
+	if cfg == nil || cfg.Fetcher.BridgeBatchSize <= 0 {
+		return defaultFetcherBridgeBatchSize
+	}
+
+	return cfg.Fetcher.BridgeBatchSize
+}
+
+// FetcherBridgeTenantConcurrency returns the tenant-level fan-out ceiling
+// for the bridge worker's pollCycle. Falls back to
+// defaultFetcherBridgeTenantConcurrency when the configured value is
+// non-positive so misconfiguration cannot collapse the cycle to fully
+// sequential behaviour silently.
+func (cfg *Config) FetcherBridgeTenantConcurrency() int {
+	if cfg == nil || cfg.Fetcher.BridgeTenantConcurrency <= 0 {
+		return defaultFetcherBridgeTenantConcurrency
+	}
+
+	return cfg.Fetcher.BridgeTenantConcurrency
+}
+
+// FetcherBridgeStaleThreshold returns the duration after which a
+// COMPLETE+unlinked extraction shifts from "pending" to "stale" in the
+// operational dashboard. Falls back to defaultFetcherBridgeStaleThreshold
+// when the configured value is non-positive so misconfiguration cannot
+// collapse the partition.
+func (cfg *Config) FetcherBridgeStaleThreshold() time.Duration {
+	if cfg == nil || cfg.Fetcher.BridgeStaleThresholdSec <= 0 {
+		return defaultFetcherBridgeStaleThreshold
+	}
+
+	return time.Duration(cfg.Fetcher.BridgeStaleThresholdSec) * time.Second
+}
+
+// FetcherBridgeRetryMaxAttempts returns the max-attempts ceiling for the
+// bridge worker's transient-failure escalation (T-005).
+func (cfg *Config) FetcherBridgeRetryMaxAttempts() int {
+	if cfg == nil || cfg.Fetcher.BridgeRetryMaxAttempts <= 0 {
+		return defaultFetcherBridgeRetryMaxAttempts
+	}
+
+	return cfg.Fetcher.BridgeRetryMaxAttempts
+}
+
+// FetcherCustodyRetentionSweepInterval returns the tick interval for the
+// custody retention sweep worker (T-006). Falls back to a sensible default
+// when the configured value is non-positive so misconfiguration cannot
+// disable the sweep silently.
+func (cfg *Config) FetcherCustodyRetentionSweepInterval() time.Duration {
+	if cfg == nil || cfg.Fetcher.CustodyRetentionSweepIntervalSec <= 0 {
+		return defaultCustodyRetentionSweepInterval
+	}
+
+	return time.Duration(cfg.Fetcher.CustodyRetentionSweepIntervalSec) * time.Second
+}
+
+// FetcherCustodyRetentionGracePeriod returns the grace period applied to
+// LATE-LINKED retention candidates before sweep deletion. Falls back to a
+// sensible default when non-positive so misconfiguration cannot collapse
+// the race protection.
+func (cfg *Config) FetcherCustodyRetentionGracePeriod() time.Duration {
+	if cfg == nil || cfg.Fetcher.CustodyRetentionGracePeriodSec <= 0 {
+		return defaultCustodyRetentionGracePeriod
+	}
+
+	return time.Duration(cfg.Fetcher.CustodyRetentionGracePeriodSec) * time.Second
 }

@@ -4,49 +4,56 @@ package cross
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	exceptionPorts "github.com/LerianStudio/matcher/internal/exception/ports"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepos "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
-	matchingPorts "github.com/LerianStudio/matcher/internal/matching/ports"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // Sentinel errors for exception matching gateway operations.
 var (
-	ErrNilAdjustmentRepository  = errors.New("adjustment repository is required")
-	ErrNilTransactionRepository = errors.New("transaction repository is required")
-	ErrNilContextLookup         = errors.New("context lookup is required")
-	ErrContextNotFound          = errors.New("context not found for transaction")
-	ErrInvalidDirection         = errors.New("invalid adjustment direction")
+	ErrNilAdjustmentRepository     = errors.New("adjustment repository is required")
+	ErrNilTransactionRepository    = errors.New("transaction repository is required")
+	ErrNilJobFinder                = errors.New("ingestion job finder is required")
+	ErrContextLookupNotInitialized = errors.New("transaction context lookup not initialized")
+	ErrTransactionNotFound         = errors.New("transaction not found")
+	ErrIngestionJobNotFound        = errors.New("ingestion job not found")
+	ErrSourceNotFound              = errors.New("source not found for context lookup")
+	ErrContextNotFound             = errors.New("context not found for transaction")
+	ErrInvalidDirection            = errors.New("invalid adjustment direction")
 )
 
-// ExceptionContextLookup abstracts the operation of finding the context ID for a transaction.
-type ExceptionContextLookup interface {
-	// GetContextIDByTransactionID returns the context ID for a given transaction.
-	GetContextIDByTransactionID(ctx context.Context, transactionID uuid.UUID) (uuid.UUID, error)
+// ExceptionTransactionRepository contains the minimal transaction operations needed
+// for exception resolution: force-match status updates.
+type ExceptionTransactionRepository interface {
+	FindByID(ctx context.Context, transactionID uuid.UUID) (*shared.Transaction, error)
+	MarkMatched(ctx context.Context, contextID uuid.UUID, transactionIDs []uuid.UUID) error
 }
 
 // ExceptionMatchingGateway implements exception.ports.MatchingGateway by coordinating
-// with matching context repositories.
+// with matching and ingestion repositories directly through one bridge.
 type ExceptionMatchingGateway struct {
 	adjustmentRepo  matchingRepos.AdjustmentRepository
-	transactionRepo matchingPorts.TransactionRepository
+	transactionRepo ExceptionTransactionRepository
 	contextLookup   ExceptionContextLookup
 }
 
 // NewExceptionMatchingGateway creates a new matching gateway for exception resolution.
 func NewExceptionMatchingGateway(
 	adjustmentRepo matchingRepos.AdjustmentRepository,
-	transactionRepo matchingPorts.TransactionRepository,
-	contextLookup ExceptionContextLookup,
+	transactionRepo ExceptionTransactionRepository,
+	jobFinder JobFinder,
+	sourceFinder SourceContextFinder,
 ) (*ExceptionMatchingGateway, error) {
 	if adjustmentRepo == nil {
 		return nil, ErrNilAdjustmentRepository
@@ -56,8 +63,9 @@ func NewExceptionMatchingGateway(
 		return nil, ErrNilTransactionRepository
 	}
 
-	if contextLookup == nil {
-		return nil, ErrNilContextLookup
+	contextLookup, err := NewTransactionContextLookup(transactionRepo, jobFinder, sourceFinder)
+	if err != nil {
+		return nil, err
 	}
 
 	return &ExceptionMatchingGateway{
@@ -68,43 +76,51 @@ func NewExceptionMatchingGateway(
 }
 
 // CreateForceMatch creates a force match by marking the transaction as matched.
-// Unlike normal matching which creates match groups linking multiple transactions,
-// force match directly transitions the transaction to MATCHED status as a manual override.
 func (gateway *ExceptionMatchingGateway) CreateForceMatch(
 	ctx context.Context,
 	input exceptionPorts.ForceMatchInput,
 ) error {
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-	ctx, span := tracer.Start(ctx, "cross.exception_matching_gateway.create_force_match")
+	if gateway == nil || gateway.transactionRepo == nil {
+		return ErrNilTransactionRepository
+	}
 
+	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+
+	ctx, span := tracer.Start(ctx, "cross.exception_matching_gateway.create_force_match")
 	defer span.End()
 
-	// Resolve the context ID from the transaction
-	contextID, err := gateway.contextLookup.GetContextIDByTransactionID(ctx, input.TransactionID)
+	contextID, err := gateway.resolveContextIDByTransactionID(ctx, input.TransactionID)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to resolve context ID", err)
-
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("force match: failed to resolve context ID for transaction %s: %v",
-			input.TransactionID, err))
+		logger.With(
+			libLog.String("operation", "force_match"),
+			libLog.String("transaction_id", input.TransactionID.String()),
+		).Log(ctx, libLog.LevelError, "failed to resolve context ID")
 
 		return fmt.Errorf("resolve context ID: %w", err)
 	}
 
-	// Mark the transaction as matched
-	// This is a direct status change without creating a match group,
-	// which is appropriate for manual force matches
-	err = gateway.transactionRepo.MarkMatched(ctx, contextID, []uuid.UUID{input.TransactionID})
-	if err != nil {
+	if err := gateway.transactionRepo.MarkMatched(ctx, contextID, []uuid.UUID{input.TransactionID}); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to mark transaction as matched", err)
-
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("force match: failed to mark transaction %s as matched: %v",
-			input.TransactionID, err))
+		logger.With(
+			libLog.String("operation", "force_match"),
+			libLog.String("transaction_id", input.TransactionID.String()),
+			libLog.String("context_id", contextID.String()),
+		).Log(ctx, libLog.LevelError, "failed to mark transaction as matched")
 
 		return fmt.Errorf("mark transaction matched: %w", err)
 	}
 
-	logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("force match created: transaction=%s, context=%s, reason=%s, actor=%s",
-		input.TransactionID, contextID, input.OverrideReason, input.Actor))
+	// input.OverrideReason and input.Actor are user-controlled; they must
+	// never be interpolated into the log message template. The structured
+	// fields are escaped by the logger and safe against CRLF injection.
+	logger.With(
+		libLog.String("operation", "force_match"),
+		libLog.String("transaction_id", input.TransactionID.String()),
+		libLog.String("context_id", contextID.String()),
+		libLog.String("override_reason", input.OverrideReason),
+		libLog.String("actor", input.Actor),
+	).Log(ctx, libLog.LevelInfo, "force match created")
 
 	return nil
 }
@@ -114,34 +130,37 @@ func (gateway *ExceptionMatchingGateway) CreateAdjustment(
 	ctx context.Context,
 	input exceptionPorts.CreateAdjustmentInput,
 ) error {
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-	ctx, span := tracer.Start(ctx, "cross.exception_matching_gateway.create_adjustment")
+	if gateway == nil || gateway.adjustmentRepo == nil {
+		return ErrNilAdjustmentRepository
+	}
 
+	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+
+	ctx, span := tracer.Start(ctx, "cross.exception_matching_gateway.create_adjustment")
 	defer span.End()
 
-	// Resolve the context ID from the transaction
-	contextID, err := gateway.contextLookup.GetContextIDByTransactionID(ctx, input.TransactionID)
+	contextID, err := gateway.resolveContextIDByTransactionID(ctx, input.TransactionID)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to resolve context ID", err)
-
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("adjust entry: failed to resolve context ID for transaction %s: %v",
-			input.TransactionID, err))
+		logger.With(
+			libLog.String("operation", "adjust_entry"),
+			libLog.String("transaction_id", input.TransactionID.String()),
+		).Log(ctx, libLog.LevelError, "failed to resolve context ID")
 
 		return fmt.Errorf("resolve context ID: %w", err)
 	}
 
-	// Map the reason to an adjustment type
-	adjustmentType := mapReasonToAdjustmentType(input.Reason)
-
-	// Create the adjustment entity
+	adjustmentType := mapReasonToAdjustmentType(ctx, logger, input.Reason)
 	transactionID := input.TransactionID
 
 	direction := matchingEntities.AdjustmentDirection(input.Direction)
 	if !direction.IsValid() {
 		libOpentelemetry.HandleSpanError(span, "invalid adjustment direction", ErrInvalidDirection)
-
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("adjust entry: invalid direction %q for transaction %s",
-			input.Direction, input.TransactionID))
+		logger.With(
+			libLog.String("operation", "adjust_entry"),
+			libLog.String("transaction_id", input.TransactionID.String()),
+			libLog.String("direction", input.Direction),
+		).Log(ctx, libLog.LevelError, "invalid adjustment direction")
 
 		return fmt.Errorf("validate direction: %w", ErrInvalidDirection)
 	}
@@ -149,46 +168,101 @@ func (gateway *ExceptionMatchingGateway) CreateAdjustment(
 	adjustment, err := matchingEntities.NewAdjustment(
 		ctx,
 		contextID,
-		nil,            // No match group ID for exception-based adjustments
-		&transactionID, // Link to the transaction
+		nil,
+		&transactionID,
 		adjustmentType,
 		direction,
 		input.Amount,
 		input.Currency,
-		input.Notes, // Use notes as description
+		input.Notes,
 		input.Reason,
 		input.Actor,
 	)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to create adjustment entity", err)
-
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("adjust entry: failed to create adjustment entity: %v", err))
+		logger.With(
+			libLog.String("operation", "adjust_entry"),
+			libLog.String("transaction_id", input.TransactionID.String()),
+		).Log(ctx, libLog.LevelError, "failed to create adjustment entity")
 
 		return fmt.Errorf("create adjustment entity: %w", err)
 	}
 
-	// Persist the adjustment
-	_, err = gateway.adjustmentRepo.Create(ctx, adjustment)
-	if err != nil {
+	if _, err := gateway.adjustmentRepo.Create(ctx, adjustment); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to persist adjustment", err)
-
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("adjust entry: failed to persist adjustment: %v", err))
+		logger.With(
+			libLog.String("operation", "adjust_entry"),
+			libLog.String("transaction_id", input.TransactionID.String()),
+			libLog.String("adjustment_id", adjustment.ID.String()),
+		).Log(ctx, libLog.LevelError, "failed to persist adjustment")
 
 		return fmt.Errorf("persist adjustment: %w", err)
 	}
 
-	logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("adjustment created: adjustment=%s, transaction=%s, amount=%s %s, reason=%s",
-		adjustment.ID, input.TransactionID, input.Amount.String(), input.Currency, input.Reason))
+	// input.Reason, input.Notes and input.Actor are user-controlled; pass
+	// them only as structured fields so the logger escapes them and they
+	// cannot forge new log lines via CRLF injection.
+	logger.With(
+		libLog.String("operation", "adjust_entry"),
+		libLog.String("adjustment_id", adjustment.ID.String()),
+		libLog.String("transaction_id", input.TransactionID.String()),
+		libLog.String("amount", input.Amount.String()),
+		libLog.String("currency", input.Currency),
+		libLog.String("reason", input.Reason),
+		libLog.String("actor", input.Actor),
+	).Log(ctx, libLog.LevelInfo, "adjustment created")
 
 	return nil
 }
 
-// mapReasonToAdjustmentType maps exception adjustment reasons to matching adjustment types.
-func mapReasonToAdjustmentType(reason string) matchingEntities.AdjustmentType {
+func (gateway *ExceptionMatchingGateway) resolveContextIDByTransactionID(
+	ctx context.Context,
+	transactionID uuid.UUID,
+) (uuid.UUID, error) {
+	if gateway == nil || gateway.contextLookup == nil {
+		return uuid.Nil, ErrContextLookupNotInitialized
+	}
+
+	contextID, err := gateway.contextLookup.GetContextIDByTransactionID(ctx, transactionID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("resolve context by transaction id: %w", err)
+	}
+
+	return contextID, nil
+}
+
+func mapSourceLookupError(jobErr, sourceErr error) error {
+	if errors.Is(jobErr, ErrIngestionJobNotFound) && errors.Is(sourceErr, sql.ErrNoRows) {
+		return ErrSourceNotFound
+	}
+
+	if errors.Is(sourceErr, ErrSourceNotFound) || errors.Is(sourceErr, ErrContextNotFound) {
+		return sourceErr
+	}
+
+	return jobErr
+}
+
+// mapReasonToAdjustmentType maps exception adjustment reasons to matching
+// adjustment types. Unknown reasons fall back to Miscellaneous but emit a
+// WARN so operators can spot unexpected reason codes reaching the gateway
+// (typically a config/console drift).
+func mapReasonToAdjustmentType(
+	ctx context.Context,
+	logger libLog.Logger,
+	reason string,
+) matchingEntities.AdjustmentType {
 	switch reason {
 	case "CURRENCY_CORRECTION":
 		return matchingEntities.AdjustmentTypeFXDifference
 	default:
+		if logger != nil {
+			logger.With(
+				libLog.String("reason", reason),
+				libLog.String("mapped_to", string(matchingEntities.AdjustmentTypeMiscellaneous)),
+			).Log(ctx, libLog.LevelWarn, "adjustment: unmapped reason, defaulting to miscellaneous")
+		}
+
 		return matchingEntities.AdjustmentTypeMiscellaneous
 	}
 }

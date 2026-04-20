@@ -117,6 +117,21 @@ func (mr *MockObjectStorageClientMockRecorder) Upload(ctx, key, reader, contentT
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Upload", reflect.TypeOf((*MockObjectStorageClient)(nil).Upload), ctx, key, reader, contentType)
 }
 
+// UploadIfAbsent mocks base method.
+func (m *MockObjectStorageClient) UploadIfAbsent(ctx context.Context, key string, reader io.Reader, contentType string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UploadIfAbsent", ctx, key, reader, contentType)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UploadIfAbsent indicates an expected call of UploadIfAbsent.
+func (mr *MockObjectStorageClientMockRecorder) UploadIfAbsent(ctx, key, reader, contentType any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadIfAbsent", reflect.TypeOf((*MockObjectStorageClient)(nil).UploadIfAbsent), ctx, key, reader, contentType)
+}
+
 // UploadWithOptions mocks base method.
 func (m *MockObjectStorageClient) UploadWithOptions(ctx context.Context, key string, reader io.Reader, contentType string, opts ...storageopt.UploadOption) (string, error) {
 	m.ctrl.T.Helper()

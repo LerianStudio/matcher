@@ -9,8 +9,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/assert"
-	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
+	"github.com/LerianStudio/lib-commons/v5/commons/assert"
+	"github.com/LerianStudio/lib-commons/v5/commons/pointers"
 
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
@@ -42,6 +42,14 @@ type RowError struct {
 
 // JobMetadata stores additional job info in JSONB column
 // Matches schema: migrations/000001_init_schema.up.sql:71-81.
+//
+// ExtractionID (T-005 P1) tags the job with the originating Fetcher
+// extraction so the trusted-stream intake can short-circuit on retry: a
+// second IngestTrustedContent call for the same extraction_id finds the
+// existing IngestionJob and returns it instead of creating a phantom empty
+// row. Empty for upload-driven (non-bridge) jobs. Persisted as the JSONB
+// key "extractionId" so the partial index in migration 000026
+// (idx_ingestion_jobs_metadata_extraction_id) accelerates lookups.
 type JobMetadata struct {
 	FileName     string     `json:"fileName,omitempty"     example:"transactions_2024.csv"`
 	FileSize     int64      `json:"fileSize,omitempty"     example:"1048576"                     minimum:"0"`
@@ -49,6 +57,7 @@ type JobMetadata struct {
 	FailedRows   int        `json:"failedRows,omitempty"   example:"5"                           minimum:"0"`
 	Error        string     `json:"error,omitempty"        example:"row 15: invalid date format"`
 	ErrorDetails []RowError `json:"errorDetails,omitempty"`
+	ExtractionID string     `json:"extractionId,omitempty" example:"a3f1b8c0-1234-4567-89ab-cdef01234567"`
 }
 
 // IngestionJob represents a batch data import operation.

@@ -9,9 +9,9 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
@@ -26,7 +26,7 @@ var psql = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 const (
 	tableName      = "fetcher_connections"
-	allColumns     = "id, fetcher_conn_id, config_name, database_type, host, port, database_name, product_name, status, last_seen_at, schema_discovered, created_at, updated_at"
+	allColumns     = "id, fetcher_conn_id, config_name, database_type, host, port, database_name, product_name, schema, user_name, status, last_seen_at, schema_discovered, created_at, updated_at"
 	upsertConflict = "fetcher_conn_id"
 )
 
@@ -65,7 +65,7 @@ func (repo *Repository) Upsert(ctx context.Context, conn *entities.FetcherConnec
 	if err != nil {
 		wrappedErr := fmt.Errorf("upsert fetcher connection: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to upsert fetcher connection", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to upsert fetcher connection")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to upsert fetcher connection")
 
 		return wrappedErr
 	}
@@ -102,7 +102,7 @@ func (repo *Repository) UpsertWithTx(ctx context.Context, tx *sql.Tx, conn *enti
 	if err != nil {
 		wrappedErr := fmt.Errorf("upsert fetcher connection with tx: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to upsert fetcher connection", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to upsert fetcher connection")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to upsert fetcher connection")
 
 		return wrappedErr
 	}
@@ -118,7 +118,7 @@ func (repo *Repository) executeUpsert(ctx context.Context, tx *sql.Tx, conn *ent
 	}
 
 	query := `INSERT INTO ` + tableName + ` (` + allColumns + `)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		ON CONFLICT (` + upsertConflict + `) DO UPDATE SET
 			config_name = EXCLUDED.config_name,
 			database_type = EXCLUDED.database_type,
@@ -126,6 +126,8 @@ func (repo *Repository) executeUpsert(ctx context.Context, tx *sql.Tx, conn *ent
 			port = EXCLUDED.port,
 			database_name = EXCLUDED.database_name,
 			product_name = EXCLUDED.product_name,
+			schema = EXCLUDED.schema,
+			user_name = EXCLUDED.user_name,
 			status = EXCLUDED.status,
 			last_seen_at = EXCLUDED.last_seen_at,
 			schema_discovered = EXCLUDED.schema_discovered,
@@ -141,6 +143,8 @@ func (repo *Repository) executeUpsert(ctx context.Context, tx *sql.Tx, conn *ent
 		model.Port,
 		model.DatabaseName,
 		model.ProductName,
+		model.Schema,
+		model.UserName,
 		model.Status,
 		model.LastSeenAt,
 		model.SchemaDiscovered,
@@ -206,7 +210,7 @@ func (repo *Repository) FindAll(ctx context.Context) ([]*entities.FetcherConnect
 	if err != nil {
 		wrappedErr := fmt.Errorf("find all fetcher connections: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to find all fetcher connections", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to find all fetcher connections")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to find all fetcher connections")
 
 		return nil, wrappedErr
 	}
@@ -241,7 +245,7 @@ func (repo *Repository) FindByID(ctx context.Context, id uuid.UUID) (*entities.F
 
 		wrappedErr := fmt.Errorf("find fetcher connection by id: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to find fetcher connection by id", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to find fetcher connection by id")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to find fetcher connection by id")
 
 		return nil, wrappedErr
 	}
@@ -276,7 +280,7 @@ func (repo *Repository) FindByFetcherID(ctx context.Context, fetcherConnID strin
 
 		wrappedErr := fmt.Errorf("find fetcher connection by fetcher id: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to find fetcher connection by fetcher id", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to find fetcher connection by fetcher id")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to find fetcher connection by fetcher id")
 
 		return nil, wrappedErr
 	}
@@ -296,6 +300,8 @@ func scanConnection(scanner interface{ Scan(dest ...any) error }) (*entities.Fet
 		&model.Port,
 		&model.DatabaseName,
 		&model.ProductName,
+		&model.Schema,
+		&model.UserName,
 		&model.Status,
 		&model.LastSeenAt,
 		&model.SchemaDiscovered,

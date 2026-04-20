@@ -85,11 +85,12 @@ func (mr *MockActorMappingRepositoryMockRecorder) Pseudonymize(ctx, actorID any)
 }
 
 // Upsert mocks base method.
-func (m *MockActorMappingRepository) Upsert(ctx context.Context, mapping *entities.ActorMapping) error {
+func (m *MockActorMappingRepository) Upsert(ctx context.Context, mapping *entities.ActorMapping) (*entities.ActorMapping, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Upsert", ctx, mapping)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*entities.ActorMapping)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Upsert indicates an expected call of Upsert.

@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/discovery/ports"
@@ -21,7 +21,6 @@ var (
 	ErrConnectionNotFound           = errors.New("fetcher connection not found")
 	ErrInvalidExtractionRequest     = errors.New("invalid extraction request")
 	ErrExtractionTrackingIncomplete = errors.New("extraction tracking is incomplete")
-	ErrTenantContextRequired        = errors.New("tenant context is required")
 	ErrDiscoveryRefreshInProgress   = errors.New("discovery refresh already in progress")
 	ErrExtractionNotFound           = errors.New("extraction request not found")
 	ErrNilExtractionStatus          = errors.New("fetcher returned nil extraction status")
@@ -43,7 +42,6 @@ type UseCase struct {
 	logger               libLog.Logger
 	extractionPoller     ports.ExtractionJobPoller // optional async poller
 	syncer               *syncer.ConnectionSyncer
-	requireTenantContext bool
 	refreshLockProvider  sharedPorts.InfrastructureProvider
 	refreshLockTTL       time.Duration
 	refreshLockTTLGetter func() time.Duration
@@ -110,16 +108,6 @@ func (uc *UseCase) WithSchemaCache(cache ports.SchemaCache, ttl time.Duration) {
 	}
 
 	uc.syncer.WithSchemaCache(cache, ttl)
-}
-
-// WithTenantContextRequirement toggles whether tenant-scoped commands must fail closed
-// when tenant context is missing.
-func (uc *UseCase) WithTenantContextRequirement(required bool) {
-	if uc == nil {
-		return
-	}
-
-	uc.requireTenantContext = required
 }
 
 // WithDiscoveryRefreshLock enables distributed locking for manual refresh operations.

@@ -18,12 +18,6 @@ func ReconciliationContextToResponse(
 		return ReconciliationContextResponse{}
 	}
 
-	var rateID string
-
-	if ctx.RateID != nil {
-		rateID = ctx.RateID.String()
-	}
-
 	var feeNormalization string
 	if ctx.FeeNormalization != nil {
 		feeNormalization = *ctx.FeeNormalization
@@ -36,7 +30,6 @@ func ReconciliationContextToResponse(
 		Type:              ctx.Type.String(),
 		Interval:          ctx.Interval,
 		Status:            ctx.Status.String(),
-		RateID:            rateID,
 		FeeToleranceAbs:   ctx.FeeToleranceAbs.String(),
 		FeeTolerancePct:   ctx.FeeTolerancePct.String(),
 		FeeNormalization:  feeNormalization,

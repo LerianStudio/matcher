@@ -5,7 +5,6 @@ package http
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,15 +17,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	repomocks "github.com/LerianStudio/matcher/internal/reporting/domain/repositories/mocks"
-	portsmocks "github.com/LerianStudio/matcher/internal/reporting/ports/mocks"
 	"github.com/LerianStudio/matcher/internal/reporting/services/command"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query"
+	portsmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 )
 
 // --- mock dashboard repository that supports source breakdown and cash impact ---
@@ -199,7 +198,7 @@ func (m *countMockReportRepository) GetVarianceReport(
 	_ context.Context,
 	_ entities.VarianceReportFilter,
 ) ([]*entities.VarianceReportRow, libHTTP.CursorPagination, error) {
-	return nil, libHTTP.CursorPagination{}, m.getVarianceErr
+	return m.varianceRows, libHTTP.CursorPagination{}, m.getVarianceErr
 }
 
 // --- helpers ---
@@ -319,7 +318,18 @@ func TestHandlers_GetMatcherDashboardMetrics_BadDateFilter(t *testing.T) {
 	provider := &mockContextProvider{
 		info: &ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, nil)
+	reportRepo := &countMockReportRepository{}
+	reportRepo.getVarianceErr = nil
+	reportRepo.varianceRows = []*entities.VarianceReportRow{{
+		SourceID:        uuid.New(),
+		Currency:        "USD",
+		FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-00000000aa01"),
+		FeeScheduleName: "INTERCHANGE",
+		TotalExpected:   decimal.RequireFromString("10.00"),
+		TotalActual:     decimal.RequireFromString("12.00"),
+		NetVariance:     decimal.RequireFromString("2.00"),
+	}}
+	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, reportRepo)
 
 	app := setupFullTestApp(
 		handlers.GetMatcherDashboardMetrics,
@@ -506,7 +516,17 @@ func TestHandlers_GetSourceBreakdown_BadDate(t *testing.T) {
 	provider := &mockContextProvider{
 		info: &ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, nil)
+	reportRepo := &countMockReportRepository{}
+	reportRepo.varianceRows = []*entities.VarianceReportRow{{
+		SourceID:        uuid.New(),
+		Currency:        "USD",
+		FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-00000000aa01"),
+		FeeScheduleName: "INTERCHANGE",
+		TotalExpected:   decimal.RequireFromString("10.00"),
+		TotalActual:     decimal.RequireFromString("12.00"),
+		NetVariance:     decimal.RequireFromString("2.00"),
+	}}
+	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, reportRepo)
 
 	app := setupFullTestApp(
 		handlers.GetSourceBreakdown,
@@ -616,7 +636,17 @@ func TestHandlers_GetCashImpactSummary_BadDate(t *testing.T) {
 	provider := &mockContextProvider{
 		info: &ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, nil)
+	reportRepo := &countMockReportRepository{}
+	reportRepo.varianceRows = []*entities.VarianceReportRow{{
+		SourceID:        uuid.New(),
+		Currency:        "USD",
+		FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-00000000aa01"),
+		FeeScheduleName: "INTERCHANGE",
+		TotalExpected:   decimal.RequireFromString("10.00"),
+		TotalActual:     decimal.RequireFromString("12.00"),
+		NetVariance:     decimal.RequireFromString("2.00"),
+	}}
+	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, reportRepo)
 
 	app := setupFullTestApp(
 		handlers.GetCashImpactSummary,
@@ -1419,7 +1449,17 @@ func TestHandlers_GetMatchedReport_Success(t *testing.T) {
 	provider := &mockContextProvider{
 		info: &ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, nil)
+	reportRepo := &countMockReportRepository{}
+	reportRepo.varianceRows = []*entities.VarianceReportRow{{
+		SourceID:        uuid.New(),
+		Currency:        "USD",
+		FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-00000000aa01"),
+		FeeScheduleName: "INTERCHANGE",
+		TotalExpected:   decimal.RequireFromString("10.00"),
+		TotalActual:     decimal.RequireFromString("12.00"),
+		NetVariance:     decimal.RequireFromString("2.00"),
+	}}
+	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, reportRepo)
 
 	app := setupFullTestApp(
 		handlers.GetMatchedReport,
@@ -1452,7 +1492,17 @@ func TestHandlers_GetMatchedReport_BadDate(t *testing.T) {
 	provider := &mockContextProvider{
 		info: &ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, nil)
+	reportRepo := &countMockReportRepository{}
+	reportRepo.varianceRows = []*entities.VarianceReportRow{{
+		SourceID:        uuid.New(),
+		Currency:        "USD",
+		FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-00000000aa01"),
+		FeeScheduleName: "INTERCHANGE",
+		TotalExpected:   decimal.RequireFromString("10.00"),
+		TotalActual:     decimal.RequireFromString("12.00"),
+		NetVariance:     decimal.RequireFromString("2.00"),
+	}}
+	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, reportRepo)
 
 	app := setupFullTestApp(
 		handlers.GetMatchedReport,
@@ -1553,7 +1603,17 @@ func TestHandlers_GetVarianceReport_Success(t *testing.T) {
 	provider := &mockContextProvider{
 		info: &ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, nil)
+	reportRepo := &countMockReportRepository{}
+	reportRepo.varianceRows = []*entities.VarianceReportRow{{
+		SourceID:        uuid.New(),
+		Currency:        "USD",
+		FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-00000000aa01"),
+		FeeScheduleName: "INTERCHANGE",
+		TotalExpected:   decimal.RequireFromString("10.00"),
+		TotalActual:     decimal.RequireFromString("12.00"),
+		NetVariance:     decimal.RequireFromString("2.00"),
+	}}
+	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, reportRepo)
 
 	app := setupFullTestApp(
 		handlers.GetVarianceReport,
@@ -1576,7 +1636,9 @@ func TestHandlers_GetVarianceReport_Success(t *testing.T) {
 
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
-	assert.NotNil(t, result.Items)
+	require.Len(t, result.Items, 1)
+	assert.Equal(t, "INTERCHANGE", result.Items[0].FeeScheduleName)
+	assert.Equal(t, "00000000-0000-0000-0000-00000000aa01", result.Items[0].FeeScheduleID)
 }
 
 func TestHandlers_GetVarianceReport_BadDate(t *testing.T) {
@@ -1682,50 +1744,6 @@ func TestCashImpactSummaryToResponse_NilInput(t *testing.T) {
 	assert.Equal(t, "0", result.TotalUnmatchedAmount)
 	assert.Empty(t, result.ByCurrency)
 	assert.Empty(t, result.ByAge)
-}
-
-// --- forbidden helper test ---
-
-func TestForbidden_WithNilError(t *testing.T) {
-	t.Parallel()
-
-	app := fiber.New()
-
-	app.Get("/test", func(c *fiber.Ctx) error {
-		_, span, logger := startHandlerSpan(c, "test")
-		defer span.End()
-
-		return forbidden(c.UserContext(), c, span, logger, nil)
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-
-	defer resp.Body.Close()
-
-	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
-}
-
-func TestForbidden_WithError(t *testing.T) {
-	t.Parallel()
-
-	app := fiber.New()
-
-	app.Get("/test", func(c *fiber.Ctx) error {
-		_, span, logger := startHandlerSpan(c, "test")
-		defer span.End()
-
-		return forbidden(c.UserContext(), c, span, logger, errors.New("test forbidden error"))
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-
-	defer resp.Body.Close()
-
-	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 }
 
 // --- parseExportJobRequest coverage ---
@@ -1906,7 +1924,7 @@ func TestMapJobToResponse_WithErrorField(t *testing.T) {
 	querySvc, err := query.NewExportJobQueryService(repo)
 	require.NoError(t, err)
 
-	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 	require.NoError(t, err)
 
 	startedAt := time.Now().UTC().Add(-time.Hour)
@@ -1953,7 +1971,7 @@ func TestMapJobToResponse_DownloadableWithFutureExpiry(t *testing.T) {
 	querySvc, err := query.NewExportJobQueryService(repo)
 	require.NoError(t, err)
 
-	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 	require.NoError(t, err)
 
 	job := &entities.ExportJob{
@@ -1991,7 +2009,7 @@ func TestMapJobToResponse_NilJobReturnsEmptyResponse(t *testing.T) {
 	querySvc, err := query.NewExportJobQueryService(repo)
 	require.NoError(t, err)
 
-	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 	require.NoError(t, err)
 
 	response := handlers.mapJobToResponse(context.Background(), nil)
@@ -2039,7 +2057,7 @@ func setupListByContextHandlers(
 	querySvc, err := query.NewExportJobQueryService(repo)
 	require.NoError(t, err)
 
-	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 	require.NoError(t, err)
 
 	return handlers
@@ -2066,8 +2084,8 @@ func TestExportJobHandlers_ListExportJobsByContext_Success(t *testing.T) {
 
 	repo := newExportJobRepoMock(t)
 	repo.EXPECT().
-		ListByContext(gomock.Any(), contextID, gomock.Any()).
-		Return(jobs, nil).
+		ListByContext(gomock.Any(), contextID, gomock.Any(), gomock.Any()).
+		Return(jobs, libHTTP.CursorPagination{}, nil).
 		Times(1)
 
 	storage := newStorageClientMock(t, storageClientMockConfig{})
@@ -2096,6 +2114,8 @@ func TestExportJobHandlers_ListExportJobsByContext_Success(t *testing.T) {
 	err = json.NewDecoder(resp.Body).Decode(&response)
 	require.NoError(t, err)
 	assert.Len(t, response.Items, 1)
+	assert.False(t, response.HasMore, "single-item page within limit should not report more pages")
+	assert.Empty(t, response.NextCursor, "no next cursor when page is not full")
 }
 
 func TestExportJobHandlers_ListExportJobsByContext_ContextNotFound(t *testing.T) {
@@ -2159,8 +2179,8 @@ func TestExportJobHandlers_ListExportJobsByContext_ServiceError(t *testing.T) {
 
 	repo := newExportJobRepoMock(t)
 	repo.EXPECT().
-		ListByContext(gomock.Any(), contextID, gomock.Any()).
-		Return(nil, errTestStorageError).
+		ListByContext(gomock.Any(), contextID, gomock.Any(), gomock.Any()).
+		Return(nil, libHTTP.CursorPagination{}, errTestStorageError).
 		Times(1)
 
 	storage := newStorageClientMock(t, storageClientMockConfig{})

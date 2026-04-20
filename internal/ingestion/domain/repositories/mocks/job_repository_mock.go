@@ -13,7 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	http "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	http "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	entities "github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	repositories "github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
 	uuid "github.com/google/uuid"
@@ -88,6 +88,21 @@ func (m *MockJobRepository) FindByID(ctx context.Context, id uuid.UUID) (*entiti
 func (mr *MockJobRepositoryMockRecorder) FindByID(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByID", reflect.TypeOf((*MockJobRepository)(nil).FindByID), ctx, id)
+}
+
+// FindLatestByExtractionID mocks base method.
+func (m *MockJobRepository) FindLatestByExtractionID(ctx context.Context, extractionID uuid.UUID) (*entities.IngestionJob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindLatestByExtractionID", ctx, extractionID)
+	ret0, _ := ret[0].(*entities.IngestionJob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindLatestByExtractionID indicates an expected call of FindLatestByExtractionID.
+func (mr *MockJobRepositoryMockRecorder) FindLatestByExtractionID(ctx, extractionID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindLatestByExtractionID", reflect.TypeOf((*MockJobRepository)(nil).FindLatestByExtractionID), ctx, extractionID)
 }
 
 // Update mocks base method.

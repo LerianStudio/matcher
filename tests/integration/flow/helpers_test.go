@@ -10,9 +10,10 @@ import (
 	"testing"
 	"time"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
 
 	configContextRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/context"
 	configFieldMapRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/field_map"
@@ -21,7 +22,7 @@ import (
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
-	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
+	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/tests/integration"
 	"github.com/LerianStudio/matcher/tests/integration/server"
 )
@@ -248,23 +249,12 @@ func ParseRunMatchResponse(t *testing.T, body []byte) RunMatchResponse {
 	return resp
 }
 
-// ErrorResponse represents a standard API error response.
-// Supports both formats: {"error": "..."} and {"code": N, "message": "..."}.
+// ErrorResponse represents the standard Matcher API error response.
 type ErrorResponse struct {
-	Code    int    `json:"code"`
+	Code    string `json:"code"`
 	Title   string `json:"title"`
 	Message string `json:"message"`
-	Error   string `json:"error"`
 	Details any    `json:"details,omitempty"`
-}
-
-// GetMessage returns the error message from either format.
-func (e ErrorResponse) GetMessage() string {
-	if e.Message != "" {
-		return e.Message
-	}
-
-	return e.Error
 }
 
 // ParseErrorResponse parses error response body.
@@ -277,13 +267,25 @@ func ParseErrorResponse(t *testing.T, body []byte) ErrorResponse {
 	return resp
 }
 
-// AssertErrorResponse validates an error response has required fields.
-// Accepts both {"error": "..."} and {"code": "...", "message": "..."} formats.
+// AssertErrorResponse validates the Matcher error-response contract.
 func AssertErrorResponse(t *testing.T, body []byte) ErrorResponse {
 	t.Helper()
 	resp := ParseErrorResponse(t, body)
-	msg := resp.GetMessage()
-	require.NotEmpty(t, msg, "error response should have error or message field")
+	require.NotEmpty(t, resp.Code, "error response should have code")
+	require.NotEmpty(t, resp.Title, "error response should have title")
+	require.NotEmpty(t, resp.Message, "error response should have message")
+
+	return resp
+}
+
+// RequireExactErrorResponse validates the full Matcher error-response contract.
+func RequireExactErrorResponse(t *testing.T, body []byte, code, title, message string) ErrorResponse {
+	t.Helper()
+
+	resp := AssertErrorResponse(t, body)
+	require.Equal(t, code, resp.Code)
+	require.Equal(t, title, resp.Title)
+	require.Equal(t, message, resp.Message)
 
 	return resp
 }
@@ -570,7 +572,7 @@ func EnsureContext(t *testing.T, sh *server.ServerHarness, contextID uuid.UUID) 
 	t.Helper()
 
 	ctx := sh.ServerCtx()
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(sh.Connection, nil)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(sh.Connection, nil)
 	repo := configContextRepo.NewRepository(provider)
 	found, err := repo.FindByID(ctx, contextID)
 	require.NoError(t, err)
@@ -601,7 +603,7 @@ func createMultiRuleFlowTestConfig(
 ) multiRuleFlowTestSeedParts {
 	t.Helper()
 
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(conn, nil)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(conn, nil)
 	srcRepo, err := configSourceRepo.NewRepository(provider)
 	require.NoError(t, err)
 	fmRepo := configFieldMapRepo.NewRepository(provider)
@@ -814,7 +816,7 @@ func SetupFlowTestConfigWithOptionsGeneric(
 	ctx := h.ServerCtx()
 	conn := h.GetConnection()
 	seed := h.GetSeed()
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(conn, nil)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(conn, nil)
 
 	tenantID := seed.TenantID
 	contextID := seed.ContextID
@@ -1052,7 +1054,7 @@ func EnsureContextGeneric(t *testing.T, h TestHarnessLike, contextID uuid.UUID) 
 
 	ctx := h.ServerCtx()
 	conn := h.GetConnection()
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(conn, nil)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(conn, nil)
 	repo := configContextRepo.NewRepository(provider)
 	found, err := repo.FindByID(ctx, contextID)
 	require.NoError(t, err)

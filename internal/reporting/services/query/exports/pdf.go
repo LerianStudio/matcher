@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
+	"unicode"
 
 	"codeberg.org/go-pdf/fpdf"
 
@@ -204,7 +206,12 @@ func BuildSummaryPDF(summary *entities.SummaryReport) ([]byte, error) {
 }
 
 func buildItemsPDF(title string, headers []string, rows [][]string) ([]byte, error) {
+	return buildItemsPDFWithCompression(title, headers, rows, true)
+}
+
+func buildItemsPDFWithCompression(title string, headers []string, rows [][]string, compress bool) ([]byte, error) {
 	pdf := fpdf.New("L", "mm", "A3", "")
+	pdf.SetCompression(compress)
 	pdf.SetFont("Arial", "", pdfFontSizeSmall)
 	pdf.AddPage()
 	pdf.CellFormat(0, pdfTitleHeight, title, "", 1, "L", false, 0, "")
@@ -219,10 +226,11 @@ func buildItemsPDF(title string, headers []string, rows [][]string) ([]byte, err
 	for _, row := range rows {
 		for i, cell := range row {
 			width := getColumnWidth(headers[i])
-			displayCell := cell
+			displayCell := sanitizePDFValue(cell)
 
-			if len(displayCell) > pdfCellMaxLength {
-				displayCell = displayCell[:pdfCellTruncLength] + "..."
+			displayRunes := []rune(displayCell)
+			if len(displayRunes) > pdfCellMaxLength {
+				displayCell = string(displayRunes[:pdfCellTruncLength]) + "..."
 			}
 
 			pdf.CellFormat(width, pdfDataRowHeight, displayCell, "1", 0, "L", false, 0, "")
@@ -240,6 +248,19 @@ func buildItemsPDF(title string, headers []string, rows [][]string) ([]byte, err
 	return buffer.Bytes(), nil
 }
 
+func sanitizePDFValue(value string) string {
+	cleaned := strings.ToValidUTF8(value, "")
+	cleaned = strings.Map(func(r rune) rune {
+		if unicode.IsPrint(r) {
+			return r
+		}
+
+		return -1
+	}, cleaned)
+
+	return strings.TrimSpace(cleaned)
+}
+
 func getColumnWidth(header string) float64 {
 	switch header {
 	case "Transaction", "Match Group", "Source", "Exception":
@@ -251,8 +272,12 @@ func getColumnWidth(header string) float64 {
 	}
 }
 
-// BuildVariancePDF generates a PDF file from variance report rows, sorted by source, currency, fee type.
+// BuildVariancePDF generates a PDF file from variance report rows, sorted by source, currency, and fee schedule.
 func BuildVariancePDF(rows []*entities.VarianceReportRow) ([]byte, error) {
+	return buildVariancePDF(rows, true)
+}
+
+func buildVariancePDF(rows []*entities.VarianceReportRow, compress bool) ([]byte, error) {
 	sorted := make([]*entities.VarianceReportRow, 0, len(rows))
 
 	for _, row := range rows {
@@ -270,7 +295,7 @@ func BuildVariancePDF(rows []*entities.VarianceReportRow) ([]byte, error) {
 			return sorted[i].Currency < sorted[j].Currency
 		}
 
-		return sorted[i].FeeType < sorted[j].FeeType
+		return sorted[i].FeeScheduleID.String() < sorted[j].FeeScheduleID.String()
 	})
 
 	pdfRows := make([][]string, 0, len(sorted))
@@ -284,7 +309,7 @@ func BuildVariancePDF(rows []*entities.VarianceReportRow) ([]byte, error) {
 		pdfRows = append(pdfRows, []string{
 			row.SourceID.String(),
 			row.Currency,
-			row.FeeType,
+			row.FeeScheduleName,
 			row.TotalExpected.String(),
 			row.TotalActual.String(),
 			row.NetVariance.String(),
@@ -292,9 +317,10 @@ func BuildVariancePDF(rows []*entities.VarianceReportRow) ([]byte, error) {
 		})
 	}
 
-	return buildItemsPDF(
+	return buildItemsPDFWithCompression(
 		"Variance Report",
-		[]string{"Source", "Currency", "Fee Type", "Expected", "Actual", "Variance", "Pct"},
+		[]string{"Source", "Currency", "Fee Schedule", "Expected", "Actual", "Variance", "Pct"},
 		pdfRows,
+		compress,
 	)
 }

@@ -6,8 +6,8 @@ import (
 	"database/sql"
 	"fmt"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
@@ -34,7 +34,7 @@ func WithTenantRead[T any](
 ) (T, error) {
 	var zero T
 
-	if provider == nil {
+	if provider == nil || ports.IsNilValue(provider) {
 		return zero, ErrConnectionRequired
 	}
 
@@ -79,7 +79,7 @@ func WithTenantRead[T any](
 }
 
 // getReadDB returns the replica DB if available, otherwise falls back to primary.
-func getReadDB(ctx context.Context, provider ports.InfrastructureProvider) (*ports.ReplicaDBLease, error) {
+func getReadDB(ctx context.Context, provider ports.InfrastructureProvider) (*ports.DBLease, error) {
 	dbLease, err := provider.GetReplicaDB(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get replica db: %w", err)
@@ -100,48 +100,151 @@ func getReadDB(ctx context.Context, provider ports.InfrastructureProvider) (*por
 func getPrimaryDBFallback(
 	ctx context.Context,
 	provider ports.InfrastructureProvider,
-) (*ports.ReplicaDBLease, error) {
-	connLease, err := provider.GetPostgresConnection(ctx)
+) (*ports.DBLease, error) {
+	primaryLease, err := provider.GetPrimaryDB(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get primary connection as fallback: %w", err)
 	}
 
-	conn := connLease.Connection()
-	if conn == nil {
-		connLease.Release()
-
+	if primaryLease == nil {
 		return nil, ErrConnectionRequired
 	}
 
-	resolver, err := conn.Resolver(ctx)
-	if err != nil {
-		connLease.Release()
-
-		return nil, fmt.Errorf("get database from primary connection: %w", err)
-	}
-
-	primaryDBs := resolver.PrimaryDBs()
-	if len(primaryDBs) == 0 {
-		connLease.Release()
+	if primaryLease.DB() == nil {
+		primaryLease.Release()
 
 		return nil, ErrNoPrimaryDB
 	}
 
-	return ports.NewReplicaDBLease(primaryDBs[0], connLease.Release), nil
+	return primaryLease, nil
 }
 
-// WithTenantReadQuery executes fn using a read replica connection with tenant schema isolation.
-// This variant accepts QueryExecutor interface, making it easier to migrate code that
-// previously used *sql.Tx since both *sql.Tx and *sql.Conn satisfy QueryExecutor.
-// Falls back to primary if no replica is configured.
+// WithTenantReadQuery executes fn using a read-only tenant-scoped transaction.
+// It prefers a replica DB when configured and falls back to primary otherwise.
+// This variant accepts QueryExecutor, making it easier to migrate code that
+// previously used *sql.Tx while preserving sqlmock-friendly transaction semantics.
 func WithTenantReadQuery[T any](
 	ctx context.Context,
 	provider ports.InfrastructureProvider,
 	fn func(QueryExecutor) (T, error),
 ) (T, error) {
-	return WithTenantRead(ctx, provider, func(conn *sql.Conn) (T, error) {
-		return fn(conn)
-	})
+	var zero T
+
+	if provider == nil || ports.IsNilValue(provider) {
+		return zero, ErrConnectionRequired
+	}
+
+	readCtx := ctx
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+
+		readCtx, cancel = context.WithTimeout(ctx, defaultTxTimeout)
+		defer cancel()
+	}
+
+	replicaLease, err := provider.GetReplicaDB(readCtx)
+	if err != nil {
+		return zero, fmt.Errorf("with tenant read query: get replica db: %w", err)
+	}
+
+	if replicaLease != nil && replicaLease.DB() != nil {
+		defer replicaLease.Release()
+
+		if shouldUseReadReplicaTx(readCtx) {
+			return withTenantReadQueryTx(readCtx, replicaLease.DB(), fn)
+		}
+
+		return withTenantReadQueryConn(readCtx, replicaLease.DB(), fn)
+	}
+
+	if replicaLease != nil {
+		replicaLease.Release()
+	}
+
+	primaryLease, err := getPrimaryDBFallback(readCtx, provider)
+	if err != nil {
+		return zero, fmt.Errorf("with tenant read query: %w", err)
+	}
+	defer primaryLease.Release()
+
+	primaryDB := primaryLease.DB()
+	if primaryDB == nil {
+		return zero, ErrNoPrimaryDB
+	}
+
+	if requiresTenantScopedConn(readCtx) {
+		return withTenantReadQueryConn(readCtx, primaryDB, fn)
+	}
+
+	return fn(primaryDB)
+}
+
+func shouldUseReadReplicaTx(ctx context.Context) bool {
+	tenantID, hasExplicitTenant := auth.LookupTenantID(ctx)
+
+	return !hasExplicitTenant || tenantID != auth.GetDefaultTenantID()
+}
+
+func requiresTenantScopedConn(ctx context.Context) bool {
+	tenantID, hasExplicitTenant := auth.LookupTenantID(ctx)
+
+	return hasExplicitTenant && tenantID != auth.GetDefaultTenantID()
+}
+
+func withTenantReadQueryConn[T any](
+	ctx context.Context,
+	db *sql.DB,
+	fn func(QueryExecutor) (T, error),
+) (T, error) {
+	var zero T
+
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return zero, fmt.Errorf("with tenant read query: acquire connection: %w", err)
+	}
+
+	defer func() {
+		resetSearchPath(ctx, conn)
+		_ = conn.Close()
+	}()
+
+	if err := applyTenantSchemaToConn(ctx, conn); err != nil {
+		return zero, fmt.Errorf("with tenant read query: apply tenant schema: %w", err)
+	}
+
+	return fn(conn)
+}
+
+func withTenantReadQueryTx[T any](
+	ctx context.Context,
+	db *sql.DB,
+	fn func(QueryExecutor) (T, error),
+) (T, error) {
+	var zero T
+
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return zero, fmt.Errorf("with tenant read query: begin read-only transaction: %w", err)
+	}
+
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	if err := auth.ApplyTenantSchema(ctx, tx); err != nil {
+		return zero, fmt.Errorf("with tenant read query: apply tenant schema: %w", err)
+	}
+
+	result, err := fn(tx)
+	if err != nil {
+		return zero, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return zero, fmt.Errorf("with tenant read query: commit read-only transaction: %w", err)
+	}
+
+	return result, nil
 }
 
 // applyTenantSchemaToConn sets the search_path for the tenant on a connection.

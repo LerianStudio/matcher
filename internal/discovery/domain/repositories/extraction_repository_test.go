@@ -105,6 +105,103 @@ func (m *mockExtractionRepository) FindByID(
 	return nil, errExtractionNotFound
 }
 
+func (m *mockExtractionRepository) LinkIfUnlinked(
+	_ context.Context,
+	id uuid.UUID,
+	ingestionJobID uuid.UUID,
+) error {
+	req, ok := m.extractions[id]
+	if !ok {
+		return errExtractionNotFound
+	}
+
+	req.IngestionJobID = ingestionJobID
+
+	return nil
+}
+
+func (m *mockExtractionRepository) MarkBridgeFailed(
+	_ context.Context,
+	_ *entities.ExtractionRequest,
+) error {
+	return nil
+}
+
+func (m *mockExtractionRepository) MarkBridgeFailedWithTx(
+	_ context.Context,
+	_ *sql.Tx,
+	_ *entities.ExtractionRequest,
+) error {
+	return nil
+}
+
+func (m *mockExtractionRepository) IncrementBridgeAttempts(
+	_ context.Context,
+	_ uuid.UUID,
+	_ int,
+) error {
+	return nil
+}
+
+func (m *mockExtractionRepository) IncrementBridgeAttemptsWithTx(
+	_ context.Context,
+	_ *sql.Tx,
+	_ uuid.UUID,
+	_ int,
+) error {
+	return nil
+}
+
+func (m *mockExtractionRepository) FindEligibleForBridge(
+	_ context.Context,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
+func (m *mockExtractionRepository) CountBridgeReadiness(
+	_ context.Context,
+	_ time.Duration,
+) (BridgeReadinessCounts, error) {
+	return BridgeReadinessCounts{}, nil
+}
+
+func (m *mockExtractionRepository) ListBridgeCandidates(
+	_ context.Context,
+	_ string,
+	_ time.Duration,
+	_ time.Time,
+	_ uuid.UUID,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
+func (m *mockExtractionRepository) FindBridgeRetentionCandidates(
+	_ context.Context,
+	_ time.Duration,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
+func (m *mockExtractionRepository) MarkCustodyDeleted(
+	_ context.Context,
+	_ uuid.UUID,
+	_ time.Time,
+) error {
+	return nil
+}
+
+func (m *mockExtractionRepository) MarkCustodyDeletedWithTx(
+	_ context.Context,
+	_ *sql.Tx,
+	_ uuid.UUID,
+	_ time.Time,
+) error {
+	return nil
+}
+
 func TestMockExtractionRepositoryOperations(t *testing.T) {
 	t.Parallel()
 

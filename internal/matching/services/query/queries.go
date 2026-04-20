@@ -8,10 +8,10 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepos "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
@@ -74,7 +74,7 @@ func (uc *UseCase) GetMatchRun(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get match run", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to get match run")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to get match run")
 
 		return nil, fmt.Errorf("finding match run: %w", err)
 	}
@@ -101,7 +101,7 @@ func (uc *UseCase) ListMatchRuns(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list match runs", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list match runs")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list match runs")
 
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("listing match runs: %w", err)
 	}
@@ -129,7 +129,7 @@ func (uc *UseCase) ListMatchRunGroups(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list match run groups", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list match run groups")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list match run groups")
 
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("listing match run groups: %w", err)
 	}
@@ -159,7 +159,7 @@ func (uc *UseCase) enrichGroupsWithItems(
 
 	itemsByGroup, err := uc.matchItemRepo.ListByMatchGroupIDs(ctx, groupIDs)
 	if err != nil {
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelWarn, "failed to batch-load match items")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelWarn, "failed to batch-load match items")
 
 		return
 	}
@@ -189,7 +189,7 @@ func (uc *UseCase) FindMatchGroupByID(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to find match group", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find match group")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to find match group")
 
 		return nil, fmt.Errorf("finding match group: %w", err)
 	}

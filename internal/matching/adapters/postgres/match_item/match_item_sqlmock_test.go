@@ -247,8 +247,8 @@ func TestCreateBatch_Success(t *testing.T) {
 	assert.Equal(t, item2.ID, items[1].ID)
 }
 
-// TestCreateBatchWithTx_InvalidTxType tests CreateBatchWithTx with invalid tx type.
-func TestCreateBatchWithTx_InvalidTxType(t *testing.T) {
+// TestCreateBatchWithTx_NilTx tests CreateBatchWithTx with nil tx.
+func TestCreateBatchWithTx_NilTx(t *testing.T) {
 	t.Parallel()
 
 	repo, _, finish := setupMockRepository(t)
@@ -256,12 +256,9 @@ func TestCreateBatchWithTx_InvalidTxType(t *testing.T) {
 
 	item := createTestMatchItem(t)
 
-	// Use an invalid transaction type (string instead of *sql.Tx)
-	invalidTx := &invalidTxType{}
-
 	items, err := repo.CreateBatchWithTx(
 		context.Background(),
-		invalidTx,
+		nil,
 		[]*matchingEntities.MatchItem{item},
 	)
 
@@ -269,14 +266,8 @@ func TestCreateBatchWithTx_InvalidTxType(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalidTx)
 }
 
-// invalidTxType is a mock type that implements the Tx interface but is not *sql.Tx.
-type invalidTxType struct{}
-
-func (tx *invalidTxType) Commit() error   { return nil }
-func (tx *invalidTxType) Rollback() error { return nil }
-
-// TestCreateBatchWithTx_NilTx tests CreateBatchWithTx with nil tx (should create new tx).
-func TestCreateBatchWithTx_NilTx(t *testing.T) {
+// TestCreateBatchWithTx_NilTx_WithMockProvider tests CreateBatchWithTx with nil tx using a mock provider.
+func TestCreateBatchWithTx_NilTx_WithMockProvider(t *testing.T) {
 	t.Parallel()
 
 	provider := &testutil.MockInfrastructureProvider{}

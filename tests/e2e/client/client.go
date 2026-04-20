@@ -1,5 +1,4 @@
-//go:build e2e
-
+//nolint:varnamelen,wsl_v5 // Test HTTP client helpers favor concise receiver names and direct path assembly.
 package client
 
 import (
@@ -21,6 +20,14 @@ type Client struct {
 	httpClient *http.Client
 	tenantID   string
 	userID     string
+}
+
+const httpErrorStatusThreshold = 400
+
+// RequestOptions customize outgoing test requests.
+type RequestOptions struct {
+	Headers        map[string]string
+	IdempotencyKey string
 }
 
 // DefaultUserID is the default user ID for e2e tests when auth is disabled.
@@ -54,6 +61,17 @@ func (c *Client) Do(
 	body io.Reader,
 	contentType string,
 ) (*http.Response, error) {
+	return c.DoWithOptions(ctx, method, path, body, contentType, RequestOptions{})
+}
+
+// DoWithOptions performs an HTTP request with tenant headers and optional overrides.
+func (c *Client) DoWithOptions(
+	ctx context.Context,
+	method, path string,
+	body io.Reader,
+	contentType string,
+	opts RequestOptions,
+) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -62,31 +80,58 @@ func (c *Client) Do(
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
+
 	req.Header.Set("X-Tenant-ID", c.tenantID)
 	req.Header.Set("X-User-ID", c.userID)
 	req.Header.Set("Accept", "application/json")
 
 	// Add unique idempotency key for write operations to prevent caching between tests
 	if method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch {
-		req.Header.Set("X-Idempotency-Key", uuid.New().String())
+		idempotencyKey := opts.IdempotencyKey
+		if idempotencyKey == "" {
+			idempotencyKey = uuid.New().String()
+		}
+
+		req.Header.Set("X-Idempotency-Key", idempotencyKey)
 	}
 
-	return c.httpClient.Do(req)
+	for key, value := range opts.Headers {
+		req.Header.Set(key, value)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("execute request: %w", err)
+	}
+
+	return resp, nil
 }
 
 // DoJSON performs a JSON request and decodes the response.
 // The response body is read and closed internally.
 func (c *Client) DoJSON(ctx context.Context, method, path string, reqBody, respBody any) error {
+	return c.DoJSONWithOptions(ctx, method, path, reqBody, respBody, RequestOptions{})
+}
+
+// DoJSONWithOptions performs a JSON request and decodes the response with request options.
+func (c *Client) DoJSONWithOptions(
+	ctx context.Context,
+	method, path string,
+	reqBody, respBody any,
+	opts RequestOptions,
+) error {
 	var body io.Reader
+
 	if reqBody != nil {
 		data, err := json.Marshal(reqBody)
 		if err != nil {
 			return fmt.Errorf("failed to marshal request: %w", err)
 		}
+
 		body = bytes.NewReader(data)
 	}
 
-	resp, err := c.Do(ctx, method, path, body, "application/json")
+	resp, err := c.DoWithOptions(ctx, method, path, body, "application/json", opts)
 	if err != nil {
 		return err
 	}
@@ -97,11 +142,8 @@ func (c *Client) DoJSON(ctx context.Context, method, path string, reqBody, respB
 		return fmt.Errorf("failed to read response: %w", err)
 	}
 
-	if resp.StatusCode >= 400 {
-		return &APIError{
-			StatusCode: resp.StatusCode,
-			Body:       respData,
-		}
+	if resp.StatusCode >= httpErrorStatusThreshold {
+		return newAPIError(resp.StatusCode, respData)
 	}
 
 	if respBody != nil && len(respData) > 0 {
@@ -127,6 +169,7 @@ func (c *Client) DoMultipart(
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create form file: %w", err)
 	}
+
 	if _, err := part.Write(fileContent); err != nil {
 		return nil, nil, fmt.Errorf("failed to write file content: %w", err)
 	}
@@ -173,11 +216,8 @@ func (c *Client) DoRaw(
 		return resp, nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	if resp.StatusCode >= 400 {
-		return resp, data, &APIError{
-			StatusCode: resp.StatusCode,
-			Body:       data,
-		}
+	if resp.StatusCode >= httpErrorStatusThreshold {
+		return resp, data, newAPIError(resp.StatusCode, data)
 	}
 
 	return resp, data, nil
@@ -187,10 +227,50 @@ func (c *Client) DoRaw(
 type APIError struct {
 	StatusCode int
 	Body       []byte
+	Parsed     *ErrorResponse
 }
 
 func (e *APIError) Error() string {
+	if e == nil {
+		return "API error <nil>"
+	}
+
+	if e.Parsed != nil {
+		if e.Parsed.Code != "" {
+			return fmt.Sprintf("API error %d (%s): %s", e.StatusCode, e.Parsed.Code, e.Parsed.Message)
+		}
+
+		return fmt.Sprintf("API error %d: %s", e.StatusCode, e.Parsed.Message)
+	}
+
 	return fmt.Sprintf("API error %d: %s", e.StatusCode, string(e.Body))
+}
+
+// ProductCode returns the parsed Matcher product code when available.
+func (e *APIError) ProductCode() string {
+	if e == nil || e.Parsed == nil {
+		return ""
+	}
+
+	return e.Parsed.Code
+}
+
+// ProductTitle returns the parsed Matcher product title when available.
+func (e *APIError) ProductTitle() string {
+	if e == nil || e.Parsed == nil {
+		return ""
+	}
+
+	return e.Parsed.Title
+}
+
+// ProductMessage returns the parsed Matcher product message when available.
+func (e *APIError) ProductMessage() string {
+	if e == nil || e.Parsed == nil {
+		return ""
+	}
+
+	return e.Parsed.Message
 }
 
 // IsNotFound returns true if the error is a 404.
@@ -206,4 +286,18 @@ func (e *APIError) IsBadRequest() bool {
 // IsConflict returns true if the error is a 409.
 func (e *APIError) IsConflict() bool {
 	return e.StatusCode == http.StatusConflict
+}
+
+func newAPIError(statusCode int, body []byte) *APIError {
+	apiError := &APIError{
+		StatusCode: statusCode,
+		Body:       body,
+	}
+
+	var parsed ErrorResponse
+	if err := json.Unmarshal(body, &parsed); err == nil && parsed.Code != "" {
+		apiError.Parsed = &parsed
+	}
+
+	return apiError
 }

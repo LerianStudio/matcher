@@ -611,9 +611,9 @@ func TestArchivePartition_SkipsComplete(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// --- handleUploadingState - re-export on crash recovery ---
+// --- handleUploadingState - streaming upload failure ---
 
-func TestHandleUploadingState_ReExportError(t *testing.T) {
+func TestHandleUploadingState_StreamQueryError(t *testing.T) {
 	t.Parallel()
 
 	deps := setupTestDeps(t)
@@ -638,7 +638,7 @@ func TestHandleUploadingState_ReExportError(t *testing.T) {
 		Status:         entities.StatusUploading,
 	}
 
-	// Export fails during re-export
+	// Streaming query fails — the (re-)entry into UPLOADING now always streams.
 	deps.sqlMock.ExpectBegin()
 	deps.sqlMock.ExpectExec("SET LOCAL search_path").WillReturnResult(sqlmock.NewResult(0, 0))
 	deps.sqlMock.ExpectQuery("SELECT id, tenant_id").
@@ -648,10 +648,9 @@ func TestHandleUploadingState_ReExportError(t *testing.T) {
 	deps.archiveRepo.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil)
 	deps.archiveRepo.EXPECT().GetByID(gomock.Any(), metadataID).Return(metadata, nil)
 
-	// nil exportBuf triggers re-export
-	err = w.handleUploadingState(ctx, metadata, nil, "")
+	err = w.handleUploadingState(ctx, metadata)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "re-export partition")
+	assert.Contains(t, err.Error(), "stream and upload partition")
 }
 
 // --- handleDetachingState ---
@@ -745,7 +744,7 @@ func TestArchiveKey_JanuaryPartition(t *testing.T) {
 
 	key, err := w.archiveKey(metadata)
 	require.NoError(t, err)
-	expected := "archives/audit-logs/550e8400-e29b-41d4-a716-446655440000/2024/01/aabbccdd-0011-2233-4455-667788990011/audit_logs_2024_01.jsonl.gz"
+	expected := "550e8400-e29b-41d4-a716-446655440000/archives/audit-logs/2024/01/aabbccdd-0011-2233-4455-667788990011/audit_logs_2024_01.jsonl.gz"
 	assert.Equal(t, expected, key)
 }
 
@@ -773,7 +772,7 @@ func TestArchiveKey_DecemberPartition(t *testing.T) {
 
 	key, err := w.archiveKey(metadata)
 	require.NoError(t, err)
-	expected := "archives/audit-logs/660e8400-e29b-41d4-a716-446655440001/2023/12/aabbccdd-0011-2233-4455-667788990022/audit_logs_2023_12.jsonl.gz"
+	expected := "660e8400-e29b-41d4-a716-446655440001/archives/audit-logs/2023/12/aabbccdd-0011-2233-4455-667788990022/audit_logs_2023_12.jsonl.gz"
 	assert.Equal(t, expected, key)
 }
 
@@ -858,6 +857,168 @@ func TestAcquireLock_NilRedisConnection(t *testing.T) {
 	assert.False(t, acquired)
 	assert.Empty(t, token)
 	assert.ErrorIs(t, err, ErrNilRedisClient)
+}
+
+// --- streamPartitionUpload correctness ---
+
+// TestStreamPartitionUpload_HashMatchesExternalComputation proves the streaming
+// implementation produces the same SHA-256 checksum as an independent offline
+// computation over the same JSONL encoding of the partition rows. This is the
+// unit-level replacement for the old "export into bytes.Buffer" verification:
+// it guarantees that swapping the buffer for io.Pipe did not change the hash
+// contract (hash is computed over `json.Marshal(row) + "\n"`).
+func TestStreamPartitionUpload_HashMatchesExternalComputation(t *testing.T) {
+	t.Parallel()
+
+	deps := setupTestDeps(t)
+	defer deps.ctrl.Finish()
+
+	w, err := NewArchivalWorker(
+		deps.archiveRepo, deps.partitionMgr, deps.storage,
+		deps.db, deps.provider, deps.cfg, deps.logger,
+	)
+	require.NoError(t, err)
+
+	tenantID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+
+	metadata := &entities.ArchiveMetadata{
+		ID:            uuid.New(),
+		TenantID:      tenantID,
+		PartitionName: "audit_logs_2015_01",
+	}
+
+	// Seed 500 deterministic rows. 500 is enough to exercise pipe backpressure
+	// (multiple Write/Read cycles) without slowing the test.
+	const rowCount = 500
+
+	rows := sqlmock.NewRows([]string{
+		"id", "tenant_id", "entity_type", "entity_id", "action",
+		"actor_id", "changes", "created_at", "tenant_seq",
+		"prev_hash", "record_hash", "hash_version",
+	})
+
+	createdAt := time.Date(2015, 1, 15, 12, 0, 0, 0, time.UTC)
+
+	for i := 0; i < rowCount; i++ {
+		rows.AddRow(
+			uuid.NewSHA1(uuid.NameSpaceDNS, []byte{byte(i), byte(i >> 8)}).String(),
+			tenantID.String(),
+			"transaction",
+			uuid.NewSHA1(uuid.NameSpaceOID, []byte{byte(i)}).String(),
+			"create",
+			nil, nil, createdAt, int64(i+1), nil, nil, nil,
+		)
+	}
+
+	deps.sqlMock.ExpectBegin()
+	deps.sqlMock.ExpectExec("SET LOCAL search_path").WillReturnResult(sqlmock.NewResult(0, 0))
+	deps.sqlMock.ExpectQuery("SELECT id, tenant_id").WillReturnRows(rows)
+	deps.sqlMock.ExpectCommit()
+
+	var uploadedBytes []byte
+
+	deps.storage.EXPECT().
+		UploadWithOptions(gomock.Any(), gomock.Any(), gomock.Any(), archiveContentType, gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ string, reader io.Reader, _ string, _ ...interface{}) (string, error) {
+			buf, copyErr := io.ReadAll(reader)
+			require.NoError(t, copyErr)
+			uploadedBytes = buf
+
+			return "archives/test-key", nil
+		})
+
+	resultRowCount, checksum, compressedSize, err :=
+		w.streamPartitionUpload(ctx, metadata, "archives/test-key")
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(rowCount), resultRowCount, "row count must match seeded rows")
+	assert.Equal(t, int64(len(uploadedBytes)), compressedSize,
+		"reported compressedSize must match bytes the uploader actually received")
+
+	// Decompress the uploaded archive and recompute the hash by streaming the
+	// raw JSON lines as-written (NOT via round-trip decode, which would reorder
+	// struct fields alphabetically for maps). The recomputed hash uses the
+	// same contract as the streaming producer: hash each stripped JSON line +
+	// "\n", where the stripped line is the literal bytes that were encoded.
+	gzReader, err := gzip.NewReader(bytes.NewReader(uploadedBytes))
+	require.NoError(t, err)
+	defer gzReader.Close()
+
+	decompressed, err := io.ReadAll(gzReader)
+	require.NoError(t, err)
+
+	independentHasher := sha256.New()
+
+	decodedRows := 0
+
+	// encoding/json Encoder appends a single "\n" after each encoded object.
+	// Split the stream on "\n" to recover each raw line exactly as produced.
+	lines := bytes.Split(decompressed, []byte{'\n'})
+	// The final element is an empty string after the trailing newline.
+	for _, line := range lines {
+		if len(line) == 0 {
+			continue
+		}
+
+		_, _ = independentHasher.Write(line)
+		_, _ = independentHasher.Write([]byte("\n"))
+
+		decodedRows++
+	}
+
+	assert.Equal(t, rowCount, decodedRows, "all rows must be recoverable from the streamed archive")
+	assert.Equal(t, hex.EncodeToString(independentHasher.Sum(nil)), checksum,
+		"hash computed during streaming must match independent computation over the same JSONL")
+}
+
+// TestStreamPartitionUpload_UploadErrorPropagates verifies that when the
+// uploader returns an error mid-stream, the producer goroutine unblocks and
+// the overall function returns an error without leaking the pipe reader or
+// the goroutine.
+func TestStreamPartitionUpload_UploadErrorPropagates(t *testing.T) {
+	t.Parallel()
+
+	deps := setupTestDeps(t)
+	defer deps.ctrl.Finish()
+
+	w, err := NewArchivalWorker(
+		deps.archiveRepo, deps.partitionMgr, deps.storage,
+		deps.db, deps.provider, deps.cfg, deps.logger,
+	)
+	require.NoError(t, err)
+
+	tenantID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+
+	metadata := &entities.ArchiveMetadata{
+		ID:            uuid.New(),
+		TenantID:      tenantID,
+		PartitionName: "audit_logs_2015_01",
+	}
+
+	rows := sqlmock.NewRows([]string{
+		"id", "tenant_id", "entity_type", "entity_id", "action",
+		"actor_id", "changes", "created_at", "tenant_seq",
+		"prev_hash", "record_hash", "hash_version",
+	}).AddRow(
+		uuid.New().String(), tenantID.String(), "transaction", uuid.New().String(), "create",
+		nil, nil, time.Now().UTC(), int64(1), nil, nil, nil,
+	)
+
+	deps.sqlMock.ExpectBegin()
+	deps.sqlMock.ExpectExec("SET LOCAL search_path").WillReturnResult(sqlmock.NewResult(0, 0))
+	deps.sqlMock.ExpectQuery("SELECT id, tenant_id").WillReturnRows(rows)
+	deps.sqlMock.ExpectRollback()
+
+	uploadFail := errors.New("s3 put failed")
+	deps.storage.EXPECT().
+		UploadWithOptions(gomock.Any(), gomock.Any(), gomock.Any(), archiveContentType, gomock.Any()).
+		Return("", uploadFail)
+
+	_, _, _, err = w.streamPartitionUpload(ctx, metadata, "archives/test-key")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, uploadFail)
 }
 
 // --- archivePartition from various states ---

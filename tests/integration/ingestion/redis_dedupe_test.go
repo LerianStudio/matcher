@@ -16,7 +16,6 @@ import (
 
 	ingestionRedis "github.com/LerianStudio/matcher/internal/ingestion/adapters/redis"
 	ingestionPorts "github.com/LerianStudio/matcher/internal/ingestion/ports"
-	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
@@ -51,7 +50,7 @@ func newDedupeService(t *testing.T, h *integration.TestHarness) *ingestionRedis.
 
 	rawClient := mustDedupeRedisConn(t, h.RedisAddr)
 	libClient := infraTestutil.NewRedisClientWithMock(rawClient)
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(h.Connection, libClient)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, libClient)
 
 	return ingestionRedis.NewDedupeService(provider)
 }

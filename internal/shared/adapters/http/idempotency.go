@@ -7,18 +7,19 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"regexp"
+	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	pkghttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // HTTP header constants for idempotency key extraction.
@@ -27,72 +28,45 @@ const (
 	HeaderIdempotencyKey       = "Idempotency-Key"
 	HeaderXIdempotencyReplayed = "X-Idempotency-Replayed"
 	httpErrorStatusThreshold   = 400
+	principalPrefixUser        = "user:"
+	principalPrefixAnonymous   = "anon:"
 )
 
 // Context key for tracking idempotency middleware execution.
 const idempotencyProcessedKey = "idempotency_processed"
 
-// Idempotency key validation constraints.
-const (
-	idempotencyKeyMaxLength = 128
-)
-
-// idempotencyKeyPattern allows alphanumeric characters, colons, underscores, and hyphens.
-// This matches the validation in internal/exception/domain/value_objects/idempotency_key.go.
-var idempotencyKeyPattern = regexp.MustCompile(`^[A-Za-z0-9:_-]+$`)
-
-// Idempotency key validation errors.
 var (
-	ErrEmptyIdempotencyKey   = errors.New("idempotency key is required")
-	ErrIdempotencyKeyTooLong = errors.New(
-		"idempotency key exceeds maximum length of 128 characters",
-	)
-	ErrInvalidIdempotencyKey = errors.New(
-		"idempotency key contains invalid characters; allowed: alphanumeric, colons, underscores, hyphens",
-	)
+	// ErrEmptyIdempotencyKey is returned when the provided key is blank.
+	ErrEmptyIdempotencyKey = shared.ErrEmptyIdempotencyKey
+	// ErrInvalidIdempotencyKey is returned when the provided key format is invalid.
+	ErrInvalidIdempotencyKey = shared.ErrInvalidIdempotencyKey
+	// ErrMissingTenantID is returned when auth middleware did not populate tenant scope.
 	ErrMissingTenantID = errors.New(
 		"tenant ID is required for idempotency; ensure auth middleware runs before idempotency middleware",
 	)
+	// ErrUnknownIdempotencyStatus is returned when a cached result has an unrecognized status.
+	ErrUnknownIdempotencyStatus = errors.New("unknown idempotency status")
 )
 
 // IdempotencyStatus represents the state of an idempotency key.
-type IdempotencyStatus string
+type IdempotencyStatus = shared.IdempotencyStatus
 
-// Idempotency status constants.
+// Re-exported idempotency statuses from the shared kernel.
 const (
-	IdempotencyStatusUnknown  IdempotencyStatus = "unknown"
-	IdempotencyStatusPending  IdempotencyStatus = "pending"
-	IdempotencyStatusComplete IdempotencyStatus = "complete"
-	IdempotencyStatusFailed   IdempotencyStatus = "failed"
+	IdempotencyStatusUnknown  = shared.IdempotencyStatusUnknown
+	IdempotencyStatusPending  = shared.IdempotencyStatusPending
+	IdempotencyStatusComplete = shared.IdempotencyStatusComplete
+	IdempotencyStatusFailed   = shared.IdempotencyStatusFailed
 )
 
-// IdempotencyResult holds the cached response for a completed idempotent request.
-type IdempotencyResult struct {
-	Status     IdempotencyStatus
-	Response   []byte
-	HTTPStatus int
-}
+// IdempotencyResult contains the cached response for an idempotent request.
+type IdempotencyResult = shared.IdempotencyResult
 
-// IdempotencyKey is the string identifier for an idempotent request.
-type IdempotencyKey string
+// IdempotencyKey is the canonical request de-duplication identifier.
+type IdempotencyKey = shared.IdempotencyKey
 
-// IdempotencyRepository defines the interface for idempotency storage operations.
-// This interface is implemented by the Redis adapter in the exception bounded context.
-//
-// TTL note: TryAcquire sets the initial pending marker with the same TTL as completed
-// entries (typically 7 days via DefaultSuccessTTL). If a request crashes between
-// TryAcquire and MarkComplete/MarkFailed, the pending marker blocks retries for
-// that full duration. MarkFailed resets the TTL to a shorter window (typically 5
-// minutes via DefaultFailedRetryWindow). Implementations should consider using a
-// shorter initial TTL for the pending state (e.g., 5 minutes) and only extending
-// to the full TTL on MarkComplete.
-type IdempotencyRepository interface {
-	TryAcquire(ctx context.Context, key IdempotencyKey) (acquired bool, err error)
-	TryReacquireFromFailed(ctx context.Context, key IdempotencyKey) (acquired bool, err error)
-	MarkComplete(ctx context.Context, key IdempotencyKey, response []byte, httpStatus int) error
-	MarkFailed(ctx context.Context, key IdempotencyKey) error
-	GetCachedResult(ctx context.Context, key IdempotencyKey) (*IdempotencyResult, error)
-}
+// IdempotencyRepository defines the persistence contract used by the middleware.
+type IdempotencyRepository = sharedPorts.IdempotencyRepository
 
 // IdempotencyMiddlewareConfig configures the idempotency middleware behavior.
 type IdempotencyMiddlewareConfig struct {
@@ -101,20 +75,10 @@ type IdempotencyMiddlewareConfig struct {
 	SkipPaths  []string
 }
 
-// validateIdempotencyKeyFormat validates the user-provided idempotency key format.
-// Returns nil if the key is valid, or a specific error describing the validation failure.
-// This validation is applied ONLY to user-provided keys, not to auto-generated hash keys.
+// validateIdempotencyKeyFormat validates a user-provided idempotency key.
 func validateIdempotencyKeyFormat(userKey string) error {
-	if userKey == "" {
-		return ErrEmptyIdempotencyKey
-	}
-
-	if len(userKey) > idempotencyKeyMaxLength {
-		return ErrIdempotencyKeyTooLong
-	}
-
-	if !idempotencyKeyPattern.MatchString(userKey) {
-		return ErrInvalidIdempotencyKey
+	if _, err := shared.ParseIdempotencyKey(userKey); err != nil {
+		return fmt.Errorf("parse idempotency key: %w", err)
 	}
 
 	return nil
@@ -158,10 +122,7 @@ func NewIdempotencyMiddleware(cfg IdempotencyMiddlewareConfig) fiber.Handler {
 
 		fiberCtx.Locals(idempotencyProcessedKey, true)
 
-		ctx := fiberCtx.UserContext()
-
-		logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-		ctx, span := tracer.Start(ctx, "middleware.idempotency")
+		ctx, span, logger := StartHandlerSpan(fiberCtx, "middleware.idempotency")
 
 		defer span.End()
 
@@ -182,16 +143,25 @@ func handleKeyValidationError(
 	if errors.Is(validationErr, ErrMissingTenantID) {
 		libOpentelemetry.HandleSpanError(span, "missing tenant ID for idempotency", validationErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("idempotency middleware: %v", validationErr))
+		logIdempotency(ctx, logger, libLog.LevelError, fmt.Sprintf("idempotency middleware: %v", validationErr))
 
-		return pkghttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_configuration_error", "an unexpected error occurred")
+		return RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_configuration_error", "an unexpected error occurred")
 	}
 
 	libOpentelemetry.HandleSpanError(span, "invalid idempotency key format", validationErr)
 
-	logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("idempotency middleware: invalid key format: %v", validationErr))
+	logIdempotency(ctx, logger, libLog.LevelWarn, fmt.Sprintf("idempotency middleware: invalid key format: %v", validationErr))
 
-	return pkghttp.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_idempotency_key", validationErr.Error())
+	message := validationErr.Error()
+	if errors.Is(validationErr, ErrEmptyIdempotencyKey) {
+		message = ErrEmptyIdempotencyKey.Error()
+	}
+
+	if errors.Is(validationErr, ErrInvalidIdempotencyKey) {
+		message = ErrInvalidIdempotencyKey.Error()
+	}
+
+	return RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_idempotency_key", message)
 }
 
 // executeIdempotencyLogic handles the core idempotency logic after initial checks pass.
@@ -217,9 +187,9 @@ func executeIdempotencyLogic(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to acquire idempotency lock", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("idempotency middleware: failed to acquire lock: %v", err))
+		logIdempotency(ctx, logger, libLog.LevelError, fmt.Sprintf("idempotency middleware: failed to acquire lock: %v", err))
 
-		return pkghttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
+		return RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
 	}
 
 	if acquired {
@@ -229,10 +199,10 @@ func executeIdempotencyLogic(
 	return handleDuplicateRequest(ctx, fiberCtx, cfg.Repository, idempotencyKey, logger, span)
 }
 
-// extractIdempotencyKey extracts and constructs a tenant-scoped idempotency key.
-// The key format is: prefix:tenantID:method:path:userKey
-// This ensures tenant isolation - different tenants cannot share idempotency keys,
-// and the same key on different endpoints/methods is treated as distinct.
+// extractIdempotencyKey extracts and constructs a tenant- and principal-scoped idempotency key.
+// The key format is: prefix:tenantID:principalID:method:requestTarget:userKey
+// This ensures tenant isolation, separates same-tenant callers when user identity is available,
+// and scopes keys to the full request target rather than path alone.
 //
 // Returns:
 //   - key: the constructed idempotency key (empty if no key should be used)
@@ -252,11 +222,23 @@ func extractIdempotencyKey(
 	userProvidedKey := userKey != ""
 
 	if userKey == "" {
-		// Body hash fallback: when no Idempotency-Key header is provided, a SHA-256
-		// hash of the request body is used as the key. This means identical payloads
-		// sent to the same tenant+method+path will be deduplicated within the TTL window.
-		// If this behavior is undesirable, clients should always provide an explicit
-		// Idempotency-Key header.
+		// Body-hash fallback is only safe for POST and PUT. PATCH requests are
+		// state-dependent: the same body (e.g. {"status":"ACTIVE"}) represents
+		// different logical operations depending on the resource's current state.
+		// Using a body hash for PATCH causes false-positive replay when a resource
+		// transitions through states and returns to a previous body shape (e.g.
+		// DRAFT→ACTIVE, then ACTIVE→PAUSED, then PAUSED→ACTIVE: the third PATCH
+		// has the same body hash as the first, but is a distinct operation).
+		// For PATCH, only enforce idempotency when an explicit key header is provided.
+		if fiberCtx.Method() == fiber.MethodPatch {
+			return "", nil
+		}
+
+		// Body hash fallback for POST/PUT: when no Idempotency-Key header is
+		// provided, a SHA-256 hash of the request body is used as the key. This
+		// means identical payloads sent to the same tenant+method+path will be
+		// deduplicated within the TTL window. If this behavior is undesirable,
+		// clients should always provide an explicit Idempotency-Key header.
 		body := fiberCtx.Body()
 		if len(body) == 0 {
 			return "", nil
@@ -276,6 +258,13 @@ func extractIdempotencyKey(
 		if err := validateIdempotencyKeyFormat(userKey); err != nil {
 			return "", err
 		}
+
+		parsedKey, err := shared.ParseIdempotencyKey(userKey)
+		if err != nil {
+			return "", fmt.Errorf("parse idempotency key: %w", err)
+		}
+
+		userKey = parsedKey.String()
 	}
 
 	// Extract tenant ID from context (set by auth middleware).
@@ -287,21 +276,96 @@ func extractIdempotencyKey(
 		return "", ErrMissingTenantID
 	}
 
-	// Include method and path for complete request scoping
-	method := fiberCtx.Method()
-	path := fiberCtx.Path()
+	rawPrincipalID := strings.TrimSpace(auth.GetUserID(ctx))
 
-	// Build the scoped key: prefix:tenantID:method:path:userKey
-	// This prevents cross-tenant data leakage and ensures the same
-	// idempotency key used on different endpoints is treated as distinct
-	if prefix != "" {
-		return fmt.Sprintf("%s:%s:%s:%s:%s", prefix, tenantID, method, path, userKey), nil
+	var principalID string
+	if rawPrincipalID == "" {
+		principalID = principalPrefixAnonymous
+	} else {
+		principalID = principalPrefixUser + rawPrincipalID
 	}
 
-	return fmt.Sprintf("%s:%s:%s:%s", tenantID, method, path, userKey), nil
+	// Include method and canonical request target for complete request scoping.
+	method := fiberCtx.Method()
+	requestTarget := canonicalRequestTarget(fiberCtx)
+
+	// Build the scoped key: prefix:tenantID:principalID:method:requestTarget:userKey.
+	// This prevents cross-tenant data leakage, reduces same-tenant caller collisions,
+	// and ensures the same idempotency key used on different request targets is distinct.
+	if prefix != "" {
+		return fmt.Sprintf("%s:%s:%s:%s:%s:%s", prefix, tenantID, principalID, method, requestTarget, userKey), nil
+	}
+
+	return fmt.Sprintf("%s:%s:%s:%s:%s", tenantID, principalID, method, requestTarget, userKey), nil
+}
+
+func canonicalRequestTarget(fiberCtx *fiber.Ctx) string {
+	if fiberCtx == nil {
+		return ""
+	}
+
+	path := fiberCtx.Path()
+
+	args := fiberCtx.Context().QueryArgs()
+	if args.Len() == 0 {
+		return path
+	}
+
+	// Fast path: single key-value pair. Skips url.Values allocation and sort,
+	// while producing identical output to url.Values.Encode (which percent-
+	// encodes the key and value and joins with "=").
+	if args.Len() == 1 {
+		var key, value string
+		for k, v := range args.All() {
+			key = string(k)
+			value = string(v)
+
+			break
+		}
+
+		target := path + "?" + url.QueryEscape(key) + "=" + url.QueryEscape(value)
+
+		return maybeHashTarget(path, target)
+	}
+
+	query := url.Values{}
+
+	for key, value := range args.All() {
+		query.Add(string(key), string(value))
+	}
+
+	for key := range query {
+		sort.Strings(query[key])
+	}
+
+	encoded := query.Encode()
+	if encoded == "" {
+		return path
+	}
+
+	return maybeHashTarget(path, path+"?"+encoded)
+}
+
+// maybeHashTarget limits Redis key size by hashing the request target when
+// it exceeds a safe threshold.
+func maybeHashTarget(path, target string) string {
+	const maxRequestTargetLen = 256
+	if len(target) > maxRequestTargetLen {
+		h := sha256.Sum256([]byte(target))
+
+		return path + "?_hash=" + hex.EncodeToString(h[:])
+	}
+
+	return target
 }
 
 type idempotencyLogger = libLog.Logger
+
+func logIdempotency(ctx context.Context, logger idempotencyLogger, level libLog.Level, message string) {
+	if logger != nil {
+		logger.Log(ctx, level, message)
+	}
+}
 
 func idempotencyKeyFingerprint(key IdempotencyKey) string {
 	hash := sha256.Sum256([]byte(key))
@@ -317,7 +381,7 @@ func markRequestFailed(
 	logger idempotencyLogger,
 ) {
 	if markErr := repo.MarkFailed(ctx, key); markErr != nil {
-		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("idempotency: failed to mark failed: %v", markErr))
+		logIdempotency(ctx, logger, libLog.LevelWarn, fmt.Sprintf("idempotency: failed to mark failed: %v", markErr))
 	}
 }
 
@@ -331,7 +395,7 @@ func markRequestComplete(
 	logger idempotencyLogger,
 ) {
 	if markErr := repo.MarkComplete(ctx, key, responseBody, statusCode); markErr != nil {
-		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("idempotency: failed to mark complete: %v", markErr))
+		logIdempotency(ctx, logger, libLog.LevelWarn, fmt.Sprintf("idempotency: failed to mark complete: %v", markErr))
 	}
 }
 
@@ -378,22 +442,22 @@ func handleDuplicateRequest(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get cached result", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("idempotency: failed to get cached result: %v", err))
+		logIdempotency(ctx, logger, libLog.LevelError, fmt.Sprintf("idempotency: failed to get cached result: %v", err))
 
-		return pkghttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
+		return RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
 	}
 
 	if result == nil {
-		logger.Log(ctx, libLog.LevelError, "idempotency: cached result is nil")
+		logIdempotency(ctx, logger, libLog.LevelError, "idempotency: cached result is nil")
 
-		return pkghttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
+		return RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
 	}
 
 	switch result.Status {
 	case IdempotencyStatusPending:
-		logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("idempotency: request in progress (key_hash=%s)", idempotencyKeyFingerprint(key)))
+		logIdempotency(ctx, logger, libLog.LevelInfo, fmt.Sprintf("idempotency: request in progress (key_hash=%s)", idempotencyKeyFingerprint(key)))
 
-		return pkghttp.RespondError(
+		return RespondError(
 			fiberCtx,
 			fiber.StatusConflict,
 			"request_in_progress",
@@ -401,7 +465,7 @@ func handleDuplicateRequest(
 		)
 
 	case IdempotencyStatusComplete:
-		logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("idempotency: replaying cached response (key_hash=%s)", idempotencyKeyFingerprint(key)))
+		logIdempotency(ctx, logger, libLog.LevelInfo, fmt.Sprintf("idempotency: replaying cached response (key_hash=%s)", idempotencyKeyFingerprint(key)))
 
 		fiberCtx.Set(HeaderXIdempotencyReplayed, "true")
 
@@ -419,15 +483,15 @@ func handleDuplicateRequest(
 		if reacquireErr != nil {
 			libOpentelemetry.HandleSpanError(span, "failed to reacquire failed idempotency key", reacquireErr)
 
-			logger.Log(ctx, libLog.LevelError, fmt.Sprintf("idempotency: failed to reacquire failed key: %v", reacquireErr))
+			logIdempotency(ctx, logger, libLog.LevelError, fmt.Sprintf("idempotency: failed to reacquire failed key: %v", reacquireErr))
 
-			return pkghttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
+			return RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
 		}
 
 		if !reacquired {
-			logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("idempotency: failed-key retry already in progress (key_hash=%s)", idempotencyKeyFingerprint(key)))
+			logIdempotency(ctx, logger, libLog.LevelInfo, fmt.Sprintf("idempotency: failed-key retry already in progress (key_hash=%s)", idempotencyKeyFingerprint(key)))
 
-			return pkghttp.RespondError(
+			return RespondError(
 				fiberCtx,
 				fiber.StatusConflict,
 				"request_in_progress",
@@ -435,11 +499,18 @@ func handleDuplicateRequest(
 			)
 		}
 
-		logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("idempotency: previous request failed, allowing retry (key_hash=%s)", idempotencyKeyFingerprint(key)))
+		logIdempotency(ctx, logger, libLog.LevelInfo, fmt.Sprintf("idempotency: previous request failed, allowing retry (key_hash=%s)", idempotencyKeyFingerprint(key)))
 
 		return processNewRequest(ctx, fiberCtx, repo, key, logger, span)
 
 	default:
-		return fiberCtx.Next()
+		libOpentelemetry.HandleSpanError(span, "idempotency: unknown status", fmt.Errorf("status %q: %w", result.Status, ErrUnknownIdempotencyStatus))
+
+		return RespondError(
+			fiberCtx,
+			fiber.StatusInternalServerError,
+			"idempotency_error",
+			"Unexpected idempotency state encountered",
+		)
 	}
 }

@@ -42,11 +42,14 @@ type SchemaTableResponse struct {
 	Columns   []SchemaColumnResponse `json:"columns"`
 }
 
-// SchemaColumnResponse represents a column.
+// SchemaColumnResponse represents a column in the API schema response.
+// Note: Type and Nullable are historical fields -- the current Fetcher API
+// only returns flat field names. These fields remain for backward
+// compatibility with persisted data and are omitted from responses when empty.
 type SchemaColumnResponse struct {
 	Name     string `json:"name"`
-	Type     string `json:"type"`
-	Nullable bool   `json:"nullable"`
+	Type     string `json:"type,omitempty"`
+	Nullable bool   `json:"nullable,omitempty"`
 }
 
 // ConnectionSchemaResponse wraps the schema for a connection.
@@ -69,18 +72,39 @@ type TestConnectionResponse struct {
 }
 
 // ExtractionRequestResponse is the response for extraction request endpoints.
+//
+// The bridge_* and custody_* fields surface the Matcher-side bridging
+// pipeline's retry-and-failure state so operators drilling into a failed
+// extraction see the failure class, message, attempt count, and failure
+// timestamp without a second call. They are independent of Status — Status
+// describes the upstream Fetcher pipeline while BridgeLastError describes
+// what happened when the Matcher worker tried to retrieve, verify, custody,
+// ingest, and link the extraction's output. All bridge/custody fields are
+// omitted from responses when zero/nil.
+//
+// BridgeLastErrorMessage is an appended-history string: the first (primary)
+// failure reason stays at the head; subsequent same-class failures are
+// appended with a '→ ' separator. BridgeFailedAt is frozen at the first
+// failure so it marks the definitive terminal timestamp; later history
+// entries are progress notes. Total length bounded — overflow truncates the
+// tail with '...' so the primary reason stays intact.
 type ExtractionRequestResponse struct {
-	ID             uuid.UUID                          `json:"id"`
-	ConnectionID   uuid.UUID                          `json:"connectionId"`
-	IngestionJobID *uuid.UUID                         `json:"ingestionJobId,omitempty"`
-	Tables         map[string]ExtractionTableResponse `json:"tables"`
-	StartDate      string                             `json:"startDate,omitempty"`
-	EndDate        string                             `json:"endDate,omitempty"`
-	Filters        *sharedPorts.ExtractionFilters     `json:"filters,omitempty"`
-	Status         string                             `json:"status"`
-	ErrorMessage   string                             `json:"errorMessage,omitempty"`
-	CreatedAt      time.Time                          `json:"createdAt"`
-	UpdatedAt      time.Time                          `json:"updatedAt"`
+	ID                     uuid.UUID                          `json:"id"`
+	ConnectionID           uuid.UUID                          `json:"connectionId"`
+	IngestionJobID         *uuid.UUID                         `json:"ingestionJobId,omitempty"`
+	Tables                 map[string]ExtractionTableResponse `json:"tables"`
+	StartDate              string                             `json:"startDate,omitempty"`
+	EndDate                string                             `json:"endDate,omitempty"`
+	Filters                *sharedPorts.ExtractionFilters     `json:"filters,omitempty"`
+	Status                 string                             `json:"status"`
+	ErrorMessage           string                             `json:"errorMessage,omitempty"`
+	CreatedAt              time.Time                          `json:"createdAt"`
+	UpdatedAt              time.Time                          `json:"updatedAt"`
+	BridgeAttempts         int                                `json:"bridgeAttempts,omitempty"`
+	BridgeLastError        string                             `json:"bridgeLastError,omitempty"`
+	BridgeLastErrorMessage string                             `json:"bridgeLastErrorMessage,omitempty"` // appended-history; see type docstring
+	BridgeFailedAt         *time.Time                         `json:"bridgeFailedAt,omitempty"`
+	CustodyDeletedAt       *time.Time                         `json:"custodyDeletedAt,omitempty"`
 }
 
 // ConnectionFromEntity converts a domain entity to a response DTO.
@@ -114,18 +138,33 @@ func ExtractionRequestFromEntity(entity *entities.ExtractionRequest) ExtractionR
 
 	filters, _ := sharedPorts.ExtractionFiltersFromMap(entity.Filters)
 
+	// BridgeFailedAt is a value type on the entity (zero when no terminal
+	// bridge failure) but a pointer in the DTO so omitempty keeps the field
+	// out of the response for extractions with no bridge state.
+	var bridgeFailedAt *time.Time
+
+	if !entity.BridgeFailedAt.IsZero() {
+		failedAt := entity.BridgeFailedAt
+		bridgeFailedAt = &failedAt
+	}
+
 	return ExtractionRequestResponse{
-		ID:             entity.ID,
-		ConnectionID:   entity.ConnectionID,
-		IngestionJobID: ingestionJobID,
-		Tables:         extractionTablesFromEntity(entity.Tables),
-		StartDate:      entity.StartDate,
-		EndDate:        entity.EndDate,
-		Filters:        filters,
-		Status:         entity.Status.String(),
-		ErrorMessage:   entity.ErrorMessage,
-		CreatedAt:      entity.CreatedAt,
-		UpdatedAt:      entity.UpdatedAt,
+		ID:                     entity.ID,
+		ConnectionID:           entity.ConnectionID,
+		IngestionJobID:         ingestionJobID,
+		Tables:                 extractionTablesFromEntity(entity.Tables),
+		StartDate:              entity.StartDate,
+		EndDate:                entity.EndDate,
+		Filters:                filters,
+		Status:                 entity.Status.String(),
+		ErrorMessage:           entity.ErrorMessage,
+		CreatedAt:              entity.CreatedAt,
+		UpdatedAt:              entity.UpdatedAt,
+		BridgeAttempts:         entity.BridgeAttempts,
+		BridgeLastError:        entity.BridgeLastError.String(),
+		BridgeLastErrorMessage: entity.BridgeLastErrorMessage,
+		BridgeFailedAt:         bridgeFailedAt,
+		CustodyDeletedAt:       entity.CustodyDeletedAt,
 	}
 }
 

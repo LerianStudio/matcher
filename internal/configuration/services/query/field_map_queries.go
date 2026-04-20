@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 )
@@ -36,7 +36,7 @@ func (uc *UseCase) GetFieldMap(
 
 			logger.With(
 				libLog.Any("field_map.id", fieldMapID.String()),
-				libLog.Any("error.message", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelError, "failed to get field map")
 		}
 
@@ -69,7 +69,7 @@ func (uc *UseCase) GetFieldMapBySource(
 
 			logger.With(
 				libLog.Any("source.id", sourceID.String()),
-				libLog.Any("error.message", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelError, "failed to get field map by source")
 		}
 
@@ -99,7 +99,7 @@ func (uc *UseCase) CheckFieldMapsExistence(
 
 		logger.With(
 			libLog.Any("source_ids.count", len(sourceIDs)),
-			libLog.Any("error.message", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "failed to check field maps existence")
 
 		return nil, fmt.Errorf("checking field maps existence: %w", err)

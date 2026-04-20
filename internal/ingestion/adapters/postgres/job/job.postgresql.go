@@ -11,10 +11,10 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	pgcommon "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
@@ -55,20 +55,13 @@ func (repo *Repository) WithTx(ctx context.Context, fn func(*sql.Tx) error) erro
 
 	defer span.End()
 
-	connectionLease, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return fmt.Errorf("get postgres connection for job transaction: %w", err)
-	}
-	defer connectionLease.Release()
-
-	_, err = pgcommon.WithTenantTx(ctx, connectionLease.Connection(), func(tx *sql.Tx) (struct{}, error) {
+	_, err := pgcommon.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) (struct{}, error) {
 		return struct{}{}, fn(tx)
 	})
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to run job transaction", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to run job transaction")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to run job transaction")
 
 		return fmt.Errorf("job transaction failed: %w", err)
 	}
@@ -111,16 +104,9 @@ func (repo *Repository) create(
 
 	defer span.End()
 
-	connectionLease, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection for create job: %w", err)
-	}
-	defer connectionLease.Release()
-
-	result, err := pgcommon.WithTenantTxOrExisting(
+	result, err := pgcommon.WithTenantTxOrExistingProvider(
 		ctx,
-		connectionLease.Connection(),
+		repo.provider,
 		tx,
 		func(execTx *sql.Tx) (*entities.IngestionJob, error) {
 			model, err := NewJobPostgreSQLModel(job)
@@ -149,7 +135,7 @@ func (repo *Repository) create(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to create ingestion job", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to create ingestion job")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to create ingestion job")
 
 		return nil, fmt.Errorf("failed to create job: %w", err)
 	}
@@ -171,18 +157,11 @@ func (repo *Repository) FindByID(
 
 	defer span.End()
 
-	connectionLease, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection for find job: %w", err)
-	}
-	defer connectionLease.Release()
-
-	result, err := pgcommon.WithTenantTx(
+	result, err := pgcommon.WithTenantReadQuery(
 		ctx,
-		connectionLease.Connection(),
-		func(tx *sql.Tx) (*entities.IngestionJob, error) {
-			row := tx.QueryRowContext(
+		repo.provider,
+		func(qe pgcommon.QueryExecutor) (*entities.IngestionJob, error) {
+			row := qe.QueryRowContext(
 				ctx,
 				"SELECT "+jobColumns+" FROM ingestion_jobs WHERE id = $1",
 				id.String(),
@@ -195,7 +174,7 @@ func (repo *Repository) FindByID(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to find ingestion job", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find ingestion job")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to find ingestion job")
 		}
 
 		return nil, fmt.Errorf("failed to find job: %w", err)
@@ -206,7 +185,7 @@ func (repo *Repository) FindByID(
 
 // FindByContextID retrieves jobs by context ID with cursor pagination.
 //
-//nolint:gocyclo,cyclop // pagination logic is inherently complex
+//nolint:cyclop // pagination logic is inherently complex
 func (repo *Repository) FindByContextID(
 	ctx context.Context,
 	contextID uuid.UUID,
@@ -221,19 +200,12 @@ func (repo *Repository) FindByContextID(
 
 	defer span.End()
 
-	connectionLease, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf("get postgres connection for list jobs: %w", err)
-	}
-	defer connectionLease.Release()
-
 	var pagination libHTTP.CursorPagination
 
-	result, err := pgcommon.WithTenantTx(
+	result, err := pgcommon.WithTenantReadQuery(
 		ctx,
-		connectionLease.Connection(),
-		func(tx *sql.Tx) (jobs []*entities.IngestionJob, err error) {
+		repo.provider,
+		func(qe pgcommon.QueryExecutor) (jobs []*entities.IngestionJob, err error) {
 			orderDirection := libHTTP.ValidateSortDirection(filter.SortOrder)
 			limit := libHTTP.ValidateLimit(
 				filter.Limit,
@@ -263,7 +235,7 @@ func (repo *Repository) FindByContextID(
 				return nil, fmt.Errorf("failed to build SQL: %w", err)
 			}
 
-			rows, err := tx.QueryContext(ctx, query, args...)
+			rows, err := qe.QueryContext(ctx, query, args...)
 			if err != nil {
 				return nil, fmt.Errorf("failed to query jobs: %w", err)
 			}
@@ -313,7 +285,7 @@ func (repo *Repository) FindByContextID(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list ingestion jobs", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list ingestion jobs")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list ingestion jobs")
 
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf(
 			"failed to list jobs by context: %w",
@@ -359,16 +331,9 @@ func (repo *Repository) update(
 
 	defer span.End()
 
-	connectionLease, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection for update job: %w", err)
-	}
-	defer connectionLease.Release()
-
-	result, err := pgcommon.WithTenantTxOrExisting(
+	result, err := pgcommon.WithTenantTxOrExistingProvider(
 		ctx,
-		connectionLease.Connection(),
+		repo.provider,
 		tx,
 		func(execTx *sql.Tx) (*entities.IngestionJob, error) {
 			model, err := NewJobPostgreSQLModel(job)
@@ -394,7 +359,7 @@ func (repo *Repository) update(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to update ingestion job", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to update ingestion job")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to update ingestion job")
 		}
 
 		return nil, fmt.Errorf("failed to update job: %w", err)

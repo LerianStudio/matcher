@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
 
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -164,10 +164,6 @@ type fakeLockInfraProvider struct {
 	releaseTracker *bool
 }
 
-func (f *fakeLockInfraProvider) GetPostgresConnection(_ context.Context) (*sharedPorts.PostgresConnectionLease, error) {
-	return nil, errors.New("not implemented")
-}
-
 func (f *fakeLockInfraProvider) GetRedisConnection(_ context.Context) (*sharedPorts.RedisConnectionLease, error) {
 	if f.redisErr != nil {
 		return nil, f.redisErr
@@ -198,7 +194,11 @@ func (f *fakeLockInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease
 	return nil, errors.New("not implemented")
 }
 
-func (f *fakeLockInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
+func (f *fakeLockInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.DBLease, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeLockInfraProvider) GetPrimaryDB(_ context.Context) (*sharedPorts.DBLease, error) {
 	return nil, errors.New("not implemented")
 }
 

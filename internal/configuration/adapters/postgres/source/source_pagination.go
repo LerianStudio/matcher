@@ -2,14 +2,14 @@ package source
 
 import (
 	stdctx "context"
-	"database/sql"
 	"fmt"
 	"strings"
 
 	"github.com/Masterminds/squirrel"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
+	"github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	sharedpg "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 )
@@ -86,7 +86,7 @@ func buildPaginatedSourceQuery(
 // executeSourceRows runs the query and scans all source rows.
 func executeSourceRows(
 	ctx stdctx.Context,
-	tx *sql.Tx,
+	qe common.QueryExecutor,
 	paginatedQuery squirrel.SelectBuilder,
 	limit int,
 ) ([]*entities.ReconciliationSource, error) {
@@ -95,9 +95,9 @@ func executeSourceRows(
 		return nil, fmt.Errorf("build list sources query: %w", err)
 	}
 
-	rows, err := tx.QueryContext(ctx, query, args...)
+	rows, err := qe.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query list sources: %w", err)
 	}
 	defer rows.Close()
 

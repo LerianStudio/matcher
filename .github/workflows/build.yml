@@ -7,19 +7,28 @@ on:
 
 jobs:
   build:
-    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/build.yml@v1.17.0
+    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/build.yml@v1.23.1
     with:
       runner_type: "blacksmith-4vcpu-ubuntu-2404"
       enable_dockerhub: true
       enable_ghcr: true
       dockerhub_org: lerianstudio
       enable_gitops_artifacts: true
+      shared_paths: |
+        go.mod
+        go.sum
+        pkg/
+        Makefile
     secrets: inherit
 
   update_gitops:
     needs: [build]
-    if: needs.build.result == 'success'
-    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/gitops-update.yml@v1.17.0
+    if: >-
+      !cancelled() &&
+      needs.build.result == 'success' &&
+      (contains(github.ref, '-beta') || contains(github.ref, '-rc')) &&
+      needs.build.outputs.has_builds == 'true'
+    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/gitops-update.yml@v1.23.1
     with:
       runner_type: "firmino-lxc-runners"
       artifact_pattern: "gitops-tags-matcher"

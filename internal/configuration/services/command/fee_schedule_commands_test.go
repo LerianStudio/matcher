@@ -355,6 +355,24 @@ func TestDeleteFeeSchedule_ReferencedByFeeRule(t *testing.T) {
 	require.ErrorIs(t, err, ErrFeeScheduleReferencedByFeeRule)
 }
 
+func TestDeleteFeeSchedule_ReferencedByVarianceHistory(t *testing.T) {
+	t.Parallel()
+
+	repo := &feeScheduleRepoStub{
+		getByIDFn: func(_ context.Context, id uuid.UUID) (*fee.FeeSchedule, error) {
+			return &fee.FeeSchedule{ID: id}, nil
+		},
+		deleteFn: func(_ context.Context, _ uuid.UUID) error {
+			return &pgconn.PgError{Code: "23503", ConstraintName: constraintFeeVarianceSchedule}
+		},
+	}
+
+	uc := newUseCaseWithFeeSchedule(t, repo)
+
+	err := uc.DeleteFeeSchedule(context.Background(), uuid.New())
+	require.ErrorIs(t, err, ErrFeeScheduleReferencedByVarianceHistory)
+}
+
 func TestParseFeeStructureFromRequest_Flat(t *testing.T) {
 	t.Parallel()
 

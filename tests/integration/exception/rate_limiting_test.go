@@ -12,7 +12,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	exceptionRedis "github.com/LerianStudio/matcher/internal/exception/adapters/redis"
-	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
+	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
@@ -29,7 +29,7 @@ func wireRateLimiter(
 	t.Helper()
 
 	redisConn := mustRedisConn(t, h.RedisAddr)
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
 
 	limiter, err := exceptionRedis.NewCallbackRateLimiter(provider, limit, window)
 	require.NoError(t, err)

@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	sharedhttp "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 )
@@ -36,8 +36,7 @@ func verifyContextOwnership(
 		return fmt.Errorf("%w: context not found", sharedhttp.ErrContextNotFound)
 	}
 
-	// The contextProvider.FindByID already filters by tenantID.
-	// If we get a result, the context belongs to the tenant.
+	// If we get a result, the context is reachable under the ambient tenant context.
 	// Additional ID check for defense in depth.
 	if ctxInfo.ID != contextID {
 		return sharedhttp.ErrContextNotOwned

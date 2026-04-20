@@ -235,12 +235,10 @@ func TestCommentRepository_FindByID_Success_Sqlmock(t *testing.T) {
 				WHERE id = $1
 			`)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).
 		WithArgs(commentID.String()).
 		WillReturnRows(sqlmock.NewRows(commentColumns()).
 			AddRow(commentID.String(), exceptionID.String(), "analyst@example.com", "Test comment", now, now))
-	mock.ExpectCommit()
 
 	result, err := repo.FindByID(ctx, commentID)
 
@@ -267,11 +265,9 @@ func TestCommentRepository_FindByID_NotFound_Sqlmock(t *testing.T) {
 				WHERE id = $1
 			`)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).
 		WithArgs(commentID.String()).
 		WillReturnError(sql.ErrNoRows)
-	mock.ExpectRollback()
 
 	result, err := repo.FindByID(ctx, commentID)
 
@@ -294,11 +290,9 @@ func TestCommentRepository_FindByID_QueryError_Sqlmock(t *testing.T) {
 				WHERE id = $1
 			`)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).
 		WithArgs(commentID.String()).
 		WillReturnError(errTestDB)
-	mock.ExpectRollback()
 
 	result, err := repo.FindByID(ctx, commentID)
 
@@ -328,13 +322,11 @@ func TestCommentRepository_FindByExceptionID_Success_Sqlmock(t *testing.T) {
 				ORDER BY created_at ASC
 			`)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).
 		WithArgs(exceptionID.String()).
 		WillReturnRows(sqlmock.NewRows(commentColumns()).
 			AddRow(commentID1.String(), exceptionID.String(), "user1@example.com", "First comment", now, now).
 			AddRow(commentID2.String(), exceptionID.String(), "user2@example.com", "Second comment", now.Add(time.Minute), now.Add(time.Minute)))
-	mock.ExpectCommit()
 
 	result, err := repo.FindByExceptionID(ctx, exceptionID)
 
@@ -362,11 +354,9 @@ func TestCommentRepository_FindByExceptionID_Empty_Sqlmock(t *testing.T) {
 				ORDER BY created_at ASC
 			`)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).
 		WithArgs(exceptionID.String()).
 		WillReturnRows(sqlmock.NewRows(commentColumns()))
-	mock.ExpectCommit()
 
 	result, err := repo.FindByExceptionID(ctx, exceptionID)
 
@@ -390,11 +380,9 @@ func TestCommentRepository_FindByExceptionID_QueryError_Sqlmock(t *testing.T) {
 				ORDER BY created_at ASC
 			`)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).
 		WithArgs(exceptionID.String()).
 		WillReturnError(errTestDB)
-	mock.ExpectRollback()
 
 	result, err := repo.FindByExceptionID(ctx, exceptionID)
 
@@ -420,12 +408,10 @@ func TestCommentRepository_FindByExceptionID_ScanError_Sqlmock(t *testing.T) {
 			`)
 
 	// Return a row with an invalid UUID to trigger a scan/parse error
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).
 		WithArgs(exceptionID.String()).
 		WillReturnRows(sqlmock.NewRows(commentColumns()).
 			AddRow("not-a-uuid", exceptionID.String(), "user@example.com", "content", time.Now().UTC(), time.Now().UTC()))
-	mock.ExpectRollback()
 
 	result, err := repo.FindByExceptionID(ctx, exceptionID)
 

@@ -8,15 +8,16 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
@@ -90,9 +91,12 @@ var (
 )
 
 type stubExceptionRepo struct {
-	exception *entities.Exception
-	findErr   error
-	updateErr error
+	exception   *entities.Exception
+	findErr     error
+	updateErr   error
+	findByIDs   []*entities.Exception // optional override for FindByIDs
+	findIDsErr  error
+	findIDsCall int // number of FindByIDs invocations (bulk regression)
 }
 
 func (repo *stubExceptionRepo) FindByID(
@@ -104,6 +108,37 @@ func (repo *stubExceptionRepo) FindByID(
 	}
 
 	return repo.exception, nil
+}
+
+func (repo *stubExceptionRepo) FindByIDs(
+	_ context.Context,
+	ids []uuid.UUID,
+) ([]*entities.Exception, error) {
+	repo.findIDsCall++
+
+	if repo.findIDsErr != nil {
+		return nil, repo.findIDsErr
+	}
+
+	// Explicit override wins.
+	if repo.findByIDs != nil {
+		return repo.findByIDs, nil
+	}
+
+	// Default fallback: return the single configured exception once per
+	// requested id (tests that only set `exception` keep working without
+	// per-id wiring). Empty id slice yields an empty result, matching the
+	// postgres adapter's early-return semantics.
+	if repo.exception == nil || len(ids) == 0 {
+		return []*entities.Exception{}, nil
+	}
+
+	result := make([]*entities.Exception, 0, len(ids))
+	for range ids {
+		result = append(result, repo.exception)
+	}
+
+	return result, nil
 }
 
 func (repo *stubExceptionRepo) List(
@@ -161,6 +196,7 @@ type stubAuditPublisher struct {
 	err       error
 	called    chan struct{} // optional; closed on first PublishExceptionEvent call
 	once      sync.Once
+	callCount int // total PublishExceptionEvent invocations (bulk regression)
 }
 
 func (audit *stubAuditPublisher) PublishExceptionEvent(
@@ -169,6 +205,7 @@ func (audit *stubAuditPublisher) PublishExceptionEvent(
 ) error {
 	audit.mu.Lock()
 	audit.lastEvent = &event
+	audit.callCount++
 	audit.mu.Unlock()
 
 	audit.once.Do(func() {
@@ -212,6 +249,15 @@ func (audit *stubAuditPublisher) getLastEvent() *ports.AuditEvent {
 	return audit.lastEvent
 }
 
+// getCallCount returns how many times PublishExceptionEvent was called in a
+// thread-safe way.
+func (audit *stubAuditPublisher) getCallCount() int {
+	audit.mu.Lock()
+	defer audit.mu.Unlock()
+
+	return audit.callCount
+}
+
 // stubCallbackRateLimiter implements ports.CallbackRateLimiter for testing.
 type stubCallbackRateLimiter struct {
 	allowed bool
@@ -237,16 +283,7 @@ type stubInfraProvider struct {
 	redisErr     error
 	txErr        error
 	tx           *sql.Tx
-}
-
-func (provider *stubInfraProvider) GetPostgresConnection(
-	_ context.Context,
-) (*sharedPorts.PostgresConnectionLease, error) {
-	if provider.postgresErr != nil {
-		return nil, provider.postgresErr
-	}
-
-	return sharedPorts.NewPostgresConnectionLease(provider.postgresConn, nil), nil
+	beginTxCall  atomic.Int64 // number of BeginTx invocations (bulk regression)
 }
 
 func (provider *stubInfraProvider) GetRedisConnection(
@@ -262,6 +299,8 @@ func (provider *stubInfraProvider) GetRedisConnection(
 // BeginTx returns a mock transaction for testing.
 // Uses sqlmock to create a valid *sql.Tx that supports Commit and Rollback.
 func (provider *stubInfraProvider) BeginTx(ctx context.Context) (*sharedPorts.TxLease, error) {
+	provider.beginTxCall.Add(1)
+
 	if provider.txErr != nil {
 		return nil, provider.txErr
 	}
@@ -279,7 +318,11 @@ func (provider *stubInfraProvider) BeginTx(ctx context.Context) (*sharedPorts.Tx
 }
 
 // GetReplicaDB returns nil for tests (read replica not used in these tests).
-func (provider *stubInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
+func (provider *stubInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.DBLease, error) {
+	return nil, nil
+}
+
+func (provider *stubInfraProvider) GetPrimaryDB(_ context.Context) (*sharedPorts.DBLease, error) {
 	return nil, nil
 }
 
@@ -307,7 +350,7 @@ func (m *mockCommentRepository) FindByExceptionID(
 	return nil, nil
 }
 
-func (m *mockCommentRepository) Delete(_ context.Context, _ uuid.UUID) error {
+func (m *mockCommentRepository) DeleteByExceptionAndID(_ context.Context, _, _ uuid.UUID) error {
 	return nil
 }
 
@@ -353,7 +396,7 @@ func (s *stubCommentRepository) FindByExceptionID(
 	return s.comments, nil
 }
 
-func (s *stubCommentRepository) Delete(_ context.Context, _ uuid.UUID) error {
+func (s *stubCommentRepository) DeleteByExceptionAndID(_ context.Context, _, _ uuid.UUID) error {
 	return s.deleteErr
 }
 

@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/dispute"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
@@ -49,6 +49,21 @@ func (repo *stubExceptionRepository) FindByID(
 	}
 
 	return repo.findException, nil
+}
+
+func (repo *stubExceptionRepository) FindByIDs(
+	_ context.Context,
+	_ []uuid.UUID,
+) ([]*entities.Exception, error) {
+	if repo.findErr != nil {
+		return nil, repo.findErr
+	}
+
+	if repo.findException == nil {
+		return []*entities.Exception{}, nil
+	}
+
+	return []*entities.Exception{repo.findException}, nil
 }
 
 func (repo *stubExceptionRepository) List(
@@ -491,6 +506,46 @@ func TestGetHistory_Success(t *testing.T) {
 	assert.Equal(t, "next-page", nextCursor)
 	assert.Equal(t, "CREATED", entries[0].Action)
 	assert.Equal(t, &actor, entries[0].ActorID)
+}
+
+// TestGetHistory_SkipsNilAuditLogs mirrors the audit consumer's defensive
+// guard: ListByEntity is expected never to return nil elements, but if the
+// repository misbehaves we must not nil-deref building HistoryEntry rows.
+func TestGetHistory_SkipsNilAuditLogs(t *testing.T) {
+	t.Parallel()
+
+	tenantID := uuid.New()
+	exceptionID := uuid.New()
+	now := time.Now().UTC()
+
+	auditLogs := []*govEntities.AuditLog{
+		nil,
+		{
+			ID:         uuid.New(),
+			TenantID:   tenantID,
+			EntityType: "exception",
+			EntityID:   exceptionID,
+			Action:     "CREATED",
+			Changes:    []byte(`{}`),
+			CreatedAt:  now,
+		},
+		nil,
+	}
+
+	exceptionRepo := &stubExceptionRepository{}
+	auditRepo := &stubAuditLogRepository{
+		listResult: auditLogs,
+	}
+
+	uc, err := NewUseCase(exceptionRepo, &stubDisputeRepository{}, auditRepo, tenantExtractor(tenantID))
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	entries, _, err := uc.GetHistory(ctx, exceptionID, "", 20)
+
+	require.NoError(t, err)
+	require.Len(t, entries, 1, "nil entries must be skipped")
+	assert.Equal(t, "CREATED", entries[0].Action)
 }
 
 func TestGetHistory_EmptyResult(t *testing.T) {

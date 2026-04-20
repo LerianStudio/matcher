@@ -17,7 +17,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/internal/auth"
+	"github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
+
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
@@ -58,7 +59,8 @@ func TestCacheService_BuildKey(t *testing.T) {
 	t.Run("builds key without source filter", func(t *testing.T) {
 		t.Parallel()
 
-		key := svc.buildKey(context.Background(), contextID, volumeKeyType, dateFrom, dateTo, nil)
+		key, err := svc.buildKey(context.Background(), contextID, volumeKeyType, dateFrom, dateTo, nil)
+		require.NoError(t, err)
 
 		expected := "matcher:dashboard:550e8400-e29b-41d4-a716-446655440000:volume:2024-01-01:2024-01-31:all"
 		assert.Equal(t, expected, key)
@@ -67,7 +69,8 @@ func TestCacheService_BuildKey(t *testing.T) {
 	t.Run("builds key with source filter", func(t *testing.T) {
 		t.Parallel()
 
-		key := svc.buildKey(context.Background(), contextID, volumeKeyType, dateFrom, dateTo, &sourceID)
+		key, err := svc.buildKey(context.Background(), contextID, volumeKeyType, dateFrom, dateTo, &sourceID)
+		require.NoError(t, err)
 
 		expected := "matcher:dashboard:550e8400-e29b-41d4-a716-446655440000:volume:2024-01-01:2024-01-31:660e8400-e29b-41d4-a716-446655440000"
 		assert.Equal(t, expected, key)
@@ -76,10 +79,11 @@ func TestCacheService_BuildKey(t *testing.T) {
 	t.Run("builds tenant-aware key when tenant is present", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
-		key := svc.buildKey(ctx, contextID, volumeKeyType, dateFrom, dateTo, nil)
+		ctx := core.ContextWithTenantID(context.Background(), "tenant-a")
+		key, err := svc.buildKey(ctx, contextID, volumeKeyType, dateFrom, dateTo, nil)
+		require.NoError(t, err)
 
-		expected := "matcher:dashboard:tenant-a:550e8400-e29b-41d4-a716-446655440000:volume:2024-01-01:2024-01-31:all"
+		expected := "tenant:tenant-a:matcher:dashboard:550e8400-e29b-41d4-a716-446655440000:volume:2024-01-01:2024-01-31:all"
 		assert.Equal(t, expected, key)
 	})
 }
@@ -372,7 +376,7 @@ func TestCacheService_SetAndGetVolumeStats(t *testing.T) {
 	err := svc.SetVolumeStats(context.Background(), filter, stats)
 	require.NoError(t, err)
 
-	key := svc.buildKey(
+	key, buildErr := svc.buildKey(
 		context.Background(),
 		filter.ContextID,
 		volumeKeyType,
@@ -380,6 +384,8 @@ func TestCacheService_SetAndGetVolumeStats(t *testing.T) {
 		filter.DateTo,
 		filter.SourceID,
 	)
+	require.NoError(t, buildErr)
+
 	raw, err := client.Get(context.Background(), key).Bytes()
 	require.NoError(t, err)
 
@@ -440,7 +446,7 @@ func TestCacheService_GetSLAStats_InvalidJSON(t *testing.T) {
 		DateTo:    time.Now().UTC(),
 	}
 
-	key := svc.buildKey(
+	key, buildErr := svc.buildKey(
 		context.Background(),
 		filter.ContextID,
 		slaKeyType,
@@ -448,6 +454,8 @@ func TestCacheService_GetSLAStats_InvalidJSON(t *testing.T) {
 		filter.DateTo,
 		filter.SourceID,
 	)
+	require.NoError(t, buildErr)
+
 	require.NoError(t, client.Set(context.Background(), key, "not-json", 0).Err())
 
 	result, err := svc.GetSLAStats(context.Background(), filter)
@@ -514,7 +522,7 @@ func TestCacheService_SetAndGetMatchRateStats(t *testing.T) {
 	err := svc.SetMatchRateStats(context.Background(), filter, stats)
 	require.NoError(t, err)
 
-	key := svc.buildKey(
+	key, buildErr := svc.buildKey(
 		context.Background(),
 		filter.ContextID,
 		matchRateKeyType,
@@ -522,6 +530,8 @@ func TestCacheService_SetAndGetMatchRateStats(t *testing.T) {
 		filter.DateTo,
 		filter.SourceID,
 	)
+	require.NoError(t, buildErr)
+
 	raw, err := client.Get(context.Background(), key).Bytes()
 	require.NoError(t, err)
 
@@ -548,7 +558,7 @@ func TestCacheService_GetMatchRateStats_InvalidJSON(t *testing.T) {
 		DateTo:    time.Now().UTC(),
 	}
 
-	key := svc.buildKey(
+	key, buildErr := svc.buildKey(
 		context.Background(),
 		filter.ContextID,
 		matchRateKeyType,
@@ -556,6 +566,8 @@ func TestCacheService_GetMatchRateStats_InvalidJSON(t *testing.T) {
 		filter.DateTo,
 		filter.SourceID,
 	)
+	require.NoError(t, buildErr)
+
 	require.NoError(t, client.Set(context.Background(), key, "not-json", 0).Err())
 
 	result, err := svc.GetMatchRateStats(context.Background(), filter)
@@ -637,7 +649,7 @@ func TestCacheService_GetDashboardAggregates_InvalidJSON(t *testing.T) {
 		DateTo:    time.Now().UTC(),
 	}
 
-	key := svc.buildKey(
+	key, buildErr := svc.buildKey(
 		context.Background(),
 		filter.ContextID,
 		aggregatesKeyType,
@@ -645,6 +657,8 @@ func TestCacheService_GetDashboardAggregates_InvalidJSON(t *testing.T) {
 		filter.DateTo,
 		filter.SourceID,
 	)
+	require.NoError(t, buildErr)
+
 	require.NoError(t, client.Set(context.Background(), key, "not-json", 0).Err())
 
 	result, err := svc.GetDashboardAggregates(context.Background(), filter)
@@ -975,7 +989,7 @@ func TestCacheService_SetAndGetMatcherDashboardMetrics(t *testing.T) {
 	err := svc.SetMatcherDashboardMetrics(context.Background(), filter, metrics)
 	require.NoError(t, err)
 
-	key := svc.buildKey(
+	key, buildErr := svc.buildKey(
 		context.Background(),
 		filter.ContextID,
 		metricsKeyType,
@@ -983,6 +997,8 @@ func TestCacheService_SetAndGetMatcherDashboardMetrics(t *testing.T) {
 		filter.DateTo,
 		filter.SourceID,
 	)
+	require.NoError(t, buildErr)
+
 	raw, err := client.Get(context.Background(), key).Bytes()
 	require.NoError(t, err)
 
@@ -1008,7 +1024,7 @@ func TestCacheService_GetMatcherDashboardMetrics_InvalidJSON(t *testing.T) {
 		DateTo:    time.Now().UTC(),
 	}
 
-	key := svc.buildKey(
+	key, buildErr := svc.buildKey(
 		context.Background(),
 		filter.ContextID,
 		metricsKeyType,
@@ -1016,6 +1032,8 @@ func TestCacheService_GetMatcherDashboardMetrics_InvalidJSON(t *testing.T) {
 		filter.DateTo,
 		filter.SourceID,
 	)
+	require.NoError(t, buildErr)
+
 	require.NoError(t, client.Set(context.Background(), key, "not-json", 0).Err())
 
 	result, err := svc.GetMatcherDashboardMetrics(context.Background(), filter)
@@ -1094,7 +1112,7 @@ func TestCacheService_SetAndGetSLAStats(t *testing.T) {
 	err := svc.SetSLAStats(context.Background(), filter, stats)
 	require.NoError(t, err)
 
-	key := svc.buildKey(
+	key, buildErr := svc.buildKey(
 		context.Background(),
 		filter.ContextID,
 		slaKeyType,
@@ -1102,6 +1120,8 @@ func TestCacheService_SetAndGetSLAStats(t *testing.T) {
 		filter.DateTo,
 		filter.SourceID,
 	)
+	require.NoError(t, buildErr)
+
 	raw, err := client.Get(context.Background(), key).Bytes()
 	require.NoError(t, err)
 
@@ -1196,7 +1216,7 @@ func TestCacheService_GetVolumeStats_InvalidJSON(t *testing.T) {
 		DateTo:    time.Now().UTC(),
 	}
 
-	key := svc.buildKey(
+	key, buildErr := svc.buildKey(
 		context.Background(),
 		filter.ContextID,
 		volumeKeyType,
@@ -1204,6 +1224,8 @@ func TestCacheService_GetVolumeStats_InvalidJSON(t *testing.T) {
 		filter.DateTo,
 		filter.SourceID,
 	)
+	require.NoError(t, buildErr)
+
 	require.NoError(t, client.Set(context.Background(), key, "invalid-json", 0).Err())
 
 	result, err := svc.GetVolumeStats(context.Background(), filter)
@@ -1555,16 +1577,21 @@ func TestCacheService_InvalidateContext_OnlyDeletesExplicitTenantKeys(t *testing
 		DateTo:    time.Now().UTC(),
 	}
 
-	tenantACtx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
-	tenantBCtx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-b")
+	tenantACtx := core.ContextWithTenantID(context.Background(), "tenant-a")
+	tenantBCtx := core.ContextWithTenantID(context.Background(), "tenant-b")
 
 	require.NoError(t, svc.SetVolumeStats(tenantACtx, filter, &entities.VolumeStats{TotalTransactions: 100}))
 	require.NoError(t, svc.SetVolumeStats(tenantBCtx, filter, &entities.VolumeStats{TotalTransactions: 200}))
 	require.NoError(t, svc.SetVolumeStats(context.Background(), filter, &entities.VolumeStats{TotalTransactions: 300}))
 
-	tenantAKey := svc.buildKey(tenantACtx, contextID, volumeKeyType, filter.DateFrom, filter.DateTo, nil)
-	tenantBKey := svc.buildKey(tenantBCtx, contextID, volumeKeyType, filter.DateFrom, filter.DateTo, nil)
-	legacyKey := svc.buildKey(context.Background(), contextID, volumeKeyType, filter.DateFrom, filter.DateTo, nil)
+	tenantAKey, buildErr := svc.buildKey(tenantACtx, contextID, volumeKeyType, filter.DateFrom, filter.DateTo, nil)
+	require.NoError(t, buildErr)
+
+	tenantBKey, buildErr := svc.buildKey(tenantBCtx, contextID, volumeKeyType, filter.DateFrom, filter.DateTo, nil)
+	require.NoError(t, buildErr)
+
+	legacyKey, buildErr := svc.buildKey(context.Background(), contextID, volumeKeyType, filter.DateFrom, filter.DateTo, nil)
+	require.NoError(t, buildErr)
 
 	require.Equal(t, int64(1), client.Exists(context.Background(), tenantAKey).Val())
 	require.Equal(t, int64(1), client.Exists(context.Background(), tenantBKey).Val())

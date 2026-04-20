@@ -10,12 +10,15 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/exception/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
+
+var _ = sharedhttp.ErrorResponse{}
 
 // BulkAssign assigns multiple exceptions to the specified assignee.
 // @Summary Bulk assign exceptions
@@ -28,10 +31,10 @@ import (
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param request body dto.BulkAssignRequest true "Bulk assign payload"
 // @Success 200 {object} dto.BulkActionResponse
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/exceptions/bulk/assign [post]
 func (handler *Handlers) BulkAssign(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.exception.bulk_assign")
@@ -40,12 +43,12 @@ func (handler *Handlers) BulkAssign(fiberCtx *fiber.Ctx) error {
 	var req dto.BulkAssignRequest
 
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
 	}
 
 	exceptionIDs, err := parseUUIDs(req.ExceptionIDs)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid exception id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid exception id", err)
 	}
 
 	result, err := handler.exceptionUC.BulkAssign(ctx, command.BulkAssignInput{
@@ -53,10 +56,14 @@ func (handler *Handlers) BulkAssign(fiberCtx *fiber.Ctx) error {
 		Assignee:     req.Assignee,
 	})
 	if err != nil {
-		return handleBulkError(ctx, fiberCtx, span, logger, "bulk assign failed", err)
+		return handler.handleBulkError(ctx, fiberCtx, span, logger, "bulk assign failed", err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, toBulkActionResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, toBulkActionResponse(result)); err != nil {
+		return fmt.Errorf("respond bulk assign: %w", err)
+	}
+
+	return nil
 }
 
 // BulkResolve resolves multiple exceptions with the specified resolution.
@@ -70,10 +77,10 @@ func (handler *Handlers) BulkAssign(fiberCtx *fiber.Ctx) error {
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param request body dto.BulkResolveRequest true "Bulk resolve payload"
 // @Success 200 {object} dto.BulkActionResponse
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/exceptions/bulk/resolve [post]
 func (handler *Handlers) BulkResolve(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.exception.bulk_resolve")
@@ -82,12 +89,12 @@ func (handler *Handlers) BulkResolve(fiberCtx *fiber.Ctx) error {
 	var req dto.BulkResolveRequest
 
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
 	}
 
 	exceptionIDs, err := parseUUIDs(req.ExceptionIDs)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid exception id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid exception id", err)
 	}
 
 	result, err := handler.exceptionUC.BulkResolve(ctx, command.BulkResolveInput{
@@ -96,10 +103,14 @@ func (handler *Handlers) BulkResolve(fiberCtx *fiber.Ctx) error {
 		Reason:       req.Reason,
 	})
 	if err != nil {
-		return handleBulkError(ctx, fiberCtx, span, logger, "bulk resolve failed", err)
+		return handler.handleBulkError(ctx, fiberCtx, span, logger, "bulk resolve failed", err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, toBulkActionResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, toBulkActionResponse(result)); err != nil {
+		return fmt.Errorf("respond bulk resolve: %w", err)
+	}
+
+	return nil
 }
 
 // BulkDispatch dispatches multiple exceptions to an external system.
@@ -113,10 +124,10 @@ func (handler *Handlers) BulkResolve(fiberCtx *fiber.Ctx) error {
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param request body dto.BulkDispatchRequest true "Bulk dispatch payload"
 // @Success 200 {object} dto.BulkActionResponse
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/exceptions/bulk/dispatch [post]
 func (handler *Handlers) BulkDispatch(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.exception.bulk_dispatch")
@@ -125,12 +136,12 @@ func (handler *Handlers) BulkDispatch(fiberCtx *fiber.Ctx) error {
 	var req dto.BulkDispatchRequest
 
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
 	}
 
 	exceptionIDs, err := parseUUIDs(req.ExceptionIDs)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid exception id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid exception id", err)
 	}
 
 	result, err := handler.dispatchUC.BulkDispatch(ctx, command.BulkDispatchInput{
@@ -139,14 +150,18 @@ func (handler *Handlers) BulkDispatch(fiberCtx *fiber.Ctx) error {
 		Queue:        req.Queue,
 	})
 	if err != nil {
-		return handleBulkError(ctx, fiberCtx, span, logger, "bulk dispatch failed", err)
+		return handler.handleBulkError(ctx, fiberCtx, span, logger, "bulk dispatch failed", err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, toBulkActionResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, toBulkActionResponse(result)); err != nil {
+		return fmt.Errorf("respond bulk dispatch: %w", err)
+	}
+
+	return nil
 }
 
 // handleBulkError maps bulk command errors to HTTP responses.
-func handleBulkError(
+func (handler *Handlers) handleBulkError(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -154,7 +169,7 @@ func handleBulkError(
 	message string,
 	err error,
 ) error {
-	logSpanError(ctx, span, logger, message, err)
+	handler.logSpanError(ctx, span, logger, message, err)
 
 	if errors.Is(err, command.ErrBulkEmptyIDs) ||
 		errors.Is(err, command.ErrBulkTooManyIDs) ||
@@ -162,10 +177,10 @@ func handleBulkError(
 		errors.Is(err, command.ErrBulkResolutionEmpty) ||
 		errors.Is(err, command.ErrBulkTargetSystemEmpty) ||
 		errors.Is(err, command.ErrActorRequired) {
-		return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
+		return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
 	}
 
-	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+	return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 }
 
 // ErrNilUUIDNotAllowed is returned when a parsed UUID is the nil UUID.

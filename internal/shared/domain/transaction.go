@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+	"github.com/LerianStudio/lib-commons/v5/commons/assert"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
@@ -152,8 +152,10 @@ type Transaction struct {
 	UpdatedAt time.Time
 }
 
-// NewTransaction creates a new Transaction with the provided values and default statuses.
-// Returns an error if required fields are missing or invalid.
+// NewTransaction creates a new Transaction with the provided values and default
+// statuses. The metadata map is deep-copied so callers can safely mutate their
+// copy after construction. Returns an error if required fields are missing or
+// invalid.
 func NewTransaction(
 	ctx context.Context,
 	tenantID uuid.UUID,
@@ -164,6 +166,42 @@ func NewTransaction(
 	date time.Time,
 	description string,
 	metadata map[string]any,
+) (*Transaction, error) {
+	return newTransaction(ctx, tenantID, jobID, sourceID, externalID, amount, currency, date, description, metadata, false)
+}
+
+// NewTransactionWithDonatedMetadata is a zero-copy variant of NewTransaction
+// for hot paths where the caller has just built the metadata map, never
+// retains a reference to it, and never mutates it after construction.
+//
+// Donating a map that is still referenced elsewhere (or later mutated by the
+// caller) will corrupt the transaction's metadata. When in doubt use
+// NewTransaction — the deep-copy cost is negligible for small maps.
+func NewTransactionWithDonatedMetadata(
+	ctx context.Context,
+	tenantID uuid.UUID,
+	jobID, sourceID uuid.UUID,
+	externalID string,
+	amount decimal.Decimal,
+	currency string,
+	date time.Time,
+	description string,
+	metadata map[string]any,
+) (*Transaction, error) {
+	return newTransaction(ctx, tenantID, jobID, sourceID, externalID, amount, currency, date, description, metadata, true)
+}
+
+func newTransaction(
+	ctx context.Context,
+	tenantID uuid.UUID,
+	jobID, sourceID uuid.UUID,
+	externalID string,
+	amount decimal.Decimal,
+	currency string,
+	date time.Time,
+	description string,
+	metadata map[string]any,
+	donatedMetadata bool,
 ) (*Transaction, error) {
 	// tenantID is validated to ensure the caller operates within a valid tenant
 	// context, but is NOT stored on the Transaction struct. Tenant isolation is
@@ -194,11 +232,11 @@ func NewTransaction(
 		return nil, fmt.Errorf("transaction currency: %w", ErrCurrencyRequired)
 	}
 
-	var metaCopy map[string]any
-	if metadata != nil {
-		metaCopy = make(map[string]any, len(metadata))
+	metaValue := metadata
+	if !donatedMetadata && metadata != nil {
+		metaValue = make(map[string]any, len(metadata))
 		for k, v := range metadata {
-			metaCopy[k] = cloneMetadataValue(v)
+			metaValue[k] = cloneMetadataValue(v)
 		}
 	}
 
@@ -215,7 +253,7 @@ func NewTransaction(
 		Status:           TransactionStatusUnmatched,
 		Date:             date,
 		Description:      description,
-		Metadata:         metaCopy,
+		Metadata:         metaValue,
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	}, nil

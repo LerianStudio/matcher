@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	pkgHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	pkgHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	pgcommon "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
 	sharedpg "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
@@ -1598,7 +1598,7 @@ func TestRepository_FindByJobID_CursorPaginationWithNonIDSort(t *testing.T) {
 
 	defer db.Close()
 
-	resolver := dbresolver.New(dbresolver.WithPrimaryDBs(db), dbresolver.WithReplicaDBs(db))
+	resolver := dbresolver.New(dbresolver.WithPrimaryDBs(db))
 	conn := testutil.NewClientWithResolver(resolver)
 	provider := &testutil.MockInfrastructureProvider{PostgresConn: conn}
 	repo := NewRepository(provider)
@@ -1625,7 +1625,7 @@ func TestRepository_FindByJobAndContextID_InvalidSortCursor(t *testing.T) {
 
 	defer db.Close()
 
-	resolver := dbresolver.New(dbresolver.WithPrimaryDBs(db), dbresolver.WithReplicaDBs(db))
+	resolver := dbresolver.New(dbresolver.WithPrimaryDBs(db))
 	conn := testutil.NewClientWithResolver(resolver)
 	provider := &testutil.MockInfrastructureProvider{PostgresConn: conn}
 	repo := NewRepository(provider)
@@ -1718,7 +1718,7 @@ func setupRepositoryWithMock(t *testing.T) (*Repository, sqlmock.Sqlmock, func()
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 
-	resolver := dbresolver.New(dbresolver.WithPrimaryDBs(db), dbresolver.WithReplicaDBs(db))
+	resolver := dbresolver.New(dbresolver.WithPrimaryDBs(db))
 	conn := testutil.NewClientWithResolver(resolver)
 	provider := &testutil.MockInfrastructureProvider{PostgresConn: conn}
 	repo := NewRepository(provider)

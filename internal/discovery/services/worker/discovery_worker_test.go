@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
@@ -25,7 +25,7 @@ import (
 // stubFetcherClient implements sharedPorts.FetcherClient for worker tests.
 type stubFetcherClient struct {
 	isHealthyFn              func(ctx context.Context) bool
-	listConnectionsFn        func(ctx context.Context, orgID string) ([]*sharedPorts.FetcherConnection, error)
+	listConnectionsFn        func(ctx context.Context, productName string) ([]*sharedPorts.FetcherConnection, error)
 	getSchemaFn              func(ctx context.Context, connectionID string) (*sharedPorts.FetcherSchema, error)
 	testConnectionFn         func(ctx context.Context, connectionID string) (*sharedPorts.FetcherTestResult, error)
 	submitExtractionJobFn    func(ctx context.Context, input sharedPorts.ExtractionJobInput) (string, error)
@@ -42,9 +42,9 @@ func (m *stubFetcherClient) IsHealthy(ctx context.Context) bool {
 	return true
 }
 
-func (m *stubFetcherClient) ListConnections(ctx context.Context, orgID string) ([]*sharedPorts.FetcherConnection, error) {
+func (m *stubFetcherClient) ListConnections(ctx context.Context, productName string) ([]*sharedPorts.FetcherConnection, error) {
 	if m.listConnectionsFn != nil {
-		return m.listConnectionsFn(ctx, orgID)
+		return m.listConnectionsFn(ctx, productName)
 	}
 
 	return nil, nil
@@ -63,7 +63,7 @@ func (m *stubFetcherClient) TestConnection(ctx context.Context, connectionID str
 		return m.testConnectionFn(ctx, connectionID)
 	}
 
-	return &sharedPorts.FetcherTestResult{Healthy: true}, nil
+	return &sharedPorts.FetcherTestResult{Status: "success"}, nil
 }
 
 func (m *stubFetcherClient) SubmitExtractionJob(ctx context.Context, input sharedPorts.ExtractionJobInput) (string, error) {
@@ -203,15 +203,23 @@ func (m *stubSchemaRepo) DeleteByConnectionIDWithTx(ctx context.Context, tx *sql
 }
 
 // stubInfraProvider implements sharedPorts.InfrastructureProvider.
-type stubInfraProvider struct{}
+//
+// The zero-value stub returns (nil, nil) for every accessor — this matches
+// the original behavior every existing caller relies on. Tests that need
+// richer behavior (e.g. custody_retention_worker sweepCycle tests, which
+// drive the Redis lock path) set the optional fn fields, which take
+// precedence when non-nil.
+type stubInfraProvider struct {
+	getRedisConnectionFn func(ctx context.Context) (*sharedPorts.RedisConnectionLease, error)
+}
 
 var _ sharedPorts.InfrastructureProvider = (*stubInfraProvider)(nil)
 
-func (m *stubInfraProvider) GetPostgresConnection(_ context.Context) (*sharedPorts.PostgresConnectionLease, error) {
-	return nil, nil
-}
+func (m *stubInfraProvider) GetRedisConnection(ctx context.Context) (*sharedPorts.RedisConnectionLease, error) {
+	if m.getRedisConnectionFn != nil {
+		return m.getRedisConnectionFn(ctx)
+	}
 
-func (m *stubInfraProvider) GetRedisConnection(_ context.Context) (*sharedPorts.RedisConnectionLease, error) {
 	return nil, nil
 }
 
@@ -219,7 +227,11 @@ func (m *stubInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, er
 	return nil, nil
 }
 
-func (m *stubInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
+func (m *stubInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.DBLease, error) {
+	return nil, nil
+}
+
+func (m *stubInfraProvider) GetPrimaryDB(_ context.Context) (*sharedPorts.DBLease, error) {
 	return nil, nil
 }
 
@@ -649,8 +661,10 @@ func TestDiscoveryWorker_SyncConnectionsAndSchemas_ListError(t *testing.T) {
 	expectedErr := errors.New("fetcher list error")
 
 	fetcher := &stubFetcherClient{
-		listConnectionsFn: func(_ context.Context, orgID string) ([]*sharedPorts.FetcherConnection, error) {
-			assert.Equal(t, "11111111-1111-1111-1111-111111111111", orgID)
+		listConnectionsFn: func(_ context.Context, productName string) ([]*sharedPorts.FetcherConnection, error) {
+			// ListConnections receives the product name "matcher", not the tenant ID.
+			// Tenant filtering is done server-side via JWT.
+			assert.Equal(t, "matcher", productName)
 
 			return nil, expectedErr
 		},
@@ -677,8 +691,9 @@ func TestDiscoveryWorker_SyncConnectionsAndSchemas_UpsertNewConnection(t *testin
 	upsertCalled := false
 
 	fetcher := &stubFetcherClient{
-		listConnectionsFn: func(_ context.Context, orgID string) ([]*sharedPorts.FetcherConnection, error) {
-			assert.Equal(t, "11111111-1111-1111-1111-111111111111", orgID)
+		listConnectionsFn: func(_ context.Context, productName string) ([]*sharedPorts.FetcherConnection, error) {
+			// ListConnections receives the product name "matcher", not the tenant ID.
+			assert.Equal(t, "matcher", productName)
 
 			return []*sharedPorts.FetcherConnection{
 				{
@@ -689,7 +704,6 @@ func TestDiscoveryWorker_SyncConnectionsAndSchemas_UpsertNewConnection(t *testin
 					Port:         5432,
 					DatabaseName: "testdb",
 					ProductName:  "PostgreSQL",
-					Status:       "AVAILABLE",
 				},
 			}, nil
 		},
@@ -697,11 +711,8 @@ func TestDiscoveryWorker_SyncConnectionsAndSchemas_UpsertNewConnection(t *testin
 			return &sharedPorts.FetcherSchema{
 				Tables: []sharedPorts.FetcherTableSchema{
 					{
-						TableName: "transactions",
-						Columns: []sharedPorts.FetcherColumnInfo{
-							{Name: "id", Type: "uuid", Nullable: false},
-							{Name: "amount", Type: "numeric", Nullable: true},
-						},
+						Name:   "transactions",
+						Fields: []string{"id", "amount"},
 					},
 				},
 			}, nil
@@ -829,7 +840,7 @@ func TestDiscoveryWorker_SyncTenantConnections_IgnoresNilFetcherConnectionEntrie
 		listConnectionsFn: func(_ context.Context, _ string) ([]*sharedPorts.FetcherConnection, error) {
 			return []*sharedPorts.FetcherConnection{
 				nil,
-				{ID: "fetcher-conn-1", ConfigName: "db", DatabaseType: "postgresql", Status: "AVAILABLE"},
+				{ID: "fetcher-conn-1", ConfigName: "db", DatabaseType: "postgresql"},
 			}, nil
 		},
 		getSchemaFn: func(_ context.Context, _ string) (*sharedPorts.FetcherSchema, error) {

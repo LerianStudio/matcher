@@ -18,7 +18,7 @@ import (
 	sharedCross "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
-	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
+	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -45,7 +45,7 @@ func newCrossAdapter(
 	t.Helper()
 
 	redisConn := mustRedisConn(t, h.RedisAddr)
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
 	txBaseRepo := ingestionTxRepo.NewRepository(provider)
 
 	adapter, err := sharedCross.NewTransactionRepositoryAdapterFromRepo(provider, txBaseRepo)

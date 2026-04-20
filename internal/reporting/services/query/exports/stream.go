@@ -118,7 +118,7 @@ func (writer *StreamingCSVWriter) WriteVarianceHeader() error {
 		return nil
 	}
 
-	if err := writer.writer.Write([]string{"source_id", "currency", "fee_type", "total_expected", "total_actual", "net_variance", "variance_pct"}); err != nil {
+	if err := writer.writer.Write([]string{"source_id", "currency", "fee_schedule_id", "fee_schedule_name", "total_expected", "total_actual", "net_variance", "variance_pct"}); err != nil {
 		return errWriteCSVHeader(err)
 	}
 
@@ -141,7 +141,8 @@ func (writer *StreamingCSVWriter) WriteVarianceRow(row *entities.VarianceReportR
 	if err := writer.writer.Write([]string{
 		sanitizeCSVValue(row.SourceID.String()),
 		sanitizeCSVValue(row.Currency),
-		sanitizeCSVValue(row.FeeType),
+		sanitizeCSVValue(row.FeeScheduleID.String()),
+		sanitizeCSVValue(row.FeeScheduleName),
 		sanitizeCSVValue(row.TotalExpected.String()),
 		sanitizeCSVValue(row.TotalActual.String()),
 		sanitizeCSVValue(row.NetVariance.String()),

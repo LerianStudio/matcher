@@ -7,102 +7,16 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
-	"github.com/bxcodec/dbresolver/v2"
 	"github.com/redis/go-redis/v9"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
 )
 
-// TenantConfig holds infrastructure configuration for a specific tenant.
-type TenantConfig struct {
-	PostgresPrimaryDSN string `json:"postgresPrimaryDSN"`
-	PostgresReplicaDSN string `json:"postgresReplicaDSN"`
-	PostgresPrimaryDB  string `json:"postgresPrimaryDB"`
-	PostgresReplicaDB  string `json:"postgresReplicaDB"`
-
-	RedisAddresses    []string      `json:"redisAddresses"`
-	RedisPassword     string        `json:"redisPassword"`
-	RedisDB           int           `json:"redisDB"`
-	RedisMasterName   string        `json:"redisMasterName"`
-	RedisProtocol     int           `json:"redisProtocol"`
-	RedisUseTLS       bool          `json:"redisUseTLS"`
-	RedisCACert       string        `json:"redisCACert"`
-	RedisReadTimeout  time.Duration `json:"redisReadTimeout"`
-	RedisWriteTimeout time.Duration `json:"redisWriteTimeout"`
-	RedisDialTimeout  time.Duration `json:"redisDialTimeout"`
-	RedisPoolSize     int           `json:"redisPoolSize"`
-	RedisMinIdleConns int           `json:"redisMinIdleConns"`
-}
-
-// ConfigurationPort resolves infrastructure configuration for a given tenant.
-type ConfigurationPort interface {
-	GetTenantConfig(ctx context.Context, tenantID string) (*TenantConfig, error)
-}
-
-var (
-	// ErrPostgresLeaseUnavailable indicates the lease has no postgres connection.
-	ErrPostgresLeaseUnavailable = errors.New("postgres connection lease unavailable")
-	// ErrRedisLeaseUnavailable indicates the lease has no redis connection.
-	ErrRedisLeaseUnavailable = errors.New("redis connection lease unavailable")
-)
+// ErrRedisLeaseUnavailable indicates the lease has no redis connection.
+var ErrRedisLeaseUnavailable = errors.New("redis connection lease unavailable")
 
 func noopLeaseRelease() {}
-
-// PostgresConnectionLease protects the lifetime of a postgres connection pool.
-// Callers MUST release the lease when finished using the connection.
-type PostgresConnectionLease struct {
-	conn        *libPostgres.Client
-	release     func()
-	releaseOnce sync.Once
-}
-
-// NewPostgresConnectionLease creates a postgres lease.
-func NewPostgresConnectionLease(conn *libPostgres.Client, release func()) *PostgresConnectionLease {
-	if conn == nil {
-		return nil
-	}
-
-	if release == nil {
-		release = noopLeaseRelease
-	}
-
-	return &PostgresConnectionLease{conn: conn, release: release}
-}
-
-// Connection returns the leased postgres connection.
-func (lease *PostgresConnectionLease) Connection() *libPostgres.Client {
-	if lease == nil {
-		return nil
-	}
-
-	return lease.conn
-}
-
-// Resolver delegates to the underlying postgres client for compatibility with existing call sites.
-func (lease *PostgresConnectionLease) Resolver(ctx context.Context) (dbresolver.DB, error) {
-	if lease == nil || lease.conn == nil {
-		return nil, ErrPostgresLeaseUnavailable
-	}
-
-	resolver, err := lease.conn.Resolver(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("resolve postgres connection from lease: %w", err)
-	}
-
-	return resolver, nil
-}
-
-// Release releases the lease exactly once.
-func (lease *PostgresConnectionLease) Release() {
-	if lease == nil {
-		return
-	}
-
-	lease.releaseOnce.Do(lease.release)
-}
 
 // RedisConnectionLease protects the lifetime of a redis connection pool.
 // Callers MUST release the lease when finished using the connection.
@@ -157,16 +71,16 @@ func (lease *RedisConnectionLease) Release() {
 	lease.releaseOnce.Do(lease.release)
 }
 
-// ReplicaDBLease protects the lifetime of a replica database handle.
+// DBLease protects the lifetime of a database handle.
 // Callers MUST release the lease when finished using the database handle.
-type ReplicaDBLease struct {
+type DBLease struct {
 	db          *sql.DB
 	release     func()
 	releaseOnce sync.Once
 }
 
-// NewReplicaDBLease creates a replica DB lease.
-func NewReplicaDBLease(db *sql.DB, release func()) *ReplicaDBLease {
+// NewDBLease creates a database lease.
+func NewDBLease(db *sql.DB, release func()) *DBLease {
 	if db == nil {
 		return nil
 	}
@@ -175,11 +89,11 @@ func NewReplicaDBLease(db *sql.DB, release func()) *ReplicaDBLease {
 		release = noopLeaseRelease
 	}
 
-	return &ReplicaDBLease{db: db, release: release}
+	return &DBLease{db: db, release: release}
 }
 
-// DB returns the leased replica database.
-func (lease *ReplicaDBLease) DB() *sql.DB {
+// DB returns the leased database handle.
+func (lease *DBLease) DB() *sql.DB {
 	if lease == nil {
 		return nil
 	}
@@ -188,7 +102,7 @@ func (lease *ReplicaDBLease) DB() *sql.DB {
 }
 
 // Release releases the lease exactly once.
-func (lease *ReplicaDBLease) Release() {
+func (lease *DBLease) Release() {
 	if lease == nil {
 		return
 	}
@@ -254,17 +168,19 @@ func (lease *TxLease) Rollback() error {
 	return lease.finish(lease.tx.Rollback())
 }
 
-// InfrastructureProvider resolves connections for the tenant in ctx.
-// Implementations MUST preserve current behavior:
-// - If ctx has no tenant, default tenant must still work.
+// InfrastructureProvider resolves tenant-scoped infrastructure from ctx.
+// Multi-tenant implementations may fail closed when tenant context is genuinely
+// absent; single-tenant/default-tenant behavior is implementation-specific.
 type InfrastructureProvider interface {
-	GetPostgresConnection(ctx context.Context) (*PostgresConnectionLease, error)
 	GetRedisConnection(ctx context.Context) (*RedisConnectionLease, error)
 	// BeginTx starts a tenant-scoped database transaction.
 	// The caller is responsible for calling Commit() or Rollback() on the returned lease.
 	BeginTx(ctx context.Context) (*TxLease, error)
 	// GetReplicaDB returns the replica database for read-only queries.
-	// Falls back to primary if no replica is configured.
-	// This enables CQRS read operations to be routed to a read replica.
-	GetReplicaDB(ctx context.Context) (*ReplicaDBLease, error)
+	// Returns nil when no replica is configured.
+	// Callers that want fallback behavior should use GetPrimaryDB explicitly.
+	GetReplicaDB(ctx context.Context) (*DBLease, error)
+	// GetPrimaryDB returns the primary database handle.
+	// This avoids resolver/client indirection for callers that only need *sql.DB.
+	GetPrimaryDB(ctx context.Context) (*DBLease, error)
 }

@@ -101,6 +101,70 @@ func (m *stubExtractionRepo) FindByID(ctx context.Context, id uuid.UUID) (*entit
 	return nil, sql.ErrNoRows
 }
 
+func (m *stubExtractionRepo) LinkIfUnlinked(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+
+func (m *stubExtractionRepo) MarkBridgeFailed(_ context.Context, _ *entities.ExtractionRequest) error {
+	return nil
+}
+
+func (m *stubExtractionRepo) MarkBridgeFailedWithTx(_ context.Context, _ *sql.Tx, _ *entities.ExtractionRequest) error {
+	return nil
+}
+
+func (m *stubExtractionRepo) IncrementBridgeAttempts(_ context.Context, _ uuid.UUID, _ int) error {
+	return nil
+}
+
+func (m *stubExtractionRepo) IncrementBridgeAttemptsWithTx(_ context.Context, _ *sql.Tx, _ uuid.UUID, _ int) error {
+	return nil
+}
+
+func (m *stubExtractionRepo) FindEligibleForBridge(_ context.Context, _ int) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
+func (m *stubExtractionRepo) CountBridgeReadiness(_ context.Context, _ time.Duration) (repositories.BridgeReadinessCounts, error) {
+	return repositories.BridgeReadinessCounts{}, nil
+}
+
+func (m *stubExtractionRepo) ListBridgeCandidates(
+	_ context.Context,
+	_ string,
+	_ time.Duration,
+	_ time.Time,
+	_ uuid.UUID,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
+func (m *stubExtractionRepo) FindBridgeRetentionCandidates(
+	_ context.Context,
+	_ time.Duration,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
+func (m *stubExtractionRepo) MarkCustodyDeleted(
+	_ context.Context,
+	_ uuid.UUID,
+	_ time.Time,
+) error {
+	return nil
+}
+
+func (m *stubExtractionRepo) MarkCustodyDeletedWithTx(
+	_ context.Context,
+	_ sharedPorts.Tx,
+	_ uuid.UUID,
+	_ time.Time,
+) error {
+	return nil
+}
+
 // --- NewExtractionPoller tests ---
 
 func TestNewExtractionPoller_NilFetcherClient(t *testing.T) {
@@ -260,8 +324,7 @@ func TestExtractionPoller_DoPoll_ImmediateFailed(t *testing.T) {
 	fetcher := &stubFetcherClient{
 		getExtractionJobStatusFn: func(_ context.Context, _ string) (*sharedPorts.ExtractionJobStatus, error) {
 			return &sharedPorts.ExtractionJobStatus{
-				Status:       "FAILED",
-				ErrorMessage: "connection refused",
+				Status: "FAILED",
 			}, nil
 		},
 	}
@@ -386,7 +449,7 @@ func TestExtractionPoller_PollOnce_CancelledStatusStopsPolling(t *testing.T) {
 	repo := &stubExtractionRepo{}
 	fetcher := &stubFetcherClient{
 		getExtractionJobStatusFn: func(_ context.Context, _ string) (*sharedPorts.ExtractionJobStatus, error) {
-			return &sharedPorts.ExtractionJobStatus{Status: "CANCELLED", JobID: "job-cancelled"}, nil
+			return &sharedPorts.ExtractionJobStatus{Status: "CANCELLED", ID: "job-cancelled"}, nil
 		},
 	}
 
@@ -654,7 +717,7 @@ func TestExtractionPoller_PollOnce_FailedUpdateFailure_RollsBackState(t *testing
 
 	fetcher := &stubFetcherClient{
 		getExtractionJobStatusFn: func(_ context.Context, _ string) (*sharedPorts.ExtractionJobStatus, error) {
-			return &sharedPorts.ExtractionJobStatus{Status: "FAILED", ErrorMessage: "fatal"}, nil
+			return &sharedPorts.ExtractionJobStatus{Status: "FAILED"}, nil
 		},
 	}
 
@@ -754,7 +817,7 @@ func TestExtractionPoller_PollOnce_ConcurrentUpdateStopsOnReloadedTerminalState(
 
 	fetcher := &stubFetcherClient{
 		getExtractionJobStatusFn: func(_ context.Context, _ string) (*sharedPorts.ExtractionJobStatus, error) {
-			return &sharedPorts.ExtractionJobStatus{Status: "FAILED", ErrorMessage: "lost connection"}, nil
+			return &sharedPorts.ExtractionJobStatus{Status: "FAILED"}, nil
 		},
 	}
 
@@ -798,7 +861,7 @@ func TestExtractionPoller_PollOnce_QueuedStatusKeepsPollingWithoutUpdate(t *test
 	fetcher := &stubFetcherClient{
 		getExtractionJobStatusFn: func(_ context.Context, jobID string) (*sharedPorts.ExtractionJobStatus, error) {
 			assert.Equal(t, extraction.FetcherJobID, jobID)
-			return &sharedPorts.ExtractionJobStatus{JobID: jobID, Status: "PENDING"}, nil
+			return &sharedPorts.ExtractionJobStatus{ID: jobID, Status: "PENDING"}, nil
 		},
 	}
 

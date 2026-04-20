@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	sharedhttp "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 )
@@ -462,7 +462,7 @@ func TestGetByID_NilConnection(t *testing.T) {
 	repo := NewRepository(&fakeInfrastructureProvider{})
 	ctx := context.Background()
 
-	// fakeInfrastructureProvider returns nil for GetPostgresConnection,
+	// fakeInfrastructureProvider returns nil database leases,
 	// so the repo fails when trying to acquire a read connection.
 	_, err := repo.GetByID(ctx, uuid.New())
 	require.Error(t, err)
@@ -496,7 +496,7 @@ func TestListByEntity_NilConnection(t *testing.T) {
 	repo := NewRepository(&fakeInfrastructureProvider{})
 	ctx := context.Background()
 
-	// fakeInfrastructureProvider returns nil for GetPostgresConnection,
+	// fakeInfrastructureProvider returns nil database leases,
 	// so the repo fails when trying to acquire a read connection.
 	_, _, err := repo.ListByEntity(ctx, "entity", uuid.New(), nil, 10)
 	require.Error(t, err)
@@ -565,7 +565,7 @@ func TestList_NilConnection(t *testing.T) {
 	repo := NewRepository(&fakeInfrastructureProvider{})
 	ctx := context.Background()
 
-	// fakeInfrastructureProvider returns nil for GetPostgresConnection,
+	// fakeInfrastructureProvider returns nil database leases,
 	// so the repo fails when trying to acquire a read connection.
 	_, _, err := repo.List(ctx, entities.AuditLogFilter{}, nil, 10)
 	require.Error(t, err)
@@ -930,16 +930,12 @@ func TestCreateWithTx_SuccessViaMock(t *testing.T) {
 	}
 
 	// Get a tx from the mock provider's database connection
-	pgConn, err := repo.provider.GetPostgresConnection(ctx)
+	pgConn, err := repo.provider.GetPrimaryDB(ctx)
 	require.NoError(t, err)
+	require.NotNil(t, pgConn)
+	require.NotNil(t, pgConn.DB())
 
-	rawDB, err := pgConn.Resolver(ctx)
-	require.NoError(t, err)
-
-	primaryDBs := rawDB.PrimaryDBs()
-	require.NotEmpty(t, primaryDBs)
-
-	tx, err := primaryDBs[0].BeginTx(ctx, nil)
+	tx, err := pgConn.DB().BeginTx(ctx, nil)
 	require.NoError(t, err)
 
 	result, err := repo.CreateWithTx(ctx, tx, auditLog)

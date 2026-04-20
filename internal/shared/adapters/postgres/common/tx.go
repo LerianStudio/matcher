@@ -6,10 +6,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"reflect"
 	"time"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
@@ -25,6 +24,8 @@ var (
 	ErrConnectionRequired = errors.New("postgres connection is required")
 	// ErrNoPrimaryDB indicates no primary database is configured.
 	ErrNoPrimaryDB = errors.New("no primary database configured for tenant transaction")
+	// ErrNilTxLease indicates the infrastructure provider returned a nil or unusable tx lease.
+	ErrNilTxLease = errors.New("tenant transaction lease is required")
 	// ErrNilCallback indicates a nil callback function was passed to a transaction wrapper.
 	ErrNilCallback = errors.New("pgcommon: callback function must not be nil")
 	// ErrInvalidTenantID indicates the tenant ID is not a valid UUID.
@@ -81,7 +82,7 @@ func WithTenantTxOrExisting[Result any](
 	}
 
 	primaryDBs := db.PrimaryDBs()
-	if len(primaryDBs) == 0 {
+	if len(primaryDBs) == 0 || primaryDBs[0] == nil {
 		return zero, ErrNoPrimaryDB
 	}
 
@@ -150,7 +151,7 @@ func WithTenantTxOrExistingProvider[Result any](
 		return zero, ErrNilCallback
 	}
 
-	if isNilInterface(provider) {
+	if ports.IsNilValue(provider) {
 		return zero, ErrConnectionRequired
 	}
 
@@ -162,9 +163,21 @@ func WithTenantTxOrExistingProvider[Result any](
 		return fn(tx)
 	}
 
-	txLease, err := provider.BeginTx(ctx)
+	txCtx := ctx
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+
+		txCtx, cancel = context.WithTimeout(ctx, defaultTxTimeout)
+		defer cancel()
+	}
+
+	txLease, err := provider.BeginTx(txCtx)
 	if err != nil {
 		return zero, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	if txLease == nil || txLease.SQLTx() == nil {
+		return zero, ErrNilTxLease
 	}
 
 	defer func() {
@@ -181,48 +194,4 @@ func WithTenantTxOrExistingProvider[Result any](
 	}
 
 	return result, nil
-}
-
-// BeginTenantTx begins a tenant-scoped transaction that the caller must manage.
-// The caller is responsible for calling Commit() or Rollback() on the returned transaction,
-// and must call the returned CancelFunc after the transaction is committed or rolled back
-// to release the timeout context resources.
-//
-// If the incoming context already has a deadline, the returned CancelFunc is a no-op.
-// If no deadline is present, a default timeout of 30 seconds is applied to prevent
-// indefinite hangs from connection pool exhaustion.
-func BeginTenantTx(ctx context.Context, provider ports.InfrastructureProvider) (*sql.Tx, context.CancelFunc, error) {
-	noop := func() {} // returned when no timeout context was created
-
-	if provider == nil {
-		return nil, noop, ErrConnectionRequired
-	}
-
-	if isNilInterface(provider) {
-		return nil, noop, ErrConnectionRequired
-	}
-
-	txLease, err := provider.BeginTx(ctx)
-	if err != nil {
-		return nil, noop, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-
-	return txLease.SQLTx(), func() {
-		_ = txLease.Rollback()
-	}, nil
-}
-
-func isNilInterface(value any) bool {
-	if value == nil {
-		return true
-	}
-
-	v := reflect.ValueOf(value)
-
-	switch v.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return v.IsNil()
-	default:
-		return false
-	}
 }

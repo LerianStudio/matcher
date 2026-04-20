@@ -11,21 +11,21 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	sharedhttp "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 )
 
 var errDatabaseFailure = errors.New("database error")
 
 type verifierMockContextProvider struct {
-	findByIDFunc func(ctx context.Context, tenantID, contextID uuid.UUID) (*ReconciliationContextInfo, error)
+	findByIDFunc func(ctx context.Context, contextID uuid.UUID) (*ReconciliationContextInfo, error)
 }
 
 func (m *verifierMockContextProvider) FindByID(
 	ctx context.Context,
-	tenantID, contextID uuid.UUID,
+	contextID uuid.UUID,
 ) (*ReconciliationContextInfo, error) {
 	if m.findByIDFunc != nil {
-		return m.findByIDFunc(ctx, tenantID, contextID)
+		return m.findByIDFunc(ctx, contextID)
 	}
 
 	return nil, nil
@@ -64,7 +64,7 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 		{
 			name: "context not owned error",
 			verifier: NewTenantOwnershipVerifier(&verifierMockContextProvider{
-				findByIDFunc: func(_ context.Context, _, _ uuid.UUID) (*ReconciliationContextInfo, error) {
+				findByIDFunc: func(_ context.Context, _ uuid.UUID) (*ReconciliationContextInfo, error) {
 					return nil, sharedhttp.ErrContextNotOwned
 				},
 			}),
@@ -75,7 +75,7 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 		{
 			name: "context not found error",
 			verifier: NewTenantOwnershipVerifier(&verifierMockContextProvider{
-				findByIDFunc: func(_ context.Context, _, _ uuid.UUID) (*ReconciliationContextInfo, error) {
+				findByIDFunc: func(_ context.Context, _ uuid.UUID) (*ReconciliationContextInfo, error) {
 					return nil, sharedhttp.ErrContextNotFound
 				},
 			}),
@@ -86,7 +86,7 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 		{
 			name: "lookup failed error",
 			verifier: NewTenantOwnershipVerifier(&verifierMockContextProvider{
-				findByIDFunc: func(_ context.Context, _, _ uuid.UUID) (*ReconciliationContextInfo, error) {
+				findByIDFunc: func(_ context.Context, _ uuid.UUID) (*ReconciliationContextInfo, error) {
 					return nil, errDatabaseFailure
 				},
 			}),
@@ -97,7 +97,7 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 		{
 			name: "nil info returned",
 			verifier: NewTenantOwnershipVerifier(&verifierMockContextProvider{
-				findByIDFunc: func(_ context.Context, _, _ uuid.UUID) (*ReconciliationContextInfo, error) {
+				findByIDFunc: func(_ context.Context, _ uuid.UUID) (*ReconciliationContextInfo, error) {
 					return nil, nil
 				},
 			}),
@@ -108,7 +108,7 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 		{
 			name: "context ID mismatch",
 			verifier: NewTenantOwnershipVerifier(&verifierMockContextProvider{
-				findByIDFunc: func(_ context.Context, _, _ uuid.UUID) (*ReconciliationContextInfo, error) {
+				findByIDFunc: func(_ context.Context, _ uuid.UUID) (*ReconciliationContextInfo, error) {
 					return &ReconciliationContextInfo{
 						ID:     uuid.MustParse("33333333-3333-3333-3333-333333333333"),
 						Active: true,
@@ -122,7 +122,7 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 		{
 			name: "context not active",
 			verifier: NewTenantOwnershipVerifier(&verifierMockContextProvider{
-				findByIDFunc: func(_ context.Context, _, ctxID uuid.UUID) (*ReconciliationContextInfo, error) {
+				findByIDFunc: func(_ context.Context, ctxID uuid.UUID) (*ReconciliationContextInfo, error) {
 					return &ReconciliationContextInfo{
 						ID:     ctxID,
 						Active: false,
@@ -136,7 +136,7 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 		{
 			name: "successful verification",
 			verifier: NewTenantOwnershipVerifier(&verifierMockContextProvider{
-				findByIDFunc: func(_ context.Context, _, ctxID uuid.UUID) (*ReconciliationContextInfo, error) {
+				findByIDFunc: func(_ context.Context, ctxID uuid.UUID) (*ReconciliationContextInfo, error) {
 					return &ReconciliationContextInfo{
 						ID:     ctxID,
 						Active: true,

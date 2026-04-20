@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 )
@@ -77,6 +77,13 @@ func (m *mockJobRepository) FindByContextID(
 func (m *mockJobRepository) Update(
 	_ context.Context,
 	_ *entities.IngestionJob,
+) (*entities.IngestionJob, error) {
+	return nil, nil
+}
+
+func (m *mockJobRepository) FindLatestByExtractionID(
+	_ context.Context,
+	_ uuid.UUID,
 ) (*entities.IngestionJob, error) {
 	return nil, nil
 }

@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
@@ -45,7 +45,6 @@ import (
 	matchGroupRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_group"
 	matchItemRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_item"
 	matchRunRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_run"
-	rateRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/rate"
 	matchLockManager "github.com/LerianStudio/matcher/internal/matching/adapters/redis"
 	matchingCommand "github.com/LerianStudio/matcher/internal/matching/services/command"
 
@@ -59,11 +58,9 @@ import (
 	exceptionPorts "github.com/LerianStudio/matcher/internal/exception/ports"
 	exceptionCommand "github.com/LerianStudio/matcher/internal/exception/services/command"
 
-	outboxRepo "github.com/LerianStudio/matcher/internal/outbox/adapters/postgres"
 	sharedCross "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
-	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 
 	"github.com/LerianStudio/matcher/tests/integration"
@@ -218,12 +215,12 @@ func wireServices(t *testing.T, h *integration.TestHarness) wiredServices {
 	t.Helper()
 
 	redisConn := mustRedisConn(t, h.RedisAddr)
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
 
 	jobRepo := ingestionJobRepo.NewRepository(provider)
 	txRepo := ingestionTxRepo.NewRepository(provider)
 	dedupe := ingestionRedis.NewDedupeService(provider)
-	outbox := outboxRepo.NewRepository(provider)
+	outbox := integration.NewTestOutboxRepository(t, h.Connection)
 
 	parserRegistry := ingestionParsers.NewParserRegistry()
 	parserRegistry.Register(ingestionParsers.NewCSVParser())
@@ -248,13 +245,14 @@ func wireServices(t *testing.T, h *integration.TestHarness) wiredServices {
 	})
 	require.NoError(t, err)
 
-	ctxProvider, err := sharedCross.NewContextProviderAdapter(configContextRepo.NewRepository(provider))
+	configProvider, err := sharedCross.NewMatchingConfigurationProvider(
+		configContextRepo.NewRepository(provider),
+		cfgSourceRepo,
+		configMatchRuleRepo.NewRepository(provider),
+		configFeeRuleRepo.NewRepository(provider),
+	)
 	require.NoError(t, err)
 	srcProvider, err := sharedCross.NewSourceProviderAdapter(cfgSourceRepo)
-	require.NoError(t, err)
-	ruleProvider, err := sharedCross.NewMatchRuleProviderAdapter(
-		configMatchRuleRepo.NewRepository(provider),
-	)
 	require.NoError(t, err)
 
 	txAdapter, err := sharedCross.NewTransactionRepositoryAdapterFromRepo(provider, txRepo)
@@ -265,21 +263,18 @@ func wireServices(t *testing.T, h *integration.TestHarness) wiredServices {
 	matchGroup := matchGroupRepo.NewRepository(provider)
 	matchItem := matchItemRepo.NewRepository(provider)
 	exceptionCreator := exceptionCreatorRepo.NewRepository(provider)
-	rate := rateRepo.NewRepository(provider)
 	feeVariance := feeVarianceRepo.NewRepository(provider)
 	auditLogRepo := governancePostgres.NewRepository(provider)
 	adjustment := adjustmentRepo.NewRepository(provider, auditLogRepo)
 	feeSchedule := feeScheduleRepo.NewRepository(provider)
 
-	feeRuleProvider, err := sharedCross.NewFeeRuleProviderAdapter(
-		configFeeRuleRepo.NewRepository(provider),
-	)
+	feeRuleProvider, err := sharedCross.NewFeeRuleProviderAdapter(configFeeRuleRepo.NewRepository(provider))
 	require.NoError(t, err)
 
 	matchingUC, err := matchingCommand.New(matchingCommand.UseCaseDeps{
-		ContextProvider:  ctxProvider,
+		ContextProvider:  configProvider.ContextProvider(),
 		SourceProvider:   srcProvider,
-		RuleProvider:     ruleProvider,
+		RuleProvider:     configProvider.MatchRuleProvider(),
 		TxRepo:           txAdapter,
 		LockManager:      lockManager,
 		MatchRunRepo:     matchRun,
@@ -287,7 +282,6 @@ func wireServices(t *testing.T, h *integration.TestHarness) wiredServices {
 		MatchItemRepo:    matchItem,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outbox,
-		RateRepo:         rate,
 		FeeVarianceRepo:  feeVariance,
 		AdjustmentRepo:   adjustment,
 		InfraProvider:    provider,
@@ -476,7 +470,7 @@ func wireIdempotencyRepo(
 	t.Helper()
 
 	redisConn := mustRedisConn(t, h.RedisAddr)
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
 
 	repo, err := exceptionRedis.NewIdempotencyRepository(provider)
 	require.NoError(t, err)
@@ -596,10 +590,10 @@ func wireExceptionUseCase(
 	t.Helper()
 
 	redisConn := mustRedisConn(t, h.RedisAddr)
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
 
 	exceptionRepo := exceptionRepoAdapter.NewRepository(provider)
-	outbox := outboxRepo.NewRepository(provider)
+	outbox := integration.NewTestOutboxRepository(t, h.Connection)
 
 	auditPub, err := exceptionAudit.NewOutboxPublisher(outbox)
 	require.NoError(t, err)
@@ -626,11 +620,11 @@ func wireDisputeUseCase(
 	t.Helper()
 
 	redisConn := mustRedisConn(t, h.RedisAddr)
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
 
 	exceptionRepo := exceptionRepoAdapter.NewRepository(provider)
 	disputeRepo := disputeRepoAdapter.NewRepository(provider)
-	outbox := outboxRepo.NewRepository(provider)
+	outbox := integration.NewTestOutboxRepository(t, h.Connection)
 
 	auditPub, err := exceptionAudit.NewOutboxPublisher(outbox)
 	require.NoError(t, err)

@@ -12,10 +12,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 func TestQueryExecutorInterface(t *testing.T) {
@@ -59,12 +60,44 @@ func TestWithTenantRead_NilProvider(t *testing.T) {
 	require.ErrorIs(t, err, ErrConnectionRequired)
 }
 
+func TestWithTenantRead_TypedNilProvider(t *testing.T) {
+	t.Parallel()
+
+	var typedNilProvider *testutil.MockInfrastructureProvider
+
+	_, err := WithTenantRead[string](
+		context.Background(),
+		ports.InfrastructureProvider(typedNilProvider),
+		func(_ *sql.Conn) (string, error) {
+			return "", nil
+		},
+	)
+
+	require.ErrorIs(t, err, ErrConnectionRequired)
+}
+
 func TestWithTenantReadQuery_NilProvider(t *testing.T) {
 	t.Parallel()
 
 	_, err := WithTenantReadQuery[string](
 		context.Background(),
 		nil,
+		func(_ QueryExecutor) (string, error) {
+			return "", nil
+		},
+	)
+
+	require.ErrorIs(t, err, ErrConnectionRequired)
+}
+
+func TestWithTenantReadQuery_TypedNilProvider(t *testing.T) {
+	t.Parallel()
+
+	var typedNilProvider *testutil.MockInfrastructureProvider
+
+	_, err := WithTenantReadQuery[string](
+		context.Background(),
+		ports.InfrastructureProvider(typedNilProvider),
 		func(_ QueryExecutor) (string, error) {
 			return "", nil
 		},
@@ -149,7 +182,7 @@ func TestWithTenantRead_FallbackToPrimary_NilConnection(t *testing.T) {
 	})
 
 	require.Error(t, err)
-	require.ErrorContains(t, err, "get replica db")
+	require.ErrorContains(t, err, "get primary connection as fallback")
 }
 
 func TestWithTenantRead_FallbackToPrimary_PostgresConnError(t *testing.T) {
@@ -168,7 +201,7 @@ func TestWithTenantRead_FallbackToPrimary_PostgresConnError(t *testing.T) {
 	})
 
 	require.Error(t, err)
-	require.ErrorContains(t, err, "get replica db")
+	require.ErrorContains(t, err, "get primary connection as fallback")
 }
 
 func TestWithTenantRead_WithReplicaDB(t *testing.T) {
@@ -564,11 +597,11 @@ func TestGetPrimaryDBFallback_NilConnection(t *testing.T) {
 	db, err := getPrimaryDBFallback(ctx, provider)
 
 	require.Error(t, err)
-	require.ErrorIs(t, err, ErrConnectionRequired)
+	require.ErrorContains(t, err, "get primary connection as fallback")
 	assert.Nil(t, db)
 }
 
-func TestGetPrimaryDBFallback_GetPostgresConnectionError(t *testing.T) {
+func TestGetPrimaryDBFallback_GetPrimaryDBError(t *testing.T) {
 	t.Parallel()
 
 	expectedErr := errors.New("postgres connection error")

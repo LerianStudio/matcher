@@ -5,6 +5,7 @@ package integration
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,9 +13,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/LerianStudio/matcher/internal/bootstrap"
+	"github.com/google/uuid"
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/LerianStudio/matcher/internal/bootstrap"
+	"github.com/LerianStudio/matcher/tests/integration/ratelimit"
 )
 
 func TestConfigurationFlow_Integration(t *testing.T) {
@@ -46,6 +52,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		t.Setenv("RABBITMQ_PASSWORD", "guest")
 		t.Setenv("RABBITMQ_VHOST", "/")
 		t.Setenv("AUTH_ENABLED", "false")
+		t.Setenv("PLUGIN_AUTH_ENABLED", "false")
 		t.Setenv("ENABLE_TELEMETRY", "false")
 		t.Setenv("LOG_LEVEL", "debug")
 		t.Setenv("RATE_LIMIT_MAX", "1000")
@@ -64,6 +71,12 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		service, err := bootstrap.InitServersWithOptions(nil)
 		require.NoError(t, err)
 		require.NotNil(t, service)
+
+		// Override systemplane-registered rate-limit defaults with test-friendly
+		// values. Without this, the registered compile-time defaults
+		// (rate_limit.max=100) mask the env-based RATE_LIMIT_MAX=1000 and cause
+		// sequential test requests to 429 after ~100 calls.
+		require.NoError(t, ratelimit.OverrideRateLimitsForTests(context.Background(), service))
 
 		runErr := make(chan error, 1)
 
@@ -117,6 +130,10 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		if runErrValue != nil {
 			t.Fatalf("server run error: %v", runErrValue)
 		}
+
+		db, err := sql.Open("pgx", h.PostgresDSN)
+		require.NoError(t, err)
+		defer db.Close()
 
 		// --- Step 1: Create Reconciliation Context ---
 		contextPayload := map[string]any{
@@ -504,6 +521,31 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		feeRuleDeleted = true
 		t.Log("Deleted Fee Rule")
 
+		contextUUID, err := uuid.Parse(contextID)
+		require.NoError(t, err)
+		scheduleUUID, err := uuid.Parse(scheduleID)
+		require.NoError(t, err)
+		ruleUUID, err := uuid.Parse(ruleID)
+		require.NoError(t, err)
+		bankUUID, err := uuid.Parse(bankID)
+		require.NoError(t, err)
+
+		cleanupVarianceHistory := attachVarianceHistoryReference(t, db, contextUUID, bankUUID, ruleUUID, scheduleUUID, "E2E Test Schedule")
+		defer cleanupVarianceHistory()
+
+		conflictResp := makeRequest(
+			t,
+			client,
+			"DELETE",
+			fmt.Sprintf("%s/v1/fee-schedules/%s", baseURL, scheduleID),
+			nil,
+			http.StatusConflict,
+		)
+		require.Equal(t, "Conflict", conflictResp["title"])
+		require.Equal(t, "fee schedule is still in use", conflictResp["message"])
+		t.Log("Verified Fee Schedule Delete Conflict From Variance History")
+		cleanupVarianceHistory()
+
 		// Verify deletion — GET should 404.
 		makeRequest(
 			t,
@@ -515,6 +557,99 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		)
 		t.Log("Verified Fee Rule Deletion (404)")
 	})
+}
+
+func attachVarianceHistoryReference(
+	t *testing.T,
+	db *sql.DB,
+	contextID, sourceID, ruleID, scheduleID uuid.UUID,
+	scheduleName string,
+) func() {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	runID := uuid.New()
+	groupID := uuid.New()
+	transactionID := uuid.New()
+	ingestionJobID := uuid.New()
+	itemID := uuid.New()
+	varianceID := uuid.New()
+	createdAt := time.Now().UTC()
+
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO match_runs (id, context_id, mode, status, stats)
+		VALUES ($1, $2, 'COMMIT', 'COMPLETED', '{}'::jsonb)
+	`, runID, contextID)
+	require.NoError(t, err)
+
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO ingestion_jobs (id, context_id, source_id, status)
+		VALUES ($1, $2, $3, 'COMPLETED')
+	`, ingestionJobID, contextID, sourceID)
+	require.NoError(t, err)
+
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO transactions (id, ingestion_job_id, source_id, external_id, amount, currency, date, extraction_status, status)
+		VALUES ($1, $2, $3, $4, 100.00, 'USD', NOW(), 'COMPLETE', 'MATCHED')
+	`, transactionID, ingestionJobID, sourceID, varianceID.String())
+	require.NoError(t, err)
+
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO match_groups (id, context_id, run_id, rule_id, confidence, status)
+		VALUES ($1, $2, $3, $4, 95, 'CONFIRMED')
+	`, groupID, contextID, runID, ruleID)
+	require.NoError(t, err)
+
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO match_items (id, match_group_id, transaction_id, allocated_amount, allocated_currency)
+		VALUES ($1, $2, $3, 100.00, 'USD')
+	`, itemID, groupID, transactionID)
+	require.NoError(t, err)
+
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO match_fee_variances (
+			id, context_id, run_id, match_group_id, transaction_id, fee_schedule_id, fee_schedule_name_snapshot,
+			currency, expected_fee_amount, actual_fee_amount, delta,
+			tolerance_abs, tolerance_percent, variance_type, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, 'USD', $8, $9, $10, $11, $12, $13, $14, $14)
+	`,
+		varianceID,
+		contextID,
+		runID,
+		groupID,
+		transactionID,
+		scheduleID,
+		scheduleName,
+		decimal.RequireFromString("10.00"),
+		decimal.RequireFromString("12.00"),
+		decimal.RequireFromString("2.00"),
+		decimal.RequireFromString("0.01"),
+		decimal.RequireFromString("0.05"),
+		"OVERCHARGE",
+		createdAt,
+	)
+	require.NoError(t, err)
+
+	cleaned := false
+
+	return func() {
+		if cleaned {
+			return
+		}
+		cleaned = true
+
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cleanupCancel()
+
+		_, _ = db.ExecContext(cleanupCtx, `DELETE FROM match_fee_variances WHERE id = $1`, varianceID)
+		_, _ = db.ExecContext(cleanupCtx, `DELETE FROM match_items WHERE id = $1`, itemID)
+		_, _ = db.ExecContext(cleanupCtx, `DELETE FROM match_groups WHERE id = $1`, groupID)
+		_, _ = db.ExecContext(cleanupCtx, `DELETE FROM transactions WHERE id = $1`, transactionID)
+		_, _ = db.ExecContext(cleanupCtx, `DELETE FROM ingestion_jobs WHERE id = $1`, ingestionJobID)
+		_, _ = db.ExecContext(cleanupCtx, `DELETE FROM match_runs WHERE id = $1`, runID)
+	}
 }
 
 func makeRequest(

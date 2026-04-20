@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
@@ -191,7 +191,7 @@ func TestExportJobQueryService_List(t *testing.T) {
 func TestExportJobQueryService_ListByContext(t *testing.T) {
 	t.Parallel()
 
-	t.Run("returns jobs successfully", func(t *testing.T) {
+	t.Run("returns jobs successfully with pagination", func(t *testing.T) {
 		t.Parallel()
 
 		ctrl := gomock.NewController(t)
@@ -211,17 +211,26 @@ func TestExportJobQueryService_ListByContext(t *testing.T) {
 				UpdatedAt:  time.Now().UTC(),
 			},
 		}
+		expectedPagination := libHTTP.CursorPagination{Next: "next-token"}
 
-		repo.EXPECT().ListByContext(gomock.Any(), contextID, 10).Return(expected, nil).Times(1)
+		repo.EXPECT().
+			ListByContext(gomock.Any(), contextID, (*libHTTP.TimestampCursor)(nil), 10).
+			Return(expected, expectedPagination, nil).
+			Times(1)
 
 		svc, err := NewExportJobQueryService(repo)
 		require.NoError(t, err)
 
-		jobs, err := svc.ListByContext(context.Background(), contextID, 10)
+		jobs, pagination, err := svc.ListByContext(context.Background(), ListByContextInput{
+			ContextID: contextID,
+			Cursor:    nil,
+			Limit:     10,
+		})
 
 		require.NoError(t, err)
 		assert.Len(t, jobs, 1)
 		assert.Equal(t, contextID, jobs[0].ContextID)
+		assert.Equal(t, "next-token", pagination.Next)
 	})
 
 	t.Run("returns error when repository fails", func(t *testing.T) {
@@ -232,16 +241,20 @@ func TestExportJobQueryService_ListByContext(t *testing.T) {
 
 		repoErr := errTestDatabaseError
 		repo.EXPECT().
-			ListByContext(gomock.Any(), gomock.Any(), gomock.Any()).
-			Return(nil, repoErr).
+			ListByContext(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+			Return(nil, libHTTP.CursorPagination{}, repoErr).
 			Times(1)
 
 		svc, err := NewExportJobQueryService(repo)
 		require.NoError(t, err)
 
-		jobs, err := svc.ListByContext(context.Background(), uuid.New(), 10)
+		jobs, pagination, err := svc.ListByContext(context.Background(), ListByContextInput{
+			ContextID: uuid.New(),
+			Limit:     10,
+		})
 
 		require.Error(t, err)
 		assert.Nil(t, jobs)
+		assert.Empty(t, pagination.Next)
 	})
 }

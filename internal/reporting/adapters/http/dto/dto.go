@@ -4,8 +4,8 @@ package dto
 import (
 	"time"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	"github.com/LerianStudio/lib-commons/v5/commons/pointers"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 )
@@ -393,13 +393,14 @@ type SummaryReportResponse struct {
 
 // VarianceReportRowResponse represents a row in the variance report.
 type VarianceReportRowResponse struct {
-	SourceID      string  `json:"source_id"      example:"550e8400-e29b-41d4-a716-446655440000"`
-	Currency      string  `json:"currency"       example:"USD"`
-	FeeType       string  `json:"fee_type"       example:"INTERCHANGE"`
-	TotalExpected string  `json:"total_expected" example:"5000.00"`
-	TotalActual   string  `json:"total_actual"   example:"4800.00"`
-	NetVariance   string  `json:"net_variance"   example:"-200.00"`
-	VariancePct   *string `json:"variance_pct,omitempty" example:"-4.00"`
+	SourceID        string  `json:"source_id"          example:"550e8400-e29b-41d4-a716-446655440000"`
+	Currency        string  `json:"currency"           example:"USD"`
+	FeeScheduleID   string  `json:"fee_schedule_id"    example:"550e8400-e29b-41d4-a716-446655440001"`
+	FeeScheduleName string  `json:"fee_schedule_name"  example:"INTERCHANGE"`
+	TotalExpected   string  `json:"total_expected"     example:"5000.00"`
+	TotalActual     string  `json:"total_actual"       example:"4800.00"`
+	NetVariance     string  `json:"net_variance"       example:"-200.00"`
+	VariancePct     *string `json:"variance_pct,omitempty" example:"-4.00"`
 }
 
 // ListMatchedReportResponse wraps a paginated list of matched items.
@@ -516,12 +517,13 @@ func VarianceRowsToResponse(rows []*entities.VarianceReportRow) []VarianceReport
 		}
 
 		resp := VarianceReportRowResponse{
-			SourceID:      row.SourceID.String(),
-			Currency:      row.Currency,
-			FeeType:       row.FeeType,
-			TotalExpected: row.TotalExpected.String(),
-			TotalActual:   row.TotalActual.String(),
-			NetVariance:   row.NetVariance.String(),
+			SourceID:        row.SourceID.String(),
+			Currency:        row.Currency,
+			FeeScheduleID:   row.FeeScheduleID.String(),
+			FeeScheduleName: row.FeeScheduleName,
+			TotalExpected:   row.TotalExpected.String(),
+			TotalActual:     row.TotalActual.String(),
+			NetVariance:     row.NetVariance.String(),
 		}
 
 		if row.VariancePct != nil {

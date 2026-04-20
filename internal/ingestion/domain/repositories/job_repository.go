@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 )
@@ -31,4 +31,12 @@ type JobRepository interface {
 		filter CursorFilter,
 	) ([]*entities.IngestionJob, libHTTP.CursorPagination, error)
 	Update(ctx context.Context, job *entities.IngestionJob) (*entities.IngestionJob, error)
+	// FindLatestByExtractionID returns the most recent ingestion job that was
+	// stamped with the given extraction id in metadata (T-005 P1). Used by
+	// IngestFromTrustedStream to short-circuit duplicate intake when the
+	// bridge orchestrator retries after a transient link failure. Returns
+	// nil + nil (NOT a sentinel) when no job has been stamped with this
+	// extraction id; this keeps the call site cheap because "no prior job"
+	// is the common case on first attempt.
+	FindLatestByExtractionID(ctx context.Context, extractionID uuid.UUID) (*entities.IngestionJob, error)
 }

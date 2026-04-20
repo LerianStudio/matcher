@@ -11,9 +11,9 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/shopspring/decimal"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
@@ -28,7 +28,11 @@ var (
 	ErrUnknownFeeStructureType = errors.New("unknown fee structure type")
 	// ErrFeeScheduleReferencedByFeeRule is returned when a fee schedule is still referenced by fee rules.
 	ErrFeeScheduleReferencedByFeeRule = errors.New("fee schedule is referenced by fee rules")
+	// ErrFeeScheduleReferencedByVarianceHistory is returned when a fee schedule is still referenced by fee variance history.
+	ErrFeeScheduleReferencedByVarianceHistory = errors.New("fee schedule is referenced by fee variance history")
 )
+
+const constraintFeeVarianceSchedule = "match_fee_variances_fee_schedule_id_fkey"
 
 // CreateFeeSchedule creates a new fee schedule.
 func (uc *UseCase) CreateFeeSchedule(
@@ -70,7 +74,7 @@ func (uc *UseCase) CreateFeeSchedule(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to create fee schedule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to create fee schedule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to create fee schedule")
 
 		return nil, fmt.Errorf("creating fee schedule: %w", err)
 	}
@@ -109,7 +113,7 @@ func (uc *UseCase) UpdateFeeSchedule(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to load fee schedule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to load fee schedule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to load fee schedule")
 
 		return nil, fmt.Errorf("finding fee schedule: %w", err)
 	}
@@ -135,7 +139,7 @@ func (uc *UseCase) UpdateFeeSchedule(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to update fee schedule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to update fee schedule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to update fee schedule")
 
 		return nil, fmt.Errorf("updating fee schedule: %w", err)
 	}
@@ -161,20 +165,25 @@ func (uc *UseCase) DeleteFeeSchedule(ctx context.Context, scheduleID uuid.UUID) 
 	if _, err := uc.feeScheduleRepo.GetByID(ctx, scheduleID); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to load fee schedule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to load fee schedule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to load fee schedule")
 
 		return fmt.Errorf("finding fee schedule: %w", err)
 	}
 
 	if err := uc.feeScheduleRepo.Delete(ctx, scheduleID); err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23503" && pgErr.ConstraintName == constraintFeeRuleSchedule {
-			return ErrFeeScheduleReferencedByFeeRule
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			switch pgErr.ConstraintName {
+			case constraintFeeRuleSchedule:
+				return ErrFeeScheduleReferencedByFeeRule
+			case constraintFeeVarianceSchedule:
+				return ErrFeeScheduleReferencedByVarianceHistory
+			}
 		}
 
 		libOpentelemetry.HandleSpanError(span, "failed to delete fee schedule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to delete fee schedule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to delete fee schedule")
 
 		return fmt.Errorf("deleting fee schedule: %w", err)
 	}

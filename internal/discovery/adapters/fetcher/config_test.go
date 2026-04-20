@@ -3,6 +3,7 @@
 package fetcher
 
 import (
+	"net"
 	"testing"
 	"time"
 
@@ -202,4 +203,80 @@ func TestHTTPClientConfig_BuildTransport_ResolveFailure(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "resolve host")
+}
+
+// TestIsBlockedSSRFTarget_DeniedRanges documents every IP class that
+// isBlockedSSRFTarget rejects. Covers the stdlib boolean helpers
+// (Private/Loopback/LinkLocal*) plus the explicit additions for
+// Unspecified, Multicast, and CGNAT (100.64/10) that are NOT
+// IsPrivate per stdlib.
+func TestIsBlockedSSRFTarget_DeniedRanges(t *testing.T) {
+	t.Parallel()
+
+	denied := []struct {
+		name string
+		ip   string
+	}{
+		// Covered by stdlib helpers.
+		{"rfc1918 10/8", "10.0.0.1"},
+		{"rfc1918 172.16/12", "172.16.0.1"},
+		{"rfc1918 192.168/16", "192.168.1.1"},
+		{"ipv6 ula fc00::/7", "fc00::1"},
+		{"ipv4 loopback", "127.0.0.1"},
+		{"ipv6 loopback", "::1"},
+		{"ipv4 link-local", "169.254.1.1"},
+		{"ipv6 link-local unicast", "fe80::1"},
+		// Explicit additions — must not be in the stdlib covered set above.
+		{"ipv4 unspecified", "0.0.0.0"},
+		{"ipv6 unspecified", "::"},
+		{"ipv4 multicast 224/4 (boundary)", "224.0.0.1"},
+		{"ipv4 multicast mid-range", "239.255.255.255"},
+		{"ipv6 multicast", "ff02::1"},
+		{"cgnat 100.64/10 low", "100.64.0.1"},
+		{"cgnat 100.64/10 high", "100.127.255.255"},
+	}
+
+	for _, tc := range denied {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ip := net.ParseIP(tc.ip)
+			require.NotNil(t, ip, "test data: parse %q", tc.ip)
+			assert.Truef(t, isBlockedSSRFTarget(ip), "%s (%s) must be blocked", tc.name, tc.ip)
+		})
+	}
+}
+
+// TestIsBlockedSSRFTarget_AllowedRanges documents that the guard does
+// NOT reject public internet addresses. Includes RFC 5737 TEST-NET
+// ranges which are intentionally allowed so integration tests that
+// resolve them in controlled environments keep working.
+func TestIsBlockedSSRFTarget_AllowedRanges(t *testing.T) {
+	t.Parallel()
+
+	allowed := []struct {
+		name string
+		ip   string
+	}{
+		{"public ipv4", "8.8.8.8"},
+		{"public ipv4 cloudflare", "1.1.1.1"},
+		{"public ipv6 google dns", "2001:4860:4860::8888"},
+		// Routable non-CGNAT addresses bordering the CGNAT range.
+		{"just below cgnat (100.63.255.254)", "100.63.255.254"},
+		{"just above cgnat (100.128.0.1)", "100.128.0.1"},
+		// RFC 5737 TEST-NET ranges are intentionally allowed.
+		{"rfc5737 test-net-1", "192.0.2.1"},
+		{"rfc5737 test-net-2", "198.51.100.1"},
+		{"rfc5737 test-net-3", "203.0.113.1"},
+	}
+
+	for _, tc := range allowed {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ip := net.ParseIP(tc.ip)
+			require.NotNil(t, ip, "test data: parse %q", tc.ip)
+			assert.Falsef(t, isBlockedSSRFTarget(ip), "%s (%s) must NOT be blocked", tc.name, tc.ip)
+		})
+	}
 }

@@ -5,15 +5,13 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 )
 
-func (uc *UseCase) cloneContextTransactional(ctx context.Context, input CloneContextInput, sourceContext *entities.ReconciliationContext, autoMatchOnUpload bool) (*entities.CloneResult, error) {
+func (uc *UseCase) cloneContextTransactional(ctx context.Context, input CloneContextInput, sourceContext *entities.ReconciliationContext) (*entities.CloneResult, error) {
 	tx, cancel, err := beginTenantTx(ctx, uc.infraProvider)
 	if err != nil {
 		return nil, fmt.Errorf("begin clone transaction: %w", err)
@@ -30,7 +28,12 @@ func (uc *UseCase) cloneContextTransactional(ctx context.Context, input CloneCon
 		return nil, fmt.Errorf("lock source context for clone: %w", err)
 	}
 
-	created, err := uc.createClonedContextWithTx(ctx, tx, input, sourceContext, autoMatchOnUpload)
+	lockedSourceContext, err := uc.findSourceContextWithOptionalTx(ctx, tx, input.SourceContextID, sourceContext)
+	if err != nil {
+		return nil, fmt.Errorf("reload locked source context: %w", err)
+	}
+
+	created, err := uc.createClonedContextWithTx(ctx, tx, input, lockedSourceContext, lockedSourceContext.AutoMatchOnUpload)
 	if err != nil {
 		return nil, err
 	}
@@ -105,28 +108,62 @@ func (uc *UseCase) cloneContextNonTransactional(ctx context.Context, input Clone
 	return result, nil
 }
 
-func (uc *UseCase) buildClonedContextEntity(input CloneContextInput, sourceContext *entities.ReconciliationContext, autoMatchOnUpload bool) *entities.ReconciliationContext {
-	now := time.Now().UTC()
+func (uc *UseCase) findSourceContextWithOptionalTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	contextID uuid.UUID,
+	fallback *entities.ReconciliationContext,
+) (*entities.ReconciliationContext, error) {
+	if tx == nil {
+		return fallback, nil
+	}
 
-	return &entities.ReconciliationContext{
-		ID:                uuid.New(),
-		TenantID:          sourceContext.TenantID,
-		Name:              strings.TrimSpace(input.NewName),
+	txFinder, ok := uc.contextRepo.(contextTxFinder)
+	if !ok {
+		return fallback, nil
+	}
+
+	locked, err := txFinder.FindByIDWithTx(ctx, tx, contextID)
+	if err != nil {
+		return nil, err
+	}
+
+	if locked == nil {
+		return nil, ErrContextNotFound
+	}
+
+	return locked, nil
+}
+
+func (uc *UseCase) buildClonedContextEntity(ctx context.Context, input CloneContextInput, sourceContext *entities.ReconciliationContext, autoMatchOnUpload bool) (*entities.ReconciliationContext, error) {
+	newName := strings.TrimSpace(input.NewName)
+	autoMatch := autoMatchOnUpload
+
+	clonedContext, err := entities.NewReconciliationContext(ctx, sourceContext.TenantID, entities.CreateReconciliationContextInput{
+		Name:              newName,
 		Type:              sourceContext.Type,
 		Interval:          sourceContext.Interval,
-		Status:            value_objects.ContextStatusActive,
-		RateID:            sourceContext.RateID,
-		FeeToleranceAbs:   sourceContext.FeeToleranceAbs,
-		FeeTolerancePct:   sourceContext.FeeTolerancePct,
-		FeeNormalization:  sourceContext.FeeNormalization,
-		AutoMatchOnUpload: autoMatchOnUpload,
-		CreatedAt:         now,
-		UpdatedAt:         now,
+		FeeToleranceAbs:   decimalStringPointer(sourceContext.FeeToleranceAbs),
+		FeeTolerancePct:   decimalStringPointer(sourceContext.FeeTolerancePct),
+		FeeNormalization:  cloneStringPointer(sourceContext.FeeNormalization),
+		AutoMatchOnUpload: &autoMatch,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build cloned context entity: %w", err)
 	}
+
+	if err := clonedContext.Activate(ctx); err != nil {
+		return nil, fmt.Errorf("activate cloned context: %w", err)
+	}
+
+	return clonedContext, nil
 }
 
 func (uc *UseCase) createClonedContextWithTx(ctx context.Context, tx *sql.Tx, input CloneContextInput, sourceContext *entities.ReconciliationContext, autoMatchOnUpload bool) (*entities.ReconciliationContext, error) {
-	newContext := uc.buildClonedContextEntity(input, sourceContext, autoMatchOnUpload)
+	newContext, err := uc.buildClonedContextEntity(ctx, input, sourceContext, autoMatchOnUpload)
+	if err != nil {
+		return nil, err
+	}
 
 	txCreator, ok := uc.contextRepo.(contextTxCreator)
 	if !ok {
@@ -142,7 +179,10 @@ func (uc *UseCase) createClonedContextWithTx(ctx context.Context, tx *sql.Tx, in
 }
 
 func (uc *UseCase) createClonedContext(ctx context.Context, input CloneContextInput, sourceContext *entities.ReconciliationContext, autoMatchOnUpload bool) (*entities.ReconciliationContext, error) {
-	newContext := uc.buildClonedContextEntity(input, sourceContext, autoMatchOnUpload)
+	newContext, err := uc.buildClonedContextEntity(ctx, input, sourceContext, autoMatchOnUpload)
+	if err != nil {
+		return nil, err
+	}
 
 	created, err := uc.contextRepo.Create(ctx, newContext)
 	if err != nil {
@@ -150,4 +190,19 @@ func (uc *UseCase) createClonedContext(ctx context.Context, input CloneContextIn
 	}
 
 	return created, nil
+}
+
+func cloneStringPointer(value *string) *string {
+	if value == nil {
+		return nil
+	}
+
+	cloned := *value
+
+	return &cloned
+}
+
+func decimalStringPointer(value interface{ String() string }) *string {
+	cloned := value.String()
+	return &cloned
 }

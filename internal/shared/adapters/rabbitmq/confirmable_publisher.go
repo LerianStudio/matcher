@@ -5,16 +5,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"sync"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/backoff"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
-	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
+	"github.com/LerianStudio/lib-commons/v5/commons/backoff"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libRabbitmq "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
+
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // recoveryAttemptResult indicates the outcome of a single recovery attempt.
@@ -28,7 +29,7 @@ const (
 
 // MIGRATION(lib-commons): ConfirmablePublisher Migration Plan
 //
-// This type is a candidate for promotion to lib-commons/v4/commons/rabbitmq so
+// This type is a candidate for promotion to lib-commons/v5/commons/rabbitmq so
 // that all Lerian services (Matcher, Midaz, and future services) can share a
 // single, battle-tested publisher-confirms implementation.
 //
@@ -382,7 +383,7 @@ func NewConfirmablePublisherFromChannel(
 	ch ConfirmableChannel,
 	opts ...ConfirmablePublisherOption,
 ) (*ConfirmablePublisher, error) {
-	if isNilInterface(ch) {
+	if sharedPorts.IsNilValue(ch) {
 		return nil, ErrChannelRequired
 	}
 
@@ -607,7 +608,7 @@ func (pub *ConfirmablePublisher) tryReconnectChannel(
 		)
 
 		// Best-effort close of the channel we just obtained.
-		if !isNilInterface(newCh) {
+		if !sharedPorts.IsNilValue(newCh) {
 			_ = newCh.Close()
 		}
 
@@ -710,7 +711,7 @@ func (pub *ConfirmablePublisher) Publish(
 		return ErrPublisherClosed
 	}
 
-	if isNilInterface(pub.ch) {
+	if sharedPorts.IsNilValue(pub.ch) {
 		pub.mu.RUnlock()
 		return ErrPublisherNotReady
 	}
@@ -833,7 +834,7 @@ func (pub *ConfirmablePublisher) Close() error {
 //	    _ = publisher.Reconnect(newCh)
 //	}
 func (pub *ConfirmablePublisher) Reconnect(ch ConfirmableChannel) error {
-	if isNilInterface(ch) {
+	if sharedPorts.IsNilValue(ch) {
 		return ErrChannelRequired
 	}
 
@@ -900,24 +901,9 @@ func (pub *ConfirmablePublisher) Channel() ConfirmableChannel {
 }
 
 func logIfConfigured(logger libLog.Logger, level libLog.Level, message string) {
-	if isNilInterface(logger) {
+	if sharedPorts.IsNilValue(logger) {
 		return
 	}
 
 	logger.Log(context.Background(), level, message)
-}
-
-func isNilInterface(value any) bool {
-	if value == nil {
-		return true
-	}
-
-	v := reflect.ValueOf(value)
-
-	switch v.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return v.IsNil()
-	default:
-		return false
-	}
 }

@@ -17,11 +17,12 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
-	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
+	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
 // --- parseUUIDs tests ---
@@ -191,7 +192,7 @@ func executeBulkErrorHandler(
 
 		var logger libLog.Logger
 
-		return handleBulkError(spanCtx, c, span, logger, "bulk operation failed", err)
+		return (&Handlers{}).handleBulkError(spanCtx, c, span, logger, "bulk operation failed", err)
 	})
 
 	request := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -206,7 +207,7 @@ func requireBulkErrorResponse(
 	t *testing.T,
 	resp *http.Response,
 	expectedStatus int,
-	expectedCode int,
+	_ int,
 	expectedTitle,
 	expectedMessage string,
 ) {
@@ -218,9 +219,18 @@ func requireBulkErrorResponse(
 
 	var errResp sharedhttp.ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-	require.Equal(t, expectedCode, errResp.Code)
-	require.Equal(t, expectedTitle, errResp.Title)
+	require.Equal(t, expectedBulkCode(expectedTitle), errResp.Code)
+	require.Equal(t, http.StatusText(expectedStatus), errResp.Title)
 	require.Equal(t, expectedMessage, errResp.Message)
+}
+
+func expectedBulkCode(expectedTitle string) string {
+	switch expectedTitle {
+	case "invalid_request":
+		return constant.CodeInvalidRequest
+	default:
+		return constant.CodeInternalServerError
+	}
 }
 
 func TestHandleBulkError_BulkEmptyIDs(t *testing.T) {
@@ -389,8 +399,8 @@ func TestParseUUIDs_NilSlice(t *testing.T) {
 func TestHandleBulkError_Signature(t *testing.T) {
 	t.Parallel()
 
-	// Verify handleBulkError has the expected function signature by type-asserting it.
-	var fn func(context.Context, *fiber.Ctx, trace.Span, libLog.Logger, string, error) error = handleBulkError
+	// Verify handleBulkError has the expected method signature by type-asserting it.
+	var fn func(context.Context, *fiber.Ctx, trace.Span, libLog.Logger, string, error) error = (&Handlers{}).handleBulkError
 
 	assert.NotNil(t, fn)
 }

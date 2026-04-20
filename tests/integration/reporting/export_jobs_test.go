@@ -77,10 +77,11 @@ func TestExportJob_ListByContext(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 		}
 
-		// List by context
-		jobs, err := repo.ListByContext(ctx, h.Seed.ContextID, 10)
+		// List by context (first page with large limit → no cursor expected)
+		jobs, pagination, err := repo.ListByContext(ctx, h.Seed.ContextID, nil, 10)
 		require.NoError(t, err)
 		require.GreaterOrEqual(t, len(jobs), 3)
+		require.Empty(t, pagination.Next, "first page with limit > total must not emit cursor")
 
 		// Verify ordering: newest first (created_at DESC)
 		for i := 1; i < len(jobs); i++ {

@@ -87,6 +87,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -94,10 +95,11 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
-	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	libRabbitmq "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
+	tmrabbitmq "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/rabbitmq"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	matchingPorts "github.com/LerianStudio/matcher/internal/matching/ports"
@@ -107,11 +109,14 @@ import (
 
 var (
 	errRabbitMQChannelRequired = errors.New("rabbitmq channel is required")
+	errRabbitMQManagerRequired = errors.New("rabbitmq tenant manager is required")
 	errPublisherNotInit        = errors.New("rabbitmq publisher not initialized")
 	errEventRequired           = errors.New("match confirmed event is required")
 	errUnmatchedEventRequired  = errors.New("match unmatched event is required")
 	errIdempotencyKeyRequired  = errors.New("idempotency key is required")
 	errConfirmableSetupFailed  = errors.New("failed to setup confirmable publisher")
+	errTenantIDRequired        = errors.New("tenant ID is required in multi-tenant mode")
+	errBrokerNacked            = errors.New("broker nacked publish")
 )
 
 const (
@@ -134,11 +139,23 @@ type amqpChannel interface {
 }
 
 // EventPublisher publishes matching events to RabbitMQ with publisher confirms.
+//
+// Two operational modes are supported:
+//
+// Single-tenant mode (default): Uses a static AMQP channel via ConfirmablePublisher.
+// All messages go through the same connection and vhost.
+//
+// Multi-tenant mode: Uses tmrabbitmq.Manager for Layer 1 vhost isolation.
+// Each publish call resolves a tenant-specific channel from a per-tenant vhost connection.
+// Layer 2 (X-Tenant-ID header) is also active, providing defense-in-depth.
 type EventPublisher struct {
 	conn                 *libRabbitmq.RabbitMQConnection
 	ch                   amqpChannel
 	confirmablePublisher *sharedRabbitmq.ConfirmablePublisher
 	propagator           propagation.TextMapPropagator
+	rmqManager           *tmrabbitmq.Manager // per-tenant vhost manager (nil in single-tenant mode)
+	multiTenant          bool                // true when using per-tenant vhost isolation
+	declaredExchanges    sync.Map            // tracks tenant exchanges already declared (key: "tenantID:exchange")
 }
 
 // NewEventPublisherFromChannel creates a matching event publisher using a dedicated AMQP
@@ -162,6 +179,24 @@ func NewEventPublisherFromChannel(
 	}
 
 	return newEventPublisher(nil, ch, otel.GetTextMapPropagator(), confirmablePublisher)
+}
+
+// NewMultiTenantEventPublisher creates a matching event publisher that uses
+// per-tenant RabbitMQ vhosts for Layer 1 isolation. Each publish call resolves
+// a tenant-specific channel via the tmrabbitmq.Manager.
+//
+// Layer 2 (X-Tenant-ID header) is also active, providing defense-in-depth.
+// The manager's connection pool handles connection reuse across publish calls.
+func NewMultiTenantEventPublisher(mgr *tmrabbitmq.Manager) (*EventPublisher, error) {
+	if mgr == nil {
+		return nil, errRabbitMQManagerRequired
+	}
+
+	return &EventPublisher{
+		rmqManager:  mgr,
+		multiTenant: true,
+		propagator:  otel.GetTextMapPropagator(),
+	}, nil
 }
 
 func newEventPublisher(
@@ -197,12 +232,145 @@ func newEventPublisher(
 	}, nil
 }
 
+// publishMultiTenant resolves a per-tenant channel from the vhost manager and publishes
+// a single message. The channel is opened and closed per-publish to avoid long-lived
+// channel state management (the Manager's connection pool handles connection reuse).
+//
+// Exchange declarations are cached per tenant:exchange pair using sync.Map to avoid
+// redundant broker round-trips. The declaration is only performed on first use per
+// tenant exchange; subsequent publishes skip the ExchangeDeclare call entirely.
+func (publisher *EventPublisher) publishMultiTenant(
+	ctx context.Context,
+	tenantID string,
+	exchange, routingKey string,
+	msg amqp.Publishing,
+) (err error) {
+	ch, chErr := publisher.rmqManager.GetChannel(ctx, tenantID)
+	if chErr != nil {
+		return fmt.Errorf("get tenant channel: %w", chErr)
+	}
+
+	defer func() {
+		if closeErr := ch.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("close tenant channel: %w", closeErr)
+		}
+	}()
+
+	// Enable publisher confirms for delivery guarantee parity with single-tenant path.
+	if confirmErr := ch.Confirm(false); confirmErr != nil {
+		return fmt.Errorf("enable confirm mode on tenant channel: %w", confirmErr)
+	}
+
+	confirms := ch.NotifyPublish(make(chan amqp.Confirmation, 1))
+
+	// Declare exchange and DLQ topology on the tenant vhost channel only on first
+	// use per tenant. ExchangeDeclare is idempotent but incurs a broker round-trip;
+	// caching avoids this overhead on every publish. The cache is stored AFTER
+	// successful declaration to prevent a concurrent goroutine from skipping
+	// declaration for an undeclared exchange.
+	cacheKey := tenantID + ":" + exchange
+	if _, loaded := publisher.declaredExchanges.Load(cacheKey); !loaded {
+		if declareErr := ch.ExchangeDeclare(exchange, sharedRabbitmq.ExchangeType, true, false, false, false, nil); declareErr != nil {
+			return fmt.Errorf("declare exchange on tenant vhost: %w", declareErr)
+		}
+
+		if dlqErr := sharedRabbitmq.DeclareDLQTopology(ch); dlqErr != nil {
+			return fmt.Errorf("declare DLQ topology on tenant vhost: %w", dlqErr)
+		}
+
+		publisher.declaredExchanges.Store(cacheKey, true)
+	}
+
+	if pubErr := ch.PublishWithContext(ctx, exchange, routingKey, false, false, msg); pubErr != nil {
+		return fmt.Errorf("publish to exchange %q on tenant %s: %w", exchange, tenantID, pubErr)
+	}
+
+	// Wait for broker confirmation.
+	select {
+	case confirm := <-confirms:
+		if !confirm.Ack {
+			return fmt.Errorf("exchange %q tenant %s: %w", exchange, tenantID, errBrokerNacked)
+		}
+
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("wait for publish confirm: %w", ctx.Err())
+	}
+}
+
+// buildPublishHeaders constructs AMQP headers with the idempotency key, optional tenant ID,
+// and W3C trace context propagation fields.
+func (publisher *EventPublisher) buildPublishHeaders(ctx context.Context, idempotencyKey uuid.UUID) amqp.Table {
+	headers := amqp.Table{
+		"idempotency_key": idempotencyKey.String(),
+	}
+
+	if tenantID, ok := auth.LookupTenantID(ctx); ok {
+		headers["X-Tenant-ID"] = tenantID
+	}
+
+	carrier := propagation.MapCarrier{}
+	publisher.propagator.Inject(ctx, carrier)
+
+	for k, v := range carrier {
+		headers[k] = v
+	}
+
+	return headers
+}
+
+// publishEvent handles the common publish-or-multi-tenant dispatch, logging, and error reporting
+// for both confirmed and unmatched event types.
+func (publisher *EventPublisher) publishEvent(
+	ctx context.Context,
+	span trace.Span,
+	logger libLog.Logger,
+	routingKey string,
+	msg amqp.Publishing,
+	matchID string,
+) error {
+	if publisher.multiTenant {
+		tenantID, ok := auth.LookupTenantID(ctx)
+		if !ok || tenantID == "" {
+			return errTenantIDRequired
+		}
+
+		if err := publisher.publishMultiTenant(ctx, tenantID, sharedRabbitmq.ExchangeName, routingKey, msg); err != nil {
+			libOpentelemetry.HandleSpanError(span, "failed to publish event via tenant vhost", err)
+
+			logger.With(libLog.Any("exchange", sharedRabbitmq.ExchangeName), libLog.Any("routing_key", routingKey), libLog.Any("tenant_id", tenantID), libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to publish event via tenant vhost")
+
+			return fmt.Errorf("failed to publish event via tenant vhost: %w", err)
+		}
+
+		logger.With(libLog.Any("exchange", sharedRabbitmq.ExchangeName), libLog.Any("routing_key", routingKey), libLog.Any("message_id", msg.MessageId), libLog.Any("match_id", matchID), libLog.Any("tenant_id", tenantID)).Log(ctx, libLog.LevelDebug, "published event via tenant vhost")
+
+		return nil
+	}
+
+	if err := publisher.confirmablePublisher.Publish(ctx, sharedRabbitmq.ExchangeName, routingKey, false, false, msg); err != nil {
+		libOpentelemetry.HandleSpanError(span, "failed to publish event with confirm", err)
+
+		logger.With(libLog.Any("exchange", sharedRabbitmq.ExchangeName), libLog.Any("routing_key", routingKey), libLog.Any("message_id", msg.MessageId), libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to publish event")
+
+		return fmt.Errorf("failed to publish event: %w", err)
+	}
+
+	logger.With(libLog.Any("exchange", sharedRabbitmq.ExchangeName), libLog.Any("routing_key", routingKey), libLog.Any("message_id", msg.MessageId), libLog.Any("match_id", matchID)).Log(ctx, libLog.LevelDebug, "published event")
+
+	return nil
+}
+
 // PublishMatchConfirmed publishes a MatchConfirmed event with broker confirmation.
 func (publisher *EventPublisher) PublishMatchConfirmed(
 	ctx context.Context,
 	event *sharedDomain.MatchConfirmedEvent,
 ) error {
-	if publisher == nil || publisher.confirmablePublisher == nil {
+	if publisher == nil {
+		return errPublisherNotInit
+	}
+
+	if !publisher.multiTenant && publisher.confirmablePublisher == nil {
 		return errPublisherNotInit
 	}
 
@@ -229,40 +397,15 @@ func (publisher *EventPublisher) PublishMatchConfirmed(
 		return errIdempotencyKeyRequired
 	}
 
-	headers := amqp.Table{
-		"idempotency_key": idempotencyKey.String(),
-	}
-
-	if tenantID, ok := auth.LookupTenantID(ctx); ok {
-		headers["X-Tenant-ID"] = tenantID
-	}
-
-	carrier := propagation.MapCarrier{}
-	publisher.propagator.Inject(ctx, carrier)
-
-	for k, v := range carrier {
-		headers[k] = v
-	}
-
 	msg := amqp.Publishing{
 		ContentType:  "application/json",
 		Body:         body,
 		DeliveryMode: amqp.Persistent,
 		MessageId:    idempotencyKey.String(),
-		Headers:      headers,
+		Headers:      publisher.buildPublishHeaders(ctx, idempotencyKey),
 	}
 
-	if err := publisher.confirmablePublisher.Publish(ctx, sharedRabbitmq.ExchangeName, routingKeyMatchConfirmed, false, false, msg); err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to publish match event with confirm", err)
-
-		logger.With(libLog.Any("exchange", sharedRabbitmq.ExchangeName), libLog.Any("routing_key", routingKeyMatchConfirmed), libLog.Any("message_id", msg.MessageId), libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to publish match event")
-
-		return fmt.Errorf("failed to publish match event: %w", err)
-	}
-
-	logger.With(libLog.Any("exchange", sharedRabbitmq.ExchangeName), libLog.Any("routing_key", routingKeyMatchConfirmed), libLog.Any("message_id", msg.MessageId), libLog.Any("match_id", event.MatchID.String())).Log(ctx, libLog.LevelDebug, "published match confirmed event")
-
-	return nil
+	return publisher.publishEvent(ctx, span, logger, routingKeyMatchConfirmed, msg, event.MatchID.String())
 }
 
 // PublishMatchUnmatched publishes a MatchUnmatched (revocation) event with broker confirmation.
@@ -270,7 +413,11 @@ func (publisher *EventPublisher) PublishMatchUnmatched(
 	ctx context.Context,
 	event *sharedDomain.MatchUnmatchedEvent,
 ) error {
-	if publisher == nil || publisher.confirmablePublisher == nil {
+	if publisher == nil {
+		return errPublisherNotInit
+	}
+
+	if !publisher.multiTenant && publisher.confirmablePublisher == nil {
 		return errPublisherNotInit
 	}
 
@@ -297,45 +444,29 @@ func (publisher *EventPublisher) PublishMatchUnmatched(
 		return errIdempotencyKeyRequired
 	}
 
-	headers := amqp.Table{
-		"idempotency_key": idempotencyKey.String(),
-	}
-
-	if tenantID, ok := auth.LookupTenantID(ctx); ok {
-		headers["X-Tenant-ID"] = tenantID
-	}
-
-	carrier := propagation.MapCarrier{}
-	publisher.propagator.Inject(ctx, carrier)
-
-	for k, v := range carrier {
-		headers[k] = v
-	}
-
 	msg := amqp.Publishing{
 		ContentType:  "application/json",
 		Body:         body,
 		DeliveryMode: amqp.Persistent,
 		MessageId:    idempotencyKey.String(),
-		Headers:      headers,
+		Headers:      publisher.buildPublishHeaders(ctx, idempotencyKey),
 	}
 
-	if err := publisher.confirmablePublisher.Publish(ctx, sharedRabbitmq.ExchangeName, routingKeyMatchUnmatched, false, false, msg); err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to publish match unmatched event with confirm", err)
-
-		logger.With(libLog.Any("exchange", sharedRabbitmq.ExchangeName), libLog.Any("routing_key", routingKeyMatchUnmatched), libLog.Any("message_id", msg.MessageId), libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to publish match unmatched event")
-
-		return fmt.Errorf("failed to publish match unmatched event: %w", err)
-	}
-
-	logger.With(libLog.Any("exchange", sharedRabbitmq.ExchangeName), libLog.Any("routing_key", routingKeyMatchUnmatched), libLog.Any("message_id", msg.MessageId), libLog.Any("match_id", event.MatchID.String())).Log(ctx, libLog.LevelDebug, "published match unmatched event")
-
-	return nil
+	return publisher.publishEvent(ctx, span, logger, routingKeyMatchUnmatched, msg, event.MatchID.String())
 }
 
 // Close gracefully stops the internal confirmable publisher.
 func (publisher *EventPublisher) Close() error {
-	if publisher == nil || publisher.confirmablePublisher == nil {
+	if publisher == nil {
+		return nil
+	}
+
+	// Multi-tenant mode: the manager is closed by bootstrap, not by individual publishers.
+	if publisher.multiTenant {
+		return nil
+	}
+
+	if publisher.confirmablePublisher == nil {
 		return nil
 	}
 

@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
@@ -137,6 +137,13 @@ func (s *stubJobRepo) FindByContextID(
 func (s *stubJobRepo) Update(
 	_ context.Context,
 	_ *entities.IngestionJob,
+) (*entities.IngestionJob, error) {
+	return nil, nil
+}
+
+func (s *stubJobRepo) FindLatestByExtractionID(
+	_ context.Context,
+	_ uuid.UUID,
 ) (*entities.IngestionJob, error) {
 	return nil, nil
 }

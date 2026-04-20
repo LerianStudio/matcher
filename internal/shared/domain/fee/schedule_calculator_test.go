@@ -87,6 +87,27 @@ func TestCalculateSchedule(t *testing.T) {
 		}
 	})
 
+	t.Run("parallel tiered schedule", func(t *testing.T) {
+		t.Parallel()
+
+		upTo100 := decimal.NewFromInt(100)
+		items := []FeeScheduleItem{
+			makeItem("Tiered", 1, TieredFee{Tiers: []Tier{
+				{UpTo: &upTo100, Rate: decimal.RequireFromString("0.01")},
+				{UpTo: nil, Rate: decimal.RequireFromString("0.02")},
+			}}),
+		}
+		schedule := makeSchedule(ApplicationOrderParallel, 2, RoundingModeHalfUp, "USD", items)
+		gross := Money{Amount: decimal.RequireFromString("150.00"), Currency: "USD"}
+
+		breakdown, err := CalculateSchedule(ctx, gross, schedule)
+		require.NoError(t, err)
+		assert.True(t, decimal.RequireFromString("2.00").Equal(breakdown.TotalFee.Amount),
+			"expected total fee 2.00, got %s", breakdown.TotalFee.Amount)
+		assert.True(t, decimal.RequireFromString("148.00").Equal(breakdown.NetAmount.Amount),
+			"expected net 148.00, got %s", breakdown.NetAmount.Amount)
+	})
+
 	t.Run("cascading single item same as parallel", func(t *testing.T) {
 		t.Parallel()
 
@@ -671,4 +692,27 @@ func TestCalculateGrossFromNet_Cascading(t *testing.T) {
 		"expected gross 100.00, got %s", gross.Amount)
 	assert.True(t, decimal.RequireFromString("2.98").Equal(breakdown.TotalFee.Amount),
 		"expected total fee 2.98, got %s", breakdown.TotalFee.Amount)
+}
+
+func TestCalculateGrossFromNet_TieredSchedule(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	upTo100 := decimal.NewFromInt(100)
+	items := []FeeScheduleItem{
+		makeItem("Tiered", 1, TieredFee{Tiers: []Tier{
+			{UpTo: &upTo100, Rate: decimal.RequireFromString("0.01")},
+			{UpTo: nil, Rate: decimal.RequireFromString("0.02")},
+		}}),
+	}
+	schedule := makeSchedule(ApplicationOrderParallel, 2, RoundingModeHalfUp, "USD", items)
+	net := Money{Amount: decimal.RequireFromString("148.00"), Currency: "USD"}
+
+	gross, breakdown, err := CalculateGrossFromNet(ctx, net, schedule)
+	require.NoError(t, err)
+	require.NotNil(t, breakdown)
+	assert.True(t, decimal.RequireFromString("150.00").Equal(gross.Amount.Round(2)),
+		"expected gross 150.00, got %s", gross.Amount)
+	assert.True(t, decimal.RequireFromString("2.00").Equal(breakdown.TotalFee.Amount),
+		"expected total fee 2.00, got %s", breakdown.TotalFee.Amount)
 }

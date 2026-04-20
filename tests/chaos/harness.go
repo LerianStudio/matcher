@@ -14,13 +14,12 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
 	toxiproxy "github.com/Shopify/toxiproxy/v2/client"
 	"github.com/bxcodec/dbresolver/v2"
 	"github.com/golang-migrate/migrate/v4"
@@ -41,7 +40,7 @@ import (
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
-	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 	embeddedmigrations "github.com/LerianStudio/matcher/migrations"
@@ -114,9 +113,9 @@ func newChaosHarness(ctx context.Context) (*ChaosHarness, error) {
 			wait.ForAll(
 				wait.ForLog("database system is ready to accept connections").
 					WithOccurrence(2).
-					WithStartupTimeout(60*time.Second),
+					WithStartupTimeout(120*time.Second),
 				wait.ForListeningPort("5432/tcp"),
-			).WithStartupTimeout(60*time.Second)),
+			).WithStartupTimeout(120*time.Second)),
 	)
 	if err != nil {
 		return cleanupOnError(fmt.Errorf("start postgres: %w", err))
@@ -132,7 +131,7 @@ func newChaosHarness(ctx context.Context) (*ChaosHarness, error) {
 			wait.ForAll(
 				wait.ForListeningPort("6379/tcp"),
 				wait.ForLog("Ready to accept connections"),
-			).WithStartupTimeout(30*time.Second)),
+			).WithStartupTimeout(120*time.Second)),
 	)
 	if err != nil {
 		return cleanupOnError(fmt.Errorf("start redis: %w", err))
@@ -382,7 +381,7 @@ func (h *ChaosHarness) Ctx() context.Context {
 
 // Provider returns an InfrastructureProvider wrapping the proxied connections.
 func (h *ChaosHarness) Provider() ports.InfrastructureProvider {
-	return tenantAdapters.NewSingleTenantInfrastructureProvider(h.Connection, nil)
+	return infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, nil)
 }
 
 // ResetDatabase truncates all tables and re-seeds for test isolation.
@@ -524,7 +523,7 @@ func waitForDB(db *sql.DB) {
 }
 
 func setupChaosSeedData(connection *libPostgres.Client) (SeedData, error) {
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(connection, nil)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(connection, nil)
 	contextRepo := configContextRepo.NewRepository(provider)
 
 	sourceRepo, err := configSourceRepo.NewRepository(provider)
@@ -569,6 +568,7 @@ func setupChaosSeedData(connection *libPostgres.Client) (SeedData, error) {
 		configEntities.CreateReconciliationSourceInput{
 			Name:   "Chaos Test Source",
 			Type:   configVO.SourceTypeLedger,
+			Side:   sharedfee.MatchingSideLeft,
 			Config: map[string]any{},
 		},
 	)
@@ -741,6 +741,7 @@ func (h *ChaosHarness) EnvVarsForBootstrap() (map[string]string, error) {
 		"RABBITMQ_HEALTH_URL":                  h.RabbitMQHealthURL,
 		"RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK": "true",
 		"AUTH_ENABLED":                         "false",
+		"PLUGIN_AUTH_ENABLED":                  "false",
 		"HTTP_BODY_LIMIT_BYTES":                "115343360",
 		"DEFAULT_TENANT_ID":                    h.Seed.TenantID.String(),
 		"DEFAULT_TENANT_SLUG":                  "default",
@@ -771,15 +772,3 @@ func (h *ChaosHarness) SetEnvForBootstrap(t *testing.T) {
 	}
 }
 
-// SetEnvForBootstrapGlobal sets environment variables globally (for TestMain context).
-// Use SetEnvForBootstrap(t) in tests when possible for automatic cleanup.
-func (h *ChaosHarness) SetEnvForBootstrapGlobal() {
-	envVars, err := h.EnvVarsForBootstrap()
-	if err != nil {
-		panic(fmt.Sprintf("failed to build chaos bootstrap env vars: %v", err))
-	}
-
-	for k, v := range envVars {
-		os.Setenv(k, v)
-	}
-}

@@ -7,8 +7,8 @@ The `internal/shared` bounded context contains domain objects, value objects, an
 This context includes:
 1. **Common Domain Entities**: `Transaction`, `MatchRule`, and `FieldMap` are canonical data structures used by Ingestion, Matching, and Reporting.
 2. **Cross-Context Adapters**: Bridge adapters that connect bounded contexts without creating direct dependencies.
-3. **Fee Calculation Engine**: Full fee calculation subsystem with calculator, verifier, normalization, and schedule/rate models.
-4. **Infrastructure Adapters**: Database connection managers, common SQL utilities, outbox repository, RabbitMQ publisher, idempotency middleware.
+3. **Fee Calculation Engine**: Full fee calculation subsystem with schedule calculation, verifier, normalization, and fee schedule/rule/structure models.
+4. **Infrastructure Adapters**: Tenant-aware infrastructure ports, common SQL utilities, outbox repository, RabbitMQ publisher, idempotency middleware, and M2M helpers.
 5. **Constants and Utilities**: System-wide constants and text utilities.
 
 ## Architecture
@@ -26,12 +26,10 @@ internal/shared/
 ├── domain/
 │   ├── events.go        # Shared event types
 │   ├── exception/       # Shared exception severity definitions
-│   ├── fee/             # Fee calculation engine (calculator, verifier, normalization, schedule)
+│   ├── fee/             # Fee calculation engine (schedule calculator, verifier, normalization, fee schedule/rule/structure)
 │   ├── field_map.go     # Canonical FieldMap definition
 │   ├── match_rule.go    # Canonical MatchRule definition
 │   └── transaction.go   # Canonical Transaction entity
-├── infrastructure/
-│   └── tenant/          # Tenant infrastructure (ConnectionManager, SingleTenantProvider)
 ├── ports/               # InfrastructureProvider, MatchTrigger, TransactionProvider interfaces
 ├── testutil/            # Shared test helpers (decimal, logger, uuid, helpers)
 └── utils/               # Text utilities
@@ -68,10 +66,10 @@ Bridge adapters that connect bounded contexts without creating direct dependenci
 ### Fee Calculation Engine
 
 Full fee calculation subsystem shared across contexts:
-- **Calculator**: Computes expected fees from rate schedules.
+- **Calculator**: Computes expected fees from fee schedules.
 - **Verifier**: Compares expected vs. actual fees and reports variances.
 - **Normalization**: Net-to-gross conversion and money handling.
-- **Schedule/Rate Models**: Fee schedule and rate definitions.
+- **Schedule/Rule Models**: Fee schedule, fee rule, and fee structure definitions.
 
 ### RabbitMQ Adapters
 
@@ -89,8 +87,7 @@ Shared event type constants used across bounded contexts for outbox event public
 
 ### Infrastructure
 
-- **ConnectionManager**: Manages PostgreSQL and Redis connections, including primary/replica splitting.
-- **SingleTenantProvider**: Default tenant provider for single-tenant deployments.
+- **InfrastructureProvider**: Tenant-aware access to transactions, primary DBs, replica DBs, and Redis.
 - **Common SQL Utilities**: Cursor pagination, nullable type helpers, transaction wrappers, and read helpers.
 
 ### Sanitization
@@ -99,7 +96,7 @@ Shared event type constants used across bounded contexts for outbox event public
 
 ### Ports
 
-- **InfrastructureProvider**: Interface for accessing database connections and tenant-aware transaction providers.
+- **InfrastructureProvider**: Interface for tenant-aware transactions, primary/replica DB access, and Redis access.
 - **MatchTrigger**: Interface for triggering auto-matching after ingestion completes.
 - **ObjectStorage**: Interface for S3-compatible object storage operations.
 - **Fetcher**: Interface for external fetcher service communication.

@@ -8,13 +8,16 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/shopspring/decimal"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
+
+var _ = sharedhttp.ErrorResponse{}
 
 var errParseItemStructure = errors.New("item structure parse error")
 
@@ -31,11 +34,11 @@ var errParseItemStructure = errors.New("item structure parse error")
 // @Param X-Idempotency-Key header string false "Idempotency key for safe retries"
 // @Param feeSchedule body dto.CreateFeeScheduleRequest true "Fee schedule creation payload"
 // @Success 201 {object} dto.FeeScheduleResponse "Successfully created fee schedule"
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/fee-schedules [post]
 func (handler *Handler) CreateFeeSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_schedule.create")
@@ -43,19 +46,19 @@ func (handler *Handler) CreateFeeSchedule(fiberCtx *fiber.Ctx) error {
 
 	var payload dto.CreateFeeScheduleRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &payload); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid fee schedule payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid fee schedule payload", err)
 	}
 
 	tenantID, err := tenantIDFromContext(ctx)
 	if err != nil {
-		return unauthorized(ctx, fiberCtx, span, logger, err)
+		return handler.unauthorized(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetTenantSpanAttribute(span, tenantID)
 
 	items, err := parseFeeScheduleItems(payload.Items)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid fee schedule items", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid fee schedule items", err)
 	}
 
 	result, err := handler.command.CreateFeeSchedule(
@@ -69,16 +72,20 @@ func (handler *Handler) CreateFeeSchedule(fiberCtx *fiber.Ctx) error {
 		items,
 	)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to create fee schedule", err)
+		handler.logSpanError(ctx, span, logger, "failed to create fee schedule", err)
 
 		if isFeeScheduleClientError(err) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
+			return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
 		}
 
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.FeeScheduleToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.FeeScheduleToResponse(result)); err != nil {
+		return fmt.Errorf("respond create fee schedule: %w", err)
+	}
+
+	return nil
 }
 
 // ListFeeSchedules lists fee schedules.
@@ -92,9 +99,9 @@ func (handler *Handler) CreateFeeSchedule(fiberCtx *fiber.Ctx) error {
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param limit query int false "Maximum number of records to return" default(20) minimum(1) maximum(200)
 // @Success 200 {array} dto.FeeScheduleResponse "List of fee schedules"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/fee-schedules [get]
 func (handler *Handler) ListFeeSchedules(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_schedule.list")
@@ -102,7 +109,7 @@ func (handler *Handler) ListFeeSchedules(fiberCtx *fiber.Ctx) error {
 
 	tenantID, err := tenantIDFromContext(ctx)
 	if err != nil {
-		return unauthorized(ctx, fiberCtx, span, logger, err)
+		return handler.unauthorized(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetTenantSpanAttribute(span, tenantID)
@@ -118,7 +125,7 @@ func (handler *Handler) ListFeeSchedules(fiberCtx *fiber.Ctx) error {
 
 	result, err := handler.query.ListFeeSchedules(ctx, limit)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to list fee schedules", err)
+		handler.logSpanError(ctx, span, logger, "failed to list fee schedules", err)
 		return writeServiceError(fiberCtx, err)
 	}
 
@@ -126,7 +133,11 @@ func (handler *Handler) ListFeeSchedules(fiberCtx *fiber.Ctx) error {
 		result = []*fee.FeeSchedule{}
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeSchedulesToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeSchedulesToResponse(result)); err != nil {
+		return fmt.Errorf("respond list fee schedules: %w", err)
+	}
+
+	return nil
 }
 
 // GetFeeSchedule retrieves a fee schedule.
@@ -140,11 +151,11 @@ func (handler *Handler) ListFeeSchedules(fiberCtx *fiber.Ctx) error {
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param scheduleId path string true "Schedule ID" format(uuid)
 // @Success 200 {object} dto.FeeScheduleResponse "Successfully retrieved fee schedule"
-// @Failure 400 {object} ErrorResponse "Invalid schedule ID format"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Fee schedule not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid schedule ID format"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Fee schedule not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/fee-schedules/{scheduleId} [get]
 func (handler *Handler) GetFeeSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_schedule.get")
@@ -152,28 +163,32 @@ func (handler *Handler) GetFeeSchedule(fiberCtx *fiber.Ctx) error {
 
 	tenantID, err := tenantIDFromContext(ctx)
 	if err != nil {
-		return unauthorized(ctx, fiberCtx, span, logger, err)
+		return handler.unauthorized(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetTenantSpanAttribute(span, tenantID)
 
 	scheduleID, err := parseUUIDParam(fiberCtx, "scheduleId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid schedule id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid schedule id", err)
 	}
 
 	result, err := handler.query.GetFeeSchedule(ctx, scheduleID)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to get fee schedule", err)
+		handler.logSpanError(ctx, span, logger, "failed to get fee schedule", err)
 
 		if errors.Is(err, fee.ErrFeeScheduleNotFound) {
-			return writeNotFound(fiberCtx, "fee schedule not found")
+			return writeNotFound(fiberCtx, "configuration_fee_schedule_not_found", "fee schedule not found")
 		}
 
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeScheduleToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeScheduleToResponse(result)); err != nil {
+		return fmt.Errorf("respond get fee schedule: %w", err)
+	}
+
+	return nil
 }
 
 // UpdateFeeSchedule updates a fee schedule.
@@ -190,12 +205,12 @@ func (handler *Handler) GetFeeSchedule(fiberCtx *fiber.Ctx) error {
 // @Param scheduleId path string true "Schedule ID" format(uuid)
 // @Param feeSchedule body dto.UpdateFeeScheduleRequest true "Fee schedule updates"
 // @Success 200 {object} dto.FeeScheduleResponse "Successfully updated fee schedule"
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Fee schedule not found"
-// @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Fee schedule not found"
+// @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/fee-schedules/{scheduleId} [patch]
 func (handler *Handler) UpdateFeeSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_schedule.update")
@@ -203,19 +218,19 @@ func (handler *Handler) UpdateFeeSchedule(fiberCtx *fiber.Ctx) error {
 
 	tenantID, err := tenantIDFromContext(ctx)
 	if err != nil {
-		return unauthorized(ctx, fiberCtx, span, logger, err)
+		return handler.unauthorized(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetTenantSpanAttribute(span, tenantID)
 
 	scheduleID, err := parseUUIDParam(fiberCtx, "scheduleId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid schedule id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid schedule id", err)
 	}
 
 	var payload dto.UpdateFeeScheduleRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &payload); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid fee schedule payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid fee schedule payload", err)
 	}
 
 	result, err := handler.command.UpdateFeeSchedule(
@@ -227,20 +242,24 @@ func (handler *Handler) UpdateFeeSchedule(fiberCtx *fiber.Ctx) error {
 		payload.RoundingMode,
 	)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to update fee schedule", err)
+		handler.logSpanError(ctx, span, logger, "failed to update fee schedule", err)
 
 		if errors.Is(err, fee.ErrFeeScheduleNotFound) {
-			return writeNotFound(fiberCtx, "fee schedule not found")
+			return writeNotFound(fiberCtx, "configuration_fee_schedule_not_found", "fee schedule not found")
 		}
 
 		if isFeeScheduleClientError(err) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
+			return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
 		}
 
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeScheduleToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeScheduleToResponse(result)); err != nil {
+		return fmt.Errorf("respond update fee schedule: %w", err)
+	}
+
+	return nil
 }
 
 // DeleteFeeSchedule deletes a fee schedule.
@@ -253,12 +272,12 @@ func (handler *Handler) UpdateFeeSchedule(fiberCtx *fiber.Ctx) error {
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param scheduleId path string true "Schedule ID" format(uuid)
 // @Success 204 "Fee schedule successfully deleted"
-// @Failure 400 {object} ErrorResponse "Invalid schedule ID format"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Fee schedule not found"
-// @Failure      409         {object}  ErrorResponse  "Conflict: fee schedule is still referenced by fee rules"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid schedule ID format"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Fee schedule not found"
+// @Failure      409         {object}  sharedhttp.ErrorResponse  "Conflict: fee schedule is still in use"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/fee-schedules/{scheduleId} [delete]
 func (handler *Handler) DeleteFeeSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_schedule.delete")
@@ -266,36 +285,41 @@ func (handler *Handler) DeleteFeeSchedule(fiberCtx *fiber.Ctx) error {
 
 	tenantID, err := tenantIDFromContext(ctx)
 	if err != nil {
-		return unauthorized(ctx, fiberCtx, span, logger, err)
+		return handler.unauthorized(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetTenantSpanAttribute(span, tenantID)
 
 	scheduleID, err := parseUUIDParam(fiberCtx, "scheduleId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid schedule id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid schedule id", err)
 	}
 
 	if err := handler.command.DeleteFeeSchedule(ctx, scheduleID); err != nil {
-		logSpanError(ctx, span, logger, "failed to delete fee schedule", err)
+		handler.logSpanError(ctx, span, logger, "failed to delete fee schedule", err)
 
 		if errors.Is(err, fee.ErrFeeScheduleNotFound) {
-			return writeNotFound(fiberCtx, "fee schedule not found")
+			return writeNotFound(fiberCtx, "configuration_fee_schedule_not_found", "fee schedule not found")
 		}
 
-		if errors.Is(err, command.ErrFeeScheduleReferencedByFeeRule) {
-			return libHTTP.RespondError(
+		if errors.Is(err, command.ErrFeeScheduleReferencedByFeeRule) ||
+			errors.Is(err, command.ErrFeeScheduleReferencedByVarianceHistory) {
+			return respondError(
 				fiberCtx,
 				fiber.StatusConflict,
 				"fee_schedule_in_use",
-				"fee schedule is still referenced by fee rules",
+				"fee schedule is still in use",
 			)
 		}
 
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	if err := libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent); err != nil {
+		return fmt.Errorf("respond delete fee schedule: %w", err)
+	}
+
+	return nil
 }
 
 // SimulateFeeSchedule simulates fee calculation for a schedule.
@@ -311,11 +335,11 @@ func (handler *Handler) DeleteFeeSchedule(fiberCtx *fiber.Ctx) error {
 // @Param scheduleId path string true "Schedule ID" format(uuid)
 // @Param simulate body dto.SimulateFeeRequest true "Simulation parameters"
 // @Success 200 {object} dto.SimulateFeeResponse "Simulation result"
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Fee schedule not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Fee schedule not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/fee-schedules/{scheduleId}/simulate [post]
 func (handler *Handler) SimulateFeeSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_schedule.simulate")
@@ -323,32 +347,32 @@ func (handler *Handler) SimulateFeeSchedule(fiberCtx *fiber.Ctx) error {
 
 	tenantID, err := tenantIDFromContext(ctx)
 	if err != nil {
-		return unauthorized(ctx, fiberCtx, span, logger, err)
+		return handler.unauthorized(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetTenantSpanAttribute(span, tenantID)
 
 	scheduleID, err := parseUUIDParam(fiberCtx, "scheduleId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid schedule id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid schedule id", err)
 	}
 
 	var payload dto.SimulateFeeRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &payload); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid simulation payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid simulation payload", err)
 	}
 
 	grossAmount, err := decimal.NewFromString(payload.GrossAmount)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid gross amount", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid gross amount", err)
 	}
 
 	schedule, err := handler.query.GetFeeSchedule(ctx, scheduleID)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to get fee schedule for simulation", err)
+		handler.logSpanError(ctx, span, logger, "failed to get fee schedule for simulation", err)
 
 		if errors.Is(err, fee.ErrFeeScheduleNotFound) {
-			return writeNotFound(fiberCtx, "fee schedule not found")
+			return writeNotFound(fiberCtx, "configuration_fee_schedule_not_found", "fee schedule not found")
 		}
 
 		return writeServiceError(fiberCtx, err)
@@ -358,16 +382,20 @@ func (handler *Handler) SimulateFeeSchedule(fiberCtx *fiber.Ctx) error {
 
 	breakdown, err := fee.CalculateSchedule(ctx, gross, schedule)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to simulate fee schedule", err)
+		handler.logSpanError(ctx, span, logger, "failed to simulate fee schedule", err)
 
 		if isFeeScheduleClientError(err) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
+			return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
 		}
 
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeBreakdownToSimulateResponse(grossAmount, payload.Currency, breakdown))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeBreakdownToSimulateResponse(grossAmount, payload.Currency, breakdown)); err != nil {
+		return fmt.Errorf("respond simulate fee schedule: %w", err)
+	}
+
+	return nil
 }
 
 func parseFeeScheduleItems(items []dto.CreateFeeScheduleItemRequest) ([]fee.FeeScheduleItemInput, error) {

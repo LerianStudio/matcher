@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	pkgHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	pkgHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/value_objects"
@@ -42,6 +42,7 @@ func setupMock(t *testing.T) (*Repository, sqlmock.Sqlmock, func()) {
 	require.NoError(t, err)
 
 	provider := testutil.NewMockProviderFromDB(t, db)
+	provider.ReplicaDB = db
 	repo := NewRepository(provider)
 
 	finish := func() {

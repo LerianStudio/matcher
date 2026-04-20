@@ -1,80 +1,174 @@
 package fetcher
 
-import sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+import "reflect"
 
 // fetcherHealthResponse maps to GET /health.
 type fetcherHealthResponse struct {
 	Status string `json:"status"`
 }
 
-// fetcherConnectionResponse maps to a single connection in GET /api/v1/connections.
+// fetcherConnectionResponse maps to a single connection in GET /v1/management/connections.
 type fetcherConnectionResponse struct {
-	ID           string `json:"id"`
-	ConfigName   string `json:"configName"`
-	DatabaseType string `json:"databaseType"`
-	Host         string `json:"host"`
-	Port         int    `json:"port"`
-	DatabaseName string `json:"databaseName"`
-	ProductName  string `json:"productName"`
-	Status       string `json:"status"`
+	ID           string         `json:"id"`
+	ConfigName   string         `json:"configName"`
+	Type         string         `json:"type"`
+	Host         string         `json:"host"`
+	Port         int            `json:"port"`
+	Schema       string         `json:"schema"`
+	DatabaseName string         `json:"databaseName"`
+	UserName     string         `json:"userName"`
+	ProductName  string         `json:"productName"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
+	CreatedAt    string         `json:"createdAt,omitempty"`
+	UpdatedAt    string         `json:"updatedAt,omitempty"`
 }
 
-// fetcherConnectionListResponse maps to the GET /api/v1/connections response.
+// fetcherConnectionListResponse maps to the GET /v1/management/connections response.
 type fetcherConnectionListResponse struct {
-	Connections []fetcherConnectionResponse `json:"connections"`
+	Items []fetcherConnectionResponse `json:"items"`
+	Page  int                         `json:"page"`
+	Limit int                         `json:"limit"`
+	Total int                         `json:"total"`
 }
 
-// fetcherColumnResponse maps to a column in schema response.
-type fetcherColumnResponse struct {
-	Name     string `json:"name"`
-	Type     string `json:"type"`
-	Nullable bool   `json:"nullable"`
-}
-
-// fetcherTableResponse maps to a table in schema response.
+// fetcherTableResponse maps to a table in the schema response.
 type fetcherTableResponse struct {
-	TableName string                  `json:"tableName"`
-	Columns   []fetcherColumnResponse `json:"columns"`
+	Name   string   `json:"name"`
+	Fields []string `json:"fields"`
 }
 
-// fetcherSchemaResponse maps to GET /api/v1/connections/:id/schema.
+// fetcherSchemaResponse maps to GET /v1/management/connections/:id/schema.
 type fetcherSchemaResponse struct {
-	ConnectionID string                 `json:"connectionId"`
+	ID           string                 `json:"id"`
+	ConfigName   string                 `json:"configName"`
+	DatabaseName string                 `json:"databaseName"`
+	Type         string                 `json:"type"`
 	Tables       []fetcherTableResponse `json:"tables"`
 }
 
-// fetcherTestResponse maps to POST /api/v1/connections/:id/test.
+// fetcherTestResponse maps to POST /v1/management/connections/:id/test.
 type fetcherTestResponse struct {
-	ConnectionID string `json:"connectionId"`
-	Healthy      bool   `json:"healthy"`
-	LatencyMs    int64  `json:"latencyMs"`
-	ErrorMessage string `json:"errorMessage,omitempty"`
+	Status    string `json:"status"`
+	Message   string `json:"message,omitempty"`
+	LatencyMs int64  `json:"latencyMs"`
 }
 
-// fetcherExtractionSubmitRequest is the request body for POST /api/v1/extractions.
+// fetcherFilterCondition mirrors Fetcher's FilterCondition struct
+// (fetcher/pkg/model/job/job_queue.go). Each field is an operator with a slice
+// of values. Callers typically use Eq for equality filters, but the full
+// operator set is available for forward compatibility.
+type fetcherFilterCondition struct {
+	Eq      []any `json:"eq,omitempty"`
+	Gt      []any `json:"gt,omitempty"`
+	Gte     []any `json:"gte,omitempty"`
+	Lt      []any `json:"lt,omitempty"`
+	Lte     []any `json:"lte,omitempty"`
+	Between []any `json:"between,omitempty"`
+	In      []any `json:"in,omitempty"`
+	Nin     []any `json:"nin,omitempty"`
+	Ne      []any `json:"ne,omitempty"`
+	Like    []any `json:"like,omitempty"`
+}
+
+// fetcherDataRequest is the nested data request within an extraction submission.
+// Filters uses the typed fetcherFilterCondition to produce a symmetric wire format
+// matching the response-side shape returned by Fetcher's status endpoint.
+type fetcherDataRequest struct {
+	MappedFields map[string]map[string][]string                          `json:"mappedFields"`
+	Filters      map[string]map[string]map[string]fetcherFilterCondition `json:"filters,omitempty"`
+}
+
+// fetcherExtractionSubmitRequest is the request body for POST /v1/fetcher.
 type fetcherExtractionSubmitRequest struct {
-	ConnectionID string                            `json:"connectionId"`
-	Tables       map[string]fetcherExtractionTable `json:"tables"`
-	Filters      *sharedPorts.ExtractionFilters    `json:"filters,omitempty"`
+	DataRequest fetcherDataRequest `json:"dataRequest"`
+	Metadata    map[string]any     `json:"metadata"`
 }
 
-// fetcherExtractionTable configures extraction for a single table.
-type fetcherExtractionTable struct {
-	Columns   []string `json:"columns,omitempty"`
-	StartDate string   `json:"startDate,omitempty"`
-	EndDate   string   `json:"endDate,omitempty"`
-}
-
-// fetcherExtractionSubmitResponse maps to POST /api/v1/extractions response.
+// fetcherExtractionSubmitResponse maps to POST /v1/fetcher response.
 type fetcherExtractionSubmitResponse struct {
-	JobID string `json:"jobId"`
+	JobID     string `json:"jobId"`
+	Status    string `json:"status,omitempty"`
+	CreatedAt string `json:"createdAt,omitempty"`
+	Message   string `json:"message,omitempty"`
 }
 
-// fetcherExtractionStatusResponse maps to GET /api/v1/extractions/:jobId response.
+// fetcherExtractionStatusResponse maps to GET /v1/fetcher/:jobId response.
+// MappedFields and Filters echo what was submitted (potentially with server-side
+// transformation, e.g. unqualified table names auto-qualified to schema.table).
 type fetcherExtractionStatusResponse struct {
-	JobID        string `json:"jobId"`
-	Status       string `json:"status"`
-	Progress     int    `json:"progress"`
-	ResultPath   string `json:"resultPath,omitempty"`
-	ErrorMessage string `json:"errorMessage,omitempty"`
+	ID           string                         `json:"id"`
+	Status       string                         `json:"status"`
+	ResultPath   string                         `json:"resultPath,omitempty"`
+	ResultHmac   string                         `json:"resultHmac,omitempty"`
+	RequestHash  string                         `json:"requestHash,omitempty"`
+	MappedFields map[string]map[string][]string `json:"mappedFields,omitempty"`
+	Metadata     map[string]any                 `json:"metadata,omitempty"`
+	CreatedAt    string                         `json:"createdAt,omitempty"`
+	CompletedAt  string                         `json:"completedAt,omitempty"`
+}
+
+// filterConditionFromMap converts an untyped map[string]any (Fetcher wire
+// format) back into a fetcherFilterCondition. Unknown keys are silently
+// ignored for forward compatibility.
+func filterConditionFromMap(m map[string]any) fetcherFilterCondition {
+	fc := fetcherFilterCondition{}
+
+	for key, val := range m {
+		slice, ok := normalizeFilterValues(val)
+		if !ok {
+			continue
+		}
+
+		switch key {
+		case "eq":
+			fc.Eq = slice
+		case "gt":
+			fc.Gt = slice
+		case "gte":
+			fc.Gte = slice
+		case "lt":
+			fc.Lt = slice
+		case "lte":
+			fc.Lte = slice
+		case "between":
+			fc.Between = slice
+		case "in":
+			fc.In = slice
+		case "nin":
+			fc.Nin = slice
+		case "ne":
+			fc.Ne = slice
+		case "like":
+			fc.Like = slice
+		}
+	}
+
+	return fc
+}
+
+func normalizeFilterValues(val any) ([]any, bool) {
+	if direct, ok := val.([]any); ok {
+		return append([]any(nil), direct...), true
+	}
+
+	rv := reflect.ValueOf(val)
+	if !rv.IsValid() {
+		return nil, false
+	}
+
+	kind := rv.Kind()
+	if kind != reflect.Slice && kind != reflect.Array {
+		return []any{val}, true
+	}
+
+	if kind == reflect.Slice && rv.IsNil() {
+		return []any{}, true
+	}
+
+	values := make([]any, 0, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		values = append(values, rv.Index(i).Interface())
+	}
+
+	return values, true
 }

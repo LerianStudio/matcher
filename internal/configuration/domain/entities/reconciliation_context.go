@@ -29,7 +29,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+	"github.com/LerianStudio/lib-commons/v5/commons/assert"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
@@ -75,7 +75,6 @@ type ReconciliationContext struct {
 	Type              value_objects.ContextType
 	Interval          string
 	Status            value_objects.ContextStatus
-	RateID            *uuid.UUID
 	FeeToleranceAbs   decimal.Decimal
 	FeeTolerancePct   decimal.Decimal
 	FeeNormalization  *string
@@ -89,7 +88,6 @@ type CreateReconciliationContextInput struct {
 	Name              string                     `json:"name"                      validate:"required,max=100" example:"Bank Reconciliation Q1"               minLength:"1" maxLength:"100"`
 	Type              value_objects.ContextType  `json:"type"                      validate:"required"         example:"1:1"                                                                enums:"1:1,1:N,N:M"`
 	Interval          string                     `json:"interval"                  validate:"required,max=100" example:"daily"                                minLength:"1" maxLength:"100"`
-	RateID            *uuid.UUID                 `json:"rateId,omitempty"                                      example:"550e8400-e29b-41d4-a716-446655440000"`
 	FeeToleranceAbs   *string                    `json:"feeToleranceAbs,omitempty"                             example:"0.01"`
 	FeeTolerancePct   *string                    `json:"feeTolerancePct,omitempty"                             example:"0.5"`
 	FeeNormalization  *string                    `json:"feeNormalization,omitempty"                            example:"NET"                                                                enums:"NET,GROSS"`
@@ -104,7 +102,6 @@ type UpdateReconciliationContextInput struct {
 	Type              *value_objects.ContextType   `json:"type,omitempty"                                          example:"1:N"                                                  enums:"1:1,1:N,N:M"`
 	Interval          *string                      `json:"interval,omitempty"         validate:"omitempty,max=100" example:"weekly"                               maxLength:"100"`
 	Status            *value_objects.ContextStatus `json:"status,omitempty"                                        example:"ACTIVE"                                               enums:"DRAFT,ACTIVE,PAUSED,ARCHIVED"`
-	RateID            *uuid.UUID                   `json:"rateId,omitempty"                                        example:"550e8400-e29b-41d4-a716-446655440000"`
 	FeeToleranceAbs   *string                      `json:"feeToleranceAbs,omitempty"                               example:"0.01"`
 	FeeTolerancePct   *string                      `json:"feeTolerancePct,omitempty"                               example:"0.5"`
 	FeeNormalization  *string                      `json:"feeNormalization,omitempty"                              example:"NET"                                                  enums:"NET,GROSS"`
@@ -112,8 +109,6 @@ type UpdateReconciliationContextInput struct {
 }
 
 // NewReconciliationContext validates input and returns a new context entity.
-//
-//nolint:cyclop // entity constructor with comprehensive validation
 func NewReconciliationContext(
 	ctx context.Context,
 	tenantID uuid.UUID,
@@ -148,24 +143,9 @@ func NewReconciliationContext(
 		return nil, ErrContextIntervalRequired
 	}
 
-	var feeToleranceAbs, feeTolerancePct decimal.Decimal
-
-	if input.FeeToleranceAbs != nil {
-		parsed, err := decimal.NewFromString(*input.FeeToleranceAbs)
-		if err != nil {
-			return nil, fmt.Errorf("%w: parse error: %w", ErrFeeToleranceAbsInvalid, err)
-		}
-
-		feeToleranceAbs = parsed
-	}
-
-	if input.FeeTolerancePct != nil {
-		parsed, err := decimal.NewFromString(*input.FeeTolerancePct)
-		if err != nil {
-			return nil, fmt.Errorf("%w: parse error: %w", ErrFeeTolerancePctInvalid, err)
-		}
-
-		feeTolerancePct = parsed
+	feeToleranceAbs, feeTolerancePct, err := parseFeeTolerances(input.FeeToleranceAbs, input.FeeTolerancePct)
+	if err != nil {
+		return nil, err
 	}
 
 	if input.FeeNormalization != nil && *input.FeeNormalization != "" {
@@ -189,7 +169,6 @@ func NewReconciliationContext(
 		Type:              input.Type,
 		Interval:          interval,
 		Status:            value_objects.ContextStatusDraft,
-		RateID:            input.RateID,
 		FeeToleranceAbs:   feeToleranceAbs,
 		FeeTolerancePct:   feeTolerancePct,
 		FeeNormalization:  input.FeeNormalization,
@@ -197,6 +176,37 @@ func NewReconciliationContext(
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}, nil
+}
+
+func parseFeeTolerances(absRaw, pctRaw *string) (decimal.Decimal, decimal.Decimal, error) {
+	feeToleranceAbs, err := parseNonNegativeDecimal(absRaw, ErrFeeToleranceAbsInvalid)
+	if err != nil {
+		return decimal.Zero, decimal.Zero, err
+	}
+
+	feeTolerancePct, err := parseNonNegativeDecimal(pctRaw, ErrFeeTolerancePctInvalid)
+	if err != nil {
+		return decimal.Zero, decimal.Zero, err
+	}
+
+	return feeToleranceAbs, feeTolerancePct, nil
+}
+
+func parseNonNegativeDecimal(raw *string, sentinel error) (decimal.Decimal, error) {
+	if raw == nil {
+		return decimal.Zero, nil
+	}
+
+	parsed, err := decimal.NewFromString(*raw)
+	if err != nil {
+		return decimal.Zero, fmt.Errorf("%w: parse error: %w", sentinel, err)
+	}
+
+	if parsed.IsNegative() {
+		return decimal.Zero, sentinel
+	}
+
+	return parsed, nil
 }
 
 func (rc *ReconciliationContext) updateName(_ context.Context, name *string) error {
@@ -277,14 +287,14 @@ func (rc *ReconciliationContext) updateStatus(
 }
 
 func (rc *ReconciliationContext) updateFeeTolerances(input UpdateReconciliationContextInput) error {
-	if input.RateID != nil {
-		rc.RateID = input.RateID
-	}
-
 	if input.FeeToleranceAbs != nil {
 		parsed, err := decimal.NewFromString(*input.FeeToleranceAbs)
 		if err != nil {
 			return fmt.Errorf("%w: parse error: %w", ErrFeeToleranceAbsInvalid, err)
+		}
+
+		if parsed.IsNegative() {
+			return ErrFeeToleranceAbsInvalid
 		}
 
 		rc.FeeToleranceAbs = parsed
@@ -294,6 +304,10 @@ func (rc *ReconciliationContext) updateFeeTolerances(input UpdateReconciliationC
 		parsed, err := decimal.NewFromString(*input.FeeTolerancePct)
 		if err != nil {
 			return fmt.Errorf("%w: parse error: %w", ErrFeeTolerancePctInvalid, err)
+		}
+
+		if parsed.IsNegative() {
+			return ErrFeeTolerancePctInvalid
 		}
 
 		rc.FeeTolerancePct = parsed

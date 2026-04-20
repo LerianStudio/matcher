@@ -43,7 +43,7 @@ console/
 worktrees/
 .worktrees/
 docs/codereview/
-docs/plans/old/
+docs/plans/
 .codegraph/
 .ruff_cache/
 vendor/

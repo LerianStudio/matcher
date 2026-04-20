@@ -16,8 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/net/http/ratelimit"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+	"github.com/LerianStudio/lib-commons/v5/commons/net/http/ratelimit"
+	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 )
@@ -115,7 +115,7 @@ func TestNewGlobalRateLimit_NilRateLimiter_ReturnsPassthrough(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Config{RateLimit: RateLimitConfig{Enabled: true, Max: 1, ExpirySec: 60}}
-	handler := NewGlobalRateLimit(nilRLGetter, cfg, nil)
+	handler := NewGlobalRateLimit(nilRLGetter, cfg, nil, nil)
 	require.NotNil(t, handler)
 
 	app := fiber.New()
@@ -136,7 +136,7 @@ func TestNewGlobalRateLimit_DisabledConfig_ReturnsPassthrough(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Config{RateLimit: RateLimitConfig{Enabled: false, Max: 1, ExpirySec: 60}}
-	handler := NewGlobalRateLimit(nilRLGetter, cfg, nil)
+	handler := NewGlobalRateLimit(nilRLGetter, cfg, nil, nil)
 	require.NotNil(t, handler)
 
 	app := fiber.New()
@@ -156,7 +156,7 @@ func TestNewExportRateLimit_NilRateLimiter_ReturnsPassthrough(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Config{RateLimit: RateLimitConfig{Enabled: true, ExportMax: 1, ExportExpirySec: 60}}
-	handler := NewExportRateLimit(nilRLGetter, cfg, nil)
+	handler := NewExportRateLimit(nilRLGetter, cfg, nil, nil)
 	require.NotNil(t, handler)
 
 	app := fiber.New()
@@ -176,7 +176,7 @@ func TestNewDispatchRateLimit_NilRateLimiter_ReturnsPassthrough(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Config{RateLimit: RateLimitConfig{Enabled: true, DispatchMax: 1, DispatchExpirySec: 60}}
-	handler := NewDispatchRateLimit(nilRLGetter, cfg, nil)
+	handler := NewDispatchRateLimit(nilRLGetter, cfg, nil, nil)
 	require.NotNil(t, handler)
 
 	app := fiber.New()
@@ -197,7 +197,7 @@ func TestNewGlobalRateLimit_DynamicDisabled_ReturnsPassthrough(t *testing.T) {
 
 	activeCfg := &Config{RateLimit: RateLimitConfig{Enabled: false, Max: 1, ExpirySec: 60}}
 
-	handler := NewGlobalRateLimit(nilRLGetter, activeCfg, func() *Config { return activeCfg })
+	handler := NewGlobalRateLimit(nilRLGetter, activeCfg, func() *Config { return activeCfg }, nil)
 	require.NotNil(t, handler)
 
 	app := fiber.New()
@@ -219,7 +219,7 @@ func TestNewGlobalRateLimit_DynamicDisabled_ReturnsPassthrough(t *testing.T) {
 func TestNewGlobalRateLimit_DynamicNilConfig_ReturnsPassthrough(t *testing.T) {
 	t.Parallel()
 
-	handler := NewGlobalRateLimit(nilRLGetter, nil, func() *Config { return nil })
+	handler := NewGlobalRateLimit(nilRLGetter, nil, func() *Config { return nil }, nil)
 	require.NotNil(t, handler)
 
 	app := fiber.New()

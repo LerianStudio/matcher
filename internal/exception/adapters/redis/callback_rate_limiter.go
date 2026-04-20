@@ -8,13 +8,12 @@ import (
 
 	"go.opentelemetry.io/otel/trace/noop"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/valkey"
 
-	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
-	tenantinfra "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -44,10 +43,10 @@ var (
 //   - If the counter exceeds the limit, deny the request
 //   - When the TTL expires, the counter resets automatically
 type CallbackRateLimiter struct {
-	provider    sharedPorts.InfrastructureProvider
-	limit       int
-	window      time.Duration
-	limitGetter func() int
+	provider      sharedPorts.InfrastructureProvider
+	limit         int
+	window        time.Duration
+	limitResolver func(context.Context) int
 }
 
 // NewCallbackRateLimiter creates a new Redis-based callback rate limiter
@@ -76,22 +75,22 @@ func NewCallbackRateLimiter(
 	}, nil
 }
 
-// SetRuntimeLimitGetter injects a live config-backed callback limit source.
-func (rl *CallbackRateLimiter) SetRuntimeLimitGetter(getter func() int) {
+// SetRuntimeLimitResolver injects a context-aware runtime callback limit source.
+func (rl *CallbackRateLimiter) SetRuntimeLimitResolver(resolver func(context.Context) int) {
 	if rl == nil {
 		return
 	}
 
-	rl.limitGetter = getter
+	rl.limitResolver = resolver
 }
 
-func (rl *CallbackRateLimiter) currentLimit() int {
+func (rl *CallbackRateLimiter) currentLimit(ctx context.Context) int {
 	if rl == nil {
 		return DefaultCallbackRateLimitPerMin
 	}
 
-	if rl.limitGetter != nil {
-		if limit := rl.limitGetter(); limit > 0 {
+	if rl.limitResolver != nil {
+		if limit := rl.limitResolver(ctx); limit > 0 {
 			return limit
 		}
 	}
@@ -137,7 +136,11 @@ func (rl *CallbackRateLimiter) Allow(ctx context.Context, key string) (bool, err
 		return false, fmt.Errorf("%w: %w", ErrRateLimiterRedisClientNil, err)
 	}
 
-	redisKey := scopedRateLimitRedisKey(ctx, key)
+	redisKey, err := scopedRateLimitRedisKey(ctx, key)
+	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "failed to build scoped redis key", err)
+		return false, fmt.Errorf("rate limiter build scoped key: %w", err)
+	}
 
 	// Lua script atomically increments counter and sets TTL on first request.
 	// This avoids race conditions between INCR and EXPIRE.
@@ -162,7 +165,7 @@ return 1
 		ctx,
 		script,
 		[]string{redisKey},
-		rl.currentLimit(),
+		rl.currentLimit(ctx),
 		rl.window.Milliseconds(),
 	).Result()
 	if err != nil {
@@ -187,16 +190,13 @@ return 1
 // Ensure CallbackRateLimiter implements the port interface.
 var _ ports.CallbackRateLimiter = (*CallbackRateLimiter)(nil)
 
-//nolint:contextcheck // This helper derives a scoped context exclusively for redis key namespacing.
-func scopedRateLimitRedisKey(ctx context.Context, key string) string {
-	if ctx == nil {
-		ctx = context.Background()
+func scopedRateLimitRedisKey(ctx context.Context, key string) (string, error) {
+	rawKey := callbackRateLimitKeyPrefix + ":" + key
+
+	result, err := valkey.GetKeyContext(ctx, rawKey)
+	if err != nil {
+		return "", fmt.Errorf("scoped rate limit redis key: %w", err)
 	}
 
-	return tenantinfra.ScopedRedisSegments(
-		context.WithValue(ctx, auth.TenantIDKey, auth.GetTenantID(ctx)),
-		true,
-		callbackRateLimitKeyPrefix,
-		key,
-	)
+	return result, nil
 }

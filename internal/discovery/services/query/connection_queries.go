@@ -8,10 +8,10 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
-	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
@@ -187,29 +187,25 @@ func convertFetcherSchemaToEntities(ctx context.Context, connectionID uuid.UUID,
 	result := make([]*entities.DiscoveredSchema, 0, len(schema.Tables))
 
 	for _, table := range schema.Tables {
-		cols := make([]entities.ColumnInfo, 0, len(table.Columns))
-		for _, col := range table.Columns {
-			cols = append(cols, entities.ColumnInfo{
-				Name:     col.Name,
-				Type:     col.Type,
-				Nullable: col.Nullable,
-			})
+		cols := make([]entities.ColumnInfo, 0, len(table.Fields))
+		for _, fieldName := range table.Fields {
+			cols = append(cols, entities.ColumnInfo{Name: fieldName})
 		}
 
-		discovered, err := entities.NewDiscoveredSchema(ctx, connectionID, table.TableName, cols)
+		discovered, err := entities.NewDiscoveredSchema(ctx, connectionID, table.Name, cols)
 		if err != nil {
 			if logger != nil {
 				logger.With(
-					libLog.Any("table", table.TableName),
+					libLog.Any("table", table.Name),
 					libLog.Any("connectionID", connectionID.String()),
-					libLog.Any("error", err.Error()),
+					libLog.Err(err),
 				).Log(ctx, libLog.LevelWarn, "skipping invalid cached schema entry during conversion")
 			}
 
 			continue
 		}
 
-		discovered.ID = uuid.NewSHA1(connectionID, []byte(table.TableName))
+		discovered.ID = uuid.NewSHA1(connectionID, []byte(table.Name))
 		discovered.DiscoveredAt = discoveredAt
 
 		result = append(result, discovered)
@@ -233,18 +229,14 @@ func (uc *UseCase) cacheSchemas(ctx context.Context, connectionID uuid.UUID, sch
 			discoveredAt = schema.DiscoveredAt
 		}
 
-		cols := make([]sharedPorts.FetcherColumnInfo, 0, len(schema.Columns))
+		fieldNames := make([]string, 0, len(schema.Columns))
 		for _, col := range schema.Columns {
-			cols = append(cols, sharedPorts.FetcherColumnInfo{
-				Name:     col.Name,
-				Type:     col.Type,
-				Nullable: col.Nullable,
-			})
+			fieldNames = append(fieldNames, col.Name)
 		}
 
 		tables = append(tables, sharedPorts.FetcherTableSchema{
-			TableName: schema.TableName,
-			Columns:   cols,
+			Name:   schema.TableName,
+			Fields: fieldNames,
 		})
 	}
 
@@ -252,7 +244,7 @@ func (uc *UseCase) cacheSchemas(ctx context.Context, connectionID uuid.UUID, sch
 	if err := uc.schemaCache.SetSchema(ctx, connectionID.String(), fetcherSchema, uc.cacheTTL); err != nil {
 		uc.logger.Log(ctx, libLog.LevelWarn, "failed to cache schemas in Redis",
 			libLog.String("connectionID", connectionID.String()),
-			libLog.Any("error", err.Error()))
+			libLog.Err(err))
 	}
 }
 

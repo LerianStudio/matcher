@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	sharedhttp "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 )
 
 // NewTenantOwnershipVerifier creates a new verifier with the given context provider.
@@ -17,7 +17,7 @@ func NewTenantOwnershipVerifier(provider contextProvider) sharedhttp.TenantOwner
 			return fmt.Errorf("%w: verifier not initialized", sharedhttp.ErrContextAccessDenied)
 		}
 
-		info, err := provider.FindByID(ctx, tenantID, contextID)
+		info, err := provider.FindByID(ctx, contextID)
 		if err != nil {
 			if errors.Is(err, sharedhttp.ErrContextNotOwned) {
 				return sharedhttp.ErrContextNotOwned

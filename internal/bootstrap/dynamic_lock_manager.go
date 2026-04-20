@@ -9,7 +9,7 @@ import (
 	"errors"
 	"fmt"
 
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
 
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )

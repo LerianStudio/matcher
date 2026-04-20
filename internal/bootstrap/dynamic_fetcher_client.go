@@ -9,34 +9,43 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/circuitbreaker"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	"github.com/LerianStudio/lib-commons/v5/commons/circuitbreaker"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	discoveryFetcher "github.com/LerianStudio/matcher/internal/discovery/adapters/fetcher"
+	discoveryPorts "github.com/LerianStudio/matcher/internal/discovery/ports"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 type dynamicFetcherClient struct {
-	initialCfg   *Config
-	configGetter func() *Config
-	mu           sync.Mutex
-	activeKey    string
-	activeClient sharedPorts.FetcherClient
-	breaker      circuitbreaker.Manager
+	initialCfg     *Config
+	configGetter   func() *Config
+	mu             sync.Mutex
+	activeKey      string
+	activeClient   sharedPorts.FetcherClient
+	breaker        circuitbreaker.Manager
+	m2mProvider    sharedPorts.M2MProvider       // nil in single-tenant mode
+	tokenExchanger discoveryPorts.TokenExchanger // nil in single-tenant mode
 }
 
-func newDynamicFetcherClient(initialCfg *Config, configGetter func() *Config, logger libLog.Logger) sharedPorts.FetcherClient {
+func newDynamicFetcherClient(initialCfg *Config, configGetter func() *Config, logger libLog.Logger, m2mProvider ...sharedPorts.M2MProvider) sharedPorts.FetcherClient {
 	var breaker circuitbreaker.Manager
 
 	if mgr, err := circuitbreaker.NewManager(logger); err == nil {
 		breaker = mgr
 	}
 
-	return &dynamicFetcherClient{
+	client := &dynamicFetcherClient{
 		initialCfg:   initialCfg,
 		configGetter: configGetter,
 		breaker:      breaker,
 	}
+
+	if len(m2mProvider) > 0 && m2mProvider[0] != nil {
+		client.m2mProvider = m2mProvider[0]
+	}
+
+	return client
 }
 
 // IsHealthy reports whether the active Fetcher client is healthy.
@@ -50,13 +59,13 @@ func (client *dynamicFetcherClient) IsHealthy(ctx context.Context) bool {
 }
 
 // ListConnections delegates connection listing to the active Fetcher client.
-func (client *dynamicFetcherClient) ListConnections(ctx context.Context, orgID string) ([]*sharedPorts.FetcherConnection, error) {
+func (client *dynamicFetcherClient) ListConnections(ctx context.Context, productName string) ([]*sharedPorts.FetcherConnection, error) {
 	delegate, err := client.current()
 	if err != nil {
 		return nil, fmt.Errorf("resolve fetcher client for list connections: %w", err)
 	}
 
-	connections, err := delegate.ListConnections(ctx, orgID)
+	connections, err := delegate.ListConnections(ctx, productName)
 	if err != nil {
 		return nil, fmt.Errorf("list fetcher connections: %w", err)
 	}
@@ -147,6 +156,16 @@ func (client *dynamicFetcherClient) current() (sharedPorts.FetcherClient, error)
 	fetcherClient, err := discoveryFetcher.NewHTTPFetcherClient(fetcherHTTPClientConfig(cfg), client.breaker)
 	if err != nil {
 		return nil, fmt.Errorf("%w: create fetcher client: %w", sharedPorts.ErrFetcherUnavailable, err)
+	}
+
+	// Inject M2M provider for multi-tenant credential injection.
+	if client.m2mProvider != nil {
+		fetcherClient.SetM2MProvider(client.m2mProvider)
+	}
+
+	// Inject token exchanger for Bearer authentication.
+	if client.tokenExchanger != nil {
+		fetcherClient.SetTokenExchanger(client.tokenExchanger)
 	}
 
 	client.activeKey = key

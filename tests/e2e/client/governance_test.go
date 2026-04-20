@@ -1,5 +1,6 @@
-//go:build e2e
+//go:build unit
 
+//nolint:varnamelen // Governance client tests use compact handler fixtures.
 package client
 
 import (
@@ -192,7 +193,7 @@ func TestGovernanceClient_ErrorHandling(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`{"error":"not found"}`))
+		w.Write([]byte(`{"code":"MTCH-0601","title":"Not Found","message":"not found"}`))
 	}))
 	defer server.Close()
 
@@ -259,7 +260,7 @@ func TestGovernanceClient_DownloadArchive_NotFound(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`{"error":"archive not found"}`))
+		w.Write([]byte(`{"code":"MTCH-0603","title":"Not Found","message":"archive not found"}`))
 	}))
 	defer server.Close()
 

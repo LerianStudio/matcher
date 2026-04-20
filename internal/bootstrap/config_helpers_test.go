@@ -7,6 +7,7 @@
 package bootstrap
 
 import (
+	"os"
 	"reflect"
 	"testing"
 
@@ -93,166 +94,6 @@ func TestRestoreZeroedFields_RestoresNestedStructField(t *testing.T) {
 	assert.Equal(t, "development", dst.App.EnvName)
 }
 
-// --- resolveConfigValue ---
-
-func TestResolveConfigValue_NilConfig(t *testing.T) {
-	t.Parallel()
-
-	val, ok := resolveConfigValue(nil, "app.env_name")
-
-	assert.False(t, ok)
-	assert.Nil(t, val)
-}
-
-func TestResolveConfigValue_EmptyKey(t *testing.T) {
-	t.Parallel()
-
-	cfg := &Config{App: AppConfig{EnvName: "production"}}
-
-	val, ok := resolveConfigValue(cfg, "")
-
-	assert.False(t, ok)
-	assert.Nil(t, val)
-}
-
-func TestResolveConfigValue_WhitespaceKey(t *testing.T) {
-	t.Parallel()
-
-	cfg := &Config{App: AppConfig{EnvName: "production"}}
-
-	val, ok := resolveConfigValue(cfg, "   ")
-
-	assert.False(t, ok)
-	assert.Nil(t, val)
-}
-
-func TestResolveConfigValue_ValidTopLevelField(t *testing.T) {
-	t.Parallel()
-
-	cfg := &Config{App: AppConfig{EnvName: "staging"}}
-
-	val, ok := resolveConfigValue(cfg, "app.env_name")
-
-	require.True(t, ok)
-	assert.Equal(t, "staging", val)
-}
-
-func TestResolveConfigValue_NestedField(t *testing.T) {
-	t.Parallel()
-
-	cfg := &Config{Server: ServerConfig{Address: ":8080"}}
-
-	val, ok := resolveConfigValue(cfg, "server.address")
-
-	require.True(t, ok)
-	assert.Equal(t, ":8080", val)
-}
-
-func TestResolveConfigValue_NonExistentKey(t *testing.T) {
-	t.Parallel()
-
-	cfg := &Config{}
-
-	val, ok := resolveConfigValue(cfg, "nonexistent.field")
-
-	assert.False(t, ok)
-	assert.Nil(t, val)
-}
-
-func TestResolveConfigValue_StructField(t *testing.T) {
-	t.Parallel()
-
-	cfg := &Config{App: AppConfig{EnvName: "production"}}
-
-	// "app" is a struct — resolveConfigValue returns it directly.
-	val, ok := resolveConfigValue(cfg, "app")
-
-	require.True(t, ok)
-	appCfg, isAppConfig := val.(AppConfig)
-	require.True(t, isAppConfig)
-	assert.Equal(t, "production", appCfg.EnvName)
-}
-
-func TestResolveConfigValue_BodyLimitBytes(t *testing.T) {
-	t.Parallel()
-
-	cfg := &Config{Server: ServerConfig{BodyLimitBytes: 4096}}
-
-	val, ok := resolveConfigValue(cfg, "server.body_limit_bytes")
-
-	require.True(t, ok)
-	assert.Equal(t, 4096, val)
-}
-
-// --- derefPointerValue ---
-
-func TestDerefPointerValue_NonPointer(t *testing.T) {
-	t.Parallel()
-
-	cfg := Config{App: AppConfig{EnvName: "test"}}
-	result, ok := derefPointerValue(reflect.ValueOf(cfg))
-
-	assert.True(t, ok)
-	assert.True(t, result.IsValid())
-}
-
-func TestDerefPointerValue_ValidPointer(t *testing.T) {
-	t.Parallel()
-
-	cfg := &Config{App: AppConfig{EnvName: "test"}}
-	result, ok := derefPointerValue(reflect.ValueOf(cfg))
-
-	assert.True(t, ok)
-	assert.True(t, result.IsValid())
-}
-
-func TestDerefPointerValue_NilPointer(t *testing.T) {
-	t.Parallel()
-
-	var cfg *Config
-	result, ok := derefPointerValue(reflect.ValueOf(cfg))
-
-	assert.False(t, ok)
-	assert.False(t, result.IsValid())
-}
-
-// --- findMapstructureField ---
-
-func TestFindMapstructureField_Found(t *testing.T) {
-	t.Parallel()
-
-	cfg := Config{App: AppConfig{EnvName: "prod"}}
-	val := reflect.ValueOf(cfg)
-
-	field, found := findMapstructureField(val, "app")
-
-	assert.True(t, found)
-	assert.True(t, field.IsValid())
-}
-
-func TestFindMapstructureField_NotFound(t *testing.T) {
-	t.Parallel()
-
-	cfg := Config{}
-	val := reflect.ValueOf(cfg)
-
-	_, found := findMapstructureField(val, "nonexistent_tag")
-
-	assert.False(t, found)
-}
-
-func TestFindMapstructureField_NestedStruct(t *testing.T) {
-	t.Parallel()
-
-	cfg := Config{Server: ServerConfig{Address: ":8080"}}
-	val := reflect.ValueOf(cfg)
-
-	field, found := findMapstructureField(val, "server")
-
-	require.True(t, found)
-	assert.True(t, field.IsValid())
-}
-
 // --- hasExplicitEnvOverride ---
 
 func TestHasExplicitEnvOverride_NoEnvTag(t *testing.T) {
@@ -282,4 +123,18 @@ func TestHasExplicitEnvOverride_EmptyEnvTag(t *testing.T) {
 	result := hasExplicitEnvOverride(fieldType)
 
 	assert.False(t, result)
+}
+
+func TestHasExplicitEnvOverride_ReadsProcessEnvironment(t *testing.T) {
+	t.Setenv("WEBHOOK_TIMEOUT_SEC", "45")
+
+	field, ok := reflect.TypeOf(Config{}).FieldByName("Webhook")
+	require.True(t, ok)
+
+	timeoutField, found := field.Type.FieldByName("TimeoutSec")
+	require.True(t, found)
+
+	assert.True(t, hasExplicitEnvOverride(timeoutField))
+	require.NoError(t, os.Unsetenv("WEBHOOK_TIMEOUT_SEC"))
+	assert.False(t, hasExplicitEnvOverride(timeoutField))
 }

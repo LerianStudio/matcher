@@ -17,16 +17,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/dispute"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	exceptionRepositories "github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
 	"github.com/LerianStudio/matcher/internal/exception/services/query"
+	crossAdapters "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 	govEntities "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
-	crossAdapters "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 )
 
 // ---------------------------------------------------------------------------
@@ -1318,7 +1318,7 @@ func TestDeleteComment_InvalidCommentID(t *testing.T) {
 func TestHandleExceptionError_TransactionNotFound(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleExceptionError, crossAdapters.ErrTransactionNotFound)
+	resp := executeErrorHandler(t, (&Handlers{}).handleExceptionError, crossAdapters.ErrTransactionNotFound)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -1334,7 +1334,7 @@ func TestHandleExceptionError_TransactionNotFound(t *testing.T) {
 func TestHandleExceptionError_IngestionJobNotFound(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleExceptionError, crossAdapters.ErrIngestionJobNotFound)
+	resp := executeErrorHandler(t, (&Handlers{}).handleExceptionError, crossAdapters.ErrIngestionJobNotFound)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -1350,7 +1350,7 @@ func TestHandleExceptionError_IngestionJobNotFound(t *testing.T) {
 func TestHandleExceptionError_SourceNotFound(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleExceptionError, crossAdapters.ErrSourceNotFound)
+	resp := executeErrorHandler(t, (&Handlers{}).handleExceptionError, crossAdapters.ErrSourceNotFound)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -1366,7 +1366,7 @@ func TestHandleExceptionError_SourceNotFound(t *testing.T) {
 func TestHandleExceptionError_ContextNotFound(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleExceptionError, crossAdapters.ErrContextNotFound)
+	resp := executeErrorHandler(t, (&Handlers{}).handleExceptionError, crossAdapters.ErrContextNotFound)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -1382,7 +1382,7 @@ func TestHandleExceptionError_ContextNotFound(t *testing.T) {
 func TestHandleExceptionError_ContextLookupNotInitialized(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleExceptionError, crossAdapters.ErrContextLookupNotInitialized)
+	resp := executeErrorHandler(t, (&Handlers{}).handleExceptionError, crossAdapters.ErrContextLookupNotInitialized)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -1398,7 +1398,7 @@ func TestHandleExceptionError_ContextLookupNotInitialized(t *testing.T) {
 func TestHandleExceptionError_EntityNotFound(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleExceptionError, entities.ErrExceptionNotFound)
+	resp := executeErrorHandler(t, (&Handlers{}).handleExceptionError, entities.ErrExceptionNotFound)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -1719,7 +1719,7 @@ func TestGetException_Success(t *testing.T) {
 func TestHandleDisputeError_InvalidDisputeCategory(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleDisputeError, dispute.ErrInvalidDisputeCategory)
+	resp := executeErrorHandler(t, (&Handlers{}).handleDisputeError, dispute.ErrInvalidDisputeCategory)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -1735,7 +1735,7 @@ func TestHandleDisputeError_InvalidDisputeCategory(t *testing.T) {
 func TestHandleDisputeError_ActorRequired(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleDisputeError, command.ErrActorRequired)
+	resp := executeErrorHandler(t, (&Handlers{}).handleDisputeError, command.ErrActorRequired)
 	defer resp.Body.Close()
 
 	requireErrorResponse(

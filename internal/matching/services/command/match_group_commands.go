@@ -50,9 +50,8 @@ var (
 	ErrLockRefreshFailed                = errors.New("lock refresh failed")
 	ErrTenantIDMismatch                 = errors.New("tenant id does not match context")
 	ErrOutboxRepoNotConfigured          = errors.New("outbox repository is not configured")
-	ErrOutboxRequiresSQLTx              = errors.New("outbox requires *sql.Tx")
+	ErrOutboxRequiresSQLTx              = errors.New("outbox requires an active sql transaction")
 	ErrContextCancelled                 = errors.New("operation cancelled")
-	ErrRateNotFound                     = errors.New("rate not found for fee verification")
 )
 
 const (
@@ -101,11 +100,25 @@ type feeVerificationInput struct {
 	ctxInfo        *ports.ReconciliationContextInfo
 	txByID         map[uuid.UUID]*shared.Transaction
 	sourceTypeByID map[uuid.UUID]string
+	leftSourceIDs  map[uuid.UUID]struct{}
+	rightSourceIDs map[uuid.UUID]struct{}
+	leftRules      []*fee.FeeRule
+	rightRules     []*fee.FeeRule
+	allSchedules   map[uuid.UUID]*fee.FeeSchedule
+}
+
+func (input *feeVerificationInput) normalizationMode() fee.NormalizationMode {
+	if input == nil || input.ctxInfo == nil || input.ctxInfo.FeeNormalization == nil {
+		return fee.NormalizationModeNone
+	}
+
+	return fee.NormalizationMode(*input.ctxInfo.FeeNormalization)
 }
 
 type feeFindings struct {
-	variances       []*matchingEntities.FeeVariance
-	exceptionInputs []ports.ExceptionTransactionInput
+	variances         []*matchingEntities.FeeVariance
+	exceptionInputs   []ports.ExceptionTransactionInput
+	skippedNoSchedule int
 }
 
 type feeExtractionError struct {

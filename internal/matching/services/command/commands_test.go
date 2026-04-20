@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
@@ -54,7 +54,6 @@ func TestSentinelErrors(t *testing.T) {
 		},
 		{"ErrNilExceptionCreator", ErrNilExceptionCreator, "exception creator is required"},
 		{"ErrNilOutboxRepository", ErrNilOutboxRepository, "outbox repository is required"},
-		{"ErrNilRateRepository", ErrNilRateRepository, "rate repository is required"},
 		{
 			"ErrNilFeeVarianceRepository",
 			ErrNilFeeVarianceRepository,
@@ -364,14 +363,6 @@ func (m *mockExceptionCreator) CreateExceptionsWithTx(
 	return nil
 }
 
-type mockRateRepo struct{}
-
-func (m *mockRateRepo) GetByID(_ context.Context, _ uuid.UUID) (*fee.Rate, error) {
-	return nil, nil
-}
-
-var _ matchingRepositories.RateRepository = (*mockRateRepo)(nil)
-
 type mockFeeVarianceRepo struct{}
 
 func (m *mockFeeVarianceRepo) CreateBatchWithTx(
@@ -498,12 +489,6 @@ type mockInfraProvider struct {
 	err error
 }
 
-func (m *mockInfraProvider) GetPostgresConnection(
-	_ context.Context,
-) (*sharedPorts.PostgresConnectionLease, error) {
-	return nil, nil
-}
-
 func (m *mockInfraProvider) GetRedisConnection(
 	_ context.Context,
 ) (*sharedPorts.RedisConnectionLease, error) {
@@ -518,7 +503,11 @@ func (m *mockInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, er
 	return sharedPorts.NewTxLease(m.tx, nil), nil
 }
 
-func (m *mockInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
+func (m *mockInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.DBLease, error) {
+	return nil, nil
+}
+
+func (m *mockInfraProvider) GetPrimaryDB(_ context.Context) (*sharedPorts.DBLease, error) {
 	return nil, nil
 }
 
@@ -631,7 +620,6 @@ func TestNewUseCase(t *testing.T) {
 			MatchItemRepo:    &mockMatchItemRepository{},
 			ExceptionCreator: &mockExceptionCreator{},
 			OutboxRepo:       outboxRepo,
-			RateRepo:         &mockRateRepo{},
 			FeeVarianceRepo:  &mockFeeVarianceRepo{},
 			AdjustmentRepo:   &mockAdjustmentRepo{},
 			InfraProvider:    &mockInfraProvider{},
@@ -772,16 +760,17 @@ func TestNewUseCase(t *testing.T) {
 		require.ErrorIs(t, err, ErrNilOutboxRepository)
 	})
 
-	t.Run("nil rate repository returns error", func(t *testing.T) {
+	t.Run("typed-nil outbox repository returns error", func(t *testing.T) {
 		t.Parallel()
 
 		deps := validDeps()
-		deps.RateRepo = nil
+		var typedNilOutboxRepo *outboxmocks.MockOutboxRepository
+		deps.OutboxRepo = typedNilOutboxRepo
 
 		uc, err := New(deps)
 
 		assert.Nil(t, uc)
-		require.ErrorIs(t, err, ErrNilRateRepository)
+		require.ErrorIs(t, err, ErrNilOutboxRepository)
 	})
 
 	t.Run("nil fee variance repository returns error", func(t *testing.T) {
@@ -881,7 +870,6 @@ func TestUseCaseFieldsInitialized(t *testing.T) {
 		MatchItemRepo:    &mockMatchItemRepository{},
 		ExceptionCreator: &mockExceptionCreator{},
 		OutboxRepo:       outboxRepo,
-		RateRepo:         &mockRateRepo{},
 		FeeVarianceRepo:  &mockFeeVarianceRepo{},
 		AdjustmentRepo:   &mockAdjustmentRepo{},
 		InfraProvider:    &mockInfraProvider{},
@@ -903,7 +891,6 @@ func TestUseCaseFieldsInitialized(t *testing.T) {
 	assert.NotNil(t, uc.matchItemRepo)
 	assert.NotNil(t, uc.exceptionCreator)
 	assert.NotNil(t, uc.outboxRepo)
-	assert.NotNil(t, uc.rateRepo)
 	assert.NotNil(t, uc.feeVarianceRepo)
 	assert.NotNil(t, uc.adjustmentRepo)
 	assert.NotNil(t, uc.feeScheduleRepo)

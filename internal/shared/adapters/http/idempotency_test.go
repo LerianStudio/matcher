@@ -16,9 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/auth"
-	vo "github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
 var errRedisConnection = errors.New("redis connection failed")
@@ -80,10 +79,10 @@ func (repo *stubIdempotencyRepo) TryReacquireFromFailed(_ context.Context, key I
 	return repo.reacquireResult, repo.reacquireErr
 }
 
-func decodeErrorResponse(t *testing.T, body io.Reader) libHTTP.ErrorResponse {
+func decodeErrorResponse(t *testing.T, body io.Reader) ErrorResponse {
 	t.Helper()
 
-	var errResp libHTTP.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(body).Decode(&errResp))
 
 	return errResp
@@ -205,8 +204,8 @@ func TestIdempotencyMiddleware_NewRequest_AcquiresLock(t *testing.T) {
 
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 	assert.True(t, repo.acquireCalled)
-	// Key format: tenantID:method:path:userKey (no prefix in this test)
-	expectedKey := IdempotencyKey(auth.DefaultTenantID + ":POST:/test:unique-key-123")
+	// Key format: tenantID:principalID:method:path:userKey (no prefix in this test)
+	expectedKey := IdempotencyKey(auth.DefaultTenantID + ":anon::POST:/test:unique-key-123")
 	assert.Equal(t, expectedKey, repo.lastKey)
 	assert.True(t, repo.markCompleteCalled)
 }
@@ -281,8 +280,8 @@ func TestIdempotencyMiddleware_PendingRequest_Returns409(t *testing.T) {
 
 	assert.Equal(t, http.StatusConflict, resp.StatusCode)
 	errResp := decodeErrorResponse(t, resp.Body)
-	assert.Equal(t, http.StatusConflict, errResp.Code)
-	assert.Equal(t, "request_in_progress", errResp.Title)
+	assert.Equal(t, constant.CodeRequestInProgress, errResp.Code)
+	assert.Equal(t, http.StatusText(http.StatusConflict), errResp.Title)
 	assert.Equal(t, "A request with this idempotency key is currently being processed", errResp.Message)
 }
 
@@ -311,8 +310,8 @@ func TestIdempotencyMiddleware_InvalidKeyFormat_Returns400Contract(t *testing.T)
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	errResp := decodeErrorResponse(t, resp.Body)
-	assert.Equal(t, http.StatusBadRequest, errResp.Code)
-	assert.Equal(t, "invalid_idempotency_key", errResp.Title)
+	assert.Equal(t, constant.CodeInvalidIdempotencyKey, errResp.Code)
+	assert.Equal(t, http.StatusText(http.StatusBadRequest), errResp.Title)
 	assert.Equal(t, ErrInvalidIdempotencyKey.Error(), errResp.Message)
 	assert.False(t, repo.acquireCalled, "repository should not be called when key format is invalid")
 }
@@ -349,8 +348,8 @@ func TestIdempotencyMiddleware_MissingTenant_Returns500Contract(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	errResp := decodeErrorResponse(t, resp.Body)
-	assert.Equal(t, http.StatusInternalServerError, errResp.Code)
-	assert.Equal(t, "idempotency_configuration_error", errResp.Title)
+	assert.Equal(t, constant.CodeIdempotencyConfiguration, errResp.Code)
+	assert.Equal(t, http.StatusText(http.StatusInternalServerError), errResp.Title)
 	assert.Equal(t, "an unexpected error occurred", errResp.Message)
 	assert.False(t, repo.acquireCalled, "repository should not be called when tenant is missing")
 }
@@ -460,45 +459,8 @@ func TestIdempotencyMiddleware_FailedRequest_ReacquireDeniedReturns409(t *testin
 
 	assert.Equal(t, http.StatusConflict, resp.StatusCode)
 	errResp := decodeErrorResponse(t, resp.Body)
-	assert.Equal(t, "request_in_progress", errResp.Title)
+	assert.Equal(t, http.StatusText(http.StatusConflict), errResp.Title)
 	assert.True(t, repo.reacquireCalled)
-}
-
-func TestIdempotencyMiddleware_WithAdapter_ReplaysCachedResponse(t *testing.T) {
-	t.Parallel()
-
-	app := fiber.New()
-	exceptionRepo := &stubExceptionRepo{
-		acquireResult: false,
-		cachedResult: &vo.IdempotencyResult{
-			Status:     vo.IdempotencyStatusComplete,
-			Response:   []byte(`{"id":"cached-adapter"}`),
-			HTTPStatus: http.StatusAccepted,
-		},
-	}
-
-	adapter := NewIdempotencyRepositoryAdapter(exceptionRepo)
-
-	app.Use(NewIdempotencyMiddleware(IdempotencyMiddlewareConfig{Repository: adapter}))
-
-	app.Post("/adapter", func(_ *fiber.Ctx) error {
-		t.Fatal("handler should not be called for adapter replay")
-		return nil
-	})
-
-	req := httptest.NewRequest(http.MethodPost, "/adapter", strings.NewReader(`{"data":"test"}`))
-	req.Header.Set(HeaderXIdempotencyKey, "adapter-key")
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, http.StatusAccepted, resp.StatusCode)
-	assert.Equal(t, "true", resp.Header.Get(HeaderXIdempotencyReplayed))
-	body, readErr := io.ReadAll(resp.Body)
-	require.NoError(t, readErr)
-	assert.JSONEq(t, `{"id":"cached-adapter"}`, string(body))
 }
 
 func TestIdempotencyMiddleware_UsesAlternativeHeader(t *testing.T) {
@@ -525,8 +487,8 @@ func TestIdempotencyMiddleware_UsesAlternativeHeader(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	// Key format: tenantID:method:path:userKey
-	expectedKey := IdempotencyKey(auth.DefaultTenantID + ":POST:/test:alternative-key")
+	// Key format: tenantID:principalID:method:path:userKey
+	expectedKey := IdempotencyKey(auth.DefaultTenantID + ":anon::POST:/test:alternative-key")
 	assert.Equal(t, expectedKey, repo.lastKey)
 }
 
@@ -554,11 +516,11 @@ func TestIdempotencyMiddleware_GeneratesHashForImplicitKey(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.True(t, repo.acquireCalled)
-	// Key format: tenantID:method:path:hash:xxxx
+	// Key format: tenantID:principalID:method:path:hash:xxxx
 	assert.Contains(t, string(repo.lastKey), ":hash:", "should generate hash key")
 	assert.True(
 		t,
-		strings.HasPrefix(string(repo.lastKey), auth.DefaultTenantID+":POST:/test:hash:"),
+		strings.HasPrefix(string(repo.lastKey), auth.DefaultTenantID+":anon::POST:/test:hash:"),
 		"should have proper scoping prefix",
 	)
 }
@@ -588,8 +550,8 @@ func TestIdempotencyMiddleware_AppliesKeyPrefix(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	// Key format with prefix: prefix:tenantID:method:path:userKey
-	expectedKey := IdempotencyKey("matcher:" + auth.DefaultTenantID + ":POST:/test:my-key")
+	// Key format with prefix: prefix:tenantID:principalID:method:path:userKey
+	expectedKey := IdempotencyKey("matcher:" + auth.DefaultTenantID + ":anon::POST:/test:my-key")
 	assert.Equal(t, expectedKey, repo.lastKey)
 }
 
@@ -649,10 +611,10 @@ func TestIdempotencyMiddleware_AcquireError_Returns500(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 
-	var errResp libHTTP.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-	assert.Equal(t, http.StatusInternalServerError, errResp.Code)
-	assert.Equal(t, "idempotency_error", errResp.Title)
+	assert.Equal(t, constant.CodeIdempotencyError, errResp.Code)
+	assert.Equal(t, http.StatusText(http.StatusInternalServerError), errResp.Title)
 	assert.Equal(t, "an unexpected error occurred", errResp.Message)
 }
 
@@ -680,6 +642,83 @@ func TestIdempotencyMiddleware_SkipsWithoutKeyAndBody(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.False(t, repo.acquireCalled, "should skip when no key and no body")
+}
+
+func TestIdempotencyMiddleware_PatchWithoutExplicitKey_SkipsBodyHash(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	repo := &stubIdempotencyRepo{acquireResult: true}
+
+	app.Use(NewIdempotencyMiddleware(IdempotencyMiddlewareConfig{
+		Repository: repo,
+	}))
+
+	handlerCalls := 0
+
+	app.Patch("/v1/contexts/abc123", func(c *fiber.Ctx) error {
+		handlerCalls++
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{"status": "ACTIVE"})
+	})
+
+	// First PATCH: {"status":"ACTIVE"} — should execute handler (no body-hash key generated)
+	req1 := httptest.NewRequest(http.MethodPatch, "/v1/contexts/abc123", strings.NewReader(`{"status":"ACTIVE"}`))
+	req1.Header.Set("Content-Type", "application/json")
+
+	resp1, err := app.Test(req1)
+	require.NoError(t, err)
+	defer resp1.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp1.StatusCode)
+	assert.False(t, repo.acquireCalled, "PATCH without explicit key should not attempt idempotency lock")
+	assert.Equal(t, 1, handlerCalls, "handler should be called on first PATCH")
+
+	// Second PATCH: same body {"status":"ACTIVE"} — should ALSO execute handler (not replayed)
+	req2 := httptest.NewRequest(http.MethodPatch, "/v1/contexts/abc123", strings.NewReader(`{"status":"ACTIVE"}`))
+	req2.Header.Set("Content-Type", "application/json")
+
+	resp2, err := app.Test(req2)
+	require.NoError(t, err)
+	defer resp2.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp2.StatusCode)
+	assert.Equal(t, "", resp2.Header.Get(HeaderXIdempotencyReplayed), "should not be replayed")
+	assert.Equal(t, 2, handlerCalls, "handler should be called again for same PATCH body")
+}
+
+func TestIdempotencyMiddleware_PatchWithExplicitKey_EnforcesIdempotency(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	repo := &stubIdempotencyRepo{
+		acquireResult: false,
+		cachedResult: &IdempotencyResult{
+			Status:     IdempotencyStatusComplete,
+			Response:   []byte(`{"status":"ACTIVE"}`),
+			HTTPStatus: http.StatusOK,
+		},
+	}
+
+	app.Use(NewIdempotencyMiddleware(IdempotencyMiddlewareConfig{
+		Repository: repo,
+	}))
+
+	app.Patch("/v1/contexts/abc123", func(_ *fiber.Ctx) error {
+		t.Fatal("handler should not be called when PATCH has explicit key and cached result")
+		return nil
+	})
+
+	req := httptest.NewRequest(http.MethodPatch, "/v1/contexts/abc123", strings.NewReader(`{"status":"ACTIVE"}`))
+	req.Header.Set(HeaderXIdempotencyKey, "explicit-patch-key")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "true", resp.Header.Get(HeaderXIdempotencyReplayed))
+	assert.True(t, repo.acquireCalled, "PATCH with explicit key should enforce idempotency")
 }
 
 func TestExtractIdempotencyKey_PrefersXHeader(t *testing.T) {
@@ -712,9 +751,33 @@ func TestExtractIdempotencyKey_PrefersXHeader(t *testing.T) {
 
 	resp.Body.Close()
 
-	// Key format: tenantID:method:path:userKey (X-Idempotency-Key takes precedence)
-	expectedKey := auth.DefaultTenantID + ":POST:/test:x-header-key"
+	// Key format: tenantID:principalID:method:path:userKey (X-Idempotency-Key takes precedence)
+	expectedKey := auth.DefaultTenantID + ":anon::POST:/test:x-header-key"
 	assert.Equal(t, expectedKey, extractedKey)
+}
+
+func TestExtractIdempotencyKey_NormalizesUserKeyWhitespace(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	var extractedKey string
+	app.Post("/test", func(fiberCtx *fiber.Ctx) error {
+		ctx := context.WithValue(fiberCtx.UserContext(), auth.TenantIDKey, auth.DefaultTenantID)
+		var err error
+		extractedKey, err = extractIdempotencyKey(ctx, fiberCtx, "matcher")
+		require.NoError(t, err)
+		return fiberCtx.SendStatus(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader(`{"data":"test"}`))
+	req.Header.Set(HeaderXIdempotencyKey, "  spaced-key  ")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, "matcher:"+auth.DefaultTenantID+":anon::POST:/test:spaced-key", extractedKey)
 }
 
 func TestIdempotencyMiddleware_TenantIsolation(t *testing.T) {
@@ -725,7 +788,7 @@ func TestIdempotencyMiddleware_TenantIsolation(t *testing.T) {
 
 	// Middleware that sets tenant in context (simulating auth middleware)
 	// In the real application, tenant extraction happens BEFORE idempotency middleware
-	tenantMiddleware := func(tenantID string) fiber.Handler {
+	tenantMiddleware := func(tenantID, userID string) fiber.Handler {
 		return func(fiberCtx *fiber.Ctx) error {
 			ctx := fiberCtx.UserContext()
 			if ctx == nil {
@@ -733,6 +796,7 @@ func TestIdempotencyMiddleware_TenantIsolation(t *testing.T) {
 			}
 
 			ctx = context.WithValue(ctx, auth.TenantIDKey, tenantID)
+			ctx = context.WithValue(ctx, auth.UserIDKey, userID)
 			fiberCtx.SetUserContext(ctx)
 
 			return fiberCtx.Next()
@@ -742,7 +806,7 @@ func TestIdempotencyMiddleware_TenantIsolation(t *testing.T) {
 	// Create separate apps to simulate different tenants
 	// In production, tenant middleware runs BEFORE idempotency middleware
 	appA := fiber.New()
-	appA.Use(tenantMiddleware("tenant-a-id")) // Tenant extraction first
+	appA.Use(tenantMiddleware("tenant-a-id", "user-a")) // Tenant extraction first
 	appA.Use(NewIdempotencyMiddleware(IdempotencyMiddlewareConfig{
 		Repository: repoA,
 		KeyPrefix:  "matcher",
@@ -752,7 +816,7 @@ func TestIdempotencyMiddleware_TenantIsolation(t *testing.T) {
 	})
 
 	appB := fiber.New()
-	appB.Use(tenantMiddleware("tenant-b-id")) // Tenant extraction first
+	appB.Use(tenantMiddleware("tenant-b-id", "user-b")) // Tenant extraction first
 	appB.Use(NewIdempotencyMiddleware(IdempotencyMiddlewareConfig{
 		Repository: repoB,
 		KeyPrefix:  "matcher",
@@ -797,9 +861,130 @@ func TestIdempotencyMiddleware_TenantIsolation(t *testing.T) {
 	assert.Contains(t, string(keyA), "tenant-a-id", "key A should contain tenant A ID")
 	assert.Contains(t, string(keyB), "tenant-b-id", "key B should contain tenant B ID")
 
-	// Verify the complete key format: prefix:tenantID:method:path:userKey
-	assert.Equal(t, IdempotencyKey("matcher:tenant-a-id:POST:/test:same-key"), keyA)
-	assert.Equal(t, IdempotencyKey("matcher:tenant-b-id:POST:/test:same-key"), keyB)
+	// Verify the complete key format: prefix:tenantID:principalID:method:path:userKey
+	assert.Equal(t, IdempotencyKey("matcher:tenant-a-id:user:user-a:POST:/test:same-key"), keyA)
+	assert.Equal(t, IdempotencyKey("matcher:tenant-b-id:user:user-b:POST:/test:same-key"), keyB)
+}
+
+func TestIdempotencyMiddleware_UserIsolationWithinTenant(t *testing.T) {
+	t.Parallel()
+
+	repoA := &stubIdempotencyRepo{acquireResult: true}
+	repoB := &stubIdempotencyRepo{acquireResult: true}
+
+	userMiddleware := func(userID string) fiber.Handler {
+		return func(fiberCtx *fiber.Ctx) error {
+			ctx := fiberCtx.UserContext()
+			if ctx == nil {
+				ctx = context.Background()
+			}
+
+			ctx = context.WithValue(ctx, auth.TenantIDKey, auth.DefaultTenantID)
+			ctx = context.WithValue(ctx, auth.UserIDKey, userID)
+			fiberCtx.SetUserContext(ctx)
+
+			return fiberCtx.Next()
+		}
+	}
+
+	appA := fiber.New()
+	appA.Use(userMiddleware("user-a"))
+	appA.Use(NewIdempotencyMiddleware(IdempotencyMiddlewareConfig{Repository: repoA, KeyPrefix: "matcher"}))
+	appA.Post("/test", func(c *fiber.Ctx) error { return c.SendString("ok") })
+
+	appB := fiber.New()
+	appB.Use(userMiddleware("user-b"))
+	appB.Use(NewIdempotencyMiddleware(IdempotencyMiddlewareConfig{Repository: repoB, KeyPrefix: "matcher"}))
+	appB.Post("/test", func(c *fiber.Ctx) error { return c.SendString("ok") })
+
+	reqA := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader(`{"data":"test"}`))
+	reqA.Header.Set(HeaderXIdempotencyKey, "same-key")
+	reqA.Header.Set("Content-Type", "application/json")
+	respA, err := appA.Test(reqA)
+	require.NoError(t, err)
+	defer respA.Body.Close()
+
+	reqB := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader(`{"data":"test"}`))
+	reqB.Header.Set(HeaderXIdempotencyKey, "same-key")
+	reqB.Header.Set("Content-Type", "application/json")
+	respB, err := appB.Test(reqB)
+	require.NoError(t, err)
+	defer respB.Body.Close()
+
+	assert.NotEqual(t, repoA.lastKey, repoB.lastKey)
+	assert.Equal(t, IdempotencyKey("matcher:"+auth.DefaultTenantID+":user:user-a:POST:/test:same-key"), repoA.lastKey)
+	assert.Equal(t, IdempotencyKey("matcher:"+auth.DefaultTenantID+":user:user-b:POST:/test:same-key"), repoB.lastKey)
+}
+
+func TestExtractIdempotencyKey_CanonicalizesQueryString(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	var extractedA string
+	var extractedB string
+
+	app.Post("/test", func(fiberCtx *fiber.Ctx) error {
+		ctx := context.WithValue(fiberCtx.UserContext(), auth.TenantIDKey, auth.DefaultTenantID)
+		ctx = context.WithValue(ctx, auth.UserIDKey, "user-a")
+
+		var err error
+		if extractedA == "" {
+			extractedA, err = extractIdempotencyKey(ctx, fiberCtx, "matcher")
+		} else {
+			extractedB, err = extractIdempotencyKey(ctx, fiberCtx, "matcher")
+		}
+		require.NoError(t, err)
+		return fiberCtx.SendStatus(http.StatusOK)
+	})
+
+	reqA := httptest.NewRequest(http.MethodPost, "/test?b=2&a=1", strings.NewReader(`{"data":"test"}`))
+	reqA.Header.Set(HeaderXIdempotencyKey, "query-key")
+	reqA.Header.Set("Content-Type", "application/json")
+	respA, err := app.Test(reqA)
+	require.NoError(t, err)
+	defer respA.Body.Close()
+
+	reqB := httptest.NewRequest(http.MethodPost, "/test?a=1&b=2", strings.NewReader(`{"data":"test"}`))
+	reqB.Header.Set(HeaderXIdempotencyKey, "query-key")
+	reqB.Header.Set("Content-Type", "application/json")
+	respB, err := app.Test(reqB)
+	require.NoError(t, err)
+	defer respB.Body.Close()
+
+	assert.Equal(t, extractedA, extractedB)
+	assert.Equal(t, "matcher:"+auth.DefaultTenantID+":user:user-a:POST:/test?a=1&b=2:query-key", extractedA)
+}
+
+func TestExtractIdempotencyKey_SingleQueryParamFastPath(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+
+	var extracted string
+
+	app.Post("/test", func(fiberCtx *fiber.Ctx) error {
+		ctx := context.WithValue(fiberCtx.UserContext(), auth.TenantIDKey, auth.DefaultTenantID)
+		ctx = context.WithValue(ctx, auth.UserIDKey, "user-a")
+
+		var err error
+
+		extracted, err = extractIdempotencyKey(ctx, fiberCtx, "matcher")
+		require.NoError(t, err)
+
+		return fiberCtx.SendStatus(http.StatusOK)
+	})
+
+	// Single-param fast path should produce a canonical key: key and value
+	// are percent-encoded identically to url.Values.Encode output.
+	req := httptest.NewRequest(http.MethodPost, "/test?name=alice", strings.NewReader(`{"data":"test"}`))
+	req.Header.Set(HeaderXIdempotencyKey, "one-param")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, "matcher:"+auth.DefaultTenantID+":user:user-a:POST:/test?name=alice:one-param", extracted)
 }
 
 func TestIdempotencyMiddleware_MethodPathIsolation(t *testing.T) {
@@ -942,7 +1127,7 @@ func TestValidateIdempotencyKeyFormat(t *testing.T) {
 		{
 			name:    "129 chars exceeds max length",
 			key:     strings.Repeat("a", 129),
-			wantErr: ErrIdempotencyKeyTooLong,
+			wantErr: ErrInvalidIdempotencyKey,
 		},
 		{
 			name:    "valid alphanumeric",
@@ -987,7 +1172,7 @@ func TestValidateIdempotencyKeyFormat(t *testing.T) {
 		{
 			name:    "whitespace only",
 			key:     "   ",
-			wantErr: ErrInvalidIdempotencyKey,
+			wantErr: ErrEmptyIdempotencyKey,
 		},
 	}
 
@@ -1004,36 +1189,4 @@ func TestValidateIdempotencyKeyFormat(t *testing.T) {
 			}
 		})
 	}
-}
-
-// TestIdempotencyStatusConstants_MatchValueObjects verifies that the IdempotencyStatus
-// constants defined in the shared HTTP package are equivalent to those defined in the
-// exception domain value_objects package. Both packages define the same status strings
-// independently; this test catches any future drift between the two sets of constants.
-func TestIdempotencyStatusConstants_MatchValueObjects(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t,
-		string(IdempotencyStatusUnknown),
-		string(vo.IdempotencyStatusUnknown),
-		"IdempotencyStatusUnknown must match between shared/http and exception/domain/value_objects",
-	)
-
-	assert.Equal(t,
-		string(IdempotencyStatusPending),
-		string(vo.IdempotencyStatusPending),
-		"IdempotencyStatusPending must match between shared/http and exception/domain/value_objects",
-	)
-
-	assert.Equal(t,
-		string(IdempotencyStatusComplete),
-		string(vo.IdempotencyStatusComplete),
-		"IdempotencyStatusComplete must match between shared/http and exception/domain/value_objects",
-	)
-
-	assert.Equal(t,
-		string(IdempotencyStatusFailed),
-		string(vo.IdempotencyStatusFailed),
-		"IdempotencyStatusFailed must match between shared/http and exception/domain/value_objects",
-	)
 }

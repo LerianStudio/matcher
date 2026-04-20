@@ -19,15 +19,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	repomocks "github.com/LerianStudio/matcher/internal/reporting/domain/repositories/mocks"
-	portsmocks "github.com/LerianStudio/matcher/internal/reporting/ports/mocks"
 	"github.com/LerianStudio/matcher/internal/reporting/services/command"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	portsmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
+	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
 // testTenantID is the tenant ID used in test middleware (setupExportJobTestApp).
@@ -126,7 +127,7 @@ func TestNewExportJobHandlers(t *testing.T) {
 	t.Run("creates handlers with valid dependencies", func(t *testing.T) {
 		t.Parallel()
 
-		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 
 		require.NoError(t, err)
 		assert.NotNil(t, handlers)
@@ -135,7 +136,7 @@ func TestNewExportJobHandlers(t *testing.T) {
 	t.Run("creates handlers with zero presign expiry uses default", func(t *testing.T) {
 		t.Parallel()
 
-		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, 0)
+		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, 0, false)
 
 		require.NoError(t, err)
 		assert.NotNil(t, handlers)
@@ -144,7 +145,7 @@ func TestNewExportJobHandlers(t *testing.T) {
 	t.Run("returns error with nil use case", func(t *testing.T) {
 		t.Parallel()
 
-		handlers, err := NewExportJobHandlers(nil, querySvc, storage, ctxProvider, time.Hour)
+		handlers, err := NewExportJobHandlers(nil, querySvc, storage, ctxProvider, time.Hour, false)
 
 		require.Error(t, err)
 		assert.Nil(t, handlers)
@@ -154,7 +155,7 @@ func TestNewExportJobHandlers(t *testing.T) {
 	t.Run("returns error with nil query service", func(t *testing.T) {
 		t.Parallel()
 
-		handlers, err := NewExportJobHandlers(uc, nil, storage, ctxProvider, time.Hour)
+		handlers, err := NewExportJobHandlers(uc, nil, storage, ctxProvider, time.Hour, false)
 
 		require.Error(t, err)
 		assert.Nil(t, handlers)
@@ -164,7 +165,19 @@ func TestNewExportJobHandlers(t *testing.T) {
 	t.Run("returns error with nil storage", func(t *testing.T) {
 		t.Parallel()
 
-		handlers, err := NewExportJobHandlers(uc, querySvc, nil, ctxProvider, time.Hour)
+		handlers, err := NewExportJobHandlers(uc, querySvc, nil, ctxProvider, time.Hour, false)
+
+		require.Error(t, err)
+		assert.Nil(t, handlers)
+		require.ErrorIs(t, err, ErrNilStorageClientHandler)
+	})
+
+	t.Run("returns error with typed-nil storage", func(t *testing.T) {
+		t.Parallel()
+
+		var typedNilStorage *portsmocks.MockObjectStorageClient
+
+		handlers, err := NewExportJobHandlers(uc, querySvc, typedNilStorage, ctxProvider, time.Hour, false)
 
 		require.Error(t, err)
 		assert.Nil(t, handlers)
@@ -174,7 +187,7 @@ func TestNewExportJobHandlers(t *testing.T) {
 	t.Run("returns error with nil context provider", func(t *testing.T) {
 		t.Parallel()
 
-		handlers, err := NewExportJobHandlers(uc, querySvc, storage, nil, time.Hour)
+		handlers, err := NewExportJobHandlers(uc, querySvc, storage, nil, time.Hour, false)
 
 		require.Error(t, err)
 		assert.Nil(t, handlers)
@@ -220,7 +233,7 @@ func setupCreateExportJobHandlers(
 	querySvc, err := query.NewExportJobQueryService(repo)
 	require.NoError(t, err)
 
-	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 	require.NoError(t, err)
 
 	return handlers
@@ -230,11 +243,11 @@ func TestExportJobHandlers_CurrentRuntimeConfig_PreservesDefaultEnabledOnPartial
 	t.Parallel()
 
 	handlers := &ExportJobHandlers{enabled: false, presignExpiry: time.Hour}
-	handlers.SetRuntimeConfigGetter(func() ExportJobRuntimeConfig {
+	handlers.SetRuntimeConfigResolver(func(context.Context) ExportJobRuntimeConfig {
 		return ExportJobRuntimeConfig{PresignExpiry: 2 * time.Hour}
 	})
 
-	runtimeCfg := handlers.currentRuntimeConfig()
+	runtimeCfg := handlers.currentRuntimeConfigForContext(context.Background())
 	require.NotNil(t, runtimeCfg.Enabled)
 	assert.False(t, *runtimeCfg.Enabled)
 	assert.Equal(t, 2*time.Hour, runtimeCfg.PresignExpiry)
@@ -318,6 +331,40 @@ func TestExportJobHandlers_CreateExportJob(t *testing.T) {
 		resp := makeCreateExportJobRequest(t, app, contextID, reqBody)
 		defer resp.Body.Close()
 
+		assert.Equal(t, fiber.StatusServiceUnavailable, resp.StatusCode)
+	})
+
+	t.Run("returns service unavailable when runtime config resolver disables create for request context", func(t *testing.T) {
+		t.Parallel()
+
+		contextID := uuid.New()
+		repo := newExportJobRepoMock(t)
+
+		handlers := setupCreateExportJobHandlers(t, contextID, repo)
+		resolverCalled := false
+		handlers.SetRuntimeConfigResolver(func(ctx context.Context) ExportJobRuntimeConfig {
+			resolverCalled = true
+			enabled := true
+			if tenantID, ok := auth.LookupTenantID(ctx); ok && tenantID == "11111111-1111-1111-1111-111111111111" {
+				enabled = false
+			}
+
+			return ExportJobRuntimeConfig{Enabled: &enabled}
+		})
+
+		app := setupExportJobTestAppWithContext(handlers.CreateExportJob, "create", contextID)
+
+		reqBody := CreateExportJobRequest{
+			ReportType: "MATCHED",
+			Format:     "CSV",
+			DateFrom:   "2024-01-01",
+			DateTo:     "2024-01-31",
+		}
+
+		resp := makeCreateExportJobRequest(t, app, contextID, reqBody)
+		defer resp.Body.Close()
+
+		assert.True(t, resolverCalled)
 		assert.Equal(t, fiber.StatusServiceUnavailable, resp.StatusCode)
 	})
 
@@ -718,7 +765,7 @@ func TestExportJobHandlers_ListExportJobs(t *testing.T) {
 		querySvc, err := query.NewExportJobQueryService(repo)
 		require.NoError(t, err)
 
-		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 		require.NoError(t, err)
 
 		app := setupExportJobTestApp(handlers.ListExportJobs, "list")
@@ -775,7 +822,7 @@ func TestExportJobHandlers_ListExportJobs(t *testing.T) {
 		querySvc, err := query.NewExportJobQueryService(repo)
 		require.NoError(t, err)
 
-		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 		require.NoError(t, err)
 
 		app := setupExportJobTestApp(handlers.ListExportJobs, "list")
@@ -830,7 +877,7 @@ func TestExportJobHandlers_ListExportJobs(t *testing.T) {
 		querySvc, err := query.NewExportJobQueryService(repo)
 		require.NoError(t, err)
 
-		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 		require.NoError(t, err)
 
 		app := setupExportJobTestApp(handlers.ListExportJobs, "list")
@@ -869,7 +916,7 @@ func TestExportJobHandlers_ListExportJobs(t *testing.T) {
 		querySvc, err := query.NewExportJobQueryService(repo)
 		require.NoError(t, err)
 
-		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 		require.NoError(t, err)
 
 		app := setupExportJobTestApp(handlers.ListExportJobs, "list")
@@ -1105,7 +1152,7 @@ func setupExportJobHandlersForRoute(
 	querySvc, err := query.NewExportJobQueryService(repo)
 	require.NoError(t, err)
 
-	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 	require.NoError(t, err)
 
 	app := setupExportJobTestApp(handler(handlers), route)
@@ -1217,9 +1264,9 @@ func TestExportJobHandlers_DownloadExportJob(t *testing.T) {
 		querySvc, err := query.NewExportJobQueryService(repo)
 		require.NoError(t, err)
 
-		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 		require.NoError(t, err)
-		handlers.SetRuntimeConfigGetter(func() ExportJobRuntimeConfig {
+		handlers.SetRuntimeConfigResolver(func(context.Context) ExportJobRuntimeConfig {
 			enabled := true
 			return ExportJobRuntimeConfig{Enabled: &enabled, PresignExpiry: 2 * time.Hour}
 		})
@@ -1293,6 +1340,12 @@ func TestExportJobHandlers_DownloadExportJob(t *testing.T) {
 		defer resp.Body.Close()
 
 		assert.Equal(t, fiber.StatusGone, resp.StatusCode)
+
+		var payload ErrorResponse
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
+		assert.Equal(t, constant.CodeReportingExportExpired, payload.Code)
+		assert.Equal(t, stdhttp.StatusText(stdhttp.StatusGone), payload.Title)
+		assert.Equal(t, "export file has expired", payload.Message)
 	})
 
 	t.Run("returns bad request for invalid job ID", func(t *testing.T) {
@@ -1420,7 +1473,7 @@ func TestRegisterExportJobRoutes(t *testing.T) {
 		querySvc, err := query.NewExportJobQueryService(repo)
 		require.NoError(t, err)
 
-		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 		require.NoError(t, err)
 
 		app := fiber.New()
@@ -1448,7 +1501,7 @@ func TestRegisterExportJobRoutes(t *testing.T) {
 		querySvc, err := query.NewExportJobQueryService(repo)
 		require.NoError(t, err)
 
-		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 		require.NoError(t, err)
 
 		limiter := func(c *fiber.Ctx) error {
@@ -1489,7 +1542,7 @@ func TestRegisterExportJobRoutes(t *testing.T) {
 		querySvc, err := query.NewExportJobQueryService(repo)
 		require.NoError(t, err)
 
-		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 		require.NoError(t, err)
 
 		app := fiber.New()

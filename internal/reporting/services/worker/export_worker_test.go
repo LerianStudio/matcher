@@ -4,6 +4,8 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"strings"
 	"sync/atomic"
@@ -15,13 +17,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
+	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 	repomocks "github.com/LerianStudio/matcher/internal/reporting/domain/repositories/mocks"
-	portsmocks "github.com/LerianStudio/matcher/internal/reporting/ports/mocks"
+	"github.com/LerianStudio/matcher/internal/reporting/services/query/exports"
+	portsmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 )
 
 var (
@@ -46,6 +50,12 @@ type mockReportRepoForWorker struct {
 	varianceItems   []*entities.VarianceReportRow
 	varianceNextKey string
 	varianceErr     error
+
+	variancePages         [][]*entities.VarianceReportRow
+	variancePageKeys      []string
+	varianceAfterKeysSeen []string
+	varianceTenantIDsSeen []string
+	varianceCalls         int
 }
 
 func (m *mockReportRepoForWorker) ListMatchedPage(
@@ -67,11 +77,29 @@ func (m *mockReportRepoForWorker) ListUnmatchedPage(
 }
 
 func (m *mockReportRepoForWorker) ListVariancePage(
-	_ context.Context,
+	ctx context.Context,
 	_ entities.VarianceReportFilter,
-	_ string,
+	afterKey string,
 	_ int,
 ) ([]*entities.VarianceReportRow, string, error) {
+	m.varianceAfterKeysSeen = append(m.varianceAfterKeysSeen, afterKey)
+	m.varianceTenantIDsSeen = append(m.varianceTenantIDsSeen, auth.GetTenantID(ctx))
+
+	if len(m.variancePages) > 0 {
+		if m.varianceCalls >= len(m.variancePages) {
+			return nil, "", m.varianceErr
+		}
+
+		items := m.variancePages[m.varianceCalls]
+		nextKey := ""
+		if m.varianceCalls < len(m.variancePageKeys) {
+			nextKey = m.variancePageKeys[m.varianceCalls]
+		}
+		m.varianceCalls++
+
+		return items, nextKey, m.varianceErr
+	}
+
 	return m.varianceItems, m.varianceNextKey, m.varianceErr
 }
 
@@ -138,6 +166,24 @@ func TestNewExportWorker(t *testing.T) {
 		logger := &libLog.NopLogger{}
 
 		worker, err := NewExportWorker(jobRepo, reportRepo, nil, cfg, logger)
+
+		require.Error(t, err)
+		assert.Nil(t, worker)
+		require.ErrorIs(t, err, ErrNilStorageClient)
+	})
+
+	t.Run("returns error with typed-nil storage", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
+		reportRepo := &mockReportRepoForWorker{}
+		cfg := ExportWorkerConfig{}
+		logger := &libLog.NopLogger{}
+
+		var typedNilStorage *portsmocks.MockObjectStorageClient
+
+		worker, err := NewExportWorker(jobRepo, reportRepo, typedNilStorage, cfg, logger)
 
 		require.Error(t, err)
 		assert.Nil(t, worker)
@@ -841,7 +887,7 @@ func TestExportWorker_GenerateFileKey(t *testing.T) {
 	tests := []struct {
 		name     string
 		job      *entities.ExportJob
-		contains []string
+		expected string
 	}{
 		{
 			name: "CSV file key",
@@ -852,14 +898,7 @@ func TestExportWorker_GenerateFileKey(t *testing.T) {
 				ReportType: entities.ExportReportTypeMatched,
 				Format:     entities.ExportFormatCSV,
 			},
-			contains: []string{
-				"exports",
-				tenantID.String(),
-				contextID.String(),
-				jobID.String(),
-				"MATCHED",
-				".csv",
-			},
+			expected: "11111111-1111-1111-1111-111111111111/exports/22222222-2222-2222-2222-222222222222/33333333-3333-3333-3333-333333333333-MATCHED.csv",
 		},
 		{
 			name: "JSON file key",
@@ -870,14 +909,7 @@ func TestExportWorker_GenerateFileKey(t *testing.T) {
 				ReportType: entities.ExportReportTypeUnmatched,
 				Format:     entities.ExportFormatJSON,
 			},
-			contains: []string{
-				"exports",
-				tenantID.String(),
-				contextID.String(),
-				jobID.String(),
-				"UNMATCHED",
-				".json",
-			},
+			expected: "11111111-1111-1111-1111-111111111111/exports/22222222-2222-2222-2222-222222222222/33333333-3333-3333-3333-333333333333-UNMATCHED.json",
 		},
 		{
 			name: "XML file key",
@@ -888,14 +920,7 @@ func TestExportWorker_GenerateFileKey(t *testing.T) {
 				ReportType: entities.ExportReportTypeVariance,
 				Format:     entities.ExportFormatXML,
 			},
-			contains: []string{
-				"exports",
-				tenantID.String(),
-				contextID.String(),
-				jobID.String(),
-				"VARIANCE",
-				".xml",
-			},
+			expected: "11111111-1111-1111-1111-111111111111/exports/22222222-2222-2222-2222-222222222222/33333333-3333-3333-3333-333333333333-VARIANCE.xml",
 		},
 	}
 
@@ -905,9 +930,7 @@ func TestExportWorker_GenerateFileKey(t *testing.T) {
 
 			result, err := worker.generateFileKey(tt.job)
 			require.NoError(t, err)
-			for _, substr := range tt.contains {
-				assert.Contains(t, result, substr)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -946,7 +969,7 @@ func TestExportWorker_GenerateFileKey_ExactFormat(t *testing.T) {
 
 	result, err := worker.generateFileKey(job)
 	require.NoError(t, err)
-	assert.Equal(t, "exports/550e8400-e29b-41d4-a716-446655440000/660e8400-e29b-41d4-a716-446655440000/aabbccdd-0011-2233-4455-667788990011-MATCHED.csv", result)
+	assert.Equal(t, "550e8400-e29b-41d4-a716-446655440000/exports/660e8400-e29b-41d4-a716-446655440000/aabbccdd-0011-2233-4455-667788990011-MATCHED.csv", result)
 }
 
 func TestExportWorker_NegativeConfigValues(t *testing.T) {
@@ -1763,9 +1786,10 @@ func TestExportWorker_StreamVarianceCSV_Success(t *testing.T) {
 
 	varianceItems := []*entities.VarianceReportRow{
 		{
-			SourceID: uuid.New(),
-			Currency: "USD",
-			FeeType:  "PROCESSING",
+			SourceID:        uuid.New(),
+			Currency:        "USD",
+			FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-000000000080"),
+			FeeScheduleName: "PROCESSING",
 		},
 	}
 
@@ -1810,9 +1834,10 @@ func TestExportWorker_StreamVarianceJSON_Success(t *testing.T) {
 
 	varianceItems := []*entities.VarianceReportRow{
 		{
-			SourceID: uuid.New(),
-			Currency: "USD",
-			FeeType:  "PROCESSING",
+			SourceID:        uuid.New(),
+			Currency:        "USD",
+			FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-000000000080"),
+			FeeScheduleName: "PROCESSING",
 		},
 	}
 
@@ -1844,7 +1869,117 @@ func TestExportWorker_StreamVarianceJSON_Success(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), count)
-	assert.Contains(t, buf.String(), "[")
+
+	var rows []exports.VarianceExportRow
+	require.NoError(t, json.Unmarshal([]byte(buf.String()), &rows))
+	require.Len(t, rows, 1)
+	assert.Equal(t, "00000000-0000-0000-0000-000000000080", rows[0].FeeScheduleID)
+	assert.Equal(t, "PROCESSING", rows[0].FeeScheduleName)
+}
+
+func TestExportWorker_StreamVarianceJSON_PaginatesAcrossPages(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
+	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	cfg := ExportWorkerConfig{PageSize: 1}
+	logger := &libLog.NopLogger{}
+
+	reportRepo := &mockReportRepoForWorker{
+		variancePages: [][]*entities.VarianceReportRow{
+			{{SourceID: uuid.New(), Currency: "USD", FeeScheduleID: uuid.MustParse("00000000-0000-0000-0000-000000000091"), FeeScheduleName: "PAGE-1"}},
+			{{SourceID: uuid.New(), Currency: "USD", FeeScheduleID: uuid.MustParse("00000000-0000-0000-0000-000000000092"), FeeScheduleName: "PAGE-2"}},
+		},
+		variancePageKeys: []string{"cursor-1", ""},
+	}
+
+	worker, err := NewExportWorker(jobRepo, reportRepo, storage, cfg, logger)
+	require.NoError(t, err)
+
+	job := &entities.ExportJob{ID: uuid.New(), TenantID: uuid.New(), ContextID: uuid.New(), ReportType: entities.ExportReportTypeVariance, Format: entities.ExportFormatJSON}
+
+	jobRepo.EXPECT().UpdateProgress(gomock.Any(), job.ID, gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	var buf strings.Builder
+	filter := entities.VarianceReportFilter{ContextID: job.ContextID}
+	count, err := worker.streamVarianceJSON(context.Background(), job, filter, &buf)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), count)
+	assert.Equal(t, []string{"", "cursor-1"}, reportRepo.varianceAfterKeysSeen)
+
+	var rows []exports.VarianceExportRow
+	require.NoError(t, json.Unmarshal([]byte(buf.String()), &rows))
+	require.Len(t, rows, 2)
+	assert.Equal(t, "PAGE-1", rows[0].FeeScheduleName)
+	assert.Equal(t, "PAGE-2", rows[1].FeeScheduleName)
+}
+
+type tenantAwareJobRepoStub struct {
+	tenants       []string
+	jobsByTenant  map[string]*entities.ExportJob
+	seenTenantIDs []string
+}
+
+func (stub *tenantAwareJobRepoStub) Create(context.Context, *entities.ExportJob) error { return nil }
+func (stub *tenantAwareJobRepoStub) GetByID(context.Context, uuid.UUID) (*entities.ExportJob, error) {
+	return nil, nil
+}
+func (stub *tenantAwareJobRepoStub) Update(context.Context, *entities.ExportJob) error { return nil }
+func (stub *tenantAwareJobRepoStub) UpdateStatus(context.Context, *entities.ExportJob) error {
+	return nil
+}
+
+func (stub *tenantAwareJobRepoStub) UpdateProgress(context.Context, uuid.UUID, int64, int64) error {
+	return nil
+}
+
+func (stub *tenantAwareJobRepoStub) List(context.Context, *string, *libHTTP.TimestampCursor, int) ([]*entities.ExportJob, libHTTP.CursorPagination, error) {
+	return nil, libHTTP.CursorPagination{}, nil
+}
+
+func (stub *tenantAwareJobRepoStub) ListByContext(context.Context, uuid.UUID, *libHTTP.TimestampCursor, int) ([]*entities.ExportJob, libHTTP.CursorPagination, error) {
+	return nil, libHTTP.CursorPagination{}, nil
+}
+
+func (stub *tenantAwareJobRepoStub) ListExpired(context.Context, int) ([]*entities.ExportJob, error) {
+	return nil, nil
+}
+func (stub *tenantAwareJobRepoStub) Delete(context.Context, uuid.UUID) error { return nil }
+func (stub *tenantAwareJobRepoStub) RequeueForRetry(context.Context, *entities.ExportJob) error {
+	return nil
+}
+
+func (stub *tenantAwareJobRepoStub) ListTenants(context.Context) ([]string, error) {
+	return stub.tenants, nil
+}
+
+func (stub *tenantAwareJobRepoStub) ClaimNextQueued(ctx context.Context) (*entities.ExportJob, error) {
+	tenantID := auth.GetTenantID(ctx)
+	stub.seenTenantIDs = append(stub.seenTenantIDs, tenantID)
+	job := stub.jobsByTenant[tenantID]
+	delete(stub.jobsByTenant, tenantID)
+	return job, nil
+}
+
+func TestExportWorker_ClaimNextQueuedJob_UsesTenantContextsWhenAvailable(t *testing.T) {
+	t.Parallel()
+
+	tenants := []string{"11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"}
+	job := &entities.ExportJob{ID: uuid.New(), TenantID: uuid.MustParse(tenants[1])}
+	jobRepo := &tenantAwareJobRepoStub{
+		tenants: tenants,
+		jobsByTenant: map[string]*entities.ExportJob{
+			tenants[1]: job,
+		},
+	}
+	worker := &ExportWorker{jobRepo: jobRepo}
+
+	claimedJob, jobCtx, err := worker.claimNextQueuedJob(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, job, claimedJob)
+	assert.Equal(t, tenants, jobRepo.seenTenantIDs)
+	assert.Equal(t, tenants[1], auth.GetTenantID(jobCtx))
 }
 
 func TestExportWorker_StreamVarianceXML_Success(t *testing.T) {
@@ -1858,9 +1993,10 @@ func TestExportWorker_StreamVarianceXML_Success(t *testing.T) {
 
 	varianceItems := []*entities.VarianceReportRow{
 		{
-			SourceID: uuid.New(),
-			Currency: "USD",
-			FeeType:  "PROCESSING",
+			SourceID:        uuid.New(),
+			Currency:        "USD",
+			FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-000000000081"),
+			FeeScheduleName: "PROCESSING",
 		},
 	}
 
@@ -1892,7 +2028,22 @@ func TestExportWorker_StreamVarianceXML_Success(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), count)
-	assert.Contains(t, buf.String(), "<varianceRows>")
+
+	type varianceRowXML struct {
+		SourceID        string `xml:"source_id"`
+		Currency        string `xml:"currency"`
+		FeeScheduleName string `xml:"fee_schedule_name"`
+		FeeScheduleID   string `xml:"fee_schedule_id"`
+	}
+	type varianceRowsXML struct {
+		Rows []varianceRowXML `xml:"row"`
+	}
+
+	var payload varianceRowsXML
+	require.NoError(t, xml.Unmarshal([]byte(buf.String()), &payload))
+	require.Len(t, payload.Rows, 1)
+	assert.Equal(t, "PROCESSING", payload.Rows[0].FeeScheduleName)
+	assert.Equal(t, "00000000-0000-0000-0000-000000000081", payload.Rows[0].FeeScheduleID)
 }
 
 func TestExportWorker_StreamUnmatchedCSV_FetchError(t *testing.T) {
@@ -2069,9 +2220,10 @@ func TestExportWorker_StreamExport_VarianceXML(t *testing.T) {
 
 	varianceItems := []*entities.VarianceReportRow{
 		{
-			SourceID: uuid.New(),
-			Currency: "USD",
-			FeeType:  "PROCESSING",
+			SourceID:        uuid.New(),
+			Currency:        "USD",
+			FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-000000000081"),
+			FeeScheduleName: "PROCESSING",
 		},
 	}
 

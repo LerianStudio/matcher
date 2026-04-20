@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 )
 
 type spyLogger struct {
@@ -34,30 +34,29 @@ func (l *spyLogger) WithGroup(name string) libLog.Logger {
 func (l *spyLogger) Enabled(_ libLog.Level) bool  { return true }
 func (l *spyLogger) Sync(_ context.Context) error { return nil }
 
-func TestSwappableLogger_SwapAndCurrent(t *testing.T) {
+func TestSwappableLogger_DelegatesLogCalls_Success(t *testing.T) {
 	t.Parallel()
 
-	first := &spyLogger{}
-	second := &spyLogger{}
-	logger := NewSwappableLogger(first)
-	require.Same(t, first, logger.Current())
+	underlying := &spyLogger{}
+	logger := NewSwappableLogger(underlying)
 
-	logger.Swap(second)
-	assert.Same(t, second, logger.Current())
-}
-
-func TestSwappableLogger_WithAndGroupSurviveSwap(t *testing.T) {
-	t.Parallel()
-
-	first := &spyLogger{}
-	second := &spyLogger{}
-	logger := NewSwappableLogger(first).WithGroup("runtime").With(libLog.String("component", "systemplane"))
-
-	logger.(*SwappableLogger).Swap(second)
 	logger.Log(context.Background(), libLog.LevelInfo, "hello")
 
-	require.Len(t, second.msgs, 1)
-	assert.Equal(t, "hello", second.msgs[0])
-	assert.Len(t, second.groups, 1)
-	assert.Len(t, second.fields, 1)
+	require.Len(t, underlying.msgs, 1)
+	assert.Equal(t, "hello", underlying.msgs[0])
+}
+
+func TestSwappableLogger_WithAndGroupPropagateToDelegate_Success(t *testing.T) {
+	t.Parallel()
+
+	underlying := &spyLogger{}
+	logger := NewSwappableLogger(underlying).WithGroup("runtime").With(libLog.String("component", "systemplane"))
+
+	logger.Log(context.Background(), libLog.LevelInfo, "hello")
+
+	require.Len(t, underlying.msgs, 1)
+	assert.Equal(t, "hello", underlying.msgs[0])
+	assert.Equal(t, []string{"runtime"}, underlying.groups)
+	require.Len(t, underlying.fields, 1)
+	assert.Equal(t, libLog.String("component", "systemplane"), underlying.fields[0])
 }

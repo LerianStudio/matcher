@@ -131,6 +131,7 @@ func TestSingleTenantFallback_Property(t *testing.T) {
 
 	extractor, err := NewTenantExtractor(
 		false,
+		false,
 		DefaultTenantID,
 		DefaultTenantSlug,
 		"test-secret",

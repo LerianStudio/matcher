@@ -10,9 +10,9 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/matching/domain/enums"
 	"github.com/LerianStudio/matcher/internal/matching/domain/repositories"
@@ -60,12 +60,7 @@ func (repo *Repository) CreateExceptionsWithTx(
 		return ErrInvalidTx
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if !ok || sqlTx == nil {
-		return ErrInvalidTx
-	}
-
-	return repo.createExceptions(ctx, sqlTx, contextID, runID, inputs, regulatorySourceTypes)
+	return repo.createExceptions(ctx, tx, contextID, runID, inputs, regulatorySourceTypes)
 }
 
 func (repo *Repository) createExceptions(
@@ -140,7 +135,7 @@ func (repo *Repository) createExceptions(
 		wrappedErr := fmt.Errorf("failed to create exceptions: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create exceptions", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to create exceptions")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to create exceptions")
 
 		return wrappedErr
 	}
@@ -175,7 +170,7 @@ func classifySeverity(
 	if err != nil {
 		logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
 		logger.With(
-			libLog.Any("error", err.Error()),
+			libLog.Err(err),
 			libLog.String("amount", classificationInput.AmountAbsBase.String()),
 			libLog.Any("age_hours", classificationInput.AgeHours),
 			libLog.String("source_type", classificationInput.SourceType),

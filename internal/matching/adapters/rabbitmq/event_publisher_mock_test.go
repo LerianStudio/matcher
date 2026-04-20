@@ -17,7 +17,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
-	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
+	libRabbitmq "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
@@ -369,7 +369,7 @@ func TestEventPublisher_PublishMatchConfirmed_PublishFailure(t *testing.T) {
 
 	err = pub.PublishMatchConfirmed(context.Background(), event)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to publish match event")
+	require.ErrorContains(t, err, "failed to publish event")
 }
 
 func TestEventPublisher_PublishMatchConfirmed_NilPublisher(t *testing.T) {

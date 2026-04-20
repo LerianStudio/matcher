@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
@@ -212,7 +212,8 @@ func makeFetcherConnection(id, configName, dbType string) *sharedPorts.FetcherCo
 		Port:         5432,
 		DatabaseName: "txns",
 		ProductName:  "PostgreSQL 17.1",
-		Status:       "AVAILABLE",
+		Schema:       "public",
+		UserName:     "matcher",
 	}
 }
 
@@ -365,14 +366,11 @@ func TestSyncConnection_ExistingConnection_UpsertsAndSyncsSchema(t *testing.T) {
 		assert.Equal(t, "fc-existing", connID)
 
 		return &sharedPorts.FetcherSchema{
-			ConnectionID: connID,
+			ID: connID,
 			Tables: []sharedPorts.FetcherTableSchema{
 				{
-					TableName: "orders",
-					Columns: []sharedPorts.FetcherColumnInfo{
-						{Name: "id", Type: "uuid", Nullable: false},
-						{Name: "amount", Type: "numeric", Nullable: true},
-					},
+					Name:   "orders",
+					Fields: []string{"id", "amount"},
 				},
 			},
 		}, nil
@@ -428,8 +426,8 @@ func TestSyncConnection_NewConnection_CreatesAndSyncsSchema(t *testing.T) {
 	fetchSchema := func(_ context.Context, _ string) (*sharedPorts.FetcherSchema, error) {
 		return &sharedPorts.FetcherSchema{
 			Tables: []sharedPorts.FetcherTableSchema{
-				{TableName: "payments", Columns: []sharedPorts.FetcherColumnInfo{{Name: "id", Type: "int"}}},
-				{TableName: "refunds", Columns: []sharedPorts.FetcherColumnInfo{{Name: "id", Type: "int"}}},
+				{Name: "payments", Fields: []string{"id"}},
+				{Name: "refunds", Fields: []string{"id"}},
 			},
 		}, nil
 	}
@@ -652,7 +650,7 @@ func TestSyncConnection_SchemaSyncFails_ReturnsError(t *testing.T) {
 	fetchSchema := func(_ context.Context, _ string) (*sharedPorts.FetcherSchema, error) {
 		return &sharedPorts.FetcherSchema{
 			Tables: []sharedPorts.FetcherTableSchema{
-				{TableName: "t1", Columns: []sharedPorts.FetcherColumnInfo{{Name: "id", Type: "int"}}},
+				{Name: "t1", Fields: []string{"id"}},
 			},
 		}, nil
 	}
@@ -777,21 +775,15 @@ func TestSyncSchema_Success_PersistsAndMarksDiscovered(t *testing.T) {
 	cs := mustNewSyncer(t, connRepo, schemaRepo)
 
 	schema := &sharedPorts.FetcherSchema{
-		ConnectionID: "fc-schema-ok",
+		ID: "fc-schema-ok",
 		Tables: []sharedPorts.FetcherTableSchema{
 			{
-				TableName: "transactions",
-				Columns: []sharedPorts.FetcherColumnInfo{
-					{Name: "id", Type: "uuid", Nullable: false},
-					{Name: "amount", Type: "numeric(18,4)", Nullable: false},
-					{Name: "description", Type: "text", Nullable: true},
-				},
+				Name:   "transactions",
+				Fields: []string{"id", "amount", "description"},
 			},
 			{
-				TableName: "accounts",
-				Columns: []sharedPorts.FetcherColumnInfo{
-					{Name: "id", Type: "uuid", Nullable: false},
-				},
+				Name:   "accounts",
+				Fields: []string{"id"},
 			},
 		},
 	}
@@ -805,12 +797,11 @@ func TestSyncSchema_Success_PersistsAndMarksDiscovered(t *testing.T) {
 	assert.Equal(t, "transactions", persistedSchemas[0].TableName)
 	assert.Equal(t, "accounts", persistedSchemas[1].TableName)
 
-	// Verify columns mapped correctly on the first table.
+	// Verify columns mapped correctly on the first table (flat field names from Fetcher).
 	require.Len(t, persistedSchemas[0].Columns, 3)
 	assert.Equal(t, "id", persistedSchemas[0].Columns[0].Name)
-	assert.Equal(t, "uuid", persistedSchemas[0].Columns[0].Type)
-	assert.False(t, persistedSchemas[0].Columns[0].Nullable)
-	assert.True(t, persistedSchemas[0].Columns[2].Nullable)
+	assert.Equal(t, "amount", persistedSchemas[0].Columns[1].Name)
+	assert.Equal(t, "description", persistedSchemas[0].Columns[2].Name)
 
 	// Verify each schema entity has the connection's internal UUID (not the fetcherConnID string).
 	for _, s := range persistedSchemas {
@@ -846,10 +837,10 @@ func TestSyncSchema_Success_RefreshesSchemaCache(t *testing.T) {
 	}}, 2*time.Minute)
 
 	err := cs.SyncSchema(context.Background(), conn, &sharedPorts.FetcherSchema{
-		ConnectionID: "fc-cache",
+		ID: "fc-cache",
 		Tables: []sharedPorts.FetcherTableSchema{{
-			TableName: "transactions",
-			Columns:   []sharedPorts.FetcherColumnInfo{{Name: "id", Type: "uuid", Nullable: false}},
+			Name:   "transactions",
+			Fields: []string{"id"},
 		}},
 	})
 
@@ -857,7 +848,7 @@ func TestSyncSchema_Success_RefreshesSchemaCache(t *testing.T) {
 	assert.Equal(t, conn.ID.String(), cachedConnID)
 	require.NotNil(t, cachedSchema)
 	require.Len(t, cachedSchema.Tables, 1)
-	assert.Equal(t, "transactions", cachedSchema.Tables[0].TableName)
+	assert.Equal(t, "transactions", cachedSchema.Tables[0].Name)
 	assert.Equal(t, 2*time.Minute, cachedTTL)
 }
 
@@ -881,7 +872,7 @@ func TestSyncSchema_UpsertBatchFails_ReturnsError(t *testing.T) {
 
 	schema := &sharedPorts.FetcherSchema{
 		Tables: []sharedPorts.FetcherTableSchema{
-			{TableName: "t1", Columns: []sharedPorts.FetcherColumnInfo{{Name: "id", Type: "int"}}},
+			{Name: "t1", Fields: []string{"id"}},
 		},
 	}
 
@@ -912,7 +903,7 @@ func TestSyncSchema_MarkDiscoveredUpsertFails_ReturnsError(t *testing.T) {
 
 	schema := &sharedPorts.FetcherSchema{
 		Tables: []sharedPorts.FetcherTableSchema{
-			{TableName: "t1", Columns: []sharedPorts.FetcherColumnInfo{{Name: "id", Type: "int"}}},
+			{Name: "t1", Fields: []string{"id"}},
 		},
 	}
 
@@ -951,8 +942,8 @@ func TestSyncSchema_EmptyTables_DeletesPersistedSchemasAndRefreshesEmptyCache(t 
 	}}, time.Minute)
 
 	err := cs.SyncSchema(context.Background(), conn, &sharedPorts.FetcherSchema{
-		ConnectionID: "fc-empty",
-		Tables:       []sharedPorts.FetcherTableSchema{},
+		ID:     "fc-empty",
+		Tables: []sharedPorts.FetcherTableSchema{},
 	})
 
 	require.NoError(t, err)
@@ -1022,7 +1013,7 @@ func TestSyncSchema_TableWithNoColumns_CreatesSchemaWithEmptyColumns(t *testing.
 
 	schema := &sharedPorts.FetcherSchema{
 		Tables: []sharedPorts.FetcherTableSchema{
-			{TableName: "empty_table", Columns: nil},
+			{Name: "empty_table", Fields: nil},
 		},
 	}
 
@@ -1089,7 +1080,8 @@ func TestSyncConnection_ExistingConnection_UpdatesHostPortDbProduct(t *testing.T
 		Port:         5433,
 		DatabaseName: "new_db",
 		ProductName:  "PostgreSQL 18.0",
-		Status:       "AVAILABLE",
+		Schema:       "myschema",
+		UserName:     "admin",
 	}
 
 	// Fetch schema returns nil to exercise the best-effort path.

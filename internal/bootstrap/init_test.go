@@ -17,26 +17,33 @@ import (
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/bxcodec/dbresolver/v2"
+	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libAssert "github.com/LerianStudio/lib-commons/v4/commons/assert"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
+	libAssert "github.com/LerianStudio/lib-commons/v5/commons/assert"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
+	libRabbitmq "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
 
 	"github.com/LerianStudio/matcher/internal/auth"
+	configWorker "github.com/LerianStudio/matcher/internal/configuration/services/worker"
+	discoveryExtractionRepo "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres/extraction"
 	discoveryWorker "github.com/LerianStudio/matcher/internal/discovery/services/worker"
 	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
 	ingestionRabbitmq "github.com/LerianStudio/matcher/internal/ingestion/adapters/rabbitmq"
 	matchingRabbitmq "github.com/LerianStudio/matcher/internal/matching/adapters/rabbitmq"
+	matchingCommand "github.com/LerianStudio/matcher/internal/matching/services/command"
 	reportingStorage "github.com/LerianStudio/matcher/internal/reporting/adapters/storage"
 	reportingWorker "github.com/LerianStudio/matcher/internal/reporting/services/worker"
+	"go.uber.org/mock/gomock"
+
 	sharedRabbitmq "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	outboxMocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 )
 
 // errMatchRuleAdapterRequired is a test-only sentinel used to verify error handling paths.
@@ -382,6 +389,70 @@ func TestCreateRabbitMQConnection(t *testing.T) {
 			),
 		)
 	})
+}
+
+func TestInitMatchingModule_WiresFeeDependencies(t *testing.T) {
+	t.Parallel()
+
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	resolver := dbresolver.New(dbresolver.WithPrimaryDBs(db), dbresolver.WithReplicaDBs(db))
+	conn := testutil.NewClientWithResolver(resolver)
+	provider := &testutil.MockInfrastructureProvider{PostgresConn: conn}
+
+	repos, err := initSharedRepositories(provider)
+	require.NoError(t, err)
+	require.NotNil(t, repos.feeSchedule)
+	require.NotNil(t, repos.configFeeRule)
+
+	app := fiber.New()
+	routes := &Routes{
+		API: app.Group("/v1"),
+		Protected: func(_ string, _ ...string) fiber.Router {
+			return app.Group("/v1")
+		},
+	}
+
+	ctrl := gomock.NewController(t)
+	mockOutbox := outboxMocks.NewMockOutboxRepository(ctrl)
+
+	useCase, err := initMatchingModule(routes, provider, mockOutbox, repos, false)
+	require.NoError(t, err)
+	require.NotNil(t, useCase)
+	require.NoError(t, routes.RegistrationErr())
+}
+
+func TestInitMatchingModule_MissingFeeScheduleRepo_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	resolver := dbresolver.New(dbresolver.WithPrimaryDBs(db), dbresolver.WithReplicaDBs(db))
+	conn := testutil.NewClientWithResolver(resolver)
+	provider := &testutil.MockInfrastructureProvider{PostgresConn: conn}
+
+	repos, err := initSharedRepositories(provider)
+	require.NoError(t, err)
+	repos.feeSchedule = nil
+
+	app := fiber.New()
+	routes := &Routes{
+		API: app.Group("/v1"),
+		Protected: func(_ string, _ ...string) fiber.Router {
+			return app.Group("/v1")
+		},
+	}
+
+	ctrl := gomock.NewController(t)
+	mockOutbox := outboxMocks.NewMockOutboxRepository(ctrl)
+
+	useCase, err := initMatchingModule(routes, provider, mockOutbox, repos, false)
+	require.ErrorIs(t, err, matchingCommand.ErrNilFeeScheduleRepository)
+	assert.Nil(t, useCase)
 }
 
 func TestEvaluateInsecureRabbitMQHealthCheckPolicy(t *testing.T) {
@@ -747,7 +818,7 @@ func TestLogStartupInfo(t *testing.T) {
 			},
 			Auth:      AuthConfig{Enabled: true},
 			Telemetry: TelemetryConfig{Enabled: true},
-			Tenancy:   TenancyConfig{MultiTenantInfraEnabled: true},
+			Tenancy:   TenancyConfig{MultiTenantEnabled: true},
 			ExportWorker: ExportWorkerConfig{
 				Enabled:         true,
 				PollIntervalSec: 5,
@@ -1176,7 +1247,7 @@ func TestInitArchivalComponents_DisabledNoStorage(t *testing.T) {
 		}
 
 		var cleanups []func()
-		worker, err := initArchivalComponents(nil, cfg, nil, nil, &libLog.NopLogger{}, &cleanups)
+		worker, err := initArchivalComponents(nil, cfg, nil, nil, nil, &libLog.NopLogger{}, &cleanups, false)
 
 		assert.NoError(t, err)
 		assert.Nil(t, worker)
@@ -1487,8 +1558,9 @@ func TestInitOptionalDiscoveryWorker(t *testing.T) {
 			nil,
 			nil,
 			nil,
+			nil,
 			logger,
-			func(_ *Routes, _ *Config, _ func() *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ libLog.Logger) (*discoveryWorker.DiscoveryWorker, error) {
+			func(_ *Routes, _ *Config, _ func() *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ *discoveryExtractionRepo.Repository, _ libLog.Logger, _ ...sharedPorts.M2MProvider) (*discoveryWorker.DiscoveryWorker, error) {
 				called = true
 				return expectedWorker, nil
 			},
@@ -1515,8 +1587,9 @@ func TestInitOptionalDiscoveryWorker(t *testing.T) {
 			nil,
 			nil,
 			nil,
+			nil,
 			logger,
-			func(_ *Routes, _ *Config, _ func() *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ libLog.Logger) (*discoveryWorker.DiscoveryWorker, error) {
+			func(_ *Routes, _ *Config, _ func() *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ *discoveryExtractionRepo.Repository, _ libLog.Logger, _ ...sharedPorts.M2MProvider) (*discoveryWorker.DiscoveryWorker, error) {
 				called = true
 				return expectedWorker, nil
 			},
@@ -1540,8 +1613,9 @@ func TestInitOptionalDiscoveryWorker(t *testing.T) {
 			nil,
 			nil,
 			nil,
+			nil,
 			logger,
-			func(_ *Routes, _ *Config, _ func() *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ libLog.Logger) (*discoveryWorker.DiscoveryWorker, error) {
+			func(_ *Routes, _ *Config, _ func() *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ *discoveryExtractionRepo.Repository, _ libLog.Logger, _ ...sharedPorts.M2MProvider) (*discoveryWorker.DiscoveryWorker, error) {
 				return nil, errors.New("fetcher bootstrap failed")
 			},
 		)
@@ -1722,8 +1796,23 @@ func TestCreateIdempotencyRepository_NilProvider(t *testing.T) {
 		},
 	}
 
-	repo := createIdempotencyRepository(cfg, nil, nil, &libLog.NopLogger{})
+	repo := createIdempotencyRepository(cfg, nil, nil, nil, &libLog.NopLogger{})
 	assert.Nil(t, repo)
+}
+
+func TestBuildWorkerManager_ReusesExistingManager(t *testing.T) {
+	t.Parallel()
+
+	existing := NewWorkerManager(&libLog.NopLogger{}, nil)
+	modules := &modulesResult{
+		schedulerWorker: &configWorker.SchedulerWorker{},
+	}
+
+	wm := buildWorkerManager(modules, existing, nil, &libLog.NopLogger{})
+
+	require.Same(t, existing, wm)
+	assert.Len(t, wm.slots, 1)
+	assert.Equal(t, workerNameScheduler, wm.slots[0].name)
 }
 
 func TestModulesResult_SchedulerWorkerField(t *testing.T) {
@@ -1959,7 +2048,7 @@ func TestInitEventPublishers_OpenChannelFailure_CleansUpOpenedChannel(t *testing
 	})
 	t.Cleanup(restore)
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{}, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "open AMQP channels")
@@ -1991,7 +2080,7 @@ func TestInitEventPublishers_MatchingPublisherFailure_CleansUpChannels(t *testin
 	})
 	t.Cleanup(restore)
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{}, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create matching event publisher")
@@ -2029,7 +2118,7 @@ func TestInitEventPublishers_IngestionPublisherFailure_CleansUpPublisherAndChann
 	})
 	t.Cleanup(restore)
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{}, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create ingestion event publisher")
@@ -2370,4 +2459,48 @@ func TestConnectInfrastructure_ContextCanceled_PropagatesError(t *testing.T) {
 	require.Error(t, err)
 	// The error should indicate context cancellation propagated through.
 	assert.True(t, errors.Is(err, context.Canceled), "expected context.Canceled in error chain, got: %v", err)
+}
+
+func TestRuntimeConfigOrFallback_PrefersConfigGetter(t *testing.T) {
+	t.Parallel()
+
+	baseCfg := defaultConfig()
+	runtimeCfg := defaultConfig()
+	runtimeCfg.CallbackRateLimit.PerMinute = 75
+
+	resolved := runtimeConfigOrFallback(baseCfg, func() *Config { return runtimeCfg })
+
+	assert.Same(t, runtimeCfg, resolved)
+}
+
+func TestResolveRuntimeIntSetting_NilResolverFallsBackToRuntimeConfig(t *testing.T) {
+	t.Parallel()
+
+	baseCfg := defaultConfig()
+	baseCfg.CallbackRateLimit.PerMinute = 60
+	runtimeCfg := defaultConfig()
+	runtimeCfg.CallbackRateLimit.PerMinute = 75
+
+	resolved := resolveRuntimeIntSetting(context.Background(), baseCfg, func() *Config { return runtimeCfg }, nil,
+		func(current *Config) int { return current.CallbackRateLimit.PerMinute },
+		func(fallback int) int { return fallback + 1 },
+	)
+
+	assert.Equal(t, 75, resolved)
+}
+
+func TestResolveRuntimeIntSetting_UsesResolverFallbackFromRuntimeConfig(t *testing.T) {
+	t.Parallel()
+
+	baseCfg := defaultConfig()
+	baseCfg.CallbackRateLimit.PerMinute = 60
+	runtimeCfg := defaultConfig()
+	runtimeCfg.CallbackRateLimit.PerMinute = 75
+
+	resolved := resolveRuntimeIntSetting(context.Background(), baseCfg, func() *Config { return runtimeCfg }, &runtimeSettingsResolver{},
+		func(current *Config) int { return current.CallbackRateLimit.PerMinute },
+		func(fallback int) int { return fallback + 25 },
+	)
+
+	assert.Equal(t, 100, resolved)
 }

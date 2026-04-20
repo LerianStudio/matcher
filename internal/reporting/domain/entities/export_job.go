@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/assert"
-	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
+	"github.com/LerianStudio/lib-commons/v5/commons/assert"
+	"github.com/LerianStudio/lib-commons/v5/commons/pointers"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
@@ -454,20 +454,6 @@ func (job *ExportJob) IsDownloadable() bool {
 	}
 
 	return job.Status == ExportJobStatusSucceeded && job.FileKey != ""
-}
-
-// IsValidExportFormat checks if the format is supported.
-//
-// Deprecated: Use ExportFormat.IsValid() method instead.
-func IsValidExportFormat(format ExportFormat) bool {
-	return format.IsValid()
-}
-
-// IsValidReportType checks if the report type is supported.
-//
-// Deprecated: Use ExportReportType.IsValid() method instead.
-func IsValidReportType(reportType ExportReportType) bool {
-	return reportType.IsValid()
 }
 
 // IsStreamableFormat returns true if the format supports streaming (no memory limit).

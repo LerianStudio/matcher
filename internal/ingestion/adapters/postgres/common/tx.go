@@ -6,59 +6,9 @@ import (
 	"database/sql"
 	"fmt"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-
 	sharedCommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
-
-// WithTenantTx executes fn within a new tenant-scoped transaction.
-func WithTenantTx[Result any](
-	ctx context.Context,
-	conn *libPostgres.Client,
-	fn func(*sql.Tx) (Result, error),
-) (Result, error) {
-	if fn == nil {
-		var zero Result
-		return zero, sharedCommon.ErrNilCallback
-	}
-
-	result, err := sharedCommon.WithTenantTx(ctx, conn, func(tx *sql.Tx) (Result, error) {
-		return fn(tx)
-	})
-	if err != nil {
-		return result, fmt.Errorf("with tenant tx: %w", err)
-	}
-
-	return result, nil
-}
-
-// WithTenantTxOrExisting executes fn within an existing or new tenant-scoped transaction.
-func WithTenantTxOrExisting[Result any](
-	ctx context.Context,
-	conn *libPostgres.Client,
-	tx *sql.Tx,
-	fn func(*sql.Tx) (Result, error),
-) (Result, error) {
-	if fn == nil {
-		var zero Result
-		return zero, sharedCommon.ErrNilCallback
-	}
-
-	result, err := sharedCommon.WithTenantTxOrExisting(
-		ctx,
-		conn,
-		tx,
-		func(execTx *sql.Tx) (Result, error) {
-			return fn(execTx)
-		},
-	)
-	if err != nil {
-		return result, fmt.Errorf("with tenant tx or existing: %w", err)
-	}
-
-	return result, nil
-}
 
 // WithTenantTxProvider executes fn within a new tenant-scoped transaction using an InfrastructureProvider.
 func WithTenantTxProvider[Result any](

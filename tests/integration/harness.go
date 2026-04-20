@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
 	"github.com/bxcodec/dbresolver/v2"
 	"github.com/golang-migrate/migrate/v4"
 	migratePostgres "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -30,7 +30,6 @@ import (
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
-	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 	embeddedmigrations "github.com/LerianStudio/matcher/migrations"
@@ -77,9 +76,9 @@ func NewTestHarness(ctx context.Context, t *testing.T) (*TestHarness, error) {
 			wait.ForAll(
 				wait.ForLog("database system is ready to accept connections").
 					WithOccurrence(2).
-					WithStartupTimeout(60*time.Second),
+					WithStartupTimeout(120*time.Second),
 				wait.ForListeningPort("5432/tcp"),
-			).WithStartupTimeout(60*time.Second)),
+			).WithStartupTimeout(120*time.Second)),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start postgres: %w", err)
@@ -108,7 +107,7 @@ func NewTestHarness(ctx context.Context, t *testing.T) (*TestHarness, error) {
 			wait.ForAll(
 				wait.ForListeningPort("6379/tcp"),
 				wait.ForLog("Ready to accept connections"),
-			).WithStartupTimeout(30*time.Second)),
+			).WithStartupTimeout(120*time.Second)),
 	)
 	if err != nil {
 		if terminateErr := terminateContainer(ctx, pgContainer); terminateErr != nil {
@@ -330,7 +329,7 @@ func (h *TestHarness) Ctx() context.Context {
 // Provider returns an InfrastructureProvider wrapping the test harness connections.
 // This should be used to pass to repository constructors instead of h.Connection directly.
 func (h *TestHarness) Provider() ports.InfrastructureProvider {
-	return tenantAdapters.NewSingleTenantInfrastructureProvider(h.Connection, nil)
+	return infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, nil)
 }
 
 func terminateContainer(ctx context.Context, container testcontainers.Container) error {
@@ -431,7 +430,7 @@ func initializeTestConnection(
 func setupSeedData(t *testing.T, connection *libPostgres.Client) (SeedData, error) {
 	t.Helper()
 
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(connection, nil)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(connection, nil)
 
 	contextRepo := configContextRepo.NewRepository(provider)
 	sourceRepo, err := configSourceRepo.NewRepository(provider)

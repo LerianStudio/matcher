@@ -1,11 +1,11 @@
-//go:build e2e
-
+//nolint:perfsprint,varnamelen,wsl_v5 // Test governance client favors concise path composition.
 package client
 
 import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 )
 
 // GovernanceClient handles governance API endpoints.
@@ -55,15 +55,12 @@ func (c *GovernanceClient) ListAuditLogs(
 	}
 	path := "/v1/governance/audit-logs"
 	if len(params) > 0 {
-		path += "?"
-		first := true
+		qp := url.Values{}
 		for k, v := range params {
-			if !first {
-				path += "&"
-			}
-			path += k + "=" + v
-			first = false
+			qp.Set(k, v)
 		}
+
+		path += "?" + qp.Encode()
 	}
 	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
 	if err != nil {
@@ -112,4 +109,59 @@ func (c *GovernanceClient) DownloadArchive(
 		return nil, fmt.Errorf("download archive: %w", err)
 	}
 	return &resp, nil
+}
+
+// GetActorMapping retrieves an actor mapping by actor ID.
+func (c *GovernanceClient) GetActorMapping(
+	ctx context.Context,
+	actorID string,
+) (*ActorMappingResponse, error) {
+	var resp ActorMappingResponse
+	path := fmt.Sprintf("/v1/governance/actor-mappings/%s", url.PathEscape(actorID))
+	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("get actor mapping: %w", err)
+	}
+	return &resp, nil
+}
+
+// UpsertActorMapping creates or updates an actor mapping.
+func (c *GovernanceClient) UpsertActorMapping(
+	ctx context.Context,
+	actorID string,
+	req UpsertActorMappingRequest,
+) (*ActorMappingResponse, error) {
+	var resp ActorMappingResponse
+	path := fmt.Sprintf("/v1/governance/actor-mappings/%s", url.PathEscape(actorID))
+	err := c.client.DoJSON(ctx, http.MethodPut, path, req, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("upsert actor mapping: %w", err)
+	}
+	return &resp, nil
+}
+
+// DeleteActorMapping permanently removes an actor mapping.
+func (c *GovernanceClient) DeleteActorMapping(
+	ctx context.Context,
+	actorID string,
+) error {
+	path := fmt.Sprintf("/v1/governance/actor-mappings/%s", url.PathEscape(actorID))
+	err := c.client.DoJSON(ctx, http.MethodDelete, path, nil, nil)
+	if err != nil {
+		return fmt.Errorf("delete actor mapping: %w", err)
+	}
+	return nil
+}
+
+// PseudonymizeActor replaces PII fields with [REDACTED] for GDPR compliance.
+func (c *GovernanceClient) PseudonymizeActor(
+	ctx context.Context,
+	actorID string,
+) error {
+	path := fmt.Sprintf("/v1/governance/actor-mappings/%s/pseudonymize", url.PathEscape(actorID))
+	err := c.client.DoJSON(ctx, http.MethodPost, path, nil, nil)
+	if err != nil {
+		return fmt.Errorf("pseudonymize actor: %w", err)
+	}
+	return nil
 }

@@ -13,7 +13,6 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
-	"github.com/LerianStudio/matcher/internal/testutil"
 )
 
 func TestReconciliationContextToResponse(t *testing.T) {
@@ -57,17 +56,14 @@ func TestReconciliationContextToResponse(t *testing.T) {
 			},
 		},
 		{
-			name: "with rate ID",
+			name: "one to many paused context",
 			input: &entities.ReconciliationContext{
-				ID:       uuid.MustParse("11111111-1111-1111-1111-111111111111"),
-				TenantID: uuid.MustParse("22222222-2222-2222-2222-222222222222"),
-				Name:     "FX Reconciliation",
-				Type:     value_objects.ContextTypeOneToMany,
-				Interval: "weekly",
-				Status:   value_objects.ContextStatusPaused,
-				RateID: testutil.UUIDPtr(
-					uuid.MustParse("33333333-3333-3333-3333-333333333333"),
-				),
+				ID:              uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+				TenantID:        uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+				Name:            "FX Reconciliation",
+				Type:            value_objects.ContextTypeOneToMany,
+				Interval:        "weekly",
+				Status:          value_objects.ContextStatusPaused,
 				FeeToleranceAbs: decimal.Zero,
 				FeeTolerancePct: decimal.Zero,
 				CreatedAt:       time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
@@ -80,7 +76,6 @@ func TestReconciliationContextToResponse(t *testing.T) {
 				Type:            "1:N",
 				Interval:        "weekly",
 				Status:          "PAUSED",
-				RateID:          "33333333-3333-3333-3333-333333333333",
 				FeeToleranceAbs: "0",
 				FeeTolerancePct: "0",
 				CreatedAt:       "2025-01-15T10:30:00Z",

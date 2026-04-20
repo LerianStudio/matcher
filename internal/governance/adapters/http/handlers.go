@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -14,15 +13,14 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/governance/adapters/http/dto"
 	governanceEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
@@ -39,15 +37,16 @@ var (
 	ErrInvalidDateFormat  = errors.New("invalid date format")
 )
 
-// productionMode indicates whether the application is running in production.
-// Set once during handler construction via NewHandler; governs SafeError behavior
-// (suppresses internal error details in client responses when true).
-// Uses atomic.Bool because parallel tests construct handlers concurrently.
-var productionMode atomic.Bool
-
 // Handler handles HTTP requests for governance audit logs.
 // It instruments each operation with OpenTelemetry metrics for observability:
 // audit_log_created_total, audit_log_queries_total, and audit_log_query_latency_seconds.
+//
+// productionMode governs SafeError behavior (suppresses internal error
+// details in client responses when true). Stored as a per-handler bool
+// rather than a package-level atomic.Bool — the previous shared-global
+// state coupled every test in the package to whichever test last
+// constructed a handler, regardless of the production flag each test
+// wanted to exercise.
 type Handler struct {
 	repo repositories.AuditLogRepository
 
@@ -55,6 +54,8 @@ type Handler struct {
 	createdTotal     metric.Int64Counter
 	queriesTotal     metric.Int64Counter
 	queryLatencyHist metric.Float64Histogram
+
+	productionMode bool
 }
 
 // NewHandler creates a new governance HTTP handler.
@@ -63,9 +64,7 @@ func NewHandler(repo repositories.AuditLogRepository, production bool) (*Handler
 		return nil, ErrRepoRequired
 	}
 
-	productionMode.Store(production)
-
-	handler := &Handler{repo: repo}
+	handler := &Handler{repo: repo, productionMode: production}
 
 	if err := handler.initMetrics(); err != nil {
 		return nil, fmt.Errorf("init governance handler metrics: %w", err)
@@ -105,24 +104,23 @@ func (handler *Handler) initMetrics() error {
 }
 
 func startHandlerSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, libLog.Logger) {
-	ctx := c.UserContext()
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	if tracer == nil {
-		tracer = otel.Tracer("governance.http")
-	}
-
-	ctx, span := tracer.Start(ctx, name)
-
-	return ctx, span, logger
+	return sharedhttp.StartHandlerSpanWithFallback(c, name, "governance.http")
 }
 
-func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
-	libOpentelemetry.HandleSpanError(span, message, err)
-	libLog.SafeError(logger, ctx, message, err, productionMode.Load())
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
+func respondError(fiberCtx *fiber.Ctx, status int, slug, message string) error {
+	return sharedhttp.RespondError(fiberCtx, status, slug, message)
 }
 
-func badRequest(
+// The helpers below (badRequest, writeServiceError, writeNotFound) are
+// defined as methods on every handler type in the governance package so
+// they can read productionMode from the receiver. Previously they were
+// package-level free functions reading a shared atomic.Bool, which
+// coupled every test in the package to whichever test last constructed a
+// handler.
+
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
+func (handler *Handler) badRequest(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -130,12 +128,11 @@ func badRequest(
 	message string,
 	err error,
 ) error {
-	logSpanError(ctx, span, logger, message, err)
-
-	return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", message)
+	return sharedhttp.BadRequest(ctx, fiberCtx, span, logger, handler.productionMode, message, err)
 }
 
-func writeServiceError(
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
+func (handler *Handler) writeServiceError(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -143,22 +140,21 @@ func writeServiceError(
 	message string,
 	err error,
 ) error {
-	logSpanError(ctx, span, logger, message, err)
-
-	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+	return sharedhttp.InternalError(ctx, fiberCtx, span, logger, handler.productionMode, message, err)
 }
 
-func writeNotFound(
+func (handler *Handler) writeNotFound(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
 	logger libLog.Logger,
+	slug string,
 	message string,
 	err error,
 ) error {
-	logSpanError(ctx, span, logger, message, err)
+	sharedhttp.LogSpanError(ctx, span, logger, handler.productionMode, message, err)
 
-	return libHTTP.RespondError(fiberCtx, fiber.StatusNotFound, "not_found", message)
+	return respondError(fiberCtx, fiber.StatusNotFound, slug, message)
 }
 
 // GetAuditLog retrieves a single audit log by ID.
@@ -171,11 +167,11 @@ func writeNotFound(
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param id path string true "Audit Log ID" format(uuid)
 // @Success 200 {object} dto.AuditLogResponse
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid request payload"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 404 {object} libHTTP.ErrorResponse "Audit log not found"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Audit log not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/governance/audit-logs/{id} [get]
 func (handler *Handler) GetAuditLog(
 	fiberCtx *fiber.Ctx,
@@ -189,12 +185,12 @@ func (handler *Handler) GetAuditLog(
 
 	idStr := fiberCtx.Params("id")
 	if idStr == "" {
-		return badRequest(ctx, fiberCtx, span, logger, "audit log id is required", ErrMissingAuditLogID)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "audit log id is required", ErrMissingAuditLogID)
 	}
 
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		return badRequest(
+		return handler.badRequest(
 			ctx,
 			fiberCtx,
 			span,
@@ -210,18 +206,19 @@ func (handler *Handler) GetAuditLog(
 
 	if err != nil {
 		if errors.Is(err, governanceErrors.ErrAuditLogNotFound) {
-			return writeNotFound(ctx, fiberCtx, span, logger, "audit log not found", err)
+			return handler.writeNotFound(ctx, fiberCtx, span, logger, "governance_audit_log_not_found", "audit log not found", err)
 		}
 
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to get audit log", err)
+		return handler.writeServiceError(ctx, fiberCtx, span, logger, "failed to get audit log", err)
 	}
 
 	if auditLog == nil {
-		return writeNotFound(
+		return handler.writeNotFound(
 			ctx,
 			fiberCtx,
 			span,
 			logger,
+			"governance_audit_log_not_found",
 			"audit log not found",
 			governanceErrors.ErrAuditLogNotFound,
 		)
@@ -247,10 +244,10 @@ func (handler *Handler) GetAuditLog(
 // @Param limit query int false "Maximum number of records to return" default(20) minimum(1) maximum(200)
 // @Param cursor query string false "Cursor for pagination (opaque)"
 // @Success 200 {object} dto.ListAuditLogsResponse
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid request payload"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/governance/entities/{entityType}/{entityId}/audit-logs [get]
 func (handler *Handler) ListAuditLogsByEntity(
 	fiberCtx *fiber.Ctx,
@@ -264,17 +261,17 @@ func (handler *Handler) ListAuditLogsByEntity(
 
 	entityType := fiberCtx.Params("entityType")
 	if entityType == "" {
-		return badRequest(ctx, fiberCtx, span, logger, "entity type is required", ErrMissingEntityType)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "entity type is required", ErrMissingEntityType)
 	}
 
 	entityIDStr := fiberCtx.Params("entityId")
 	if entityIDStr == "" {
-		return badRequest(ctx, fiberCtx, span, logger, "entity id is required", ErrMissingEntityID)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "entity id is required", ErrMissingEntityID)
 	}
 
 	entityID, err := uuid.Parse(entityIDStr)
 	if err != nil {
-		return badRequest(
+		return handler.badRequest(
 			ctx,
 			fiberCtx,
 			span,
@@ -286,7 +283,7 @@ func (handler *Handler) ListAuditLogsByEntity(
 
 	cursor, limit, err := parseTimestampCursorPagination(fiberCtx)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 	}
 
 	logs, nextCursor, err := handler.repo.ListByEntity(ctx, entityType, entityID, cursor, limit)
@@ -294,12 +291,12 @@ func (handler *Handler) ListAuditLogsByEntity(
 	handler.queryLatencyHist.Record(ctx, time.Since(queryStart).Seconds())
 
 	if err != nil {
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to list audit logs", err)
+		return handler.writeServiceError(ctx, fiberCtx, span, logger, "failed to list audit logs", err)
 	}
 
 	response := dto.ListAuditLogsResponse{
 		Items: dto.AuditLogsToResponse(logs),
-		CursorResponse: dto.CursorResponse{
+		CursorResponse: sharedhttp.CursorResponse{
 			Limit:      limit,
 			NextCursor: nextCursor,
 			HasMore:    nextCursor != "",
@@ -329,10 +326,10 @@ func (handler *Handler) ListAuditLogsByEntity(
 // @Param limit query int false "Maximum number of records to return" default(20) minimum(1) maximum(200)
 // @Param cursor query string false "Cursor for pagination (opaque)"
 // @Success 200 {object} dto.ListAuditLogsResponse
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/governance/audit-logs [get]
 func (handler *Handler) ListAuditLogs(
 	fiberCtx *fiber.Ctx,
@@ -346,12 +343,12 @@ func (handler *Handler) ListAuditLogs(
 
 	filter, err := parseAuditLogFilter(fiberCtx)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
 	cursor, limit, err := parseTimestampCursorPagination(fiberCtx)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 	}
 
 	logs, nextCursor, err := handler.repo.List(ctx, filter, cursor, limit)
@@ -359,12 +356,12 @@ func (handler *Handler) ListAuditLogs(
 	handler.queryLatencyHist.Record(ctx, time.Since(queryStart).Seconds())
 
 	if err != nil {
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to list audit logs", err)
+		return handler.writeServiceError(ctx, fiberCtx, span, logger, "failed to list audit logs", err)
 	}
 
 	response := dto.ListAuditLogsResponse{
 		Items: dto.AuditLogsToResponse(logs),
-		CursorResponse: dto.CursorResponse{
+		CursorResponse: sharedhttp.CursorResponse{
 			Limit:      limit,
 			NextCursor: nextCursor,
 			HasMore:    nextCursor != "",

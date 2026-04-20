@@ -15,9 +15,9 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.uber.org/mock/gomock"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
@@ -30,24 +30,25 @@ var (
 )
 
 type exportJobRepoMockConfig struct {
-	createErr          error
-	createCalled       *bool
-	getByIDJob         *entities.ExportJob
-	getByIDErr         error
-	listJobs           []*entities.ExportJob
-	listCursor         libHTTP.CursorPagination
-	listErr            error
-	updateErr          error
-	updateStatusErr    error
-	updateStatusCalled *bool
-	updateProgressErr  error
-	claimJob           *entities.ExportJob
-	claimErr           error
-	expiredJobs        []*entities.ExportJob
-	expiredErr         error
-	deleteErr          error
-	listByContextJobs  []*entities.ExportJob
-	listByContextErr   error
+	createErr           error
+	createCalled        *bool
+	getByIDJob          *entities.ExportJob
+	getByIDErr          error
+	listJobs            []*entities.ExportJob
+	listCursor          libHTTP.CursorPagination
+	listErr             error
+	updateErr           error
+	updateStatusErr     error
+	updateStatusCalled  *bool
+	updateProgressErr   error
+	claimJob            *entities.ExportJob
+	claimErr            error
+	expiredJobs         []*entities.ExportJob
+	expiredErr          error
+	deleteErr           error
+	listByContextJobs   []*entities.ExportJob
+	listByContextCursor libHTTP.CursorPagination
+	listByContextErr    error
 }
 
 // newExportJobRepoMock builds a mock ExportJobRepository pre-wired with the
@@ -107,8 +108,8 @@ func newExportJobRepoMock(
 		Return(cfg.listJobs, cfg.listCursor, cfg.listErr).
 		AnyTimes()
 	mock.EXPECT().
-		ListByContext(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(cfg.listByContextJobs, cfg.listByContextErr).
+		ListByContext(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(cfg.listByContextJobs, cfg.listByContextCursor, cfg.listByContextErr).
 		AnyTimes()
 	mock.EXPECT().
 		ListExpired(gomock.Any(), gomock.Any()).

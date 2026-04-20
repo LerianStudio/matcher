@@ -11,16 +11,16 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/matching/adapters/http/dto"
 	matchingRepos "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/matching/services/command"
-	sharedpagination "github.com/LerianStudio/matcher/internal/shared/adapters/http"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
@@ -36,11 +36,11 @@ import (
 // @Param contextId path string true "Context ID" format(uuid)
 // @Param request body RunMatchRequest true "Run match payload"
 // @Success 202 {object} RunMatchResponse
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid request payload"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/matching/contexts/{contextId}/run [post]
 func (handler *Handler) RunMatch(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matching.run")
@@ -56,7 +56,7 @@ func (handler *Handler) RunMatch(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrInvalidContextID,
 		libHTTP.ErrContextAccessDenied,
 	)
-	if shouldReturn, returnErr := handleContextVerificationError(ctx, fiberCtx, span, logger, err); shouldReturn {
+	if shouldReturn, returnErr := handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err); shouldReturn {
 		return returnErr
 	}
 
@@ -64,17 +64,17 @@ func (handler *Handler) RunMatch(fiberCtx *fiber.Ctx) error {
 
 	var payload RunMatchRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &payload); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid run match payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid run match payload", err)
 	}
 
 	modeValue := strings.TrimSpace(payload.Mode)
 	if modeValue == "" {
-		return badRequest(ctx, fiberCtx, span, logger, "mode is required", ErrRunModeRequired)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "mode is required", ErrRunModeRequired)
 	}
 
 	mode, err := matchingVO.ParseMatchRunMode(strings.ToUpper(modeValue))
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid match run mode", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid match run mode", err)
 	}
 
 	run, _, err := handler.command.RunMatch(
@@ -86,11 +86,11 @@ func (handler *Handler) RunMatch(fiberCtx *fiber.Ctx) error {
 		},
 	)
 	if err != nil {
-		return handleRunMatchError(ctx, fiberCtx, span, logger, err)
+		return handler.handleRunMatchError(ctx, fiberCtx, span, logger, err)
 	}
 
 	if run == nil {
-		return writeServiceError(
+		return handler.writeServiceError(
 			ctx,
 			fiberCtx,
 			span,
@@ -118,11 +118,11 @@ func (handler *Handler) RunMatch(fiberCtx *fiber.Ctx) error {
 // @Param runId path string true "Run ID" format(uuid)
 // @Param contextId query string true "Context ID" format(uuid)
 // @Success 200 {object} dto.MatchRunResponse
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid request payload"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 404 {object} libHTTP.ErrorResponse "Match run not found"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Match run not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/matching/runs/{runId} [get]
 func (handler *Handler) GetMatchRun(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matching.get_run")
@@ -130,7 +130,7 @@ func (handler *Handler) GetMatchRun(fiberCtx *fiber.Ctx) error {
 
 	runID, err := parseUUIDParam(fiberCtx, "runId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid run id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid run id", err)
 	}
 
 	contextID, tenantID, err := libHTTP.ParseAndVerifyResourceScopedID(
@@ -144,7 +144,7 @@ func (handler *Handler) GetMatchRun(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 		"context",
 	)
-	if shouldReturn, returnErr := handleContextQueryVerificationError(ctx, fiberCtx, span, logger, err); shouldReturn {
+	if shouldReturn, returnErr := handler.handleContextQueryVerificationError(ctx, fiberCtx, span, logger, err); shouldReturn {
 		return returnErr
 	}
 
@@ -158,7 +158,7 @@ func (handler *Handler) GetMatchRun(fiberCtx *fiber.Ctx) error {
 	}
 
 	if err != nil {
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to load match run", err)
+		return handler.writeServiceError(ctx, fiberCtx, span, logger, "failed to load match run", err)
 	}
 
 	if run == nil {
@@ -187,11 +187,11 @@ func (handler *Handler) GetMatchRun(fiberCtx *fiber.Ctx) error {
 // @Param cursor query string false "Cursor for pagination (opaque)"
 // @Param sort_order query string false "Sort order" Enums(asc,desc)
 // @Success 200 {object} ListMatchRunsResponse
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid request payload"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/matching/contexts/{contextId}/runs [get]
 func (handler *Handler) ListMatchRuns(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matching.list_runs")
@@ -207,7 +207,7 @@ func (handler *Handler) ListMatchRuns(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrInvalidContextID,
 		libHTTP.ErrContextAccessDenied,
 	)
-	if shouldReturn, returnErr := handleContextVerificationError(ctx, fiberCtx, span, logger, err); shouldReturn {
+	if shouldReturn, returnErr := handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err); shouldReturn {
 		return returnErr
 	}
 
@@ -215,7 +215,7 @@ func (handler *Handler) ListMatchRuns(fiberCtx *fiber.Ctx) error {
 
 	cursor, limit, err := libHTTP.ParseOpaqueCursorPagination(fiberCtx)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 	}
 
 	cursor = strings.TrimSpace(cursor)
@@ -227,7 +227,7 @@ func (handler *Handler) ListMatchRuns(fiberCtx *fiber.Ctx) error {
 
 	sortOrder = strings.ToLower(sortOrder)
 	if sortOrder != "asc" && sortOrder != sortOrderDesc {
-		return badRequest(
+		return handler.badRequest(
 			ctx,
 			fiberCtx,
 			span,
@@ -249,15 +249,15 @@ func (handler *Handler) ListMatchRuns(fiberCtx *fiber.Ctx) error {
 	)
 	if err != nil {
 		if errors.Is(err, libHTTP.ErrInvalidCursor) {
-			return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 		}
 
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to list match runs", err)
+		return handler.writeServiceError(ctx, fiberCtx, span, logger, "failed to list match runs", err)
 	}
 
 	if writeErr := libHTTP.Respond(fiberCtx, fiber.StatusOK, ListMatchRunsResponse{
 		Items: dto.MatchRunsToResponse(runs),
-		CursorResponse: sharedpagination.CursorResponse{
+		CursorResponse: sharedhttp.CursorResponse{
 			NextCursor: pagination.Next,
 			PrevCursor: pagination.Prev,
 			Limit:      limit,
@@ -285,11 +285,11 @@ func (handler *Handler) ListMatchRuns(fiberCtx *fiber.Ctx) error {
 // @Param sort_order query string false "Sort order" Enums(asc,desc)
 // @Param sort_by query string false "Sort field" Enums(id,created_at,status)
 // @Success 200 {object} ListMatchGroupsResponse
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid request payload"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 404 {object} libHTTP.ErrorResponse "Match run not found"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Match run not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/matching/runs/{runId}/groups [get]
 //
 //nolint:cyclop // HTTP handler with multiple query params and validations
@@ -299,7 +299,7 @@ func (handler *Handler) GetMatchRunResults(fiberCtx *fiber.Ctx) error {
 
 	runID, err := parseUUIDParam(fiberCtx, "runId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid run id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid run id", err)
 	}
 
 	contextID, tenantID, err := libHTTP.ParseAndVerifyResourceScopedID(
@@ -313,7 +313,7 @@ func (handler *Handler) GetMatchRunResults(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 		"context",
 	)
-	if shouldReturn, returnErr := handleContextQueryVerificationError(ctx, fiberCtx, span, logger, err); shouldReturn {
+	if shouldReturn, returnErr := handler.handleContextQueryVerificationError(ctx, fiberCtx, span, logger, err); shouldReturn {
 		return returnErr
 	}
 
@@ -321,7 +321,7 @@ func (handler *Handler) GetMatchRunResults(fiberCtx *fiber.Ctx) error {
 
 	cursor, limit, err := libHTTP.ParseOpaqueCursorPagination(fiberCtx)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 	}
 
 	cursor = strings.TrimSpace(cursor)
@@ -333,7 +333,7 @@ func (handler *Handler) GetMatchRunResults(fiberCtx *fiber.Ctx) error {
 
 	sortOrder = strings.ToLower(sortOrder)
 	if sortOrder != "asc" && sortOrder != sortOrderDesc {
-		return badRequest(
+		return handler.badRequest(
 			ctx,
 			fiberCtx,
 			span,
@@ -345,7 +345,7 @@ func (handler *Handler) GetMatchRunResults(fiberCtx *fiber.Ctx) error {
 
 	sortBy := strings.TrimSpace(fiberCtx.Query("sort_by"))
 	if sortBy != "" && sortBy != "id" && sortBy != "created_at" && sortBy != "status" {
-		return badRequest(
+		return handler.badRequest(
 			ctx,
 			fiberCtx,
 			span,
@@ -368,15 +368,15 @@ func (handler *Handler) GetMatchRunResults(fiberCtx *fiber.Ctx) error {
 	)
 	if err != nil {
 		if errors.Is(err, libHTTP.ErrInvalidCursor) {
-			return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 		}
 
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to load match run results", err)
+		return handler.writeServiceError(ctx, fiberCtx, span, logger, "failed to load match run results", err)
 	}
 
 	if writeErr := libHTTP.Respond(fiberCtx, fiber.StatusOK, ListMatchGroupsResponse{
 		Items: dto.MatchGroupsToResponse(groups),
-		CursorResponse: sharedpagination.CursorResponse{
+		CursorResponse: sharedhttp.CursorResponse{
 			NextCursor: pagination.Next,
 			PrevCursor: pagination.Prev,
 			Limit:      limit,
@@ -391,17 +391,18 @@ func (handler *Handler) GetMatchRunResults(fiberCtx *fiber.Ctx) error {
 
 // runMatchBadRequestErrors maps bad-request sentinel errors to human-readable messages.
 var runMatchBadRequestErrors = []struct {
-	err error
-	msg string
+	err  error
+	slug string
+	msg  string
 }{
-	{command.ErrNoSourcesConfigured, "no sources configured for context"},
-	{command.ErrAtLeastTwoSourcesRequired, "at least two sources are required"},
-	{command.ErrSourceSideRequiredForMatching, "all sources must declare side LEFT or RIGHT before matching"},
-	{command.ErrOneToOneRequiresExactlyOneLeftSource, "1:1 contexts require exactly one LEFT source"},
-	{command.ErrOneToOneRequiresExactlyOneRightSource, "1:1 contexts require exactly one RIGHT source"},
-	{command.ErrOneToManyRequiresExactlyOneLeftSource, "1:N contexts require exactly one LEFT source"},
-	{command.ErrAtLeastOneRightSourceRequired, "at least one RIGHT source is required"},
-	{command.ErrMatchRunModeRequired, "match run mode is required"},
+	{command.ErrNoSourcesConfigured, "matching_no_sources_configured", "no sources configured for context"},
+	{command.ErrAtLeastTwoSourcesRequired, "matching_at_least_two_sources", "at least two sources are required"},
+	{command.ErrSourceSideRequiredForMatching, "matching_source_side_required", "all sources must declare side LEFT or RIGHT before matching"},
+	{command.ErrOneToOneRequiresExactlyOneLeftSource, "matching_invalid_one_to_one_topology", "1:1 contexts require exactly one LEFT source"},
+	{command.ErrOneToOneRequiresExactlyOneRightSource, "matching_invalid_one_to_one_topology", "1:1 contexts require exactly one RIGHT source"},
+	{command.ErrOneToManyRequiresExactlyOneLeftSource, "matching_invalid_one_to_many_topology", "1:N contexts require exactly one LEFT source"},
+	{command.ErrAtLeastOneRightSourceRequired, "matching_invalid_one_to_many_topology", "at least one RIGHT source is required"},
+	{command.ErrMatchRunModeRequired, "invalid_request", "match run mode is required"},
 }
 
 // isRunMatchBadRequestError returns true if err is a client-side (bad request) error.
@@ -426,8 +427,18 @@ func runMatchBadRequestMessage(err error) string {
 	return "bad request"
 }
 
+func runMatchBadRequestSlug(err error) string {
+	for _, entry := range runMatchBadRequestErrors {
+		if errors.Is(err, entry.err) {
+			return entry.slug
+		}
+	}
+
+	return "invalid_request"
+}
+
 // mapRunMatchErrorToResponse maps known errors to appropriate HTTP responses.
-func mapRunMatchErrorToResponse(
+func (handler *Handler) mapRunMatchErrorToResponse(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -438,43 +449,44 @@ func mapRunMatchErrorToResponse(
 	case errors.Is(err, command.ErrContextNotFound):
 		return writeNotFound(fiberCtx, "context not found")
 	case errors.Is(err, command.ErrContextNotActive):
-		return libHTTP.RespondError(fiberCtx, fiber.StatusForbidden, "context_not_active", "context is not active")
+		return respondError(fiberCtx, fiber.StatusForbidden, "context_not_active", "context is not active")
 	case isRunMatchBadRequestError(err):
-		return badRequest(ctx, fiberCtx, span, logger, runMatchBadRequestMessage(err), err)
+		handler.logSpanError(ctx, span, logger, runMatchBadRequestMessage(err), err)
+		return respondError(fiberCtx, fiber.StatusBadRequest, runMatchBadRequestSlug(err), runMatchBadRequestMessage(err))
 	case errors.Is(err, command.ErrFeeRulesReferenceMissingSchedules):
-		return libHTTP.RespondError(
+		return respondError(
 			fiberCtx,
 			fiber.StatusUnprocessableEntity,
 			"fee_rules_misconfigured",
 			"fee rules reference fee schedules that do not exist",
 		)
 	case errors.Is(err, command.ErrFeeRulesRequiredForNormalization):
-		return libHTTP.RespondError(
+		return respondError(
 			fiberCtx,
 			fiber.StatusUnprocessableEntity,
 			"fee_rules_missing",
 			"fee normalization is enabled but no fee rules are configured for this context",
 		)
 	case errors.Is(err, sharedfee.ErrFeeRuleCountLimitExceeded):
-		return libHTTP.RespondError(
+		return respondError(
 			fiberCtx,
 			fiber.StatusUnprocessableEntity,
 			"fee_rules_misconfigured",
 			"fee rule count exceeds the maximum allowed per context",
 		)
 	case errors.Is(err, command.ErrMatchRunLocked):
-		return libHTTP.RespondError(
+		return respondError(
 			fiberCtx,
 			fiber.StatusConflict,
 			"match_run_in_progress",
 			"another match run is already in progress for this context",
 		)
 	default:
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to run match", err)
+		return handler.writeServiceError(ctx, fiberCtx, span, logger, "failed to run match", err)
 	}
 }
 
-func handleRunMatchError(
+func (handler *Handler) handleRunMatchError(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -485,7 +497,7 @@ func handleRunMatchError(
 		libOpentelemetry.HandleSpanError(span, "failed to run match", err)
 	}
 
-	libLog.SafeError(logger, ctx, "failed to run match", err, productionMode.Load())
+	libLog.SafeError(logger, ctx, "failed to run match", err, handler.productionMode)
 
-	return mapRunMatchErrorToResponse(ctx, fiberCtx, span, logger, err)
+	return handler.mapRunMatchErrorToResponse(ctx, fiberCtx, span, logger, err)
 }

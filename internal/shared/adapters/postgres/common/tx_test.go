@@ -7,15 +7,17 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 func TestSentinelErrors(t *testing.T) {
@@ -33,6 +35,11 @@ func TestSentinelErrors(t *testing.T) {
 			"no primary database configured for tenant transaction",
 			ErrNoPrimaryDB.Error(),
 		)
+	})
+
+	t.Run("ErrNilTxLease has correct message", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, "tenant transaction lease is required", ErrNilTxLease.Error())
 	})
 
 	t.Run("ErrNilCallback has correct message", func(t *testing.T) {
@@ -414,6 +421,101 @@ func TestWithTenantTxOrExistingProvider_CreateNewTx(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+type nilTxLeaseProvider struct{}
+
+func (nilTxLeaseProvider) GetRedisConnection(context.Context) (*ports.RedisConnectionLease, error) {
+	return nil, nil
+}
+
+func (nilTxLeaseProvider) BeginTx(context.Context) (*ports.TxLease, error) {
+	return nil, nil
+}
+
+func (nilTxLeaseProvider) GetReplicaDB(context.Context) (*ports.DBLease, error) {
+	return nil, nil
+}
+
+func (nilTxLeaseProvider) GetPrimaryDB(context.Context) (*ports.DBLease, error) {
+	return nil, nil
+}
+
+type emptyTxLeaseProvider struct{}
+
+func (emptyTxLeaseProvider) GetRedisConnection(context.Context) (*ports.RedisConnectionLease, error) {
+	return nil, nil
+}
+
+func (emptyTxLeaseProvider) BeginTx(context.Context) (*ports.TxLease, error) {
+	return &ports.TxLease{}, nil
+}
+
+func (emptyTxLeaseProvider) GetReplicaDB(context.Context) (*ports.DBLease, error) {
+	return nil, nil
+}
+
+func (emptyTxLeaseProvider) GetPrimaryDB(context.Context) (*ports.DBLease, error) {
+	return nil, nil
+}
+
+type deadlineCapturingProvider struct {
+	deadlineSet bool
+	ctxErr      error
+	tx          *sql.Tx
+}
+
+func (provider *deadlineCapturingProvider) GetRedisConnection(context.Context) (*ports.RedisConnectionLease, error) {
+	return nil, nil
+}
+
+func (provider *deadlineCapturingProvider) BeginTx(ctx context.Context) (*ports.TxLease, error) {
+	_, provider.deadlineSet = ctx.Deadline()
+	if provider.ctxErr != nil {
+		return nil, provider.ctxErr
+	}
+
+	return ports.NewTxLease(provider.tx, nil), nil
+}
+
+func (provider *deadlineCapturingProvider) GetReplicaDB(context.Context) (*ports.DBLease, error) {
+	return nil, nil
+}
+
+func (provider *deadlineCapturingProvider) GetPrimaryDB(context.Context) (*ports.DBLease, error) {
+	return nil, nil
+}
+
+func TestWithTenantTxOrExistingProvider_NilTxLease(t *testing.T) {
+	t.Parallel()
+
+	result, err := WithTenantTxOrExistingProvider(
+		contextWithDefaultTenant(),
+		nilTxLeaseProvider{},
+		nil,
+		func(_ *sql.Tx) (string, error) {
+			return "should not run", nil
+		},
+	)
+
+	require.ErrorIs(t, err, ErrNilTxLease)
+	assert.Empty(t, result)
+}
+
+func TestWithTenantTxOrExistingProvider_EmptyTxLease(t *testing.T) {
+	t.Parallel()
+
+	result, err := WithTenantTxOrExistingProvider(
+		contextWithDefaultTenant(),
+		emptyTxLeaseProvider{},
+		nil,
+		func(_ *sql.Tx) (string, error) {
+			return "should not run", nil
+		},
+	)
+
+	require.ErrorIs(t, err, ErrNilTxLease)
+	assert.Empty(t, result)
+}
+
 func TestWithTenantTxOrExisting_WithExistingTx_DefaultTenant(t *testing.T) {
 	t.Parallel()
 
@@ -477,99 +579,30 @@ func TestWithTenantTxOrExisting_CommitError(t *testing.T) {
 	assert.Empty(t, result)
 }
 
-func TestBeginTenantTx_NilProvider(t *testing.T) {
+func TestWithTenantTxOrExistingProvider_AddsDefaultDeadlineWhenMissing(t *testing.T) {
 	t.Parallel()
 
-	tx, cancel, err := BeginTenantTx(context.Background(), nil)
+	provider := &deadlineCapturingProvider{ctxErr: errors.New("stop")}
 
+	_, err := WithTenantTxOrExistingProvider(context.Background(), provider, nil, func(_ *sql.Tx) (string, error) {
+		return "ok", nil
+	})
 	require.Error(t, err)
-	require.ErrorIs(t, err, ErrConnectionRequired)
-	assert.Nil(t, tx)
-	assert.NotNil(t, cancel, "cancel must always be non-nil")
-	cancel() // safe to call (no-op)
+	assert.True(t, provider.deadlineSet)
 }
 
-func TestBeginTenantTx_ProviderReturnsError(t *testing.T) {
+func TestWithTenantTxOrExistingProvider_PreservesExistingDeadline(t *testing.T) {
 	t.Parallel()
 
-	expectedErr := errors.New("connection error")
-	provider := &testutil.MockInfrastructureProvider{
-		PostgresErr: expectedErr,
-	}
+	provider := &deadlineCapturingProvider{ctxErr: errors.New("stop")}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
 
-	tx, cancel, err := BeginTenantTx(context.Background(), provider)
-
+	_, err := WithTenantTxOrExistingProvider(ctx, provider, nil, func(_ *sql.Tx) (string, error) {
+		return "ok", nil
+	})
 	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to begin transaction")
-	assert.Nil(t, tx)
-	assert.NotNil(t, cancel)
-	cancel()
-}
-
-func TestBeginTenantTx_ProviderReturnsNilConnection(t *testing.T) {
-	t.Parallel()
-
-	provider := &testutil.MockInfrastructureProvider{
-		PostgresConn: nil,
-	}
-
-	tx, cancel, err := BeginTenantTx(context.Background(), provider)
-
-	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to begin transaction")
-	assert.Nil(t, tx)
-	assert.NotNil(t, cancel)
-	cancel()
-}
-
-func TestBeginTenantTx_Success_DefaultTenant(t *testing.T) {
-	t.Parallel()
-
-	conn, mock, db := setupMockConnection(t)
-	defer db.Close()
-
-	provider := &testutil.MockInfrastructureProvider{
-		PostgresConn: conn,
-	}
-
-	ctx := contextWithDefaultTenant()
-
-	mock.ExpectBegin()
-	mock.ExpectRollback()
-
-	tx, cancel, err := BeginTenantTx(ctx, provider)
-
-	require.NoError(t, err)
-	require.NotNil(t, tx)
-	assert.NotNil(t, cancel)
-
-	_ = tx.Rollback()
-	cancel()
-
-	require.NoError(t, mock.ExpectationsWereMet())
-}
-
-func TestBeginTenantTx_BeginTxError(t *testing.T) {
-	t.Parallel()
-
-	conn, mock, db := setupMockConnection(t)
-	defer db.Close()
-
-	provider := &testutil.MockInfrastructureProvider{
-		PostgresConn: conn,
-	}
-
-	ctx := contextWithDefaultTenant()
-
-	mock.ExpectBegin().WillReturnError(errors.New("begin failed"))
-
-	tx, cancel, err := BeginTenantTx(ctx, provider)
-
-	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to begin transaction")
-	assert.Nil(t, tx)
-	assert.NotNil(t, cancel)
-	cancel()
+	assert.True(t, provider.deadlineSet)
 }
 
 func TestWithTenantTx_DelegatesCorrectly(t *testing.T) {
@@ -759,85 +792,3 @@ func TestWithTenantTxProvider_NonDefaultTenant_Success(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestBeginTenantTx_NonDefaultTenant_Success(t *testing.T) {
-	t.Parallel()
-
-	conn, mock, db := setupMockConnection(t)
-	defer db.Close()
-
-	provider := &testutil.MockInfrastructureProvider{
-		PostgresConn: conn,
-	}
-
-	ctx := contextWithNonDefaultTenant()
-
-	mock.ExpectBegin()
-	mock.ExpectExec("SET LOCAL search_path").
-		WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectRollback()
-
-	tx, cancel, err := BeginTenantTx(ctx, provider)
-
-	require.NoError(t, err)
-	require.NotNil(t, tx)
-	assert.NotNil(t, cancel)
-
-	_ = tx.Rollback()
-	cancel()
-
-	require.NoError(t, mock.ExpectationsWereMet())
-}
-
-func TestBeginTenantTx_NonDefaultTenant_SchemaError(t *testing.T) {
-	t.Parallel()
-
-	conn, mock, db := setupMockConnection(t)
-	defer db.Close()
-
-	provider := &testutil.MockInfrastructureProvider{
-		PostgresConn: conn,
-	}
-
-	ctx := contextWithNonDefaultTenant()
-
-	mock.ExpectBegin()
-	mock.ExpectExec("SET LOCAL search_path").
-		WillReturnError(errors.New("schema not found"))
-	mock.ExpectRollback()
-
-	tx, cancel, err := BeginTenantTx(ctx, provider)
-
-	require.Error(t, err)
-	require.ErrorContains(t, err, "apply tenant schema")
-	assert.Nil(t, tx)
-	assert.NotNil(t, cancel)
-	cancel()
-
-	require.NoError(t, mock.ExpectationsWereMet())
-}
-
-func TestBeginTenantTx_CancelFunc_IsCallableAfterCommit(t *testing.T) {
-	t.Parallel()
-
-	conn, mock, db := setupMockConnection(t)
-	defer db.Close()
-
-	provider := &testutil.MockInfrastructureProvider{
-		PostgresConn: conn,
-	}
-
-	ctx := contextWithDefaultTenant()
-
-	mock.ExpectBegin()
-	mock.ExpectCommit()
-
-	tx, cancel, err := BeginTenantTx(ctx, provider)
-
-	require.NoError(t, err)
-	require.NotNil(t, tx)
-
-	require.NoError(t, tx.Commit())
-	cancel() // must not panic
-
-	require.NoError(t, mock.ExpectationsWereMet())
-}

@@ -5,6 +5,10 @@
 # Define the root directory of the project
 MATCHER_ROOT := $(shell pwd)
 
+# Worktree-safe: disable VCS stamping so that go build / test / vet succeed
+# inside git worktrees where the .git directory is a file pointing elsewhere.
+export GOFLAGS := -buildvcs=false
+
 # Test targets use CLEAN_ENV to unset the full Matcher config env surface so
 # tests are not polluted by host environment values.
 CONFIG_ENV_KEYS := $(shell sed -n 's/^[[:space:]]*"\([A-Z0-9_]*\)",/\1/p' internal/bootstrap/config_test_helpers_test.go 2>/dev/null)
@@ -140,6 +144,7 @@ help:
 	@echo "  make test-e2e                    - Run e2e tests (requires local stack)"
 	@echo "  make test-e2e-fast               - Run e2e tests in quick mode"
 	@echo "  make test-e2e-journeys           - Run only e2e journey tests"
+	@echo "  make test-e2e-discovery          - Run discovery E2E tests with mock Fetcher"
 	@echo "  make test-e2e-dashboard          - Run 5k tx dashboard stresser (data preserved)"
 	@echo "  make test-all                    - Run all tests (unit + int + e2e) with merged coverage"
 	@echo "  make test-chaos                  - Run chaos/resilience tests"
@@ -166,6 +171,7 @@ help:
 	@echo ""
 	@echo "Code Generation Commands:"
 	@echo "  make generate                    - Run code generation (mocks, etc.)"
+	@echo "  make generate-casdoor           - Generate Casdoor RBAC seed data"
 	@echo "  make generate-docs               - Generate Swagger documentation"
 	@echo ""
 	@echo ""
@@ -320,7 +326,7 @@ check-coverage: test
 # Test Commands
 #-------------------------------------------------------
 
-.PHONY: test test-unit coverage-unit test-int test-e2e test-e2e-dashboard test-chaos test-all cover
+.PHONY: test test-unit coverage-unit test-int test-e2e test-e2e-discovery test-e2e-dashboard test-chaos test-all cover
 
 test: test-unit
 
@@ -338,43 +344,47 @@ test-unit:
 
 test-int:
 	$(call print_title,Running integration tests)
-	@$(TEST_RUNNER) -tags=integration -coverprofile=$(COVER_PROFILE_INT) -race -cover ./tests/integration/...
+	@TESTCONTAINERS_RYUK_DISABLED=$${TESTCONTAINERS_RYUK_DISABLED:-true} $(TEST_RUNNER) -tags=integration -coverprofile=$(COVER_PROFILE_INT) -race -cover ./tests/integration/...
 	$(call show_coverage,$(COVER_PROFILE_INT))
 	@echo "[ok] Integration tests passed"
 
 test-e2e:
 	$(call print_title,Running e2e tests against local stack)
 	@echo "Requires: $(DOCKER_CMD) up -d (ensure full stack is running)"
-	@echo "Checking stack health..."
-	@$(TEST_RUNNER) -tags=e2e -timeout=10m -v -p 1 -coverprofile=$(COVER_PROFILE_E2E) -race -cover ./tests/e2e/...
+	@TESTCONTAINERS_RYUK_DISABLED=$${TESTCONTAINERS_RYUK_DISABLED:-true} $(TEST_RUNNER) -tags=e2e -timeout=10m -v -p 1 -coverprofile=$(COVER_PROFILE_E2E) -race -cover ./tests/e2e/...
 	$(call show_coverage,$(COVER_PROFILE_E2E))
 	@echo "[ok] E2E tests passed"
 
 test-e2e-fast:
 	$(call print_title,Running e2e tests - quick mode)
-	@$(TEST_RUNNER) -tags=e2e -timeout=5m -short -p 1 -coverprofile=$(COVER_PROFILE_E2E) -race -cover ./tests/e2e/...
+	@TESTCONTAINERS_RYUK_DISABLED=$${TESTCONTAINERS_RYUK_DISABLED:-true} $(TEST_RUNNER) -tags=e2e -timeout=5m -short -p 1 -coverprofile=$(COVER_PROFILE_E2E) -race -cover ./tests/e2e/...
 	$(call show_coverage,$(COVER_PROFILE_E2E))
 	@echo "[ok] E2E tests passed (quick mode)"
 
 test-e2e-journeys:
 	$(call print_title,Running e2e journey tests only)
-	@$(TEST_RUNNER) -tags=e2e -timeout=10m -v -coverprofile=$(COVER_PROFILE_E2E) -race -cover ./tests/e2e/journeys/...
+	@TESTCONTAINERS_RYUK_DISABLED=$${TESTCONTAINERS_RYUK_DISABLED:-true} $(TEST_RUNNER) -tags=e2e -timeout=10m -v -coverprofile=$(COVER_PROFILE_E2E) -race -cover ./tests/e2e/journeys/...
 	$(call show_coverage,$(COVER_PROFILE_E2E))
 	@echo "[ok] Journey tests passed"
+
+test-e2e-discovery:
+	$(call print_title,Running Discovery E2E tests with mock Fetcher)
+	@TESTCONTAINERS_RYUK_DISABLED=$${TESTCONTAINERS_RYUK_DISABLED:-true} E2E_REQUIRE_FETCHER_MOCK=1 $(TEST_RUNNER) -tags=e2e -timeout=5m -v -p 1 -coverprofile=$(COVER_PROFILE_E2E) -race -cover -run TestDiscovery ./tests/e2e/journeys/...
+	@echo "[ok] Discovery E2E tests passed"
 
 test-e2e-dashboard:
 	$(call print_title,Running dashboard stresser - data will be PRESERVED)
 	@echo "This test generates ~5k transactions and keeps data for dashboard viewing."
 	@echo "To clean up later, delete the context 'dashboard-stress-5k' via API."
 	@echo ""
-	E2E_KEEP_DATA=1 $(TEST_RUNNER) -tags=e2e -timeout=30m -v -count=1 -race -run TestDashboardStresser_HighVolume ./tests/e2e/journeys/...
+	TESTCONTAINERS_RYUK_DISABLED=$${TESTCONTAINERS_RYUK_DISABLED:-true} E2E_KEEP_DATA=1 $(TEST_RUNNER) -tags=e2e -timeout=30m -v -count=1 -race -run TestDashboardStresser_HighVolume ./tests/e2e/journeys/...
 	@echo ""
 	@echo "[ok] Dashboard stresser completed - data preserved in database"
 
 test-chaos:
 	$(call print_title,Running chaos/resilience tests)
 	@echo "Requires Docker for testcontainers (PostgreSQL + Redis + RabbitMQ + Toxiproxy)"
-	@$(TEST_RUNNER) -tags=chaos -timeout=15m -v -count=1 -p 1 -race ./tests/chaos/...
+	@TESTCONTAINERS_RYUK_DISABLED=$${TESTCONTAINERS_RYUK_DISABLED:-true} $(TEST_RUNNER) -tags=chaos -timeout=15m -v -count=1 -p 1 -race ./tests/chaos/...
 	@echo "[ok] Chaos tests passed"
 
 test-all:
@@ -406,6 +416,9 @@ cover:
 
 ci:
 	$(call print_title,Running local CI verification pipeline)
+	@$(MAKE) generate
+	@$(MAKE) generate-docs
+	@$(MAKE) generate-casdoor
 	@$(MAKE) lint
 	@$(MAKE) test
 	@$(MAKE) test-int
@@ -483,12 +496,17 @@ docker-build:
 # Code Generation Commands
 #-------------------------------------------------------
 
-.PHONY: generate generate-docs
+.PHONY: generate generate-casdoor generate-docs
 
 generate:
 	$(call print_title,Running code generation)
 	@go generate ./...
 	@echo "[ok] Code generation completed"
+
+generate-casdoor:
+	$(call print_title,Generating Casdoor seed data)
+	@go run ./cmd/generate-casdoor --output config/casdoor/init_data.json
+	@echo "[ok] Casdoor seed data generated at config/casdoor/init_data.json"
 
 generate-docs:
 	$(call print_title,Generating Swagger documentation)
@@ -549,12 +567,16 @@ check-db-safety:
 migrate-up: check-db-safety
 	$(call print_title,Applying database migrations)
 	$(call check_command,migrate,"https://github.com/golang-migrate/migrate")
+	$(call check_command,go,"https://go.dev/dl/")
+	@DATABASE_URL="$(DATABASE_URL)" go run ./cmd/migration-preflight --action up
 	@migrate -path $(MIGRATE_PATH) -database "$(DATABASE_URL)" up
 	@echo "[ok] Migrations applied successfully"
 
 migrate-down: check-db-safety
 	$(call print_title,Rolling back last migration)
 	$(call check_command,migrate,"https://github.com/golang-migrate/migrate")
+	$(call check_command,go,"https://go.dev/dl/")
+	@DATABASE_URL="$(DATABASE_URL)" go run ./cmd/migration-preflight --action down
 	@migrate -path $(MIGRATE_PATH) -database "$(DATABASE_URL)" down 1
 	@echo "[ok] Migration rolled back successfully"
 
@@ -564,8 +586,10 @@ migrate-to: check-db-safety
 		echo "Error: VERSION not specified."; \
 		echo "Usage: make migrate-to VERSION=<version_number>"; \
 		exit 1; \
-	fi
+		fi
 	$(call check_command,migrate,"https://github.com/golang-migrate/migrate")
+	$(call check_command,go,"https://go.dev/dl/")
+	@DATABASE_URL="$(DATABASE_URL)" go run ./cmd/migration-preflight --action goto --target $(VERSION)
 	@migrate -path $(MIGRATE_PATH) -database "$(DATABASE_URL)" goto $(VERSION)
 	@echo "[ok] Migrated to version $(VERSION) successfully"
 

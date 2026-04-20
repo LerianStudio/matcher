@@ -11,19 +11,17 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/bxcodec/dbresolver/v2"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	sharedhttp "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
-	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -45,9 +43,21 @@ func (s *stubInfraProvider) Close() {
 	}
 }
 
-func (s *stubInfraProvider) GetPostgresConnection(
+func (s *stubInfraProvider) GetRedisConnection(
 	_ context.Context,
-) (*sharedPorts.PostgresConnectionLease, error) {
+) (*sharedPorts.RedisConnectionLease, error) {
+	return nil, nil
+}
+
+func (s *stubInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, error) {
+	return nil, nil
+}
+
+func (s *stubInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.DBLease, error) {
+	return nil, nil
+}
+
+func (s *stubInfraProvider) GetPrimaryDB(ctx context.Context) (*sharedPorts.DBLease, error) {
 	if s.connErr != nil {
 		return nil, s.connErr
 	}
@@ -67,24 +77,7 @@ func (s *stubInfraProvider) GetPostgresConnection(
 	mock.ExpectCommit()
 	mock.ExpectRollback()
 
-	resolver := dbresolver.New(dbresolver.WithPrimaryDBs(db))
-	conn := testutil.NewClientWithResolver(resolver)
-
-	return sharedPorts.NewPostgresConnectionLease(conn, nil), nil
-}
-
-func (s *stubInfraProvider) GetRedisConnection(
-	_ context.Context,
-) (*sharedPorts.RedisConnectionLease, error) {
-	return nil, nil
-}
-
-func (s *stubInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, error) {
-	return nil, nil
-}
-
-func (s *stubInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
-	return nil, nil
+	return sharedPorts.NewDBLease(db, nil), nil
 }
 
 // stubAuditLogRepo implements sharedPorts.AuditLogRepository for testing.

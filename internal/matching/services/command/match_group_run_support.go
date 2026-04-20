@@ -9,9 +9,9 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	"github.com/LerianStudio/matcher/internal/matching/domain/repositories"
@@ -125,10 +125,15 @@ func (uc *UseCase) loadFeeRulesAndSchedules(
 
 	logger, _, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled // only logger needed here
 
+	if uc.feeRuleProvider == nil {
+		span.SetAttributes(attribute.Bool("fee_rules_load_error", true))
+		return nil, nil, nil, ErrNilFeeRuleProvider
+	}
+
 	rules, err := uc.feeRuleProvider.FindByContextID(ctx, contextID)
 	if err != nil {
 		span.SetAttributes(attribute.Bool("fee_rules_load_error", true))
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to load fee rules")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to load fee rules")
 
 		return nil, nil, nil, fmt.Errorf("loading fee rules: %w", err)
 	}
@@ -145,17 +150,7 @@ func (uc *UseCase) loadFeeRulesAndSchedules(
 		return nil, nil, nil, fee.ErrFeeRuleCountLimitExceeded
 	}
 
-	sort.SliceStable(rules, func(i, j int) bool {
-		if rules[i] == nil {
-			return false
-		}
-
-		if rules[j] == nil {
-			return true
-		}
-
-		return rules[i].Priority < rules[j].Priority
-	})
+	sortFeeRulesByPriority(rules)
 
 	scheduleIDSet := make(map[uuid.UUID]struct{})
 
@@ -178,7 +173,7 @@ func (uc *UseCase) loadFeeRulesAndSchedules(
 	schedules, err := uc.feeScheduleRepo.GetByIDs(ctx, scheduleIDs)
 	if err != nil {
 		span.SetAttributes(attribute.Bool("fee_rules_load_error", true))
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to load fee schedules")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to load fee schedules")
 
 		return nil, nil, nil, fmt.Errorf("loading fee schedules: %w", err)
 	}
@@ -204,6 +199,20 @@ func (uc *UseCase) loadFeeRulesAndSchedules(
 	leftRules, rightRules := fee.SplitRulesBySide(rules)
 
 	return leftRules, rightRules, schedules, nil
+}
+
+func sortFeeRulesByPriority(rules []*fee.FeeRule) {
+	sort.SliceStable(rules, func(i, j int) bool {
+		if rules[i] == nil {
+			return false
+		}
+
+		if rules[j] == nil {
+			return true
+		}
+
+		return rules[i].Priority < rules[j].Priority
+	})
 }
 
 func buildSourceTypeMap(sources []*ports.SourceInfo) map[uuid.UUID]string {

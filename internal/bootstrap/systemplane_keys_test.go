@@ -1,584 +1,473 @@
-//go:build unit
-
 // Copyright 2025 Lerian Studio. All rights reserved.
 // Use of this source code is governed by an Elastic License 2.0
 // that can be found in the LICENSE.md file.
 
+//go:build unit
+
 package bootstrap
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
-	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/registry"
+	"github.com/LerianStudio/lib-commons/v5/commons/systemplane"
 )
 
-// expectedTotalKeys is the total number of configuration keys registered by
-// RegisterMatcherKeys. This constant MUST be updated when keys are added or
-// removed from matcherKeyDefs.
-const expectedTotalKeys = 124
-
-// expectedBootstrapOnlyCount is the count of keys with ApplyBootstrapOnly.
-const expectedBootstrapOnlyCount = 20
-
-// expectedLiveReadCount is the count of keys with ApplyLiveRead.
-const expectedLiveReadCount = 16
-
-// expectedWorkerReconcileCount is the count of keys with ApplyWorkerReconcile.
-const expectedWorkerReconcileCount = 13
-
-// expectedBundleRebuildCount is the count of keys with ApplyBundleRebuild.
-const expectedBundleRebuildCount = 68
-
-// expectedBundleRebuildAndReconcileCount is the count of keys with ApplyBundleRebuildAndReconcile.
-const expectedBundleRebuildAndReconcileCount = 7
-
-// expectedSecretKeyCount is the number of keys marked Secret=true.
-const expectedSecretKeyCount = 10
-
-func TestRegisterMatcherKeys_Success(t *testing.T) {
+// TestMatcherKeyDefs_AllKeysUnique ensures no duplicate key registration would occur.
+func TestMatcherKeyDefs_AllKeysUnique(t *testing.T) {
 	t.Parallel()
 
-	reg := registry.New()
+	defs := matcherKeyDefs(defaultConfig())
+	seen := make(map[string]int)
 
-	err := RegisterMatcherKeys(reg)
-
-	require.NoError(t, err)
-}
-
-func TestRegisterMatcherKeys_KeyCount(t *testing.T) {
-	t.Parallel()
-
-	reg := registry.New()
-
-	err := RegisterMatcherKeys(reg)
-	require.NoError(t, err)
-
-	allKeys := reg.List(domain.KindConfig)
-
-	assert.Len(t, allKeys, expectedTotalKeys,
-		"total registered key count mismatch; update expectedTotalKeys if keys were added/removed")
-}
-
-func TestRegisterMatcherKeys_BootstrapOnlyCount(t *testing.T) {
-	t.Parallel()
-
-	reg := registry.New()
-	require.NoError(t, RegisterMatcherKeys(reg))
-
-	count := countByApplyBehavior(reg, domain.ApplyBootstrapOnly)
-
-	assert.Equal(t, expectedBootstrapOnlyCount, count,
-		"bootstrap-only key count mismatch")
-}
-
-func TestRegisterMatcherKeys_LiveReadCount(t *testing.T) {
-	t.Parallel()
-
-	reg := registry.New()
-	require.NoError(t, RegisterMatcherKeys(reg))
-
-	count := countByApplyBehavior(reg, domain.ApplyLiveRead)
-
-	assert.Equal(t, expectedLiveReadCount, count,
-		"live-read key count mismatch")
-}
-
-func TestRegisterMatcherKeys_WorkerReconcileCount(t *testing.T) {
-	t.Parallel()
-
-	reg := registry.New()
-	require.NoError(t, RegisterMatcherKeys(reg))
-
-	count := countByApplyBehavior(reg, domain.ApplyWorkerReconcile)
-
-	assert.Equal(t, expectedWorkerReconcileCount, count,
-		"worker-reconcile key count mismatch")
-}
-
-func TestRegisterMatcherKeys_BundleRebuildCount(t *testing.T) {
-	t.Parallel()
-
-	reg := registry.New()
-	require.NoError(t, RegisterMatcherKeys(reg))
-
-	count := countByApplyBehavior(reg, domain.ApplyBundleRebuild)
-
-	assert.Equal(t, expectedBundleRebuildCount, count,
-		"bundle-rebuild key count mismatch")
-}
-
-func TestRegisterMatcherKeys_BundleRebuildAndReconcileCount(t *testing.T) {
-	t.Parallel()
-
-	reg := registry.New()
-	require.NoError(t, RegisterMatcherKeys(reg))
-
-	count := countByApplyBehavior(reg, domain.ApplyBundleRebuildAndReconcile)
-
-	assert.Equal(t, expectedBundleRebuildAndReconcileCount, count,
-		"bundle-rebuild+worker-reconcile key count mismatch")
-}
-
-func TestRegisterMatcherKeys_SelectedApplyBehaviors(t *testing.T) {
-	t.Parallel()
-
-	reg := registry.New()
-	require.NoError(t, RegisterMatcherKeys(reg))
-
-	tests := []struct {
-		key      string
-		behavior domain.ApplyBehavior
-		mutable  bool
-	}{
-		{key: "postgres.query_timeout_sec", behavior: domain.ApplyLiveRead, mutable: true},
-		{key: "idempotency.retry_window_sec", behavior: domain.ApplyLiveRead, mutable: true},
-		{key: "idempotency.success_ttl_hours", behavior: domain.ApplyLiveRead, mutable: true},
-		{key: "webhook.timeout_sec", behavior: domain.ApplyLiveRead, mutable: true},
-		{key: "tenancy.default_tenant_id", behavior: domain.ApplyBootstrapOnly, mutable: false},
-		{key: "tenancy.default_tenant_slug", behavior: domain.ApplyBootstrapOnly, mutable: false},
-		{key: "idempotency.hmac_secret", behavior: domain.ApplyBootstrapOnly, mutable: false},
+	for _, d := range defs {
+		seen[d.key]++
 	}
 
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.key, func(t *testing.T) {
-			t.Parallel()
-
-			def, ok := reg.Get(tt.key)
-			require.True(t, ok)
-			assert.Equal(t, tt.behavior, def.ApplyBehavior)
-			assert.Equal(t, tt.mutable, def.MutableAtRuntime)
-		})
+	for key, count := range seen {
+		assert.Equalf(t, 1, count, "key %q registered %d times", key, count)
 	}
 }
 
-func TestRegisterMatcherKeys_ApplyBehaviorCountsAddUp(t *testing.T) {
+// TestMatcherKeyDefs_AllKeysHaveDescriptions ensures every key has a non-empty description.
+func TestMatcherKeyDefs_AllKeysHaveDescriptions(t *testing.T) {
 	t.Parallel()
 
-	reg := registry.New()
-	require.NoError(t, RegisterMatcherKeys(reg))
-
-	total := countByApplyBehavior(reg, domain.ApplyBootstrapOnly) +
-		countByApplyBehavior(reg, domain.ApplyLiveRead) +
-		countByApplyBehavior(reg, domain.ApplyWorkerReconcile) +
-		countByApplyBehavior(reg, domain.ApplyBundleRebuild) +
-		countByApplyBehavior(reg, domain.ApplyBundleRebuildAndReconcile)
-
-	assert.Equal(t, expectedTotalKeys, total,
-		"sum of per-behavior counts must equal total key count")
+	for _, d := range matcherKeyDefs(defaultConfig()) {
+		assert.NotEmptyf(t, d.description, "key %q has empty description", d.key)
+	}
 }
 
-func TestRegisterMatcherKeys_NoDuplicates(t *testing.T) {
+// TestMatcherKeyDefs_NoBootstrapOnlyKeys confirms Wave 1 H5 + H6 key removals stuck.
+// Bootstrap-only keys (credentials, connection identities, log level) must NOT be
+// registered on the systemplane because they require a process restart to take effect —
+// registering them would mislead operators (admin API appears to accept changes while
+// live traffic continues to use the boot-time value).
+func TestMatcherKeyDefs_NoBootstrapOnlyKeys(t *testing.T) {
 	t.Parallel()
 
-	reg := registry.New()
+	forbiddenPrefixes := []string{
+		"postgres.primary_",
+		"postgres.replica_",
+		"redis.host", "redis.password", "redis.db", "redis.tls", "redis.protocol",
+		"redis.master_name", "redis.ca_cert", "redis.dial_timeout_ms",
+		"rabbitmq.url", "rabbitmq.host", "rabbitmq.port", "rabbitmq.user",
+		"rabbitmq.password", "rabbitmq.vhost", "rabbitmq.health_url",
+		"rabbitmq.allow_insecure",
+		"app.log_level",
+		"postgres.connect_timeout_sec",
+		"postgres.migrations_path",
+		"tenancy.default_tenant_id",
+		"tenancy.default_tenant_slug",
+		"auth.enabled",
+		"auth.host",
+		"auth.token_secret",
+		"outbox.retry_window_sec",
+		"outbox.dispatch_interval_sec",
+		// Server listener + TLS + trusted-proxies + OTel collector: all consumed
+		// once at startup (fiber_server.go, observability.go). Registering them
+		// would mislead operators — PUT would succeed but have no effect.
+		"server.address",
+		"server.tls_cert_file",
+		"server.tls_key_file",
+		"server.tls_terminated_upstream",
+		"server.trusted_proxies",
+		"telemetry.collector_endpoint",
+	}
 
-	err := RegisterMatcherKeys(reg)
-	require.NoError(t, err)
+	for _, d := range matcherKeyDefs(defaultConfig()) {
+		for _, fp := range forbiddenPrefixes {
+			assert.Falsef(t,
+				strings.HasPrefix(d.key, fp) || d.key == strings.TrimSuffix(fp, "_"),
+				"bootstrap-only key %q must not be registered (matched forbidden %q)",
+				d.key, fp,
+			)
+		}
+	}
+}
 
-	// Registering a second time must fail because all keys already exist.
-	err = RegisterMatcherKeys(reg)
+// --- validatePositiveInt ---
+//
+// NOTE: validatePositiveInt supports only `int` and `float64` types.
+// `int64` and other numeric types fall through to the default case
+// and return an error. Tests reflect that actual behaviour.
 
+func TestValidatePositiveInt_Valid(t *testing.T) {
+	t.Parallel()
+
+	for _, v := range []any{1, 100, float64(42)} {
+		require.NoError(t, validatePositiveInt(v))
+	}
+}
+
+func TestValidatePositiveInt_Invalid(t *testing.T) {
+	t.Parallel()
+
+	for _, v := range []any{0, -1, "not-a-number", nil} {
+		require.Error(t, validatePositiveInt(v))
+	}
+}
+
+// TestValidatePositiveInt_Int64Rejected documents that int64 is not accepted.
+// If this behaviour ever changes to accept int64, update the positive/invalid
+// lists above accordingly.
+func TestValidatePositiveInt_Int64Rejected(t *testing.T) {
+	t.Parallel()
+
+	require.Error(t, validatePositiveInt(int64(5000)))
+}
+
+// --- validateBodyLimitBytes ---
+
+func TestValidateBodyLimitBytes_AcceptsWithinCeiling(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, validateBodyLimitBytes(1))
+	require.NoError(t, validateBodyLimitBytes(1024))
+	require.NoError(t, validateBodyLimitBytes(keyBodyLimitCeilingBytes))
+	require.NoError(t, validateBodyLimitBytes(float64(32*1024*1024)))
+}
+
+func TestValidateBodyLimitBytes_RejectsZeroOrNegative(t *testing.T) {
+	t.Parallel()
+
+	for _, v := range []any{0, -1, -1024, float64(0), float64(-5.5)} {
+		require.Errorf(t, validateBodyLimitBytes(v), "value %v must fail positive-int check", v)
+	}
+}
+
+func TestValidateBodyLimitBytes_RejectsAboveCeiling(t *testing.T) {
+	t.Parallel()
+
+	err := validateBodyLimitBytes(keyBodyLimitCeilingBytes + 1)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "already registered")
+	require.ErrorIs(t, err, errBodyLimitExceedsCeiling)
 }
 
-func TestRegisterMatcherKeys_ValidatorPositiveInt(t *testing.T) {
+func TestValidateBodyLimitBytes_RejectsWrongType(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name    string
-		value   any
-		wantErr bool
-	}{
-		{name: "positive", value: 42, wantErr: false},
-		{name: "zero", value: 0, wantErr: true},
-		{name: "negative", value: -1, wantErr: true},
-		{name: "large_positive", value: 100000, wantErr: false},
+	for _, v := range []any{"128", nil, []int{1}, int64(1024)} {
+		require.Errorf(t, validateBodyLimitBytes(v), "value %T must fail type check", v)
 	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+// --- corsProductionValidator ---
+
+// TestCORSProductionValidator_NilOutsideProduction asserts the factory
+// returns nil for every non-production env, so the registration loop
+// attaches no validator at all (keeping the validator list lean in dev/
+// staging/uat/etc., matching the original no-validator behaviour).
+func TestCORSProductionValidator_NilOutsideProduction(t *testing.T) {
+	t.Parallel()
+
+	for _, envName := range []string{"development", "staging", "uat", "qa", "test", ""} {
+		t.Run(envName, func(t *testing.T) {
 			t.Parallel()
-
-			err := validatePositiveInt(tt.value)
-
-			if tt.wantErr {
-				require.Error(t, err)
-				assert.ErrorIs(t, err, domain.ErrValueInvalid)
-			} else {
-				require.NoError(t, err)
-			}
+			assert.Nil(t, corsProductionValidator(envName), "env %q must get a nil validator", envName)
 		})
 	}
 }
 
-func TestRegisterMatcherKeys_ValidatorNonNegativeInt(t *testing.T) {
+// TestCORSProductionValidator_RejectsWildcardInProd asserts an admin PUT
+// of "*" (or a comma-separated list containing an exact "*" entry) is
+// rejected at validation time, matching the startup policy in
+// validateProductionCoreConfig so the admin API cannot widen CORS past
+// what the startup validator enforced.
+func TestCORSProductionValidator_RejectsWildcardInProd(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name    string
-		value   any
-		wantErr bool
-	}{
-		{name: "positive", value: 42, wantErr: false},
-		{name: "zero", value: 0, wantErr: false},
-		{name: "negative", value: -1, wantErr: true},
-	}
+	validator := corsProductionValidator("production")
+	require.NotNil(t, validator)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, origins := range []string{
+		"*",
+		"  *  ",
+		"https://app.example.com,*",
+		"*,https://app.example.com",
+	} {
+		t.Run(origins, func(t *testing.T) {
 			t.Parallel()
 
-			err := validateNonNegativeInt(tt.value)
-
-			if tt.wantErr {
-				require.Error(t, err)
-				assert.ErrorIs(t, err, domain.ErrValueInvalid)
-			} else {
-				require.NoError(t, err)
-			}
+			err := validator(origins)
+			require.Error(t, err)
+			require.ErrorIs(t, err, errCORSWildcardInProd)
 		})
 	}
 }
 
-func TestRegisterMatcherKeys_ValidatorLogLevel(t *testing.T) {
+// TestCORSProductionValidator_AcceptsRestrictedOriginsInProd asserts the
+// validator does NOT reject restricted origin lists (subdomain wildcards
+// like "https://*.example.com" remain allowed — they aren't exact "*").
+func TestCORSProductionValidator_AcceptsRestrictedOriginsInProd(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name    string
-		value   any
-		wantErr bool
-	}{
-		{name: "debug", value: "debug", wantErr: false},
-		{name: "info", value: "info", wantErr: false},
-		{name: "warn", value: "warn", wantErr: false},
-		{name: "error", value: "error", wantErr: false},
-		{name: "DEBUG_uppercase", value: "DEBUG", wantErr: false},
-		{name: "invalid_trace", value: "trace", wantErr: true},
-		{name: "invalid_empty", value: "", wantErr: true},
-		{name: "invalid_bogus", value: "bogus", wantErr: true},
-	}
+	validator := corsProductionValidator("production")
+	require.NotNil(t, validator)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, origins := range []string{
+		"https://app.example.com",
+		"https://app.example.com,https://admin.example.com",
+		"https://*.example.com", // subdomain wildcard, not exact "*"
+		"",                      // intentionally allowed: empty means "no origins"
+	} {
+		t.Run(origins, func(t *testing.T) {
 			t.Parallel()
-
-			err := validateLogLevel(tt.value)
-
-			if tt.wantErr {
-				require.Error(t, err)
-				assert.ErrorIs(t, err, domain.ErrValueInvalid)
-			} else {
-				require.NoError(t, err)
-			}
+			assert.NoError(t, validator(origins))
 		})
 	}
 }
 
-func TestRegisterMatcherKeys_ValidatorSSLMode(t *testing.T) {
+// TestCORSProductionValidator_RejectsNonString confirms the validator
+// type-checks the incoming value. systemplane typically hands string
+// values back, but registration uses any, so defensive type checking
+// is worth the one extra test.
+func TestCORSProductionValidator_RejectsNonString(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name    string
-		value   any
-		wantErr bool
-	}{
-		{name: "disable", value: "disable", wantErr: false},
-		{name: "require", value: "require", wantErr: false},
-		{name: "verify_ca", value: "verify-ca", wantErr: false},
-		{name: "verify_full", value: "verify-full", wantErr: false},
-		{name: "invalid_empty", value: "", wantErr: true},
-		{name: "invalid_prefer", value: "prefer", wantErr: true},
-		{name: "invalid_bogus", value: "bogus", wantErr: true},
-	}
+	validator := corsProductionValidator("production")
+	require.NotNil(t, validator)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			err := validateSSLMode(tt.value)
-
-			if tt.wantErr {
-				require.Error(t, err)
-				assert.ErrorIs(t, err, domain.ErrValueInvalid)
-			} else {
-				require.NoError(t, err)
-			}
-		})
+	for _, v := range []any{42, nil, []string{"*"}, true} {
+		require.Errorf(t, validator(v), "value %T must fail type check", v)
 	}
 }
 
-func TestRegisterMatcherKeys_ValidatorOptionalSSLMode(t *testing.T) {
+// --- validateFetcherURL ---
+
+func TestValidateFetcherURL_EmptyAllowed(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name    string
-		value   any
-		wantErr bool
-	}{
-		{name: "empty_allowed", value: "", wantErr: false},
-		{name: "disable", value: "disable", wantErr: false},
-		{name: "require", value: "require", wantErr: false},
-		{name: "invalid_bogus", value: "bogus", wantErr: true},
-	}
+	// Empty is permitted: Fetcher integration is separately gated by
+	// `fetcher.enabled` (default false). See systemplane_keys.go comment.
+	require.NoError(t, validateFetcherURL(""))
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+func TestValidateFetcherURL_HTTPAndHTTPSAccepted(t *testing.T) {
+	t.Parallel()
 
-			err := validateOptionalSSLMode(tt.value)
+	require.NoError(t, validateFetcherURL("https://fetcher.example.com"))
+	require.NoError(t, validateFetcherURL("http://localhost:4006"))
+}
 
-			if tt.wantErr {
-				require.Error(t, err)
-				assert.ErrorIs(t, err, domain.ErrValueInvalid)
-			} else {
-				require.NoError(t, err)
-			}
-		})
+func TestValidateFetcherURL_Malformed(t *testing.T) {
+	t.Parallel()
+
+	// "not-a-url" parses but is not absolute (no scheme).
+	// "ftp://example.com" is absolute but uses a non-HTTP scheme.
+	// "://broken" fails url.Parse outright.
+	for _, u := range []string{"not-a-url", "ftp://example.com", "://broken"} {
+		require.Errorf(t, validateFetcherURL(u), "expected error for URL %q", u)
 	}
 }
 
-func TestRegisterMatcherKeys_ValidatorNonEmptyString(t *testing.T) {
+func TestValidateFetcherURL_NonString(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name    string
-		value   any
-		wantErr bool
-	}{
-		{name: "valid", value: "localhost", wantErr: false},
-		{name: "empty", value: "", wantErr: true},
-		{name: "whitespace_only", value: "   ", wantErr: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			err := validateNonEmptyString(tt.value)
-
-			if tt.wantErr {
-				require.Error(t, err)
-				assert.ErrorIs(t, err, domain.ErrValueInvalid)
-			} else {
-				require.NoError(t, err)
-			}
-		})
-	}
+	require.Error(t, validateFetcherURL(42))
+	require.Error(t, validateFetcherURL(nil))
 }
 
-func TestRegisterMatcherKeys_SecretKeysHaveRedactFull(t *testing.T) {
-	t.Parallel()
+// --- matcherKeyDefs(cfg) env-seeded defaults ---
+//
+// The signature change matcherKeyDefs() -> matcherKeyDefs(cfg) ensures env
+// overrides like MATCHER_RATE_LIMIT_MAX=10000 propagate to the registered
+// systemplane default. Without this seeding, SystemplaneGetInt returned the
+// compile-time default with ok=true, silently dropping env overrides.
+//
+// These tests cover representative keys spanning int/string/bool/duration-like
+// fields across several Config sub-structs.
 
-	reg := registry.New()
-	require.NoError(t, RegisterMatcherKeys(reg))
+// findKeyDef returns the matcherKeyDef with the given dotted key, or fails the
+// test if no such key is registered.
+func findKeyDef(t *testing.T, defs []matcherKeyDef, key string) matcherKeyDef {
+	t.Helper()
 
-	allKeys := reg.List(domain.KindConfig)
-
-	for _, def := range allKeys {
-		if def.Secret {
-			assert.Equal(t, domain.RedactFull, def.RedactPolicy,
-				"secret key %q must have RedactFull policy", def.Key)
-		}
-	}
-}
-
-func TestRegisterMatcherKeys_NonSecretKeysHaveRedactNone(t *testing.T) {
-	t.Parallel()
-
-	reg := registry.New()
-	require.NoError(t, RegisterMatcherKeys(reg))
-
-	allKeys := reg.List(domain.KindConfig)
-
-	for _, def := range allKeys {
-		if !def.Secret {
-			assert.Equal(t, domain.RedactNone, def.RedactPolicy,
-				"non-secret key %q must have RedactNone policy", def.Key)
-		}
-	}
-}
-
-func TestRegisterMatcherKeys_AllKeysHaveDescription(t *testing.T) {
-	t.Parallel()
-
-	reg := registry.New()
-	require.NoError(t, RegisterMatcherKeys(reg))
-
-	allKeys := reg.List(domain.KindConfig)
-
-	for _, def := range allKeys {
-		assert.NotEmpty(t, def.Description,
-			"key %q must have a non-empty description", def.Key)
-	}
-}
-
-func TestRegisterMatcherKeys_AllKeysHaveGroup(t *testing.T) {
-	t.Parallel()
-
-	reg := registry.New()
-	require.NoError(t, RegisterMatcherKeys(reg))
-
-	allKeys := reg.List(domain.KindConfig)
-
-	for _, def := range allKeys {
-		assert.NotEmpty(t, def.Group,
-			"key %q must have a non-empty group", def.Key)
-	}
-}
-
-func TestRegisterMatcherKeys_AllKeysAreKindConfig(t *testing.T) {
-	t.Parallel()
-
-	defs := matcherKeyDefs()
-
-	for _, def := range defs {
-		assert.Equal(t, domain.KindConfig, def.Kind,
-			"key %q must be KindConfig (settings set is initially empty)", def.Key)
-	}
-}
-
-func TestRegisterMatcherKeys_AllKeysHaveGlobalScope(t *testing.T) {
-	t.Parallel()
-
-	defs := matcherKeyDefs()
-
-	for _, def := range defs {
-		require.Len(t, def.AllowedScopes, 1,
-			"key %q must have exactly one allowed scope", def.Key)
-		assert.Equal(t, domain.ScopeGlobal, def.AllowedScopes[0],
-			"key %q must have ScopeGlobal", def.Key)
-	}
-}
-
-func TestRegisterMatcherKeys_BootstrapOnlyKeysAreImmutable(t *testing.T) {
-	t.Parallel()
-
-	defs := matcherKeyDefs()
-
-	for _, def := range defs {
-		if def.ApplyBehavior == domain.ApplyBootstrapOnly {
-			assert.False(t, def.MutableAtRuntime,
-				"bootstrap-only key %q must have MutableAtRuntime=false", def.Key)
-		}
-	}
-}
-
-func TestRegisterMatcherKeys_RuntimeKeysAreMutable(t *testing.T) {
-	t.Parallel()
-
-	defs := matcherKeyDefs()
-
-	for _, def := range defs {
-		if def.ApplyBehavior != domain.ApplyBootstrapOnly {
-			assert.True(t, def.MutableAtRuntime,
-				"runtime key %q (behavior=%s) must have MutableAtRuntime=true", def.Key, def.ApplyBehavior)
-		}
-	}
-}
-
-func TestRegisterMatcherKeys_NoDuplicateKeys(t *testing.T) {
-	t.Parallel()
-
-	defs := matcherKeyDefs()
-	seen := make(map[string]bool, len(defs))
-
-	for _, def := range defs {
-		assert.False(t, seen[def.Key],
-			"duplicate key definition: %q", def.Key)
-
-		seen[def.Key] = true
-	}
-}
-
-func TestRegisterMatcherKeys_SecretKeyCount(t *testing.T) {
-	t.Parallel()
-
-	defs := matcherKeyDefs()
-
-	secretCount := 0
-
-	for _, def := range defs {
-		if def.Secret {
-			secretCount++
+	for _, d := range defs {
+		if d.key == key {
+			return d
 		}
 	}
 
-	assert.Equal(t, expectedSecretKeyCount, secretCount, "secret key count mismatch")
+	t.Fatalf("matcherKeyDefs missing key %q", key)
+
+	return matcherKeyDef{}
 }
 
-func TestRegisterMatcherKeys_ValidatorIntFromFloat64(t *testing.T) {
+// TestMatcherKeyDefs_DefaultsReflectCfgRateLimit verifies that non-default
+// rate_limit values in cfg flow through to the registered key defaults. This
+// is the bug the refactor fixes: previously the registered default was the
+// compile-time constant 100, which silently overrode env values.
+func TestMatcherKeyDefs_DefaultsReflectCfgRateLimit(t *testing.T) {
 	t.Parallel()
 
-	// JSON unmarshalling delivers numbers as float64. Validators must handle this.
-	require.NoError(t, validatePositiveInt(float64(42)))
-	require.Error(t, validatePositiveInt(float64(-1)))
-	require.Error(t, validatePositiveInt(float64(0)))
+	cfg := defaultConfig()
+	cfg.RateLimit.Enabled = false
+	cfg.RateLimit.Max = 12345
+	cfg.RateLimit.ExpirySec = 789
+	cfg.RateLimit.ExportMax = 42
+	cfg.RateLimit.ExportExpirySec = 17
+	cfg.RateLimit.DispatchMax = 9876
+	cfg.RateLimit.DispatchExpirySec = 54
 
-	// Non-integer float64 should fail.
-	require.Error(t, validatePositiveInt(3.14))
+	defs := matcherKeyDefs(cfg)
+
+	assert.Equal(t, false, findKeyDef(t, defs, "rate_limit.enabled").defaultValue)
+	assert.Equal(t, 12345, findKeyDef(t, defs, "rate_limit.max").defaultValue)
+	assert.Equal(t, 789, findKeyDef(t, defs, "rate_limit.expiry_sec").defaultValue)
+	assert.Equal(t, 42, findKeyDef(t, defs, "rate_limit.export_max").defaultValue)
+	assert.Equal(t, 17, findKeyDef(t, defs, "rate_limit.export_expiry_sec").defaultValue)
+	assert.Equal(t, 9876, findKeyDef(t, defs, "rate_limit.dispatch_max").defaultValue)
+	assert.Equal(t, 54, findKeyDef(t, defs, "rate_limit.dispatch_expiry_sec").defaultValue)
 }
 
-func TestRegisterMatcherKeys_ValidatorRejectsWrongType(t *testing.T) {
+// TestMatcherKeyDefs_DefaultsReflectCfgServer exercises string and bool fields
+// across the server/cors categories. Bootstrap-only server fields
+// (address, tls_*, trusted_proxies) are not registered — see
+// TestMatcherKeyDefs_NoBootstrapOnlyKeys for the exclusion guard.
+func TestMatcherKeyDefs_DefaultsReflectCfgServer(t *testing.T) {
 	t.Parallel()
 
-	err := validatePositiveInt("not-a-number")
+	cfg := defaultConfig()
+	cfg.Server.BodyLimitBytes = 1024 * 1024
+	cfg.Server.CORSAllowedOrigins = "https://custom.example.com"
+	cfg.Server.CORSAllowedMethods = "GET,POST"
+
+	defs := matcherKeyDefs(cfg)
+
+	assert.Equal(t, 1024*1024, findKeyDef(t, defs, "server.body_limit_bytes").defaultValue)
+	assert.Equal(t, "https://custom.example.com", findKeyDef(t, defs, "cors.allowed_origins").defaultValue)
+	assert.Equal(t, "GET,POST", findKeyDef(t, defs, "cors.allowed_methods").defaultValue)
+}
+
+// TestMatcherKeyDefs_DefaultsReflectCfgIdempotency covers duration-like int
+// fields (seconds/hours) that feed cfg.IdempotencyRetryWindow() accessors.
+func TestMatcherKeyDefs_DefaultsReflectCfgIdempotency(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.Idempotency.RetryWindowSec = 600
+	cfg.Idempotency.SuccessTTLHours = 48
+	cfg.Idempotency.HMACSecret = "test-secret-long-enough-to-look-real"
+
+	defs := matcherKeyDefs(cfg)
+
+	assert.Equal(t, 600, findKeyDef(t, defs, "idempotency.retry_window_sec").defaultValue)
+	assert.Equal(t, 48, findKeyDef(t, defs, "idempotency.success_ttl_hours").defaultValue)
+	assert.Equal(t, "test-secret-long-enough-to-look-real", findKeyDef(t, defs, "idempotency.hmac_secret").defaultValue)
+}
+
+// TestMatcherKeyDefs_DefaultsReflectCfgFetcher spans int/string/bool fields
+// across the fetcher integration.
+func TestMatcherKeyDefs_DefaultsReflectCfgFetcher(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.Fetcher.Enabled = true
+	cfg.Fetcher.URL = "https://fetcher.internal:8443"
+	cfg.Fetcher.AllowPrivateIPs = true
+	cfg.Fetcher.HealthTimeoutSec = 7
+	cfg.Fetcher.RequestTimeoutSec = 45
+	cfg.Fetcher.DiscoveryIntervalSec = 120
+	cfg.Fetcher.SchemaCacheTTLSec = 600
+	cfg.Fetcher.ExtractionPollSec = 10
+	cfg.Fetcher.ExtractionTimeoutSec = 1200
+
+	defs := matcherKeyDefs(cfg)
+
+	assert.Equal(t, true, findKeyDef(t, defs, "fetcher.enabled").defaultValue)
+	assert.Equal(t, "https://fetcher.internal:8443", findKeyDef(t, defs, "fetcher.url").defaultValue)
+	assert.Equal(t, true, findKeyDef(t, defs, "fetcher.allow_private_ips").defaultValue)
+	assert.Equal(t, 7, findKeyDef(t, defs, "fetcher.health_timeout_sec").defaultValue)
+	assert.Equal(t, 45, findKeyDef(t, defs, "fetcher.request_timeout_sec").defaultValue)
+	assert.Equal(t, 120, findKeyDef(t, defs, "fetcher.discovery_interval_sec").defaultValue)
+	assert.Equal(t, 600, findKeyDef(t, defs, "fetcher.schema_cache_ttl_sec").defaultValue)
+	assert.Equal(t, 10, findKeyDef(t, defs, "fetcher.extraction_poll_sec").defaultValue)
+	assert.Equal(t, 1200, findKeyDef(t, defs, "fetcher.extraction_timeout_sec").defaultValue)
+}
+
+// TestMatcherKeyDefs_DefaultsReflectCfgArchival covers the largest config
+// group and includes storage-class/bucket strings.
+func TestMatcherKeyDefs_DefaultsReflectCfgArchival(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.Archival.Enabled = true
+	cfg.Archival.IntervalHours = 48
+	cfg.Archival.HotRetentionDays = 30
+	cfg.Archival.WarmRetentionMonths = 12
+	cfg.Archival.ColdRetentionMonths = 60
+	cfg.Archival.BatchSize = 10000
+	cfg.Archival.PartitionLookahead = 7
+	cfg.Archival.StorageBucket = "company-audit"
+	cfg.Archival.StoragePrefix = "audit/prod"
+	cfg.Archival.StorageClass = "STANDARD_IA"
+	cfg.Archival.PresignExpirySec = 7200
+
+	defs := matcherKeyDefs(cfg)
+
+	assert.Equal(t, true, findKeyDef(t, defs, "archival.enabled").defaultValue)
+	assert.Equal(t, 48, findKeyDef(t, defs, "archival.interval_hours").defaultValue)
+	assert.Equal(t, 30, findKeyDef(t, defs, "archival.hot_retention_days").defaultValue)
+	assert.Equal(t, 12, findKeyDef(t, defs, "archival.warm_retention_months").defaultValue)
+	assert.Equal(t, 60, findKeyDef(t, defs, "archival.cold_retention_months").defaultValue)
+	assert.Equal(t, 10000, findKeyDef(t, defs, "archival.batch_size").defaultValue)
+	assert.Equal(t, 7, findKeyDef(t, defs, "archival.partition_lookahead").defaultValue)
+	assert.Equal(t, "company-audit", findKeyDef(t, defs, "archival.storage_bucket").defaultValue)
+	assert.Equal(t, "audit/prod", findKeyDef(t, defs, "archival.storage_prefix").defaultValue)
+	assert.Equal(t, "STANDARD_IA", findKeyDef(t, defs, "archival.storage_class").defaultValue)
+	assert.Equal(t, 7200, findKeyDef(t, defs, "archival.presign_expiry_sec").defaultValue)
+}
+
+// TestMatcherKeyDefs_NilCfgDefaults documents that nil cfg is tolerated and
+// produces the same result as defaultConfig(), so in-process tests that call
+// matcherKeyDefs without a Config still work.
+func TestMatcherKeyDefs_NilCfgDefaults(t *testing.T) {
+	t.Parallel()
+
+	nilDefs := matcherKeyDefs(nil)
+	defDefs := matcherKeyDefs(defaultConfig())
+
+	require.Len(t, nilDefs, len(defDefs), "nil-cfg and defaultConfig-cfg must return the same number of keys")
+
+	byKey := make(map[string]any, len(defDefs))
+	for _, d := range defDefs {
+		byKey[d.key] = d.defaultValue
+	}
+
+	for _, d := range nilDefs {
+		want, ok := byKey[d.key]
+		require.True(t, ok, "nil-cfg produced unknown key %q", d.key)
+		assert.Equalf(t, want, d.defaultValue, "nil-cfg default mismatch for key %q", d.key)
+	}
+}
+
+// TestRegisterMatcherKeys_NilClientRejected asserts the exported constructor
+// refuses a nil systemplane client with a wrapped ErrSystemplaneClientNil.
+// The client nil-check fires before the cfg nil-check so the returned
+// sentinel distinguishes the two bootstrap wiring bugs.
+func TestRegisterMatcherKeys_NilClientRejected(t *testing.T) {
+	t.Parallel()
+
+	err := RegisterMatcherKeys(nil, nil)
 	require.Error(t, err)
-	require.ErrorIs(t, err, domain.ErrValueInvalid)
-
-	err = validateLogLevel(42)
-	require.Error(t, err)
-	require.ErrorIs(t, err, domain.ErrValueInvalid)
-
-	err = validateSSLMode(true)
-	require.Error(t, err)
-	require.ErrorIs(t, err, domain.ErrValueInvalid)
-
-	err = validateNonEmptyString(42)
-	require.Error(t, err)
-	require.ErrorIs(t, err, domain.ErrValueInvalid)
+	assert.ErrorIs(t, err, ErrSystemplaneClientNil)
 }
 
-func TestRegisterMatcherKeys_RegistryValidation(t *testing.T) {
+// TestRegisterMatcherKeys_NilCfgRejected asserts the exported constructor
+// refuses a nil cfg with a wrapped ErrConfigNil when a valid client is passed.
+func TestRegisterMatcherKeys_NilCfgRejected(t *testing.T) {
 	t.Parallel()
 
-	reg := registry.New()
-	require.NoError(t, RegisterMatcherKeys(reg))
+	client, err := systemplane.NewForTesting(&noopSystemplaneStore{})
+	require.NoError(t, err, "in-memory systemplane client must initialize")
 
-	// Verify that the registry's Validate method delegates to our custom validators.
-	// app.log_level has a log level validator.
-	require.NoError(t, reg.Validate("app.log_level", "debug"))
-	require.Error(t, reg.Validate("app.log_level", "trace"))
+	t.Cleanup(func() { _ = client.Close() })
 
-	// postgres.primary_ssl_mode has an SSL mode validator.
-	require.NoError(t, reg.Validate("postgres.primary_ssl_mode", "require"))
-	require.Error(t, reg.Validate("postgres.primary_ssl_mode", "prefer"))
-
-	// rate_limit.max has a positive int validator.
-	require.NoError(t, reg.Validate("rate_limit.max", 100))
-	require.Error(t, reg.Validate("rate_limit.max", 0))
-
-	// redis.db has a non-negative int validator.
-	require.NoError(t, reg.Validate("redis.db", 0))
-	require.Error(t, reg.Validate("redis.db", -1))
-}
-
-// countByApplyBehavior counts the number of registered keys with the given apply behavior.
-func countByApplyBehavior(reg registry.Registry, behavior domain.ApplyBehavior) int {
-	allKeys := reg.List(domain.KindConfig)
-
-	count := 0
-
-	for _, def := range allKeys {
-		if def.ApplyBehavior == behavior {
-			count++
-		}
-	}
-
-	return count
+	err = RegisterMatcherKeys(client, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrConfigNil)
 }

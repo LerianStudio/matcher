@@ -11,11 +11,12 @@ import (
 	"sync"
 	"testing"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/LerianStudio/matcher/internal/bootstrap"
 	"github.com/LerianStudio/matcher/tests/integration"
+	"github.com/LerianStudio/matcher/tests/integration/ratelimit"
 )
 
 // sharedService holds the singleton service instance shared across all tests.
@@ -110,6 +111,17 @@ func (sh *SharedServerHarness) getOrCreateSharedService(t *testing.T) (*bootstra
 			return
 		}
 
+		// Override systemplane-registered rate-limit defaults with test-friendly
+		// values. The systemplane `Register` path hardcodes compile-time defaults
+		// (e.g., rate_limit.max=100), which mask env-var overrides because
+		// `client.Get` returns (registeredDefault, true) even when no DB override
+		// exists. Set explicit overrides so integration tests with many
+		// sequential requests from the same test IP do not hit 429.
+		if err := ratelimit.OverrideRateLimitsForTests(context.Background(), svc); err != nil {
+			sharedServiceErr = fmt.Errorf("failed to override rate limits: %w", err)
+			return
+		}
+
 		sharedService = svc
 	})
 
@@ -127,6 +139,10 @@ func setSharedEnvFromContainers(t *testing.T, sh *SharedServerHarness) error {
 		return fmt.Errorf("failed to parse postgres DSN: %w", err)
 	}
 
+	if pgURL.User == nil {
+		return fmt.Errorf("invalid postgres DSN (missing user info): %q", sh.PostgresDSN)
+	}
+
 	pgHost, pgPort, _ := strings.Cut(pgURL.Host, ":")
 	if pgPort == "" {
 		pgPort = "5432"
@@ -140,6 +156,11 @@ func setSharedEnvFromContainers(t *testing.T, sh *SharedServerHarness) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse redis address: %w", err)
 	}
+
+	if redisURL.Host == "" {
+		return fmt.Errorf("invalid redis DSN (empty host): %q", sh.RedisAddr)
+	}
+
 	redisHost := redisURL.Host
 
 	// Set environment variables using os.Setenv (not t.Setenv) since this is shared
@@ -171,7 +192,8 @@ func setSharedEnvFromContainers(t *testing.T, sh *SharedServerHarness) error {
 		"RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK": "true",
 
 		// Auth disabled for tests
-		"AUTH_ENABLED": "false",
+		"AUTH_ENABLED":        "false",
+		"PLUGIN_AUTH_ENABLED": "false",
 
 		// Body limit: 110 MiB / 115343360 bytes
 		"HTTP_BODY_LIMIT_BYTES": "115343360",

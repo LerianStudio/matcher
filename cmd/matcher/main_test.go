@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	"github.com/stretchr/testify/require"
 )
 

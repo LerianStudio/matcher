@@ -9,35 +9,37 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+	"github.com/LerianStudio/lib-commons/v5/commons/assert"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
 // FeeVariance records the difference between expected and actual fees for a transaction.
 type FeeVariance struct {
-	ID            uuid.UUID
-	ContextID     uuid.UUID
-	RunID         uuid.UUID
-	MatchGroupID  uuid.UUID
-	TransactionID uuid.UUID
-	RateID        uuid.UUID
-	Currency      string
-	ExpectedFee   decimal.Decimal
-	ActualFee     decimal.Decimal
-	Delta         decimal.Decimal
-	ToleranceAbs  decimal.Decimal
-	TolerancePct  decimal.Decimal
-	VarianceType  string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID                      uuid.UUID
+	ContextID               uuid.UUID
+	RunID                   uuid.UUID
+	MatchGroupID            uuid.UUID
+	TransactionID           uuid.UUID
+	FeeScheduleID           uuid.UUID
+	FeeScheduleNameSnapshot string
+	Currency                string
+	ExpectedFee             decimal.Decimal
+	ActualFee               decimal.Decimal
+	Delta                   decimal.Decimal
+	ToleranceAbs            decimal.Decimal
+	TolerancePct            decimal.Decimal
+	VarianceType            string
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
 }
 
 // NewFeeVariance creates a validated FeeVariance entity.
 // Delta is computed internally as |expected - actual| to guarantee consistency.
 func NewFeeVariance(
 	ctx context.Context,
-	contextID, runID, matchGroupID, transactionID, rateID uuid.UUID,
+	contextID, runID, matchGroupID, transactionID, feeScheduleID uuid.UUID,
+	feeScheduleNameSnapshot,
 	currency string,
 	expected, actual, tolAbs, tolPct decimal.Decimal,
 	varianceType string,
@@ -60,8 +62,12 @@ func NewFeeVariance(
 		return nil, fmt.Errorf("fee variance transaction id: %w", err)
 	}
 
-	if err := asserter.That(ctx, rateID != uuid.Nil, "rate id is required"); err != nil {
-		return nil, fmt.Errorf("fee variance rate id: %w", err)
+	if err := asserter.That(ctx, feeScheduleID != uuid.Nil, "fee schedule id is required"); err != nil {
+		return nil, fmt.Errorf("fee variance fee schedule id: %w", err)
+	}
+
+	if err := asserter.NotEmpty(ctx, feeScheduleNameSnapshot, "fee schedule name snapshot is required"); err != nil {
+		return nil, fmt.Errorf("fee variance fee schedule name snapshot: %w", err)
 	}
 
 	if err := asserter.NotEmpty(ctx, currency, "currency is required"); err != nil {
@@ -84,20 +90,21 @@ func NewFeeVariance(
 	now := time.Now().UTC()
 
 	return &FeeVariance{
-		ID:            uuid.New(),
-		ContextID:     contextID,
-		RunID:         runID,
-		MatchGroupID:  matchGroupID,
-		TransactionID: transactionID,
-		RateID:        rateID,
-		Currency:      currency,
-		ExpectedFee:   expected,
-		ActualFee:     actual,
-		Delta:         computedDelta,
-		ToleranceAbs:  tolAbs,
-		TolerancePct:  tolPct,
-		VarianceType:  varianceType,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:                      uuid.New(),
+		ContextID:               contextID,
+		RunID:                   runID,
+		MatchGroupID:            matchGroupID,
+		TransactionID:           transactionID,
+		FeeScheduleID:           feeScheduleID,
+		FeeScheduleNameSnapshot: feeScheduleNameSnapshot,
+		Currency:                currency,
+		ExpectedFee:             expected,
+		ActualFee:               actual,
+		Delta:                   computedDelta,
+		ToleranceAbs:            tolAbs,
+		TolerancePct:            tolPct,
+		VarianceType:            varianceType,
+		CreatedAt:               now,
+		UpdatedAt:               now,
 	}, nil
 }

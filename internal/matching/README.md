@@ -7,7 +7,7 @@ The `internal/matching` bounded context is the core engine of the Matcher servic
 This context handles:
 1. **Match Runs**: Orchestrating the end-to-end matching process (fetching candidates, locking, matching, persisting).
 2. **Rule Execution**: Applying deterministic and tolerance-based rules (Exact Match, Date Window, Amount Tolerance, One-to-Many).
-3. **Fee Verification**: Validating transaction fees against configured rates and tolerances.
+3. **Fee Verification**: Validating transaction fees against configured fee schedules and tolerances.
 4. **Locking**: Ensuring transactions are not matched by concurrent processes using distributed locks via Redis.
 5. **Persistence**: Saving `MatchRun`, `MatchGroup`, `MatchItem`, `Adjustment`, and `FeeVariance` records.
 6. **Manual Match / Unmatch**: Creating manual matches or breaking existing ones.
@@ -31,8 +31,7 @@ internal/matching/
 │   │   ├── fee_variance/    # Fee variance repository
 │   │   ├── match_group/     # Match group repository
 │   │   ├── match_item/      # Match item repository
-│   │   ├── match_run/       # Match run repository
-│   │   └── rate/            # Fee rate repository
+│   │   └── match_run/       # Match run repository
 │   ├── rabbitmq/            # Event publisher
 │   └── redis/               # Distributed lock manager
 ├── domain/
@@ -74,8 +73,8 @@ internal/matching/
 
 ### Fee Verification
 
-The engine verifies fees if a `RateID` is configured on the context.
-- **Process**: Extracts actual fee from transaction metadata -> Calculates expected fee based on `Rate` -> Compares delta against `Tolerance`.
+The engine verifies fees using per-transaction `FeeSchedule` resolution via predicates configured on `FeeRule` entities.
+- **Process**: Extracts actual fee from transaction metadata -> Resolves applicable `FeeSchedule` via fee rule predicates -> Compares delta against `Tolerance`.
 - **Outcome**:
   - Within tolerance: Pass.
   - Outside tolerance: Creates a `FeeVariance` record and optionally an exception.
@@ -88,7 +87,7 @@ The engine verifies fees if a `RateID` is configured on the context.
 - **Currency Conversion**: Cross-currency matching with FX rate lookups and base-currency normalization.
 - **Deterministic Sorting**: Ensures consistent match ordering across runs for reproducible results.
 - **Date Math**: Date window evaluation with lag tolerance for handling settlement delays.
-- **Fee Normalization**: Net-to-gross fee conversion during rule execution for accurate fee comparison.
+- **Fee Normalization**: Net-to-gross and gross-to-net fee conversion during rule execution for accurate fee comparison.
 
 > **Note**: The core matching engine implementation lives in `domain/services/` (not `services/command/`). This includes `engine.go` (orchestrator), `allocation.go` / `allocation_failure.go` (amount distribution), `confidence_scorer.go`, the evaluators (`exact_evaluator.go`, `tolerance_evaluator.go`, `date_lag_evaluator.go`), `currency_conversion.go`, `date_math.go`, `deterministic_sort.go`, and rule configuration decoding (`rule_config_decode.go`, `rule_definition.go`). The `services/command/` layer orchestrates use cases (run, manual match, unmatch, adjustments) that delegate to these domain services.
 

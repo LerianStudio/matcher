@@ -165,15 +165,17 @@ func TestBuildVarianceRow_PositiveVariance(t *testing.T) {
 	t.Parallel()
 
 	sourceID := uuid.New()
+	feeScheduleID := uuid.New()
 	expected := decimal.NewFromInt(100)
 	actual := decimal.NewFromInt(110)
 	variance := actual.Sub(expected)
 
-	row := BuildVarianceRow(sourceID, "USD", "PERCENTAGE", expected, actual, variance)
+	row := BuildVarianceRow(sourceID, "USD", feeScheduleID, "PERCENTAGE", expected, actual, variance)
 
 	assert.Equal(t, sourceID, row.SourceID)
 	assert.Equal(t, "USD", row.Currency)
-	assert.Equal(t, "PERCENTAGE", row.FeeType)
+	assert.Equal(t, feeScheduleID, row.FeeScheduleID)
+	assert.Equal(t, "PERCENTAGE", row.FeeScheduleName)
 	assert.True(t, row.TotalExpected.Equal(expected))
 	assert.True(t, row.TotalActual.Equal(actual))
 	assert.True(t, row.NetVariance.Equal(variance))
@@ -185,11 +187,12 @@ func TestBuildVarianceRow_NegativeVariance(t *testing.T) {
 	t.Parallel()
 
 	sourceID := uuid.New()
+	feeScheduleID := uuid.New()
 	expected := decimal.NewFromInt(100)
 	actual := decimal.NewFromInt(90)
 	variance := actual.Sub(expected)
 
-	row := BuildVarianceRow(sourceID, "EUR", "FLAT", expected, actual, variance)
+	row := BuildVarianceRow(sourceID, "EUR", feeScheduleID, "FLAT", expected, actual, variance)
 
 	assert.True(t, row.NetVariance.Equal(decimal.NewFromInt(-10)))
 	assert.NotNil(t, row.VariancePct)
@@ -200,11 +203,12 @@ func TestBuildVarianceRow_ZeroExpected_NilPercentage(t *testing.T) {
 	t.Parallel()
 
 	sourceID := uuid.New()
+	feeScheduleID := uuid.New()
 	expected := decimal.Zero
 	actual := decimal.NewFromInt(5)
 	variance := actual.Sub(expected)
 
-	row := BuildVarianceRow(sourceID, "USD", "TIERED", expected, actual, variance)
+	row := BuildVarianceRow(sourceID, "USD", feeScheduleID, "TIERED", expected, actual, variance)
 
 	assert.True(t, row.TotalExpected.IsZero())
 	assert.True(t, row.TotalActual.Equal(decimal.NewFromInt(5)))
@@ -216,11 +220,12 @@ func TestBuildVarianceRow_ZeroVariance(t *testing.T) {
 	t.Parallel()
 
 	sourceID := uuid.New()
+	feeScheduleID := uuid.New()
 	expected := decimal.NewFromInt(100)
 	actual := decimal.NewFromInt(100)
 	variance := decimal.Zero
 
-	row := BuildVarianceRow(sourceID, "BRL", "PERCENTAGE", expected, actual, variance)
+	row := BuildVarianceRow(sourceID, "BRL", feeScheduleID, "PERCENTAGE", expected, actual, variance)
 
 	assert.True(t, row.NetVariance.IsZero())
 	assert.NotNil(t, row.VariancePct)
@@ -231,11 +236,12 @@ func TestBuildVarianceRow_DecimalPrecision(t *testing.T) {
 	t.Parallel()
 
 	sourceID := uuid.New()
+	feeScheduleID := uuid.New()
 	expected := decimal.NewFromFloat(100.00)
 	actual := decimal.NewFromFloat(101.50)
 	variance := actual.Sub(expected)
 
-	row := BuildVarianceRow(sourceID, "USD", "FLAT", expected, actual, variance)
+	row := BuildVarianceRow(sourceID, "USD", feeScheduleID, "FLAT", expected, actual, variance)
 
 	assert.True(t, row.NetVariance.Equal(decimal.NewFromFloat(1.50)))
 	assert.NotNil(t, row.VariancePct)

@@ -59,13 +59,11 @@ func TestSchemaCache_GetSchema(t *testing.T) {
 	t.Parallel()
 
 	expectedSchema := &sharedPorts.FetcherSchema{
-		ConnectionID: "test-conn",
+		ID: "test-conn",
 		Tables: []sharedPorts.FetcherTableSchema{
 			{
-				TableName: "users",
-				Columns: []sharedPorts.FetcherColumnInfo{
-					{Name: "id", Type: "uuid", Nullable: false},
-				},
+				Name:   "users",
+				Fields: []string{"id"},
 			},
 		},
 	}
@@ -101,7 +99,7 @@ func TestSchemaCache_SetSchema(t *testing.T) {
 		},
 	}
 
-	schema := &sharedPorts.FetcherSchema{ConnectionID: "test-conn"}
+	schema := &sharedPorts.FetcherSchema{ID: "test-conn"}
 	err := cache.SetSchema(context.Background(), "test-conn", schema, 5*time.Minute)
 
 	assert.NoError(t, err)

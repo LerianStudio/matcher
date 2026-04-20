@@ -18,16 +18,17 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
-	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
+	libS3 "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/s3"
 
+	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
-	"github.com/LerianStudio/matcher/internal/reporting/ports"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query/exports"
-	tenantinfra "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
 
@@ -77,7 +78,7 @@ type ExportWorker struct {
 	mu         sync.Mutex
 	jobRepo    repositories.ExportJobRepository
 	reportRepo repositories.ReportRepository
-	storage    ports.ObjectStorageClient
+	storage    sharedPorts.ObjectStorageClient
 	cfg        ExportWorkerConfig
 	logger     libLog.Logger
 	tracer     trace.Tracer
@@ -125,7 +126,7 @@ func normalizeExportWorkerConfig(cfg ExportWorkerConfig) ExportWorkerConfig {
 func NewExportWorker(
 	jobRepo repositories.ExportJobRepository,
 	reportRepo repositories.ReportRepository,
-	storage ports.ObjectStorageClient,
+	storage sharedPorts.ObjectStorageClient,
 	cfg ExportWorkerConfig,
 	logger libLog.Logger,
 ) (*ExportWorker, error) {
@@ -137,7 +138,7 @@ func NewExportWorker(
 		return nil, ErrNilReportRepository
 	}
 
-	if storage == nil {
+	if sharedPorts.IsNilValue(storage) {
 		return nil, ErrNilStorageClient
 	}
 
@@ -270,7 +271,7 @@ func (worker *ExportWorker) pollAndProcess(ctx context.Context) {
 	ctx = libCommons.ContextWithLogger(ctx, worker.logger)
 	ctx = libCommons.ContextWithTracer(ctx, worker.tracer)
 
-	job, err := worker.jobRepo.ClaimNextQueued(ctx)
+	job, jobCtx, err := worker.claimNextQueuedJob(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to claim job", err)
 
@@ -283,10 +284,75 @@ func (worker *ExportWorker) pollAndProcess(ctx context.Context) {
 		return
 	}
 
-	worker.processJob(ctx, job)
+	worker.processJob(jobCtx, job)
+}
+
+func (worker *ExportWorker) claimNextQueuedJob(ctx context.Context) (*entities.ExportJob, context.Context, error) {
+	if tenantLister, ok := worker.jobRepo.(sharedPorts.TenantLister); ok {
+		job, jobCtx, err := worker.claimNextQueuedJobAcrossTenants(ctx, tenantLister)
+		if job != nil || err != nil {
+			return job, jobCtx, err
+		}
+	}
+
+	job, err := worker.jobRepo.ClaimNextQueued(ctx)
+	if err != nil {
+		return nil, ctx, err
+	}
+
+	if job == nil {
+		return nil, ctx, nil
+	}
+
+	return job, withTenantContext(ctx, job.TenantID.String()), nil
+}
+
+func (worker *ExportWorker) claimNextQueuedJobAcrossTenants(
+	ctx context.Context,
+	tenantLister sharedPorts.TenantLister,
+) (*entities.ExportJob, context.Context, error) {
+	tenants, err := tenantLister.ListTenants(ctx)
+	if err != nil {
+		return nil, ctx, fmt.Errorf("list export worker tenants: %w", err)
+	}
+
+	var firstErr error
+
+	for _, tenantID := range tenants {
+		tenantCtx := withTenantContext(ctx, tenantID)
+
+		job, claimErr := worker.jobRepo.ClaimNextQueued(tenantCtx)
+		if claimErr != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("claim export job for tenant %s: %w", tenantID, claimErr)
+			}
+
+			continue
+		}
+
+		if job != nil {
+			return job, withTenantContext(tenantCtx, job.TenantID.String()), nil
+		}
+	}
+
+	if firstErr != nil {
+		return nil, ctx, firstErr
+	}
+
+	return nil, ctx, nil
+}
+
+func withTenantContext(ctx context.Context, tenantID string) context.Context {
+	if tenantID == "" {
+		return ctx
+	}
+
+	return context.WithValue(ctx, auth.TenantIDKey, tenantID)
 }
 
 func (worker *ExportWorker) processJob(ctx context.Context, job *entities.ExportJob) {
+	ctx = withTenantContext(ctx, job.TenantID.String())
+
 	ctx, span := worker.tracer.Start(ctx, "export_worker.process_job")
 	defer span.End()
 
@@ -894,7 +960,12 @@ func (worker *ExportWorker) streamVarianceJSON(
 		}
 
 		for _, item := range items {
-			if err := jsonWriter.WriteRow(item); err != nil {
+			exportRow := exports.NewVarianceExportRow(item)
+			if exportRow == nil {
+				continue
+			}
+
+			if err := jsonWriter.WriteRow(exportRow); err != nil {
 				return 0, err
 			}
 		}
@@ -949,7 +1020,12 @@ func (worker *ExportWorker) streamVarianceXML(
 		}
 
 		for _, item := range items {
-			if err := xmlWriter.WriteRow("row", item); err != nil {
+			exportRow := exports.NewVarianceExportRow(item)
+			if exportRow == nil {
+				continue
+			}
+
+			if err := xmlWriter.WriteRow("row", exportRow); err != nil {
 				return 0, err
 			}
 		}
@@ -1096,12 +1172,14 @@ func (worker *ExportWorker) calculateBackoff(attempt int) time.Duration {
 }
 
 func (worker *ExportWorker) generateFileKey(job *entities.ExportJob) (string, error) {
-	return tenantinfra.ScopedObjectStorageKey(
-		"exports",
-		job.TenantID.String(),
+	originalKey := fmt.Sprintf("exports/%s/%s-%s.%s",
 		job.ContextID.String(),
-		fmt.Sprintf("%s-%s.%s", job.ID.String(), job.ReportType, worker.getExtension(job.Format)),
+		job.ID.String(),
+		job.ReportType,
+		worker.getExtension(job.Format),
 	)
+
+	return libS3.GetObjectStorageKey(job.TenantID.String(), originalKey)
 }
 
 func (worker *ExportWorker) getExtension(format entities.ExportFormat) string {

@@ -12,10 +12,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	outboxEntities "github.com/LerianStudio/lib-commons/v5/commons/outbox"
 	configAudit "github.com/LerianStudio/matcher/internal/configuration/adapters/audit"
 	configPorts "github.com/LerianStudio/matcher/internal/configuration/ports"
-	outboxRepo "github.com/LerianStudio/matcher/internal/outbox/adapters/postgres"
-	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/tests/integration"
@@ -28,7 +27,7 @@ func newAuditPublisher(
 ) *configAudit.OutboxPublisher {
 	t.Helper()
 
-	repo := outboxRepo.NewRepository(h.Provider())
+	repo := integration.NewTestOutboxRepository(t, h.Connection)
 
 	pub, err := configAudit.NewOutboxPublisher(repo)
 	require.NoError(t, err)

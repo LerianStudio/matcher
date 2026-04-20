@@ -17,7 +17,6 @@ type ReconciliationContextInfo struct {
 	ID               uuid.UUID
 	Type             shared.ContextType
 	Active           bool
-	RateID           *uuid.UUID
 	FeeToleranceAbs  decimal.Decimal
 	FeeTolerancePct  decimal.Decimal
 	FeeNormalization *string

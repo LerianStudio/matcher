@@ -745,13 +745,13 @@ func TestVarianceRowsToResponse(t *testing.T) {
 
 		rows := []*entities.VarianceReportRow{
 			{
-				SourceID:      sourceID,
-				Currency:      "USD",
-				FeeType:       "INTERCHANGE",
-				TotalExpected: decimal.NewFromInt(5000),
-				TotalActual:   decimal.NewFromInt(4800),
-				NetVariance:   decimal.NewFromInt(-200),
-				VariancePct:   &pct,
+				SourceID:        sourceID,
+				Currency:        "USD",
+				FeeScheduleName: "INTERCHANGE",
+				TotalExpected:   decimal.NewFromInt(5000),
+				TotalActual:     decimal.NewFromInt(4800),
+				NetVariance:     decimal.NewFromInt(-200),
+				VariancePct:     &pct,
 			},
 		}
 
@@ -760,7 +760,7 @@ func TestVarianceRowsToResponse(t *testing.T) {
 		require.Len(t, result, 1)
 		assert.Equal(t, sourceID.String(), result[0].SourceID)
 		assert.Equal(t, "USD", result[0].Currency)
-		assert.Equal(t, "INTERCHANGE", result[0].FeeType)
+		assert.Equal(t, "INTERCHANGE", result[0].FeeScheduleName)
 		assert.Equal(t, "5000", result[0].TotalExpected)
 		assert.Equal(t, "4800", result[0].TotalActual)
 		assert.Equal(t, "-200", result[0].NetVariance)
@@ -773,12 +773,12 @@ func TestVarianceRowsToResponse(t *testing.T) {
 
 		rows := []*entities.VarianceReportRow{
 			{
-				SourceID:      uuid.New(),
-				Currency:      "EUR",
-				FeeType:       "PROCESSING",
-				TotalExpected: decimal.Zero,
-				TotalActual:   decimal.NewFromInt(100),
-				NetVariance:   decimal.NewFromInt(100),
+				SourceID:        uuid.New(),
+				Currency:        "EUR",
+				FeeScheduleName: "PROCESSING",
+				TotalExpected:   decimal.Zero,
+				TotalActual:     decimal.NewFromInt(100),
+				NetVariance:     decimal.NewFromInt(100),
 			},
 		}
 

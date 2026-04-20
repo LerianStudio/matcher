@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
@@ -167,6 +168,40 @@ func TestPublishIngestionCompleted_EmptyPublisher(t *testing.T) {
 
 	err = publisher.PublishIngestionCompleted(context.Background(), event)
 	require.ErrorIs(t, err, errPublisherNotInit)
+}
+
+// TestPublish_MultiTenantWithNilManager exercises the outer guard that
+// rejects publish() when multiTenant is true but rmqManager is nil. Without
+// the guard, publishMultiTenant would nil-deref on GetChannel. The error
+// maps to the existing errPublisherNotInit wiring sentinel so callers need
+// no new sentinel to discriminate.
+func TestPublish_MultiTenantWithNilManager(t *testing.T) {
+	t.Parallel()
+
+	publisher := &EventPublisher{multiTenant: true}
+
+	job := &entities.IngestionJob{
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
+		SourceID:  uuid.New(),
+		Status:    value_objects.JobStatusProcessing,
+	}
+
+	event, err := entities.NewIngestionCompletedEvent(
+		context.Background(),
+		job,
+		1,
+		time.Now().UTC(),
+		time.Now().UTC(),
+		1,
+		0,
+	)
+	require.NoError(t, err)
+
+	assert.NotPanics(t, func() {
+		publishErr := publisher.PublishIngestionCompleted(context.Background(), event)
+		require.ErrorIs(t, publishErr, errPublisherNotInit)
+	})
 }
 
 // TestPublishIngestionFailed_EmptyPublisher tests empty publisher struct.

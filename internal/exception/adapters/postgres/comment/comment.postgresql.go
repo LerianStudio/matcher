@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
@@ -154,11 +154,11 @@ func (repo *Repository) FindByID(
 
 	defer span.End()
 
-	result, err := pgcommon.WithTenantTxProvider(
+	result, err := pgcommon.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) (*entities.ExceptionComment, error) {
-			row := tx.QueryRowContext(ctx, `
+		func(qe pgcommon.QueryExecutor) (*entities.ExceptionComment, error) {
+			row := qe.QueryRowContext(ctx, `
 				SELECT id, exception_id, author, content, created_at, updated_at
 				FROM exception_comments
 				WHERE id = $1
@@ -193,11 +193,11 @@ func (repo *Repository) FindByExceptionID(
 
 	defer span.End()
 
-	result, err := pgcommon.WithTenantTxProvider(
+	result, err := pgcommon.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) ([]*entities.ExceptionComment, error) {
-			rows, queryErr := tx.QueryContext(ctx, `
+		func(qe pgcommon.QueryExecutor) ([]*entities.ExceptionComment, error) {
+			rows, queryErr := qe.QueryContext(ctx, `
 				SELECT id, exception_id, author, content, created_at, updated_at
 				FROM exception_comments
 				WHERE exception_id = $1
@@ -340,6 +340,63 @@ func (repo *Repository) executeDelete(
 	}
 
 	return true, nil
+}
+
+// DeleteByExceptionAndID deletes a comment only when both the exception ID
+// and the comment ID match. This prevents cross-exception deletion where a
+// caller submits exception B's URL with exception A's comment ID.
+func (repo *Repository) DeleteByExceptionAndID(
+	ctx context.Context,
+	exceptionID, commentID uuid.UUID,
+) error {
+	if repo == nil || repo.provider == nil {
+		return ErrRepoNotInitialized
+	}
+
+	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+	ctx, span := tracer.Start(ctx, "postgres.comment.delete_by_exception_and_id")
+
+	defer span.End()
+
+	_, err := pgcommon.WithTenantTxProvider(
+		ctx,
+		repo.provider,
+		func(tx *sql.Tx) (bool, error) {
+			result, execErr := tx.ExecContext(ctx, `
+				DELETE FROM exception_comments WHERE id = $1 AND exception_id = $2
+			`, commentID.String(), exceptionID.String())
+			if execErr != nil {
+				return false, fmt.Errorf("delete comment scoped to exception: %w", execErr)
+			}
+
+			rowsAffected, affectedErr := result.RowsAffected()
+			if affectedErr != nil {
+				return false, fmt.Errorf("get rows affected: %w", affectedErr)
+			}
+
+			if rowsAffected == 0 {
+				return false, ErrCommentNotFound
+			}
+
+			return true, nil
+		},
+	)
+	if err != nil {
+		if errors.Is(err, ErrCommentNotFound) {
+			return ErrCommentNotFound
+		}
+
+		wrappedErr := fmt.Errorf("delete comment scoped to exception: %w", err)
+		libOpentelemetry.HandleSpanError(span, "failed to delete comment", wrappedErr)
+		logger.With(
+			libLog.String("exception_id", exceptionID.String()),
+			libLog.String("comment_id", commentID.String()),
+		).Log(ctx, libLog.LevelError, "failed to delete comment scoped to exception")
+
+		return wrappedErr
+	}
+
+	return nil
 }
 
 var _ repositories.CommentRepository = (*Repository)(nil)

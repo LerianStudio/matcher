@@ -13,7 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/internal/auth"
+	"github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
+
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
@@ -106,8 +107,8 @@ func TestCallbackRateLimiter_SameExternalKeyDifferentTenants(t *testing.T) {
 	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
 	limiter := newTestRateLimiter(t, provider, 1, time.Minute)
 
-	tenantA := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
-	tenantB := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-b")
+	tenantA := core.ContextWithTenantID(context.Background(), "tenant-a")
+	tenantB := core.ContextWithTenantID(context.Background(), "tenant-b")
 
 	allowed, err := limiter.Allow(tenantA, "JIRA")
 	require.NoError(t, err)
@@ -129,36 +130,30 @@ func TestCallbackRateLimiter_SameExternalKeyDifferentTenants(t *testing.T) {
 func TestScopedRateLimitRedisKey(t *testing.T) {
 	t.Parallel()
 
-	t.Run("missing tenant preserves legacy default-tenant scope", func(t *testing.T) {
+	t.Run("no tenant in context returns raw key unchanged", func(t *testing.T) {
 		t.Parallel()
 
-		assert.Equal(
-			t,
-			"matcher:callback:ratelimit:"+auth.DefaultTenantID+":JIRA",
-			scopedRateLimitRedisKey(context.Background(), "JIRA"),
-		)
+		key, err := scopedRateLimitRedisKey(context.Background(), "JIRA")
+		require.NoError(t, err)
+		assert.Equal(t, "matcher:callback:ratelimit:JIRA", key)
 	})
 
-	t.Run("explicit default tenant preserves legacy format", func(t *testing.T) {
+	t.Run("tenant in context returns tenant-prefixed key", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := context.WithValue(context.Background(), auth.TenantIDKey, auth.DefaultTenantID)
-		assert.Equal(
-			t,
-			"matcher:callback:ratelimit:"+auth.DefaultTenantID+":JIRA",
-			scopedRateLimitRedisKey(ctx, "JIRA"),
-		)
+		ctx := core.ContextWithTenantID(context.Background(), "tenant-a")
+		key, err := scopedRateLimitRedisKey(ctx, "JIRA")
+		require.NoError(t, err)
+		assert.Equal(t, "tenant:tenant-a:matcher:callback:ratelimit:JIRA", key)
 	})
 
-	t.Run("explicit custom tenant is scoped without double colon", func(t *testing.T) {
+	t.Run("default tenant in context returns tenant-prefixed key", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
-		assert.Equal(
-			t,
-			"matcher:callback:ratelimit:tenant-a:JIRA",
-			scopedRateLimitRedisKey(ctx, "JIRA"),
-		)
+		ctx := core.ContextWithTenantID(context.Background(), "11111111-1111-1111-1111-111111111111")
+		key, err := scopedRateLimitRedisKey(ctx, "JIRA")
+		require.NoError(t, err)
+		assert.Equal(t, "tenant:11111111-1111-1111-1111-111111111111:matcher:callback:ratelimit:JIRA", key)
 	})
 }
 
@@ -225,6 +220,38 @@ func TestCallbackRateLimiter_NilProviderConstructor(t *testing.T) {
 	limiter, err := NewCallbackRateLimiter(nil, 10, time.Minute)
 	require.ErrorIs(t, err, ErrRateLimiterNilProvider)
 	require.Nil(t, limiter)
+}
+
+func TestCallbackRateLimiter_CurrentLimit_PrefersResolver(t *testing.T) {
+	t.Parallel()
+
+	limiter := &CallbackRateLimiter{limit: 10}
+	limiter.SetRuntimeLimitResolver(func(context.Context) int { return 25 })
+
+	assert.Equal(t, 25, limiter.currentLimit(context.Background()))
+}
+
+func TestCallbackRateLimiter_AllowUsesRuntimeResolver(t *testing.T) {
+	t.Parallel()
+
+	conn, cleanup := setupRedis(t)
+	t.Cleanup(cleanup)
+
+	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
+	limiter := newTestRateLimiter(t, provider, 1, time.Minute)
+	limiter.SetRuntimeLimitResolver(func(context.Context) int { return 2 })
+
+	allowed, err := limiter.Allow(context.Background(), "test-system")
+	require.NoError(t, err)
+	require.True(t, allowed)
+
+	allowed, err = limiter.Allow(context.Background(), "test-system")
+	require.NoError(t, err)
+	require.True(t, allowed, "runtime resolver should raise the effective limit above the constructor default")
+
+	allowed, err = limiter.Allow(context.Background(), "test-system")
+	require.NoError(t, err)
+	require.False(t, allowed)
 }
 
 func TestCallbackRateLimiter_RedisConnectionError(t *testing.T) {

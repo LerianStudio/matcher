@@ -9,9 +9,9 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
@@ -52,16 +52,9 @@ func (repo *Repository) Create(
 	ctx, span := tracer.Start(ctx, "repository.source.create")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	result, err := common.WithTenantTx(
+	result, err := common.WithTenantTxProvider(
 		ctx,
-		connection.Connection(),
+		repo.provider,
 		func(tx *sql.Tx) (*entities.ReconciliationSource, error) {
 			return repo.executeCreate(ctx, tx, entity)
 		},
@@ -69,7 +62,7 @@ func (repo *Repository) Create(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to create reconciliation source", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to create reconciliation source")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to create reconciliation source")
 
 		return nil, fmt.Errorf("failed to create reconciliation source: %w", err)
 	}
@@ -101,16 +94,9 @@ func (repo *Repository) CreateWithTx(
 	ctx, span := tracer.Start(ctx, "repository.source.create_with_tx")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	result, err := common.WithTenantTxOrExisting(
+	result, err := common.WithTenantTxOrExistingProvider(
 		ctx,
-		connection.Connection(),
+		repo.provider,
 		tx,
 		func(innerTx *sql.Tx) (*entities.ReconciliationSource, error) {
 			return repo.executeCreate(ctx, innerTx, entity)
@@ -119,7 +105,7 @@ func (repo *Repository) CreateWithTx(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to create reconciliation source", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to create reconciliation source")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to create reconciliation source")
 
 		return nil, fmt.Errorf("failed to create reconciliation source: %w", err)
 	}
@@ -178,16 +164,9 @@ func (repo *Repository) Update(
 
 	entity.UpdatedAt = time.Now().UTC()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	result, err := common.WithTenantTx(
+	result, err := common.WithTenantTxProvider(
 		ctx,
-		connection.Connection(),
+		repo.provider,
 		func(tx *sql.Tx) (*entities.ReconciliationSource, error) {
 			return repo.executeUpdate(ctx, tx, entity)
 		},
@@ -196,7 +175,7 @@ func (repo *Repository) Update(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to update reconciliation source", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to update reconciliation source")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to update reconciliation source")
 		}
 
 		return nil, fmt.Errorf("failed to update reconciliation source: %w", err)
@@ -231,16 +210,9 @@ func (repo *Repository) UpdateWithTx(
 
 	entity.UpdatedAt = time.Now().UTC()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	result, err := common.WithTenantTxOrExisting(
+	result, err := common.WithTenantTxOrExistingProvider(
 		ctx,
-		connection.Connection(),
+		repo.provider,
 		tx,
 		func(innerTx *sql.Tx) (*entities.ReconciliationSource, error) {
 			return repo.executeUpdate(ctx, innerTx, entity)
@@ -250,7 +222,7 @@ func (repo *Repository) UpdateWithTx(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to update reconciliation source", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to update reconciliation source")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to update reconciliation source")
 		}
 
 		return nil, fmt.Errorf("failed to update reconciliation source: %w", err)
@@ -309,21 +281,14 @@ func (repo *Repository) Delete(ctx stdctx.Context, contextID, id uuid.UUID) erro
 	ctx, span := tracer.Start(ctx, "repository.source.delete")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	_, err = common.WithTenantTx(ctx, connection.Connection(), func(tx *sql.Tx) (bool, error) {
+	_, err := common.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) (bool, error) {
 		return repo.executeDelete(ctx, tx, contextID, id)
 	})
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to delete reconciliation source", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to delete reconciliation source")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to delete reconciliation source")
 		}
 
 		return fmt.Errorf("failed to delete reconciliation source: %w", err)
@@ -352,16 +317,9 @@ func (repo *Repository) DeleteWithTx(
 	ctx, span := tracer.Start(ctx, "repository.source.delete_with_tx")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	_, err = common.WithTenantTxOrExisting(
+	_, err := common.WithTenantTxOrExistingProvider(
 		ctx,
-		connection.Connection(),
+		repo.provider,
 		tx,
 		func(innerTx *sql.Tx) (bool, error) {
 			return repo.executeDelete(ctx, innerTx, contextID, id)
@@ -371,7 +329,7 @@ func (repo *Repository) DeleteWithTx(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to delete reconciliation source", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to delete reconciliation source")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to delete reconciliation source")
 		}
 
 		return fmt.Errorf("failed to delete reconciliation source: %w", err)

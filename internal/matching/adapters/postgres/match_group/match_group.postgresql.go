@@ -12,10 +12,10 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepos "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
@@ -66,12 +66,7 @@ func (repo *Repository) CreateBatchWithTx(
 		return nil, ErrInvalidTx
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if !ok || sqlTx == nil {
-		return nil, ErrInvalidTx
-	}
-
-	return repo.createBatch(ctx, sqlTx, groups)
+	return repo.createBatch(ctx, tx, groups)
 }
 
 func (repo *Repository) createBatch(
@@ -109,7 +104,7 @@ func (repo *Repository) createBatch(
 		wrappedErr := fmt.Errorf("create match group batch transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create match group batch", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to create match group batch")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to create match group batch")
 
 		return nil, wrappedErr
 	}
@@ -362,7 +357,7 @@ func (repo *Repository) ListByRunID(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to list match groups", wrappedErr)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to list match groups")
+			logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to list match groups")
 		}
 
 		return nil, libHTTP.CursorPagination{}, wrappedErr
@@ -478,7 +473,7 @@ func (repo *Repository) FindByID(
 
 		libOpentelemetry.HandleSpanError(span, "failed to find match group by id", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to find match group by id")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to find match group by id")
 
 		return nil, wrappedErr
 	}
@@ -516,7 +511,7 @@ func (repo *Repository) Update(
 		if !errors.Is(wrappedErr, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to update match group", wrappedErr)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to update match group")
+			logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to update match group")
 		}
 
 		return nil, wrappedErr
@@ -543,11 +538,6 @@ func (repo *Repository) UpdateWithTx(
 		return nil, ErrTransactionRequired
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if !ok || sqlTx == nil {
-		return nil, ErrInvalidTx
-	}
-
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 	ctx, span := tracer.Start(ctx, "postgres.update_match_group_with_tx")
 
@@ -556,7 +546,7 @@ func (repo *Repository) UpdateWithTx(
 	result, err := pgcommon.WithTenantTxOrExistingProvider(
 		ctx,
 		repo.provider,
-		sqlTx,
+		tx,
 		func(innerTx *sql.Tx) (*matchingEntities.MatchGroup, error) {
 			return repo.executeUpdate(ctx, innerTx, group)
 		},
@@ -566,7 +556,7 @@ func (repo *Repository) UpdateWithTx(
 		if !errors.Is(wrappedErr, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to update match group", wrappedErr)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to update match group")
+			logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to update match group")
 		}
 
 		return nil, wrappedErr

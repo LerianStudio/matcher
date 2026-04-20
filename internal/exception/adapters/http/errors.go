@@ -2,6 +2,8 @@ package http
 
 import (
 	"errors"
+
+	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 )
 
 // Handler-level errors for the exception domain.
@@ -40,7 +42,8 @@ var (
 	ErrInvalidExceptionID = errors.New("invalid exception id")
 
 	// ErrExceptionNotFound indicates the exception was not found.
-	ErrExceptionNotFound = errors.New("exception not found")
+	// Aliased to the domain sentinel so errors.Is matches across layers.
+	ErrExceptionNotFound = entities.ErrExceptionNotFound
 
 	// ErrExceptionAccessDenied indicates access to the exception was denied.
 	ErrExceptionAccessDenied = errors.New("access to exception denied")

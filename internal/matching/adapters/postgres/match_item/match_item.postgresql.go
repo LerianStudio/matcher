@@ -10,9 +10,9 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepos "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
@@ -46,7 +46,7 @@ func (repo *Repository) CreateBatch(
 }
 
 // CreateBatchWithTx persists multiple match items using an existing transaction.
-// The tx must be a *sql.Tx or ErrInvalidTx is returned.
+// The tx must be non-nil.
 func (repo *Repository) CreateBatchWithTx(
 	ctx context.Context,
 	tx matchingRepos.Tx,
@@ -60,12 +60,7 @@ func (repo *Repository) CreateBatchWithTx(
 		return nil, ErrInvalidTx
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if !ok || sqlTx == nil {
-		return nil, ErrInvalidTx
-	}
-
-	return repo.createBatch(ctx, sqlTx, items)
+	return repo.createBatch(ctx, tx, items)
 }
 
 func (repo *Repository) createBatch(
@@ -130,7 +125,7 @@ func (repo *Repository) createBatch(
 		wrappedErr := fmt.Errorf("create match item batch transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create match item batch", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to create match item batch")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to create match item batch")
 
 		return nil, wrappedErr
 	}
@@ -193,7 +188,7 @@ func (repo *Repository) ListByMatchGroupID(
 		wrappedErr := fmt.Errorf("list match items by group: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list match items by group", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to list match items by group")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to list match items by group")
 
 		return nil, wrappedErr
 	}
@@ -231,7 +226,7 @@ func (repo *Repository) ListByMatchGroupIDs(
 		wrappedErr := fmt.Errorf("list match items by group ids: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list match items by group ids", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to list match items by group ids")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to list match items by group ids")
 
 		return nil, wrappedErr
 	}

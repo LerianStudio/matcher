@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/LerianStudio/matcher/internal/auth"
+	bootstrap "github.com/LerianStudio/matcher/internal/bootstrap"
 	configContextRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/context"
 	configFeeRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/fee_rule"
 	configFieldMapRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/field_map"
@@ -45,20 +46,17 @@ import (
 	matchGroupRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_group"
 	matchItemRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_item"
 	matchRunRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_run"
-	rateRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/rate"
 	matchLockManager "github.com/LerianStudio/matcher/internal/matching/adapters/redis"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	matchingPorts "github.com/LerianStudio/matcher/internal/matching/ports"
 	matchingCommand "github.com/LerianStudio/matcher/internal/matching/services/command"
 
-	outboxRepo "github.com/LerianStudio/matcher/internal/outbox/adapters/postgres"
-	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
-	outboxServices "github.com/LerianStudio/matcher/internal/outbox/services"
+	outboxServices "github.com/LerianStudio/lib-commons/v5/commons/outbox"
 	sharedCross "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
-	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 
 	"github.com/LerianStudio/matcher/tests/integration"
 )
@@ -210,12 +208,12 @@ func wireE4T9UseCases(t *testing.T, h *integration.TestHarness) e4t9Wired {
 	t.Helper()
 
 	redisConn := mustRedisConn(t, h.RedisAddr)
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
 
 	jobRepo := ingestionJobRepo.NewRepository(provider)
 	txRepo := ingestionTxRepo.NewRepository(provider)
 	dedupe := ingestionRedis.NewDedupeService(provider)
-	outbox := outboxRepo.NewRepository(provider)
+	outbox := integration.NewTestOutboxRepository(t, h.Connection)
 
 	parserRegistry := ingestionParsers.NewParserRegistry()
 	parserRegistry.Register(ingestionParsers.NewCSVParser())
@@ -240,13 +238,14 @@ func wireE4T9UseCases(t *testing.T, h *integration.TestHarness) e4t9Wired {
 	})
 	require.NoError(t, err)
 
-	ctxProvider, err := sharedCross.NewContextProviderAdapter(configContextRepo.NewRepository(provider))
+	configProvider, err := sharedCross.NewMatchingConfigurationProvider(
+		configContextRepo.NewRepository(provider),
+		cfgSourceRepo,
+		configMatchRuleRepo.NewRepository(provider),
+		configFeeRuleRepo.NewRepository(provider),
+	)
 	require.NoError(t, err)
 	srcProvider, err := sharedCross.NewSourceProviderAdapter(cfgSourceRepo)
-	require.NoError(t, err)
-	ruleProvider, err := sharedCross.NewMatchRuleProviderAdapter(
-		configMatchRuleRepo.NewRepository(provider),
-	)
 	require.NoError(t, err)
 
 	txAdapter, err := sharedCross.NewTransactionRepositoryAdapterFromRepo(provider, txRepo)
@@ -257,21 +256,18 @@ func wireE4T9UseCases(t *testing.T, h *integration.TestHarness) e4t9Wired {
 	matchGroup := matchGroupRepo.NewRepository(provider)
 	matchItem := matchItemRepo.NewRepository(provider)
 	exceptionCreator := exceptionCreatorRepo.NewRepository(provider)
-	rate := rateRepo.NewRepository(provider)
 	feeVariance := feeVarianceRepo.NewRepository(provider)
 	auditLogRepo := governancePostgres.NewRepository(provider)
 	adjustment := adjustmentRepo.NewRepository(provider, auditLogRepo)
 	feeSchedule := feeScheduleRepo.NewRepository(provider)
 
-	feeRuleProvider, err := sharedCross.NewFeeRuleProviderAdapter(
-		configFeeRuleRepo.NewRepository(provider),
-	)
+	feeRuleProvider, err := sharedCross.NewFeeRuleProviderAdapter(configFeeRuleRepo.NewRepository(provider))
 	require.NoError(t, err)
 
 	matchingUC, err := matchingCommand.New(matchingCommand.UseCaseDeps{
-		ContextProvider:  ctxProvider,
+		ContextProvider:  configProvider.ContextProvider(),
 		SourceProvider:   srcProvider,
-		RuleProvider:     ruleProvider,
+		RuleProvider:     configProvider.MatchRuleProvider(),
 		TxRepo:           txAdapter,
 		LockManager:      lockManager,
 		MatchRunRepo:     matchRun,
@@ -279,7 +275,6 @@ func wireE4T9UseCases(t *testing.T, h *integration.TestHarness) e4t9Wired {
 		MatchItemRepo:    matchItem,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outbox,
-		RateRepo:         rate,
 		FeeVarianceRepo:  feeVariance,
 		AdjustmentRepo:   adjustment,
 		InfraProvider:    provider,
@@ -319,54 +314,54 @@ func countInt(
 
 type capturePublishers struct {
 	matchConfirmed int
+	matchUnmatched int
 	last           *shared.MatchConfirmedEvent
+	tenantIDs      []uuid.UUID
 }
 
-func (c *capturePublishers) PublishIngestionCompleted(
-	_ context.Context,
-	_ *ingestionEntities.IngestionCompletedEvent,
-) error {
+func (cap *capturePublishers) PublishMatchConfirmed(_ context.Context, event *shared.MatchConfirmedEvent) error {
+	cap.matchConfirmed++
+	cap.last = event
+	cap.tenantIDs = append(cap.tenantIDs, event.TenantID)
 	return nil
 }
 
-func (c *capturePublishers) PublishIngestionFailed(
-	_ context.Context,
-	_ *ingestionEntities.IngestionFailedEvent,
-) error {
+func (cap *capturePublishers) PublishMatchUnmatched(_ context.Context, _ *shared.MatchUnmatchedEvent) error {
+	cap.matchUnmatched++
 	return nil
 }
 
-func (c *capturePublishers) PublishMatchConfirmed(
-	_ context.Context,
-	event *shared.MatchConfirmedEvent,
-) error {
-	c.matchConfirmed++
-	c.last = event
+type noopAuditPublisher struct{}
+
+func (noopAuditPublisher) PublishAuditLogCreated(context.Context, *shared.AuditLogCreatedEvent) error {
 	return nil
 }
 
-func (c *capturePublishers) PublishMatchUnmatched(
-	_ context.Context,
-	_ *shared.MatchUnmatchedEvent,
-) error {
-	return nil
-}
+var (
+	_ shared.MatchEventPublisher          = (*capturePublishers)(nil)
+	_ sharedPorts.IngestionEventPublisher = (*noopIngestionPublisher)(nil)
+	_ shared.AuditEventPublisher          = noopAuditPublisher{}
+)
 
 func newDispatcher(
 	t *testing.T,
 	h *integration.TestHarness,
 	cap *capturePublishers,
+	opts ...outboxServices.DispatcherOption,
 ) *outboxServices.Dispatcher {
 	t.Helper()
 
-	provider := h.Provider()
-	repo := outboxRepo.NewRepository(provider)
+	repo := integration.NewTestOutboxRepository(t, h.Connection)
+	registry := outboxServices.NewHandlerRegistry()
+	err := bootstrap.RegisterOutboxHandlers(registry, &noopIngestionPublisher{}, cap, noopAuditPublisher{})
+	require.NoError(t, err)
+
 	dispatcher, err := outboxServices.NewDispatcher(
 		repo,
-		cap,
-		cap,
+		registry,
 		nil,
 		noop.NewTracerProvider().Tracer("tests.integration.outbox"),
+		opts...,
 	)
 	require.NoError(t, err)
 
@@ -382,7 +377,7 @@ func assertMatchConfirmedPending(
 	return countInt(t, ctx, h.Connection,
 		"SELECT count(*) FROM outbox_events WHERE event_type=$1 AND status=$2",
 		shared.EventTypeMatchConfirmed,
-		outboxEntities.OutboxStatusPending,
+		outboxServices.OutboxStatusPending,
 	)
 }
 
@@ -503,7 +498,7 @@ func registerFailureDiagnostics(t *testing.T, h *integration.TestHarness, contex
 				diagCtx,
 				h.Connection,
 				"SELECT count(*) FROM outbox_events WHERE status=$1",
-				outboxEntities.OutboxStatusPending,
+				outboxServices.OutboxStatusPending,
 			),
 		)
 	})
