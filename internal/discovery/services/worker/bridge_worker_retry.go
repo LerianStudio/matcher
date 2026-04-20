@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
@@ -29,6 +29,10 @@ func (worker *BridgeWorker) persistTerminalFailure(
 	class vo.BridgeErrorClass,
 	originalErr error,
 ) {
+	if extraction == nil {
+		return
+	}
+
 	logger, _ := worker.tracking(ctx)
 
 	extraction.RecordBridgeAttempt()
@@ -75,6 +79,10 @@ func (worker *BridgeWorker) handleTransientFailure(
 	extraction *entities.ExtractionRequest,
 	originalErr error,
 ) {
+	if extraction == nil {
+		return
+	}
+
 	logger, _ := worker.tracking(ctx)
 
 	attempts := extraction.RecordBridgeAttempt()

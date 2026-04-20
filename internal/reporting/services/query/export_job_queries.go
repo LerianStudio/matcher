@@ -8,10 +8,10 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
@@ -96,30 +96,38 @@ func (svc *ExportJobQueryService) List(
 	return jobs, pagination, nil
 }
 
-// ListByContext retrieves export jobs for a specific reconciliation context.
+// ListByContextInput contains parameters for listing export jobs scoped to a context.
+type ListByContextInput struct {
+	ContextID uuid.UUID
+	Cursor    *libHTTP.TimestampCursor
+	Limit     int
+}
+
+// ListByContext retrieves export jobs for a specific reconciliation context with
+// forward-only cursor-based pagination. The returned CursorPagination.Next is
+// empty when there are no more pages.
 func (svc *ExportJobQueryService) ListByContext(
 	ctx context.Context,
-	contextID uuid.UUID,
-	limit int,
-) ([]*entities.ExportJob, error) {
+	input ListByContextInput,
+) ([]*entities.ExportJob, libHTTP.CursorPagination, error) {
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 
 	ctx, span := tracer.Start(ctx, "reporting.query.export_job.list_by_context")
 	defer span.End()
 
-	jobs, err := svc.repo.ListByContext(ctx, contextID, limit)
+	jobs, pagination, err := svc.repo.ListByContext(ctx, input.ContextID, input.Cursor, input.Limit)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list export jobs by context", err)
 
 		logger.Log(ctx, libLog.LevelError, fmt.Sprintf(
 			"failed to list export jobs by context %s (limit=%d): %v",
-			contextID.String(),
-			limit,
+			input.ContextID.String(),
+			input.Limit,
 			err,
 		))
 
-		return nil, fmt.Errorf("listing export jobs by context: %w", err)
+		return nil, libHTTP.CursorPagination{}, fmt.Errorf("listing export jobs by context: %w", err)
 	}
 
-	return jobs, nil
+	return jobs, pagination, nil
 }

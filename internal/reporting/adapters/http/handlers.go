@@ -6,15 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/adapters/http/dto"
@@ -63,18 +62,20 @@ type ReconciliationContextInfo = sharedPorts.ContextAccessInfo
 
 type contextProvider = sharedPorts.ContextAccessProvider
 
-// productionMode indicates whether the application is running in production.
-// Set once during handler construction via NewHandler; governs SafeError behavior
-// (suppresses internal error details in client responses when true).
-// Uses atomic.Bool because parallel tests construct handlers concurrently.
-var productionMode atomic.Bool
-
 // Handlers provides HTTP handlers for reporting operations.
+//
+// productionMode governs SafeError behavior (suppresses internal error
+// details in client responses when true). Stored as a per-handler bool
+// rather than a package-level atomic.Bool — the previous shared-global
+// state coupled every test in the package to whichever test last
+// constructed a handler, regardless of the production flag each test
+// wanted to exercise.
 type Handlers struct {
 	dashboardUC     *query.DashboardUseCase
 	exportUC        *query.UseCase
 	contextProvider contextProvider
 	contextVerifier libHTTP.TenantOwnershipVerifier
+	productionMode  bool
 }
 
 // NewHandlers creates a new Handlers instance with the given use cases.
@@ -96,8 +97,6 @@ func NewHandlers(
 		return nil, ErrNilExportUseCase
 	}
 
-	productionMode.Store(production)
-
 	verifier := NewTenantOwnershipVerifier(ctxProvider)
 
 	return &Handlers{
@@ -105,6 +104,7 @@ func NewHandlers(
 		exportUC:        exportUC,
 		contextProvider: ctxProvider,
 		contextVerifier: verifier,
+		productionMode:  production,
 	}, nil
 }
 
@@ -112,8 +112,14 @@ func startHandlerSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, l
 	return sharedhttp.StartHandlerSpan(c, name)
 }
 
-func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
-	sharedhttp.LogSpanError(ctx, span, logger, productionMode.Load(), message, err)
+// The helpers below (logSpanError, badRequest) are defined as methods on
+// every handler type in the reporting package so they can read
+// productionMode from the receiver. Previously they were package-level
+// free functions reading a shared atomic.Bool, which coupled every test
+// in the package to whichever test last constructed a handler.
+
+func (handler *Handlers) logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
+	sharedhttp.LogSpanError(ctx, span, logger, handler.productionMode, message, err)
 }
 
 //nolint:wrapcheck // HTTP transport response is the terminal error boundary.
@@ -127,7 +133,7 @@ func respondContextVerificationError(fiberCtx *fiber.Ctx, err error) error {
 }
 
 //nolint:wrapcheck // HTTP transport response is the terminal error boundary.
-func badRequest(
+func (handler *Handlers) badRequest(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -135,11 +141,11 @@ func badRequest(
 	message string,
 	err error,
 ) error {
-	return sharedhttp.BadRequest(ctx, fiberCtx, span, logger, productionMode.Load(), message, err)
+	return sharedhttp.BadRequest(ctx, fiberCtx, span, logger, handler.productionMode, message, err)
 }
 
 // handleContextVerificationError maps errors from ParseAndVerifyTenantScopedID to HTTP responses.
-func handleContextVerificationError(
+func (handler *Handlers) handleContextVerificationError(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -147,12 +153,12 @@ func handleContextVerificationError(
 	err error,
 ) error {
 	if errors.Is(err, libHTTP.ErrMissingContextID) || errors.Is(err, libHTTP.ErrInvalidContextID) {
-		logSpanError(ctx, span, logger, "context verification failed", err)
+		handler.logSpanError(ctx, span, logger, "context verification failed", err)
 
 		return respondContextVerificationError(fiberCtx, err)
 	}
 
-	logSpanError(ctx, span, logger, "context verification failed", err)
+	handler.logSpanError(ctx, span, logger, "context verification failed", err)
 
 	return respondContextVerificationError(fiberCtx, err)
 }
@@ -261,24 +267,28 @@ func (handler *Handlers) GetVolumeStats(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	filter, err := parseDashboardFilter(fiberCtx, contextID)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
 	stats, err := handler.dashboardUC.GetVolumeStats(ctx, filter)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to get volume stats", err)
+		handler.logSpanError(ctx, span, logger, "failed to get volume stats", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.VolumeStatsToResponse(stats))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.VolumeStatsToResponse(stats)); err != nil {
+		return fmt.Errorf("respond volume stats: %w", err)
+	}
+
+	return nil
 }
 
 // GetMatchRateStats handles GET /v1/reports/contexts/:contextId/dashboard/match-rate
@@ -315,24 +325,28 @@ func (handler *Handlers) GetMatchRateStats(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	filter, err := parseDashboardFilter(fiberCtx, contextID)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
 	stats, err := handler.dashboardUC.GetMatchRateStats(ctx, filter)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to get match rate stats", err)
+		handler.logSpanError(ctx, span, logger, "failed to get match rate stats", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatchRateStatsToResponse(stats))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatchRateStatsToResponse(stats)); err != nil {
+		return fmt.Errorf("respond match rate stats: %w", err)
+	}
+
+	return nil
 }
 
 // GetSLAStats handles GET /v1/reports/contexts/:contextId/dashboard/sla
@@ -369,24 +383,28 @@ func (handler *Handlers) GetSLAStats(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	filter, err := parseDashboardFilter(fiberCtx, contextID)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
 	stats, err := handler.dashboardUC.GetSLAStats(ctx, filter)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to get sla stats", err)
+		handler.logSpanError(ctx, span, logger, "failed to get sla stats", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SLAStatsToResponse(stats))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SLAStatsToResponse(stats)); err != nil {
+		return fmt.Errorf("respond sla stats: %w", err)
+	}
+
+	return nil
 }
 
 // GetDashboardAggregates handles GET /v1/reports/contexts/:contextId/dashboard
@@ -423,24 +441,28 @@ func (handler *Handlers) GetDashboardAggregates(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	filter, err := parseDashboardFilter(fiberCtx, contextID)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
 	aggregates, err := handler.dashboardUC.GetDashboardAggregates(ctx, filter)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to get dashboard aggregates", err)
+		handler.logSpanError(ctx, span, logger, "failed to get dashboard aggregates", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.DashboardAggregatesToResponse(aggregates))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.DashboardAggregatesToResponse(aggregates)); err != nil {
+		return fmt.Errorf("respond dashboard aggregates: %w", err)
+	}
+
+	return nil
 }
 
 // GetMatcherDashboardMetrics handles GET /v1/reports/contexts/:contextId/dashboard/metrics
@@ -480,24 +502,28 @@ func (handler *Handlers) GetMatcherDashboardMetrics(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	filter, err := parseDashboardFilter(fiberCtx, contextID)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
 	metrics, err := handler.dashboardUC.GetMatcherDashboardMetrics(ctx, filter)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to get matcher dashboard metrics", err)
+		handler.logSpanError(ctx, span, logger, "failed to get matcher dashboard metrics", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatcherDashboardMetricsToResponse(metrics))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatcherDashboardMetricsToResponse(metrics)); err != nil {
+		return fmt.Errorf("respond dashboard metrics: %w", err)
+	}
+
+	return nil
 }
 
 // GetSourceBreakdown handles GET /v1/reports/contexts/:contextId/dashboard/source-breakdown
@@ -537,24 +563,28 @@ func (handler *Handlers) GetSourceBreakdown(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	filter, err := parseDashboardFilter(fiberCtx, contextID)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
 	breakdowns, err := handler.dashboardUC.GetSourceBreakdown(ctx, filter)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to get source breakdown", err)
+		handler.logSpanError(ctx, span, logger, "failed to get source breakdown", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SourceBreakdownToResponse(breakdowns))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SourceBreakdownToResponse(breakdowns)); err != nil {
+		return fmt.Errorf("respond source breakdown: %w", err)
+	}
+
+	return nil
 }
 
 // GetCashImpactSummary handles GET /v1/reports/contexts/:contextId/dashboard/cash-impact
@@ -594,24 +624,28 @@ func (handler *Handlers) GetCashImpactSummary(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	filter, err := parseDashboardFilter(fiberCtx, contextID)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
 	summary, err := handler.dashboardUC.GetCashImpactSummary(ctx, filter)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to get cash impact summary", err)
+		handler.logSpanError(ctx, span, logger, "failed to get cash impact summary", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.CashImpactSummaryToResponse(summary))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.CashImpactSummaryToResponse(summary)); err != nil {
+		return fmt.Errorf("respond cash impact summary: %w", err)
+	}
+
+	return nil
 }
 
 // countFn produces a count for a given report filter.
@@ -636,24 +670,28 @@ func (handler *Handlers) handleCount(
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	filter, err := parseReportFilter(fiberCtx, contextID)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
 	count, err := fn(ctx, filter)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to count records", err)
+		handler.logSpanError(ctx, span, logger, "failed to count records", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExportCountResponse{Count: count})
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExportCountResponse{Count: count}); err != nil {
+		return fmt.Errorf("respond export count: %w", err)
+	}
+
+	return nil
 }
 
 // CountMatched handles GET /v1/reports/contexts/:contextId/matches/count
@@ -843,14 +881,14 @@ func (handler *Handlers) handleExport(
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	filter, err := parseReportFilter(fiberCtx, contextID)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
 	format := fiberCtx.Query("format", formatCSV)
@@ -858,10 +896,10 @@ func (handler *Handlers) handleExport(
 	data, contentType, filename, err := fn(ctx, filter, format)
 	if err != nil {
 		if errors.Is(err, ErrInvalidExportFormat) {
-			return badRequest(ctx, fiberCtx, span, logger, "invalid format", err)
+			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid format", err)
 		}
 
-		logSpanError(ctx, span, logger, "failed to export report", err)
+		handler.logSpanError(ctx, span, logger, "failed to export report", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
@@ -1050,31 +1088,35 @@ func (handler *Handlers) GetMatchedReport(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	filter, err := parseReportFilter(fiberCtx, contextID)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
 	items, pagination, err := handler.exportUC.GetMatchedReport(ctx, filter)
 	if err != nil {
 		if errors.Is(err, libHTTP.ErrInvalidCursor) {
-			return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 		}
 
-		logSpanError(ctx, span, logger, "failed to get matched report", err)
+		handler.logSpanError(ctx, span, logger, "failed to get matched report", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListMatchedReportResponse{
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListMatchedReportResponse{
 		Items:      dto.MatchedItemsToResponse(items),
 		Pagination: pagination,
-	})
+	}); err != nil {
+		return fmt.Errorf("respond list matched: %w", err)
+	}
+
+	return nil
 }
 
 // GetUnmatchedReport handles GET /v1/reports/contexts/:contextId/unmatched
@@ -1114,31 +1156,35 @@ func (handler *Handlers) GetUnmatchedReport(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	filter, err := parseReportFilter(fiberCtx, contextID)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
 	items, pagination, err := handler.exportUC.GetUnmatchedReport(ctx, filter)
 	if err != nil {
 		if errors.Is(err, libHTTP.ErrInvalidCursor) {
-			return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 		}
 
-		logSpanError(ctx, span, logger, "failed to get unmatched report", err)
+		handler.logSpanError(ctx, span, logger, "failed to get unmatched report", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListUnmatchedReportResponse{
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListUnmatchedReportResponse{
 		Items:      dto.UnmatchedItemsToResponse(items),
 		Pagination: pagination,
-	})
+	}); err != nil {
+		return fmt.Errorf("respond list unmatched: %w", err)
+	}
+
+	return nil
 }
 
 // GetSummaryReport handles GET /v1/reports/contexts/:contextId/summary
@@ -1175,24 +1221,28 @@ func (handler *Handlers) GetSummaryReport(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	filter, err := parseReportFilter(fiberCtx, contextID)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
 	summary, err := handler.exportUC.GetSummaryReport(ctx, filter)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to get summary report", err)
+		handler.logSpanError(ctx, span, logger, "failed to get summary report", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SummaryReportToResponse(summary))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SummaryReportToResponse(summary)); err != nil {
+		return fmt.Errorf("respond summary report: %w", err)
+	}
+
+	return nil
 }
 
 // GetVarianceReport handles GET /v1/reports/contexts/:contextId/variance
@@ -1232,31 +1282,35 @@ func (handler *Handlers) GetVarianceReport(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	filter, err := parseVarianceReportFilter(fiberCtx, contextID)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
 	rows, pagination, err := handler.exportUC.GetVarianceReport(ctx, filter)
 	if err != nil {
 		if errors.Is(err, libHTTP.ErrInvalidCursor) {
-			return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 		}
 
-		logSpanError(ctx, span, logger, "failed to get variance report", err)
+		handler.logSpanError(ctx, span, logger, "failed to get variance report", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListVarianceReportResponse{
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListVarianceReportResponse{
 		Items:      dto.VarianceRowsToResponse(rows),
 		Pagination: pagination,
-	})
+	}); err != nil {
+		return fmt.Errorf("respond variance report: %w", err)
+	}
+
+	return nil
 }
 
 // CountUnmatched handles GET /v1/reports/contexts/:contextId/unmatched/count
@@ -1322,14 +1376,14 @@ func (handler *Handlers) ExportVarianceReport(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	filter, err := parseVarianceReportFilter(fiberCtx, contextID)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
 	format := fiberCtx.Query("format", formatCSV)
@@ -1341,7 +1395,7 @@ func (handler *Handlers) ExportVarianceReport(fiberCtx *fiber.Ctx) error {
 
 		data, err := handler.exportUC.ExportVarianceCSV(ctx, filter)
 		if err != nil {
-			logSpanError(ctx, span, logger, "failed to export variance CSV", err)
+			handler.logSpanError(ctx, span, logger, "failed to export variance CSV", err)
 
 			return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 		}
@@ -1351,7 +1405,7 @@ func (handler *Handlers) ExportVarianceReport(fiberCtx *fiber.Ctx) error {
 	case formatPDF:
 		data, err := handler.exportUC.ExportVariancePDF(ctx, filter)
 		if err != nil {
-			logSpanError(ctx, span, logger, "failed to export variance PDF", err)
+			handler.logSpanError(ctx, span, logger, "failed to export variance PDF", err)
 
 			return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 		}
@@ -1362,6 +1416,6 @@ func (handler *Handlers) ExportVarianceReport(fiberCtx *fiber.Ctx) error {
 		return fiberCtx.Send(data)
 
 	default:
-		return badRequest(ctx, fiberCtx, span, logger, "invalid format", ErrInvalidExportFormat)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid format", ErrInvalidExportFormat)
 	}
 }

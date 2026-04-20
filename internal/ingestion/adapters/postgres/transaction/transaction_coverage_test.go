@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	pgcommon "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
 	sharedpg "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"

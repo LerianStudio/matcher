@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
 	"github.com/bxcodec/dbresolver/v2"
 	"github.com/golang-migrate/migrate/v4"
 	migratePostgres "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -317,6 +317,14 @@ func (h *SharedTestHarness) Cleanup() error {
 
 const schemaMigrationsTable = "schema_migrations"
 
+// systemplaneEntriesTable is the lib-commons v5 systemplane-backing table.
+// It stores runtime configuration overrides (e.g., rate_limit.max) that the
+// test harness seeds once via the systemplane Client's Set() API. Truncating
+// this table between tests would revert overrides to the compile-time
+// defaults in internal/bootstrap/systemplane_keys.go, which are too low for
+// integration test workloads and cause 429 Too Many Requests failures.
+const systemplaneEntriesTable = "systemplane_entries"
+
 func resetSharedDatabase(t *testing.T, connection *libPostgres.Client) error {
 	t.Helper()
 
@@ -388,8 +396,9 @@ SELECT tablename
 FROM pg_tables
 WHERE schemaname = 'public'
   AND tablename <> $1
+  AND tablename <> $2
 ORDER BY tablename ASC
-`, schemaMigrationsTable)
+`, schemaMigrationsTable, systemplaneEntriesTable)
 	if err != nil {
 		return nil, fmt.Errorf("querying table names: %w", err)
 	}

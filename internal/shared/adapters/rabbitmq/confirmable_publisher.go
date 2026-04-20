@@ -10,10 +10,10 @@ import (
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/backoff"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
-	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
+	"github.com/LerianStudio/lib-commons/v5/commons/backoff"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libRabbitmq "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -29,7 +29,7 @@ const (
 
 // MIGRATION(lib-commons): ConfirmablePublisher Migration Plan
 //
-// This type is a candidate for promotion to lib-commons/v4/commons/rabbitmq so
+// This type is a candidate for promotion to lib-commons/v5/commons/rabbitmq so
 // that all Lerian services (Matcher, Midaz, and future services) can share a
 // single, battle-tested publisher-confirms implementation.
 //

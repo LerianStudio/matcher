@@ -9,7 +9,7 @@ package bootstrap
 import (
 	"testing"
 
-	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
+	libZap "github.com/LerianStudio/lib-commons/v5/commons/zap"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -73,4 +73,72 @@ func TestIsProductionEnvironment(t *testing.T) {
 	assert.True(t, IsProductionEnvironment("production"))
 	assert.True(t, IsProductionEnvironment(" PrOdUcTiOn "))
 	assert.False(t, IsProductionEnvironment("staging"))
+}
+
+// TestIsDevelopmentOrTestEnvironment exhaustively covers the helper that
+// gates dev/test-only behavior. The function trims whitespace and lowercases
+// the input, matching exactly "development" or "test" — every other value
+// (including "dev", empty string, staging, production, UAT) must return false
+// so the caller treats them as production-adjacent.
+func TestIsDevelopmentOrTestEnvironment(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		envName string
+		want    bool
+	}{
+		// Positive — explicit development/test names.
+		{name: "development_lowercase_returns_true", envName: "development", want: true},
+		{name: "test_lowercase_returns_true", envName: "test", want: true},
+
+		// Case-insensitive normalization.
+		{name: "Development_titlecase_returns_true", envName: "Development", want: true},
+		{name: "DEVELOPMENT_uppercase_returns_true", envName: "DEVELOPMENT", want: true},
+		{name: "Test_titlecase_returns_true", envName: "Test", want: true},
+		{name: "TEST_uppercase_returns_true", envName: "TEST", want: true},
+		{name: "TeSt_mixedcase_returns_true", envName: "TeSt", want: true},
+
+		// Whitespace normalization.
+		{name: "development_with_spaces_returns_true", envName: "  development  ", want: true},
+		{name: "test_with_tabs_newlines_returns_true", envName: "\tTeSt\n", want: true},
+		{name: "Development_with_trailing_space_returns_true", envName: "Development ", want: true},
+
+		// Negative — "dev" is NOT equivalent to "development" here.
+		{name: "dev_returns_false", envName: "dev", want: false},
+		{name: "DEV_returns_false", envName: "DEV", want: false},
+		{name: "dev_with_spaces_returns_false", envName: "  dev  ", want: false},
+
+		// Negative — empty string is NOT considered dev (contrast with
+		// isLocalDevelopmentEnvironment, which is scoped to HTTP permissiveness).
+		{name: "empty_string_returns_false", envName: "", want: false},
+		{name: "whitespace_only_returns_false", envName: "   ", want: false},
+
+		// Negative — production / production-adjacent environments.
+		{name: "production_returns_false", envName: "production", want: false},
+		{name: "Production_returns_false", envName: "Production", want: false},
+		{name: "staging_returns_false", envName: "staging", want: false},
+		{name: "qa_returns_false", envName: "qa", want: false},
+		{name: "uat_returns_false", envName: "uat", want: false},
+		{name: "preview_returns_false", envName: "preview", want: false},
+		{name: "prod_returns_false", envName: "prod", want: false},
+
+		// Negative — adjacent / substring / typo values.
+		{name: "testing_returns_false", envName: "testing", want: false},
+		{name: "developmenting_returns_false", envName: "developmenting", want: false},
+		{name: "random_value_returns_false", envName: "unknown-env", want: false},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := IsDevelopmentOrTestEnvironment(tc.envName)
+
+			assert.Equal(t, tc.want, got,
+				"IsDevelopmentOrTestEnvironment(%q) = %v, want %v", tc.envName, got, tc.want)
+		})
+	}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace/noop"
 
+	outboxServices "github.com/LerianStudio/lib-commons/v5/commons/outbox"
 	"github.com/LerianStudio/matcher/internal/ingestion/adapters/parsers"
 	ingestionJobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
 	ingestionTransactionRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/transaction"
@@ -21,8 +22,6 @@ import (
 	ingestionVO "github.com/LerianStudio/matcher/internal/ingestion/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
 	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
-	outboxServices "github.com/LerianStudio/matcher/internal/outbox/services"
-	outboxPostgres "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/outbox"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/tests/integration"
@@ -130,6 +129,20 @@ func (noopDedupe) MarkSeenWithRetry(
 	return nil
 }
 
+func (noopDedupe) MarkSeenBulk(
+	_ context.Context,
+	_ uuid.UUID,
+	hashes []string,
+	_ time.Duration,
+) (map[string]bool, error) {
+	result := make(map[string]bool, len(hashes))
+	for _, h := range hashes {
+		result[h] = true
+	}
+
+	return result, nil
+}
+
 func (noopDedupe) Clear(_ context.Context, _ uuid.UUID, _ string) error {
 	return nil
 }
@@ -208,6 +221,35 @@ func (f *integrationFakeDedupe) MarkSeenWithRetry(
 	return nil
 }
 
+func (f *integrationFakeDedupe) MarkSeenBulk(
+	_ context.Context,
+	_ uuid.UUID,
+	hashes []string,
+	_ time.Duration,
+) (map[string]bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.duplicates == nil {
+		f.duplicates = map[string]bool{}
+	}
+
+	result := make(map[string]bool, len(hashes))
+
+	for _, hash := range hashes {
+		if f.duplicates[hash] {
+			result[hash] = false
+
+			continue
+		}
+
+		f.duplicates[hash] = true
+		result[hash] = true
+	}
+
+	return result, nil
+}
+
 func (f *integrationFakeDedupe) Clear(_ context.Context, _ uuid.UUID, hash string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -277,7 +319,7 @@ func TestIntegrationDedupeJobState(t *testing.T) {
 		contextID := h.Seed.ContextID
 		sourceID := h.Seed.SourceID
 
-		outbox := outboxPostgres.NewRepository(provider)
+		outbox := integration.NewTestOutboxRepository(t, h.Connection)
 		useCase, err := ingestionCommand.NewUseCase(ingestionCommand.UseCaseDeps{
 			JobRepo:         jobRepo,
 			TransactionRepo: txRepo,
@@ -342,7 +384,7 @@ func TestIntegrationUploadFlow(t *testing.T) {
 		registry := parsers.NewParserRegistry()
 		registry.Register(parsers.NewCSVParser())
 
-		outbox := outboxPostgres.NewRepository(provider)
+		outbox := integration.NewTestOutboxRepository(t, h.Connection)
 		useCase, err := ingestionCommand.NewUseCase(ingestionCommand.UseCaseDeps{
 			JobRepo:         jobRepo,
 			TransactionRepo: txRepo,
@@ -394,7 +436,7 @@ func TestIntegrationEventPublication(t *testing.T) {
 
 		contextID := h.Seed.ContextID
 		sourceID := h.Seed.SourceID
-		outbox := outboxPostgres.NewRepository(provider)
+		outbox := integration.NewTestOutboxRepository(t, h.Connection)
 		useCase, err := ingestionCommand.NewUseCase(ingestionCommand.UseCaseDeps{
 			JobRepo:         jobRepo,
 			TransactionRepo: txRepo,
@@ -451,7 +493,7 @@ func TestIntegrationEventPublicationFailure(t *testing.T) {
 
 		contextID := h.Seed.ContextID
 		sourceID := h.Seed.SourceID
-		outbox := outboxPostgres.NewRepository(provider)
+		outbox := integration.NewTestOutboxRepository(t, h.Connection)
 		useCase, err := ingestionCommand.NewUseCase(ingestionCommand.UseCaseDeps{
 			JobRepo:         jobRepo,
 			TransactionRepo: txRepo,
@@ -492,7 +534,7 @@ func TestOutboxDispatcherPublishesPending(t *testing.T) {
 		provider := h.Provider()
 		jobRepo := ingestionJobRepo.NewRepository(provider)
 		txRepo := ingestionTransactionRepo.NewRepository(provider)
-		outbox := outboxPostgres.NewRepository(provider)
+		outbox := integration.NewTestOutboxRepository(t, h.Connection)
 
 		fieldMap := &shared.FieldMap{Mapping: map[string]any{
 			"external_id": "id",
@@ -535,10 +577,20 @@ func TestOutboxDispatcherPublishesPending(t *testing.T) {
 		)
 		require.NoError(t, err)
 
+		handlers := outboxServices.NewHandlerRegistry()
+		err = handlers.Register(shared.EventTypeIngestionCompleted,
+			func(_ context.Context, _ *outboxServices.OutboxEvent) error {
+				publisher.mu.Lock()
+				publisher.completed++
+				publisher.mu.Unlock()
+				return nil
+			},
+		)
+		require.NoError(t, err)
+
 		dispatcher, err := outboxServices.NewDispatcher(
 			outbox,
-			publisher,
-			&noopMatchPublisher{},
+			handlers,
 			nil,
 			noop.NewTracerProvider().Tracer("test"),
 		)

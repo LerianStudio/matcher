@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	configRepositories "github.com/LerianStudio/matcher/internal/configuration/domain/repositories"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"

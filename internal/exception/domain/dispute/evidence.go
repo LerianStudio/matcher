@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+	"github.com/LerianStudio/lib-commons/v5/commons/assert"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	"github.com/LerianStudio/matcher/internal/shared/utils"

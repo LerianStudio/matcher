@@ -13,10 +13,10 @@ import (
 	"github.com/gofiber/fiber/v2"
 	fiberSwagger "github.com/swaggo/fiber-swagger"
 
-	authMiddleware "github.com/LerianStudio/lib-auth/v2/auth/middleware"
-	"github.com/LerianStudio/lib-commons/v4/commons/assert"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	"github.com/LerianStudio/lib-commons/v4/commons/net/http/ratelimit"
+	authMiddleware "github.com/LerianStudio/lib-auth/v3/auth/middleware"
+	"github.com/LerianStudio/lib-commons/v5/commons/assert"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	"github.com/LerianStudio/lib-commons/v5/commons/net/http/ratelimit"
 
 	swagger "github.com/LerianStudio/matcher/docs/swagger"
 	"github.com/LerianStudio/matcher/internal/auth"
@@ -133,6 +133,17 @@ func RegisterRoutes(
 				"/health",
 				"/ready",
 				"/version",
+				// /system/* is the v5 systemplane admin plane. Its PUTs are the
+				// canonical "write runtime config" mutation — callers are
+				// expected to be able to flip a value back and forth by
+				// re-sending the same body (e.g., PUT true, ops review, PUT
+				// false, PUT true again). Caching on body-hash would replay
+				// the first response indefinitely and make the admin API
+				// silently non-functional after the first successful write to
+				// a given (key, value) pair. The admin plane has its own
+				// dedicated rate limiter for DoS protection (NewAdminRateLimit),
+				// so idempotency caching adds no safety here — only breakage.
+				"/system",
 			},
 		},
 	)
@@ -143,22 +154,39 @@ func RegisterRoutes(
 		API: app.Group(""),
 	}
 
-	// Build the additional middleware chain. The tenant DB handler (when enabled)
-	// runs AFTER auth/tenant extraction but BEFORE idempotency and rate limiting.
-	additionalMiddleware := []fiber.Handler{
+	// sharedChain is the per-protected-route middleware slice applied AFTER
+	// the auth chain (validateTenantClaims → Authorize → ExtractTenant) and
+	// BEFORE the user-supplied handlers. Order matters:
+	//
+	//   1. WhenEnabled(tenantDBHandler) — multi-tenant DB pinning. Runs first
+	//      so idempotency lookups and rate-limit counters are keyed against
+	//      the correctly-scoped tenant DB.
+	//   2. idempotencyMiddleware       — before rate limiting, so a duplicate
+	//      request that should replay a cached response is not rejected as
+	//      429 before the middleware gets a chance to answer from the cache.
+	//   3. globalRateLimit             — last in the shared chain, first line
+	//      of defense against handler-overload.
+	//
+	// Previously this slice was passed as the additionalMiddleware varargs of
+	// auth.ProtectedGroupWithActionsWithMiddleware, which in turn called
+	// router.Group("/", handlers...) and thereby installed every handler as
+	// an app-level USE entry. Each of the 114 protected(...) invocations in
+	// the bounded contexts stacked another copy, so a single HTTP request
+	// ran every middleware 114 times. The protectedRouter wiring below
+	// registers each route directly on the app with the composed chain, so
+	// each middleware runs EXACTLY ONCE per matching request.
+	sharedChain := []fiber.Handler{
 		WhenEnabled(tenantDBHandler),
 		idempotencyMiddleware,
 		globalRateLimit,
 	}
 
 	routes.Protected = func(resource string, actions ...string) fiber.Router {
-		group, err := auth.ProtectedGroupWithActionsWithMiddleware(
-			app,
+		authChain, err := auth.BuildProtectedAuthChain(
 			authClient,
 			tenantExtractor,
 			resource,
 			actions,
-			additionalMiddleware...,
 		)
 		if err != nil {
 			// This closure is called during route registration at startup,
@@ -166,17 +194,36 @@ func RegisterRoutes(
 			// and actions are hardcoded string literals in every call site,
 			// so an error here indicates a programmer bug in route definitions.
 			// The error is collected and surfaced via RegistrationErr() after
-			// all modules complete registration; the stub group prevents nil
+			// all modules complete registration; the stub router prevents nil
 			// dereferences on chained .Post()/.Get() calls.
 			routes.registrationErrs = append(routes.registrationErrs, fmt.Errorf(
 				"protected route registration failed for resource=%q actions=%v: %w",
 				resource, actions, err,
 			))
 
-			return app.Group("")
+			// Return a no-op router so downstream .Get()/.Post() calls do
+			// not nil-dereference. The router has no authChain and records
+			// every verb call as a no-op (route is never registered on the
+			// app), so any hit against the misconfigured path yields a
+			// Fiber default 404 rather than a privileged handler running.
+			return &protectedRouter{
+				app:       app,
+				logger:    logger,
+				label:     fmt.Sprintf("resource=%q actions=%v (registration failed)", resource, actions),
+				recordErr: func(e error) { routes.registrationErrs = append(routes.registrationErrs, e) },
+			}
 		}
 
-		return group
+		return &protectedRouter{
+			app:         app,
+			authChain:   authChain,
+			sharedChain: sharedChain,
+			logger:      logger,
+			label:       fmt.Sprintf("resource=%q actions=%v", resource, actions),
+			recordErr: func(e error) {
+				routes.registrationErrs = append(routes.registrationErrs, e)
+			},
+		}
 	}
 
 	return routes, nil

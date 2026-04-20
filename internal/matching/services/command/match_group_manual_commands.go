@@ -7,9 +7,9 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	"github.com/LerianStudio/matcher/internal/matching/domain/repositories"
@@ -71,7 +71,7 @@ func (uc *UseCase) ManualMatch(
 	ctxInfo, err := uc.contextProvider.FindByID(ctx, in.TenantID, in.ContextID)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to find context", err)
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find context")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to find context")
 
 		return nil, fmt.Errorf("find context: %w", ErrContextNotFound)
 	}
@@ -87,7 +87,7 @@ func (uc *UseCase) ManualMatch(
 	transactions, err := uc.txRepo.FindByContextAndIDs(ctx, in.ContextID, in.TransactionIDs)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to find transactions", err)
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find transactions")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to find transactions")
 
 		return nil, fmt.Errorf("find transactions: %w", err)
 	}
@@ -231,7 +231,7 @@ func (uc *UseCase) ManualMatch(
 	})
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to create manual match", err)
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to create manual match")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to create manual match")
 
 		return nil, fmt.Errorf("create manual match: %w", err)
 	}

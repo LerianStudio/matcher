@@ -9,9 +9,9 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
@@ -67,7 +67,7 @@ func (repo *Repository) Create(ctx context.Context, req *entities.ExtractionRequ
 	if err != nil {
 		wrappedErr := fmt.Errorf("create extraction request: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create extraction request", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to create extraction request")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to create extraction request")
 
 		return wrappedErr
 	}
@@ -104,7 +104,7 @@ func (repo *Repository) CreateWithTx(ctx context.Context, tx *sql.Tx, req *entit
 	if err != nil {
 		wrappedErr := fmt.Errorf("create extraction request with tx: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create extraction request", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to create extraction request")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to create extraction request")
 
 		return wrappedErr
 	}
@@ -173,7 +173,7 @@ func (repo *Repository) Update(ctx context.Context, req *entities.ExtractionRequ
 	if err != nil {
 		wrappedErr := fmt.Errorf("update extraction request: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to update extraction request", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to update extraction request")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to update extraction request")
 
 		return wrappedErr
 	}
@@ -206,7 +206,7 @@ func (repo *Repository) UpdateIfUnchanged(ctx context.Context, req *entities.Ext
 	if err != nil {
 		wrappedErr := fmt.Errorf("update extraction request if unchanged: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to update extraction request if unchanged", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to update extraction request if unchanged")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to update extraction request if unchanged")
 
 		return wrappedErr
 	}
@@ -249,7 +249,7 @@ func (repo *Repository) UpdateIfUnchangedWithTx(
 	if err != nil {
 		wrappedErr := fmt.Errorf("update extraction request if unchanged with tx: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to update extraction request if unchanged", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to update extraction request if unchanged")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to update extraction request if unchanged")
 
 		return wrappedErr
 	}
@@ -286,7 +286,7 @@ func (repo *Repository) UpdateWithTx(ctx context.Context, tx *sql.Tx, req *entit
 	if err != nil {
 		wrappedErr := fmt.Errorf("update extraction request with tx: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to update extraction request", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to update extraction request")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to update extraction request")
 
 		return wrappedErr
 	}
@@ -449,7 +449,7 @@ func (repo *Repository) FindByID(ctx context.Context, id uuid.UUID) (*entities.E
 
 		wrappedErr := fmt.Errorf("find extraction request by id: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to find extraction request by id", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to find extraction request by id")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to find extraction request by id")
 
 		return nil, wrappedErr
 	}
@@ -502,7 +502,7 @@ func (repo *Repository) LinkIfUnlinked(
 		}
 
 		libOpentelemetry.HandleSpanError(span, "atomic link failed", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "atomic link failed")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "atomic link failed")
 
 		return wrappedErr
 	}
@@ -636,7 +636,7 @@ func (repo *Repository) FindEligibleForBridge(
 	if err != nil {
 		wrappedErr := fmt.Errorf("find eligible extractions: %w", err)
 		libOpentelemetry.HandleSpanError(span, "find eligible extractions failed", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "find eligible extractions failed")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "find eligible extractions failed")
 
 		return nil, wrappedErr
 	}
@@ -732,7 +732,7 @@ func (repo *Repository) FindBridgeRetentionCandidates(
 	if err != nil {
 		wrappedErr := fmt.Errorf("find bridge retention candidates: %w", err)
 		libOpentelemetry.HandleSpanError(span, "find bridge retention candidates failed", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "find bridge retention candidates failed")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "find bridge retention candidates failed")
 
 		return nil, wrappedErr
 	}

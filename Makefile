@@ -5,6 +5,10 @@
 # Define the root directory of the project
 MATCHER_ROOT := $(shell pwd)
 
+# Worktree-safe: disable VCS stamping so that go build / test / vet succeed
+# inside git worktrees where the .git directory is a file pointing elsewhere.
+export GOFLAGS := -buildvcs=false
+
 # Test targets use CLEAN_ENV to unset the full Matcher config env surface so
 # tests are not polluted by host environment values.
 CONFIG_ENV_KEYS := $(shell sed -n 's/^[[:space:]]*"\([A-Z0-9_]*\)",/\1/p' internal/bootstrap/config_test_helpers_test.go 2>/dev/null)

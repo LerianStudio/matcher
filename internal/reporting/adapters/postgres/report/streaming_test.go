@@ -1449,3 +1449,52 @@ func TestStreamUnmatchedForExport_NegativeMaxRecords(t *testing.T) {
 	assert.NoError(t, iter.Close())
 	require.NoError(t, mock.ExpectationsWereMet())
 }
+
+// TestStreamingIterators_NilRowsDefensivePath asserts that Next/Err/Scan do
+// not deref a nil *sql.Rows. A nil rows value should never arise in the
+// happy path (the stream constructors only return a populated iterator or an
+// error), but if a caller uses `&matchedRowIterator{}` directly or closes
+// the rows out-of-band the iterator methods must still be callable without
+// panicking.
+func TestStreamingIterators_NilRowsDefensivePath(t *testing.T) {
+	t.Parallel()
+
+	t.Run("matchedRowIterator with nil rows", func(t *testing.T) {
+		t.Parallel()
+
+		iter := &matchedRowIterator{}
+
+		assert.False(t, iter.Next())
+		assert.NoError(t, iter.Err())
+
+		_, err := iter.Scan()
+		require.ErrorIs(t, err, errIteratorNotInitialized)
+		assert.NoError(t, iter.Close())
+	})
+
+	t.Run("unmatchedRowIterator with nil rows", func(t *testing.T) {
+		t.Parallel()
+
+		iter := &unmatchedRowIterator{}
+
+		assert.False(t, iter.Next())
+		assert.NoError(t, iter.Err())
+
+		_, err := iter.Scan()
+		require.ErrorIs(t, err, errIteratorNotInitialized)
+		assert.NoError(t, iter.Close())
+	})
+
+	t.Run("varianceRowIterator with nil rows", func(t *testing.T) {
+		t.Parallel()
+
+		iter := &varianceRowIterator{}
+
+		assert.False(t, iter.Next())
+		assert.NoError(t, iter.Err())
+
+		_, err := iter.Scan()
+		require.ErrorIs(t, err, errIteratorNotInitialized)
+		assert.NoError(t, iter.Close())
+	})
+}

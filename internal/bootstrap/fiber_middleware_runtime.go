@@ -8,17 +8,31 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 )
 
 func runtimeBodyLimitMiddleware(initialCfg *Config, configGetter func() *Config) fiber.Handler {
 	return func(fiberCtx *fiber.Ctx) error {
 		limit := effectiveRuntimeBodyLimit(initialCfg, configGetter)
+
+		// Fast path: reject based on Content-Length before pulling the body
+		// into memory. fasthttp's ContentLength returns -1 for chunked
+		// encoding and -2 when no Content-Length header is present; in both
+		// cases we cannot trust a pre-read check and must fall through to the
+		// materialised-body comparison below.
+		if cl := fiberCtx.Request().Header.ContentLength(); cl > 0 {
+			if cl > limit {
+				return fiber.ErrRequestEntityTooLarge
+			}
+
+			return fiberCtx.Next()
+		}
 
 		if len(fiberCtx.Body()) > limit {
 			return fiber.ErrRequestEntityTooLarge
@@ -57,21 +71,37 @@ func effectiveRuntimeBodyLimit(initialCfg *Config, configGetter func() *Config) 
 	return limit
 }
 
+// corsSnapshot captures the resolved CORS policy and its pre-built Fiber
+// handler. Stored in atomic.Pointer so the fast path is lock-free: readers
+// Load the pointer, compare the three string fields against the latest
+// resolved values, and invoke handler without ever taking a lock when the
+// policy hasn't changed. A rebuild (rare — only when systemplane swaps CORS
+// config) takes a short writer lock to avoid duplicate cors.New allocations
+// when multiple requests observe a miss concurrently.
+type corsSnapshot struct {
+	handler fiber.Handler
+	origins string
+	methods string
+	headers string
+}
+
 func runtimeCORSMiddleware(initialCfg *Config, configGetter func() *Config) fiber.Handler {
 	var (
-		mu            sync.RWMutex
-		activeHandler fiber.Handler
-		activeOrigins string
-		activeMethods string
-		activeHeaders string
+		active   atomic.Pointer[corsSnapshot]
+		rebuildM sync.Mutex
 	)
 
-	buildHandler := func(origins, methods, headers string) fiber.Handler {
-		return cors.New(cors.Config{
-			AllowOrigins: origins,
-			AllowMethods: methods,
-			AllowHeaders: headers,
-		})
+	buildSnapshot := func(origins, methods, headers string) *corsSnapshot {
+		return &corsSnapshot{
+			handler: cors.New(cors.Config{
+				AllowOrigins: origins,
+				AllowMethods: methods,
+				AllowHeaders: headers,
+			}),
+			origins: origins,
+			methods: methods,
+			headers: headers,
+		}
 	}
 
 	resolve := func() (string, string, string) {
@@ -93,29 +123,26 @@ func runtimeCORSMiddleware(initialCfg *Config, configGetter func() *Config) fibe
 	return func(fiberCtx *fiber.Ctx) error {
 		origins, methods, headers := resolve()
 
-		mu.RLock()
-
-		handler := activeHandler
-		currentOrigins := activeOrigins
-		currentMethods := activeMethods
-		currentHeaders := activeHeaders
-
-		mu.RUnlock()
-
-		if handler == nil || currentOrigins != origins || currentMethods != methods || currentHeaders != headers {
-			mu.Lock()
-			if activeHandler == nil || activeOrigins != origins || activeMethods != methods || activeHeaders != headers {
-				activeHandler = buildHandler(origins, methods, headers)
-				activeOrigins = origins
-				activeMethods = methods
-				activeHeaders = headers
-			}
-
-			handler = activeHandler
-			mu.Unlock()
+		snap := active.Load()
+		if snap != nil && snap.origins == origins && snap.methods == methods && snap.headers == headers {
+			return snap.handler(fiberCtx)
 		}
 
-		return handler(fiberCtx)
+		// Rare path: CORS policy changed (or first request). Serialise rebuilds
+		// behind a mutex so concurrent misses don't each allocate a new
+		// cors.New handler. Re-check inside the lock in case another goroutine
+		// already swapped in a matching snapshot.
+		rebuildM.Lock()
+
+		snap = active.Load()
+		if snap == nil || snap.origins != origins || snap.methods != methods || snap.headers != headers {
+			snap = buildSnapshot(origins, methods, headers)
+			active.Store(snap)
+		}
+
+		rebuildM.Unlock()
+
+		return snap.handler(fiberCtx)
 	}
 }
 

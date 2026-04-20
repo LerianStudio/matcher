@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -79,6 +79,8 @@ type flatConfig struct {
 	ExportRateLimitExpirySec    int
 	DispatchRateLimitMax        int
 	DispatchRateLimitExpirySec  int
+	AdminRateLimitMax           int
+	AdminRateLimitExpirySec     int
 	InfraConnectTimeoutSec      int
 	IdempotencyRetryWindowSec   int
 	IdempotencySuccessTTLHours  int
@@ -164,6 +166,8 @@ func buildConfig(fc flatConfig) Config {
 	cfg.RateLimit.ExportExpirySec = fc.ExportRateLimitExpirySec
 	cfg.RateLimit.DispatchMax = fc.DispatchRateLimitMax
 	cfg.RateLimit.DispatchExpirySec = fc.DispatchRateLimitExpirySec
+	cfg.RateLimit.AdminMax = fc.AdminRateLimitMax
+	cfg.RateLimit.AdminExpirySec = fc.AdminRateLimitExpirySec
 	cfg.Infrastructure.ConnectTimeoutSec = fc.InfraConnectTimeoutSec
 	cfg.Idempotency.RetryWindowSec = fc.IdempotencyRetryWindowSec
 	cfg.Idempotency.SuccessTTLHours = fc.IdempotencySuccessTTLHours
@@ -1902,6 +1906,8 @@ func TestConfig_ValidateRateLimitConfig_ExpiryValidation(t *testing.T) {
 			ExportRateLimitExpirySec:   60,
 			DispatchRateLimitMax:       50,
 			DispatchRateLimitExpirySec: 60,
+			AdminRateLimitMax:          30,
+			AdminRateLimitExpirySec:    60,
 			InfraConnectTimeoutSec:     30,
 		})
 

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"testing"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -226,6 +226,22 @@ func TestConfigManager_BootstrapWiring(t *testing.T) {
 		assert.NotNil(t, cm.Get())
 		assert.Same(t, cfg, cm.Get())
 	})
+}
+
+func TestConfigManager_WatchSystemplane_InitialHydrateAppliesOverrides(t *testing.T) {
+	t.Parallel()
+
+	base := defaultConfig()
+	base.RateLimit.Max = 100
+
+	client := newStartedTestClient(t, base)
+	setMatcherKey(t, client, "rate_limit.max", 777)
+
+	cm := newTestConfigManager(t, base, &testLogger{})
+	require.Equal(t, 100, cm.Get().RateLimit.Max)
+
+	require.NoError(t, cm.WatchSystemplane(client))
+	require.Equal(t, 777, cm.Get().RateLimit.Max)
 }
 
 func TestRestoreZeroedFields_RestoresBlankString(t *testing.T) {

@@ -14,8 +14,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
@@ -311,6 +311,23 @@ func canonicalRequestTarget(fiberCtx *fiber.Ctx) string {
 		return path
 	}
 
+	// Fast path: single key-value pair. Skips url.Values allocation and sort,
+	// while producing identical output to url.Values.Encode (which percent-
+	// encodes the key and value and joins with "=").
+	if args.Len() == 1 {
+		var key, value string
+		for k, v := range args.All() {
+			key = string(k)
+			value = string(v)
+
+			break
+		}
+
+		target := path + "?" + url.QueryEscape(key) + "=" + url.QueryEscape(value)
+
+		return maybeHashTarget(path, target)
+	}
+
 	query := url.Values{}
 
 	for key, value := range args.All() {
@@ -326,9 +343,12 @@ func canonicalRequestTarget(fiberCtx *fiber.Ctx) string {
 		return path
 	}
 
-	target := path + "?" + encoded
+	return maybeHashTarget(path, path+"?"+encoded)
+}
 
-	// Limit Redis key size: hash the request target if it exceeds a safe threshold.
+// maybeHashTarget limits Redis key size by hashing the request target when
+// it exceeds a safe threshold.
+func maybeHashTarget(path, target string) string {
 	const maxRequestTargetLen = 256
 	if len(target) > maxRequestTargetLen {
 		h := sha256.Sum256([]byte(target))

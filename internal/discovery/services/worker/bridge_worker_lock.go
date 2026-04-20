@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 )
 
 // acquireLock is a thin wrapper over the infrastructure provider's Redis
@@ -61,7 +61,7 @@ func (worker *BridgeWorker) releaseLock(ctx context.Context, token string) {
 
 	rdb, clientErr := conn.GetClient(ctx)
 	if clientErr != nil {
-		worker.logger.With(libLog.Any("error", clientErr.Error())).
+		worker.logger.With(libLog.Err(clientErr)).
 			Log(ctx, libLog.LevelWarn, "bridge: failed to get redis client for lock release")
 
 		return

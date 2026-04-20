@@ -10,9 +10,9 @@ import (
 	"github.com/shopspring/decimal"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/matching/adapters/http/dto"
@@ -21,6 +21,11 @@ import (
 )
 
 var _ = sharedhttp.ErrorResponse{}
+
+// errAdjustmentUnauthenticated is returned when CreateAdjustment is invoked
+// without an authenticated user in the request context. The HTTP surface
+// fails closed rather than silently attributing the write to "system".
+var errAdjustmentUnauthenticated = errors.New("unauthenticated adjustment request")
 
 // CreateAdjustment creates a balancing journal entry to resolve variance.
 // @Summary Create an adjustment
@@ -55,7 +60,7 @@ func (handler *Handler) CreateAdjustment(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 		"context",
 	)
-	if shouldReturn, returnErr := handleContextQueryVerificationError(ctx, fiberCtx, span, logger, err); shouldReturn {
+	if shouldReturn, returnErr := handler.handleContextQueryVerificationError(ctx, fiberCtx, span, logger, err); shouldReturn {
 		return returnErr
 	}
 
@@ -63,7 +68,7 @@ func (handler *Handler) CreateAdjustment(fiberCtx *fiber.Ctx) error {
 
 	var payload CreateAdjustmentRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &payload); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid adjustment payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid adjustment payload", err)
 	}
 
 	amount := decimal.Zero
@@ -71,7 +76,7 @@ func (handler *Handler) CreateAdjustment(fiberCtx *fiber.Ctx) error {
 	if payload.Amount != "" {
 		parsedAmount, err := decimal.NewFromString(payload.Amount)
 		if err != nil {
-			return badRequest(ctx, fiberCtx, span, logger, "invalid amount format", err)
+			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid amount format", err)
 		}
 
 		amount = parsedAmount
@@ -79,17 +84,26 @@ func (handler *Handler) CreateAdjustment(fiberCtx *fiber.Ctx) error {
 
 	matchGroupID, err := parseOptionalUUID(payload.MatchGroupID)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid match_group_id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid match_group_id", err)
 	}
 
 	transactionID, err := parseOptionalUUID(payload.TransactionID)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid transaction_id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid transaction_id", err)
 	}
 
 	createdBy := getUserFromRequest(fiberCtx)
 	if createdBy == "" {
-		createdBy = "system"
+		// Adjustments reach the HTTP surface only through authenticated
+		// tenant traffic; a missing user ID means auth middleware is
+		// misconfigured or bypassed. Fail closed — never attribute the
+		// write to a generic "system" principal. Any genuinely
+		// background-initiated adjustment must go through the cross-context
+		// gateway (internal/shared/adapters/cross/exception_matching_gateway.go),
+		// which carries its own actor.
+		handler.logSpanError(ctx, span, logger, "adjustment rejected: missing authenticated user", errAdjustmentUnauthenticated)
+
+		return respondError(fiberCtx, fiber.StatusUnauthorized, "unauthorized", "authenticated user required")
 	}
 
 	adjustment, err := handler.command.CreateAdjustment(ctx, command.CreateAdjustmentInput{
@@ -106,7 +120,7 @@ func (handler *Handler) CreateAdjustment(fiberCtx *fiber.Ctx) error {
 		CreatedBy:     createdBy,
 	})
 	if err != nil {
-		return handleAdjustmentError(ctx, fiberCtx, span, logger, err)
+		return handler.handleAdjustmentError(ctx, fiberCtx, span, logger, err)
 	}
 
 	adjResp := dto.AdjustmentToResponse(adjustment)
@@ -144,7 +158,7 @@ var adjustmentBadRequestErrors = map[error]string{
 	command.ErrAdjustmentCreatedByRequired:   "created_by is required",
 }
 
-func handleAdjustmentError(
+func (handler *Handler) handleAdjustmentError(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -163,7 +177,7 @@ func handleAdjustmentError(
 	// Check bad-request errors
 	for sentinel, msg := range adjustmentBadRequestErrors {
 		if errors.Is(err, sentinel) {
-			return badRequest(ctx, fiberCtx, span, logger, msg, err)
+			return handler.badRequest(ctx, fiberCtx, span, logger, msg, err)
 		}
 	}
 
@@ -172,5 +186,5 @@ func handleAdjustmentError(
 		return respondError(fiberCtx, fiber.StatusForbidden, "context_not_active", "context is not active")
 	}
 
-	return writeServiceError(ctx, fiberCtx, span, logger, "failed to create adjustment", err)
+	return handler.writeServiceError(ctx, fiberCtx, span, logger, "failed to create adjustment", err)
 }

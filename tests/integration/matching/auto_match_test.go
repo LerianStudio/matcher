@@ -24,7 +24,6 @@ import (
 	ingestionRedis "github.com/LerianStudio/matcher/internal/ingestion/adapters/redis"
 	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
 	sharedCross "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
-	outboxRepo "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/outbox"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/tests/integration"
@@ -259,7 +258,7 @@ func wireIngestionWithTrigger(
 	jobRepo := ingestionJobRepo.NewRepository(provider)
 	txRepo := ingestionTxRepo.NewRepository(provider)
 	dedupe := ingestionRedis.NewDedupeService(provider)
-	outbox := outboxRepo.NewRepository(provider)
+	outbox := integration.NewTestOutboxRepository(t, h.Connection)
 
 	parserRegistry := ingestionParsers.NewParserRegistry()
 	parserRegistry.Register(ingestionParsers.NewCSVParser())

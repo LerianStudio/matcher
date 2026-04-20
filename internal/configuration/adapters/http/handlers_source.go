@@ -3,12 +3,13 @@ package http
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
@@ -53,28 +54,32 @@ func (handler *Handler) CreateSource(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	var req dto.CreateSourceRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid source payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid source payload", err)
 	}
 
 	domainInput, err := req.ToDomainInput()
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid source payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid source payload", err)
 	}
 
 	result, err := handler.command.CreateSource(ctx, contextID, domainInput)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to create source", err)
+		handler.logSpanError(ctx, span, logger, "failed to create source", err)
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.ReconciliationSourceToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.ReconciliationSourceToResponse(result)); err != nil {
+		return fmt.Errorf("respond create source: %w", err)
+	}
+
+	return nil
 }
 
 // ListSources lists reconciliation sources.
@@ -112,14 +117,14 @@ func (handler *Handler) ListSources(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	cursor, limit, err := libHTTP.ParseOpaqueCursorPagination(fiberCtx)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination", err)
 	}
 
 	var sourceType *value_objects.SourceType
@@ -127,7 +132,7 @@ func (handler *Handler) ListSources(fiberCtx *fiber.Ctx) error {
 	if typeParam := strings.TrimSpace(fiberCtx.Query("type")); typeParam != "" {
 		parsed, err := value_objects.ParseSourceType(strings.ToUpper(typeParam))
 		if err != nil {
-			return badRequest(ctx, fiberCtx, span, logger, "invalid source type", err)
+			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid source type", err)
 		}
 
 		sourceType = &parsed
@@ -136,10 +141,10 @@ func (handler *Handler) ListSources(fiberCtx *fiber.Ctx) error {
 	result, pagination, err := handler.query.ListSources(ctx, contextID, cursor, limit, sourceType)
 	if err != nil {
 		if errors.Is(err, libHTTP.ErrInvalidCursor) {
-			return badRequest(ctx, fiberCtx, span, logger, "invalid pagination", err)
+			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination", err)
 		}
 
-		logSpanError(ctx, span, logger, "failed to list sources", err)
+		handler.logSpanError(ctx, span, logger, "failed to list sources", err)
 
 		return writeServiceError(fiberCtx, err)
 	}
@@ -156,7 +161,7 @@ func (handler *Handler) ListSources(fiberCtx *fiber.Ctx) error {
 
 	fieldMapsExist, err := handler.query.CheckFieldMapsExistence(ctx, sourceIDs)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to check field maps existence", err)
+		handler.logSpanError(ctx, span, logger, "failed to check field maps existence", err)
 		return writeServiceError(fiberCtx, err)
 	}
 
@@ -170,7 +175,11 @@ func (handler *Handler) ListSources(fiberCtx *fiber.Ctx) error {
 		},
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, response)
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, response); err != nil {
+		return fmt.Errorf("respond list sources: %w", err)
+	}
+
+	return nil
 }
 
 // GetSource retrieves a reconciliation source.
@@ -206,19 +215,19 @@ func (handler *Handler) GetSource(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	sourceID, err := parseUUIDParam(fiberCtx, "sourceId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid source id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid source id", err)
 	}
 
 	result, err := handler.query.GetSource(ctx, contextID, sourceID)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to get source", err)
+		handler.logSpanError(ctx, span, logger, "failed to get source", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
 			return writeNotFound(fiberCtx, "configuration_source_not_found", "source not found")
@@ -227,7 +236,11 @@ func (handler *Handler) GetSource(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationSourceToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationSourceToResponse(result)); err != nil {
+		return fmt.Errorf("respond get source: %w", err)
+	}
+
+	return nil
 }
 
 // UpdateSource updates a reconciliation source.
@@ -266,29 +279,29 @@ func (handler *Handler) UpdateSource(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	sourceID, err := parseUUIDParam(fiberCtx, "sourceId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid source id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid source id", err)
 	}
 
 	var req dto.UpdateSourceRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid source payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid source payload", err)
 	}
 
 	domainInput, err := req.ToDomainInput()
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid source payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid source payload", err)
 	}
 
 	result, err := handler.command.UpdateSource(ctx, contextID, sourceID, domainInput)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to update source", err)
+		handler.logSpanError(ctx, span, logger, "failed to update source", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
 			return writeNotFound(fiberCtx, "configuration_source_not_found", "source not found")
@@ -297,7 +310,11 @@ func (handler *Handler) UpdateSource(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationSourceToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationSourceToResponse(result)); err != nil {
+		return fmt.Errorf("respond update source: %w", err)
+	}
+
+	return nil
 }
 
 // DeleteSource deletes a reconciliation source.
@@ -332,18 +349,18 @@ func (handler *Handler) DeleteSource(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	sourceID, err := parseUUIDParam(fiberCtx, "sourceId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid source id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid source id", err)
 	}
 
 	if err := handler.command.DeleteSource(ctx, contextID, sourceID); err != nil {
-		logSpanError(ctx, span, logger, "failed to delete source", err)
+		handler.logSpanError(ctx, span, logger, "failed to delete source", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
 			return writeNotFound(fiberCtx, "configuration_source_not_found", "source not found")
@@ -356,5 +373,9 @@ func (handler *Handler) DeleteSource(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	if err := libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent); err != nil {
+		return fmt.Errorf("respond delete source: %w", err)
+	}
+
+	return nil
 }

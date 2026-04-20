@@ -11,9 +11,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/matching/adapters/http/dto"
@@ -56,7 +56,7 @@ func (handler *Handler) RunMatch(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrInvalidContextID,
 		libHTTP.ErrContextAccessDenied,
 	)
-	if shouldReturn, returnErr := handleContextVerificationError(ctx, fiberCtx, span, logger, err); shouldReturn {
+	if shouldReturn, returnErr := handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err); shouldReturn {
 		return returnErr
 	}
 
@@ -64,17 +64,17 @@ func (handler *Handler) RunMatch(fiberCtx *fiber.Ctx) error {
 
 	var payload RunMatchRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &payload); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid run match payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid run match payload", err)
 	}
 
 	modeValue := strings.TrimSpace(payload.Mode)
 	if modeValue == "" {
-		return badRequest(ctx, fiberCtx, span, logger, "mode is required", ErrRunModeRequired)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "mode is required", ErrRunModeRequired)
 	}
 
 	mode, err := matchingVO.ParseMatchRunMode(strings.ToUpper(modeValue))
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid match run mode", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid match run mode", err)
 	}
 
 	run, _, err := handler.command.RunMatch(
@@ -86,11 +86,11 @@ func (handler *Handler) RunMatch(fiberCtx *fiber.Ctx) error {
 		},
 	)
 	if err != nil {
-		return handleRunMatchError(ctx, fiberCtx, span, logger, err)
+		return handler.handleRunMatchError(ctx, fiberCtx, span, logger, err)
 	}
 
 	if run == nil {
-		return writeServiceError(
+		return handler.writeServiceError(
 			ctx,
 			fiberCtx,
 			span,
@@ -130,7 +130,7 @@ func (handler *Handler) GetMatchRun(fiberCtx *fiber.Ctx) error {
 
 	runID, err := parseUUIDParam(fiberCtx, "runId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid run id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid run id", err)
 	}
 
 	contextID, tenantID, err := libHTTP.ParseAndVerifyResourceScopedID(
@@ -144,7 +144,7 @@ func (handler *Handler) GetMatchRun(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 		"context",
 	)
-	if shouldReturn, returnErr := handleContextQueryVerificationError(ctx, fiberCtx, span, logger, err); shouldReturn {
+	if shouldReturn, returnErr := handler.handleContextQueryVerificationError(ctx, fiberCtx, span, logger, err); shouldReturn {
 		return returnErr
 	}
 
@@ -158,7 +158,7 @@ func (handler *Handler) GetMatchRun(fiberCtx *fiber.Ctx) error {
 	}
 
 	if err != nil {
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to load match run", err)
+		return handler.writeServiceError(ctx, fiberCtx, span, logger, "failed to load match run", err)
 	}
 
 	if run == nil {
@@ -207,7 +207,7 @@ func (handler *Handler) ListMatchRuns(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrInvalidContextID,
 		libHTTP.ErrContextAccessDenied,
 	)
-	if shouldReturn, returnErr := handleContextVerificationError(ctx, fiberCtx, span, logger, err); shouldReturn {
+	if shouldReturn, returnErr := handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err); shouldReturn {
 		return returnErr
 	}
 
@@ -215,7 +215,7 @@ func (handler *Handler) ListMatchRuns(fiberCtx *fiber.Ctx) error {
 
 	cursor, limit, err := libHTTP.ParseOpaqueCursorPagination(fiberCtx)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 	}
 
 	cursor = strings.TrimSpace(cursor)
@@ -227,7 +227,7 @@ func (handler *Handler) ListMatchRuns(fiberCtx *fiber.Ctx) error {
 
 	sortOrder = strings.ToLower(sortOrder)
 	if sortOrder != "asc" && sortOrder != sortOrderDesc {
-		return badRequest(
+		return handler.badRequest(
 			ctx,
 			fiberCtx,
 			span,
@@ -249,10 +249,10 @@ func (handler *Handler) ListMatchRuns(fiberCtx *fiber.Ctx) error {
 	)
 	if err != nil {
 		if errors.Is(err, libHTTP.ErrInvalidCursor) {
-			return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 		}
 
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to list match runs", err)
+		return handler.writeServiceError(ctx, fiberCtx, span, logger, "failed to list match runs", err)
 	}
 
 	if writeErr := libHTTP.Respond(fiberCtx, fiber.StatusOK, ListMatchRunsResponse{
@@ -299,7 +299,7 @@ func (handler *Handler) GetMatchRunResults(fiberCtx *fiber.Ctx) error {
 
 	runID, err := parseUUIDParam(fiberCtx, "runId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid run id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid run id", err)
 	}
 
 	contextID, tenantID, err := libHTTP.ParseAndVerifyResourceScopedID(
@@ -313,7 +313,7 @@ func (handler *Handler) GetMatchRunResults(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 		"context",
 	)
-	if shouldReturn, returnErr := handleContextQueryVerificationError(ctx, fiberCtx, span, logger, err); shouldReturn {
+	if shouldReturn, returnErr := handler.handleContextQueryVerificationError(ctx, fiberCtx, span, logger, err); shouldReturn {
 		return returnErr
 	}
 
@@ -321,7 +321,7 @@ func (handler *Handler) GetMatchRunResults(fiberCtx *fiber.Ctx) error {
 
 	cursor, limit, err := libHTTP.ParseOpaqueCursorPagination(fiberCtx)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 	}
 
 	cursor = strings.TrimSpace(cursor)
@@ -333,7 +333,7 @@ func (handler *Handler) GetMatchRunResults(fiberCtx *fiber.Ctx) error {
 
 	sortOrder = strings.ToLower(sortOrder)
 	if sortOrder != "asc" && sortOrder != sortOrderDesc {
-		return badRequest(
+		return handler.badRequest(
 			ctx,
 			fiberCtx,
 			span,
@@ -345,7 +345,7 @@ func (handler *Handler) GetMatchRunResults(fiberCtx *fiber.Ctx) error {
 
 	sortBy := strings.TrimSpace(fiberCtx.Query("sort_by"))
 	if sortBy != "" && sortBy != "id" && sortBy != "created_at" && sortBy != "status" {
-		return badRequest(
+		return handler.badRequest(
 			ctx,
 			fiberCtx,
 			span,
@@ -368,10 +368,10 @@ func (handler *Handler) GetMatchRunResults(fiberCtx *fiber.Ctx) error {
 	)
 	if err != nil {
 		if errors.Is(err, libHTTP.ErrInvalidCursor) {
-			return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 		}
 
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to load match run results", err)
+		return handler.writeServiceError(ctx, fiberCtx, span, logger, "failed to load match run results", err)
 	}
 
 	if writeErr := libHTTP.Respond(fiberCtx, fiber.StatusOK, ListMatchGroupsResponse{
@@ -438,7 +438,7 @@ func runMatchBadRequestSlug(err error) string {
 }
 
 // mapRunMatchErrorToResponse maps known errors to appropriate HTTP responses.
-func mapRunMatchErrorToResponse(
+func (handler *Handler) mapRunMatchErrorToResponse(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -451,7 +451,7 @@ func mapRunMatchErrorToResponse(
 	case errors.Is(err, command.ErrContextNotActive):
 		return respondError(fiberCtx, fiber.StatusForbidden, "context_not_active", "context is not active")
 	case isRunMatchBadRequestError(err):
-		logSpanError(ctx, span, logger, runMatchBadRequestMessage(err), err)
+		handler.logSpanError(ctx, span, logger, runMatchBadRequestMessage(err), err)
 		return respondError(fiberCtx, fiber.StatusBadRequest, runMatchBadRequestSlug(err), runMatchBadRequestMessage(err))
 	case errors.Is(err, command.ErrFeeRulesReferenceMissingSchedules):
 		return respondError(
@@ -482,11 +482,11 @@ func mapRunMatchErrorToResponse(
 			"another match run is already in progress for this context",
 		)
 	default:
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to run match", err)
+		return handler.writeServiceError(ctx, fiberCtx, span, logger, "failed to run match", err)
 	}
 }
 
-func handleRunMatchError(
+func (handler *Handler) handleRunMatchError(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -497,7 +497,7 @@ func handleRunMatchError(
 		libOpentelemetry.HandleSpanError(span, "failed to run match", err)
 	}
 
-	libLog.SafeError(logger, ctx, "failed to run match", err, productionMode.Load())
+	libLog.SafeError(logger, ctx, "failed to run match", err, handler.productionMode)
 
-	return mapRunMatchErrorToResponse(ctx, fiberCtx, span, logger, err)
+	return handler.mapRunMatchErrorToResponse(ctx, fiberCtx, span, logger, err)
 }

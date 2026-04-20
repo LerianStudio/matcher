@@ -9,10 +9,10 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
@@ -53,7 +53,7 @@ func (repo *Repository) FindByContextID(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list reconciliation sources", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list reconciliation sources")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list reconciliation sources")
 
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("failed to find reconciliation sources by context: %w", err)
 	}
@@ -95,7 +95,7 @@ func (repo *Repository) FindByContextIDAndType(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list reconciliation sources", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list reconciliation sources")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list reconciliation sources")
 
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("failed to find reconciliation sources by context and type: %w", err)
 	}
@@ -142,7 +142,7 @@ func (repo *Repository) FindByContextIDWithTx(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list reconciliation sources with tx", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list reconciliation sources with tx")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list reconciliation sources with tx")
 
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("failed to find reconciliation sources by context with tx: %w", err)
 	}

@@ -11,8 +11,8 @@ import (
 	"net/url"
 	"strings"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	"github.com/LerianStudio/lib-commons/v5/commons/assert"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
@@ -376,6 +376,26 @@ func (cfg *Config) validateActiveRateLimitConfig(ctx context.Context, asserter *
 		return fmt.Errorf("config validation: %w", err)
 	}
 
+	if err := asserter.That(ctx, cfg.RateLimit.AdminMax > 0, "ADMIN_RATE_LIMIT_MAX must be positive", "admin_rate_limit_max", cfg.RateLimit.AdminMax); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	if err := asserter.That(ctx, cfg.RateLimit.AdminMax <= maxRateLimitRequestsPerWindow,
+		"ADMIN_RATE_LIMIT_MAX must not exceed 1000000",
+		"admin_rate_limit_max", cfg.RateLimit.AdminMax); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	if err := asserter.That(ctx, cfg.RateLimit.AdminExpirySec > 0, "ADMIN_RATE_LIMIT_EXPIRY_SEC must be positive", "admin_rate_limit_expiry", cfg.RateLimit.AdminExpirySec); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	if err := asserter.That(ctx, cfg.RateLimit.AdminExpirySec <= maxRateLimitWindowSeconds,
+		"ADMIN_RATE_LIMIT_EXPIRY_SEC must not exceed 86400",
+		"admin_rate_limit_expiry", cfg.RateLimit.AdminExpirySec); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
 	return nil
 }
 
@@ -409,6 +429,19 @@ func (cfg *Config) validateProductionCoreConfig(ctx context.Context, asserter *a
 
 	if err := asserter.That(ctx, strings.TrimSpace(cfg.Server.CORSAllowedOrigins) != "" && !corsContainsWildcard(cfg.Server.CORSAllowedOrigins), "CORS_ALLOWED_ORIGINS must be restricted in production (exact \"*\" not allowed)", "cors_origins", cfg.Server.CORSAllowedOrigins); err != nil {
 		return fmt.Errorf("production config validation: %w", err)
+	}
+
+	// When rate limiting is enabled in production, TRUSTED_PROXIES must be set
+	// so Fiber resolves the correct client IP. Behind an ingress that terminates
+	// TLS for us (the common prod topology), c.IP() without trusted proxies
+	// returns the ingress address — so every request shares one identity and
+	// the rate limiter throttles the ingress itself instead of real clients.
+	if cfg.RateLimit.Enabled {
+		if err := asserter.NotEmpty(ctx, strings.TrimSpace(cfg.Server.TrustedProxies),
+			"TRUSTED_PROXIES is required in production when rate limiting is enabled",
+			"rate_limit_hint", "set TRUSTED_PROXIES to the CIDR(s) of your ingress/load balancer so client IPs resolve correctly"); err != nil {
+			return fmt.Errorf("production config validation: %w", err)
+		}
 	}
 
 	return nil

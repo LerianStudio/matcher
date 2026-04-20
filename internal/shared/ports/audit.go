@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	sharedhttp "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 )

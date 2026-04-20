@@ -57,18 +57,18 @@ func (mr *MockCommentRepositoryMockRecorder) Create(ctx, comment any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockCommentRepository)(nil).Create), ctx, comment)
 }
 
-// Delete mocks base method.
-func (m *MockCommentRepository) Delete(ctx context.Context, id uuid.UUID) error {
+// DeleteByExceptionAndID mocks base method.
+func (m *MockCommentRepository) DeleteByExceptionAndID(ctx context.Context, exceptionID, commentID uuid.UUID) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Delete", ctx, id)
+	ret := m.ctrl.Call(m, "DeleteByExceptionAndID", ctx, exceptionID, commentID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// Delete indicates an expected call of Delete.
-func (mr *MockCommentRepositoryMockRecorder) Delete(ctx, id any) *gomock.Call {
+// DeleteByExceptionAndID indicates an expected call of DeleteByExceptionAndID.
+func (mr *MockCommentRepositoryMockRecorder) DeleteByExceptionAndID(ctx, exceptionID, commentID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockCommentRepository)(nil).Delete), ctx, id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteByExceptionAndID", reflect.TypeOf((*MockCommentRepository)(nil).DeleteByExceptionAndID), ctx, exceptionID, commentID)
 }
 
 // FindByExceptionID mocks base method.

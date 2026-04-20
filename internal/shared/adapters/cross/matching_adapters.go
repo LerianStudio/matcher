@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configRepositories "github.com/LerianStudio/matcher/internal/configuration/domain/repositories"

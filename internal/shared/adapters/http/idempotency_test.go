@@ -955,6 +955,38 @@ func TestExtractIdempotencyKey_CanonicalizesQueryString(t *testing.T) {
 	assert.Equal(t, "matcher:"+auth.DefaultTenantID+":user:user-a:POST:/test?a=1&b=2:query-key", extractedA)
 }
 
+func TestExtractIdempotencyKey_SingleQueryParamFastPath(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+
+	var extracted string
+
+	app.Post("/test", func(fiberCtx *fiber.Ctx) error {
+		ctx := context.WithValue(fiberCtx.UserContext(), auth.TenantIDKey, auth.DefaultTenantID)
+		ctx = context.WithValue(ctx, auth.UserIDKey, "user-a")
+
+		var err error
+
+		extracted, err = extractIdempotencyKey(ctx, fiberCtx, "matcher")
+		require.NoError(t, err)
+
+		return fiberCtx.SendStatus(http.StatusOK)
+	})
+
+	// Single-param fast path should produce a canonical key: key and value
+	// are percent-encoded identically to url.Values.Encode output.
+	req := httptest.NewRequest(http.MethodPost, "/test?name=alice", strings.NewReader(`{"data":"test"}`))
+	req.Header.Set(HeaderXIdempotencyKey, "one-param")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, "matcher:"+auth.DefaultTenantID+":user:user-a:POST:/test?name=alice:one-param", extracted)
+}
+
 func TestIdempotencyMiddleware_MethodPathIsolation(t *testing.T) {
 	t.Parallel()
 

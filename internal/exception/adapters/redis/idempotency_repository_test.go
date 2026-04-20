@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"

@@ -11,8 +11,8 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
@@ -171,7 +171,7 @@ func (uc *UseCase) loadMatchGroup(
 			return nil, ErrMatchGroupNotFound
 		}
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find match group")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to find match group")
 
 		return nil, fmt.Errorf("find match group: %w", err)
 	}
@@ -202,12 +202,12 @@ func (uc *UseCase) rejectOrRevokeGroup(
 	}
 
 	if err != nil {
-		logger.With(libLog.String("action", action), libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to update match group status")
+		logger.With(libLog.String("action", action), libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to update match group status")
 		return fmt.Errorf("%s match group: %w", action, err)
 	}
 
 	if _, err := uc.matchGroupRepo.UpdateWithTx(ctx, tx, group); err != nil {
-		logger.With(libLog.String("action", action), libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to update match group after status change")
+		logger.With(libLog.String("action", action), libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to update match group after status change")
 		return fmt.Errorf("update match group: %w", err)
 	}
 
@@ -261,6 +261,22 @@ func (uc *UseCase) enqueueUnmatchEvent(
 		return fmt.Errorf("build match unmatched event: %w", err)
 	}
 
+	// Guard against pathological groups whose transaction list alone
+	// would overflow the broker cap. See the MatchConfirmedEvent path
+	// for the rationale behind matchEventEnvelopeHeadroomBytes.
+	truncatedIDs, originalCount := shared.TruncateIDListIfTooLarge(
+		ctx,
+		shared.EventTypeMatchUnmatched,
+		event.MatchID,
+		event.TransactionIDs,
+		shared.DefaultOutboxMaxPayloadBytes-matchEventEnvelopeHeadroomBytes,
+	)
+
+	if len(truncatedIDs) != originalCount {
+		event.TransactionIDs = truncatedIDs
+		event.TruncatedIDCount = originalCount
+	}
+
 	body, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("marshal match unmatched event: %w", err)
@@ -286,7 +302,7 @@ func (uc *UseCase) revertTransactionStatuses(
 ) error {
 	items, err := uc.matchItemRepo.ListByMatchGroupID(ctx, matchGroupID)
 	if err != nil {
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list match items")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list match items")
 		return fmt.Errorf("list match items: %w", err)
 	}
 
@@ -300,7 +316,7 @@ func (uc *UseCase) revertTransactionStatuses(
 	}
 
 	if err := uc.txRepo.MarkUnmatchedWithTx(ctx, tx, contextID, transactionIDs); err != nil {
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to mark transactions unmatched")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to mark transactions unmatched")
 		return fmt.Errorf("mark transactions unmatched: %w", err)
 	}
 

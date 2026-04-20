@@ -12,10 +12,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
-	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
+	"github.com/LerianStudio/lib-commons/v5/commons/systemplane"
+	libZap "github.com/LerianStudio/lib-commons/v5/commons/zap"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
@@ -39,10 +40,9 @@ type Service struct {
 	cleanupFuncs       []func()
 	readinessState     *readinessState
 
-	// Systemplane components for centralized runtime configuration.
-	// These are nil when systemplane initialization fails (graceful degradation).
-	spComponents     *SystemplaneComponents
-	cancelChangeFeed context.CancelFunc
+	// Systemplane client for centralized runtime configuration.
+	// Nil when systemplane initialization fails (graceful degradation).
+	spClient *systemplane.Client
 }
 
 type readinessState struct {
@@ -83,6 +83,19 @@ func (svc *Service) GetOutboxRunner() libCommons.App {
 	}
 
 	return svc.outboxRunner
+}
+
+// GetSystemplaneClient returns the systemplane client used for runtime
+// configuration management. May be nil if systemplane initialization failed
+// (graceful degradation to static config). Primarily used by integration test
+// harnesses to override runtime-mutable settings (e.g., rate limits) whose
+// registered defaults would otherwise mask env-based overrides.
+func (svc *Service) GetSystemplaneClient() *systemplane.Client {
+	if svc == nil {
+		return nil
+	}
+
+	return svc.spClient
 }
 
 // Run starts the service with all configured components using the launcher.
@@ -228,28 +241,14 @@ func (svc *Service) stopBackgroundWorkers(ctx context.Context, logger libLog.Log
 	}
 }
 
-// stopSystemplane gracefully shuts down the systemplane components.
-// The ordering matters: change feed stops first to prevent triggering reloads,
-// then the supervisor stops, and finally the backend connection is closed.
-func (svc *Service) stopSystemplane(ctx context.Context, logger libLog.Logger) {
-	if svc.cancelChangeFeed != nil {
-		svc.cancelChangeFeed()
-	}
-
-	if svc.spComponents == nil {
+// stopSystemplane gracefully shuts down the systemplane client.
+func (svc *Service) stopSystemplane(_ context.Context, logger libLog.Logger) {
+	if svc.spClient == nil {
 		return
 	}
 
-	if svc.spComponents.Supervisor != nil {
-		if err := svc.spComponents.Supervisor.Stop(ctx); err != nil {
-			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("systemplane supervisor stop failed: %v", err))
-		}
-	}
-
-	if svc.spComponents.Backend != nil {
-		if err := svc.spComponents.Backend.Close(); err != nil {
-			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("systemplane backend close failed: %v", err))
-		}
+	if err := svc.spClient.Close(); err != nil {
+		logger.Log(context.Background(), libLog.LevelWarn, fmt.Sprintf("systemplane client close failed: %v", err)) //nolint:contextcheck // shutdown path: no request context available
 	}
 }
 

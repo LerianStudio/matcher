@@ -11,10 +11,10 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	pgcommon "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
@@ -61,7 +61,7 @@ func (repo *Repository) WithTx(ctx context.Context, fn func(*sql.Tx) error) erro
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to run job transaction", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to run job transaction")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to run job transaction")
 
 		return fmt.Errorf("job transaction failed: %w", err)
 	}
@@ -135,7 +135,7 @@ func (repo *Repository) create(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to create ingestion job", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to create ingestion job")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to create ingestion job")
 
 		return nil, fmt.Errorf("failed to create job: %w", err)
 	}
@@ -174,7 +174,7 @@ func (repo *Repository) FindByID(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to find ingestion job", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find ingestion job")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to find ingestion job")
 		}
 
 		return nil, fmt.Errorf("failed to find job: %w", err)
@@ -285,7 +285,7 @@ func (repo *Repository) FindByContextID(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list ingestion jobs", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list ingestion jobs")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list ingestion jobs")
 
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf(
 			"failed to list jobs by context: %w",
@@ -359,7 +359,7 @@ func (repo *Repository) update(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to update ingestion job", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to update ingestion job")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to update ingestion job")
 		}
 
 		return nil, fmt.Errorf("failed to update job: %w", err)

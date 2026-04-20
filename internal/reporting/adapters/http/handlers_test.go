@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace/noop"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/adapters/http/dto"
@@ -980,7 +980,7 @@ func TestLogSpanError_WithNilLogger(t *testing.T) {
 	defer span.End()
 
 	require.NotPanics(t, func() {
-		logSpanError(context.Background(), span, nil, "test message", errors.New("test error"))
+		(&Handlers{}).logSpanError(context.Background(), span, nil, "test message", errors.New("test error"))
 	})
 }
 
@@ -993,6 +993,6 @@ func TestLogSpanError_WithLogger(t *testing.T) {
 	defer span.End()
 
 	mock := &testutil.TestLogger{}
-	logSpanError(context.Background(), span, mock, "test message", errors.New("test error"))
+	(&Handlers{}).logSpanError(context.Background(), span, mock, "test message", errors.New("test error"))
 	require.True(t, mock.ErrorCalled)
 }

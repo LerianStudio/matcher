@@ -11,10 +11,10 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
@@ -44,11 +44,11 @@ func (repo *Repository) FindByID(ctx context.Context, id uuid.UUID) (*entities.E
 
 	defer span.End()
 
-	exception, err := pgcommon.WithTenantTxProvider(
+	exception, err := pgcommon.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) (*entities.Exception, error) {
-			row := tx.QueryRowContext(ctx, `
+		func(qe pgcommon.QueryExecutor) (*entities.Exception, error) {
+			row := qe.QueryRowContext(ctx, `
 			SELECT id, transaction_id, severity, status, external_system, external_issue_id,
 			       assigned_to, due_at, resolution_notes, resolution_type, resolution_reason,
 			       reason, version, created_at, updated_at
@@ -73,6 +73,79 @@ func (repo *Repository) FindByID(ctx context.Context, id uuid.UUID) (*entities.E
 	}
 
 	return exception, nil
+}
+
+// FindByIDs retrieves all exceptions whose ids appear in the provided slice
+// using a single `WHERE id IN (...)` query against the tenant replica.
+// Ids not present in the store are silently omitted from the result: the
+// caller reconciles the returned set against the requested set. An empty
+// or nil input returns an empty slice and no error.
+//
+// The IN-list form (rather than ANY($1::uuid[])) mirrors the ingestion
+// transaction adapter's FindByContextAndIDs and sidesteps pgx text-mode
+// ARRAY encoding quirks without pgxuuid registered -- plus it keeps
+// sqlmock assertions straightforward because each id is a scalar arg.
+func (repo *Repository) FindByIDs(
+	ctx context.Context,
+	ids []uuid.UUID,
+) ([]*entities.Exception, error) {
+	if repo == nil || repo.provider == nil {
+		return nil, ErrRepoNotInitialized
+	}
+
+	if len(ids) == 0 {
+		return []*entities.Exception{}, nil
+	}
+
+	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+	ctx, span := tracer.Start(ctx, "postgres.exception.find_by_ids")
+
+	defer span.End()
+
+	// Convert []uuid.UUID to []string so squirrel emits IN ($1,...,$N)
+	// with scalar text args, avoiding driver-specific array handling.
+	idStrs := make([]string, 0, len(ids))
+	for _, id := range ids {
+		idStrs = append(idStrs, id.String())
+	}
+
+	query, args, buildErr := squirrel.Select(strings.Split(columns, ", ")...).
+		From("exceptions").
+		Where(squirrel.Eq{"id": idStrs}).
+		PlaceholderFormat(squirrel.Dollar).
+		ToSql()
+	if buildErr != nil {
+		return nil, fmt.Errorf("build find-by-ids query: %w", buildErr)
+	}
+
+	exceptions, err := pgcommon.WithTenantReadQuery(
+		ctx,
+		repo.provider,
+		func(qe pgcommon.QueryExecutor) ([]*entities.Exception, error) {
+			rows, queryErr := qe.QueryContext(ctx, query, args...)
+			if queryErr != nil {
+				return nil, fmt.Errorf("query exceptions by ids: %w", queryErr)
+			}
+
+			defer func() {
+				if closeErr := rows.Close(); closeErr != nil {
+					logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to close rows: %v", closeErr))
+				}
+			}()
+
+			return scanAllRows(rows, len(ids))
+		},
+	)
+	if err != nil {
+		wrappedErr := fmt.Errorf("failed to find exceptions by ids: %w", err)
+		libOpentelemetry.HandleSpanError(span, "failed to find exceptions by ids", wrappedErr)
+
+		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to find exceptions by ids: %v", wrappedErr))
+
+		return nil, wrappedErr
+	}
+
+	return exceptions, nil
 }
 
 type listQueryParams struct {
@@ -178,11 +251,11 @@ func (repo *Repository) executeListQuery(
 ) ([]*entities.Exception, libHTTP.CursorPagination, error) {
 	var pagination libHTTP.CursorPagination
 
-	result, err := pgcommon.WithTenantTxProvider(
+	result, err := pgcommon.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) ([]*entities.Exception, error) {
-			exceptions, cursorDirection, err := queryExceptions(ctx, tx, filter, params, logger)
+		func(qe pgcommon.QueryExecutor) ([]*entities.Exception, error) {
+			exceptions, cursorDirection, err := queryExceptions(ctx, qe, filter, params, logger)
 			if err != nil {
 				return nil, err
 			}
@@ -218,7 +291,7 @@ func (repo *Repository) executeListQuery(
 
 func queryExceptions(
 	ctx context.Context,
-	tx *sql.Tx,
+	qe pgcommon.QueryExecutor,
 	filter repositories.ExceptionFilter,
 	params listQueryParams,
 	logger libLog.Logger,
@@ -228,7 +301,7 @@ func queryExceptions(
 		return nil, "", fmt.Errorf("failed to build SQL: %w", err)
 	}
 
-	rows, err := tx.QueryContext(ctx, query, args...)
+	rows, err := qe.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to query exceptions: %w", err)
 	}
@@ -543,7 +616,7 @@ func (repo *Repository) executeUpdate(
 }
 
 // ExistsForTenant checks if an exception with the given ID exists in the current tenant's schema.
-// This method uses tenant-scoped transactions for schema isolation.
+// This method uses tenant-scoped read queries for schema isolation.
 func (repo *Repository) ExistsForTenant(ctx context.Context, id uuid.UUID) (bool, error) {
 	if repo == nil || repo.provider == nil {
 		return false, ErrRepoNotInitialized
@@ -554,13 +627,13 @@ func (repo *Repository) ExistsForTenant(ctx context.Context, id uuid.UUID) (bool
 
 	defer span.End()
 
-	exists, err := pgcommon.WithTenantTxProvider(
+	exists, err := pgcommon.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) (bool, error) {
+		func(qe pgcommon.QueryExecutor) (bool, error) {
 			var found bool
 
-			err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM exceptions WHERE id = $1)`, id.String()).
+			err := qe.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM exceptions WHERE id = $1)`, id.String()).
 				Scan(&found)
 			if err != nil {
 				return false, fmt.Errorf("check exception existence: %w", err)

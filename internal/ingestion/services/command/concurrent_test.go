@@ -17,7 +17,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
@@ -317,6 +317,38 @@ func (d *concurrentDedupe) MarkSeenWithRetry(
 	}
 
 	return d.MarkSeen(ctx, contextID, hash, ttl)
+}
+
+func (d *concurrentDedupe) MarkSeenBulk(
+	ctx context.Context,
+	contextID uuid.UUID,
+	hashes []string,
+	ttl time.Duration,
+) (map[string]bool, error) {
+	if d.dupErr != nil {
+		return nil, d.dupErr
+	}
+
+	result := make(map[string]bool, len(hashes))
+
+	for _, hash := range hashes {
+		err := d.MarkSeen(ctx, contextID, hash, ttl)
+		if err == nil {
+			result[hash] = true
+
+			continue
+		}
+
+		if errors.Is(err, ports.ErrDuplicateTransaction) {
+			result[hash] = false
+
+			continue
+		}
+
+		return nil, err
+	}
+
+	return result, nil
 }
 
 func (d *concurrentDedupe) Clear(_ context.Context, _ uuid.UUID, hash string) error {

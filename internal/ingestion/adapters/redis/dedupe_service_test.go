@@ -12,7 +12,7 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/core"
+	"github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
 
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
@@ -358,4 +358,102 @@ func TestDedupeServiceClearBatchEmptyHashes(t *testing.T) {
 
 	err := service.ClearBatch(context.Background(), uuid.New(), []string{})
 	require.NoError(t, err)
+}
+
+func TestDedupeServiceMarkSeenBulkMarksAllNewHashes(t *testing.T) {
+	t.Parallel()
+
+	_, client := setupRedis(t)
+	conn := testutil.NewRedisClientWithMock(client)
+	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
+	service := NewDedupeService(provider)
+
+	ctx := context.Background()
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	sourceID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+
+	hashes := []string{
+		service.CalculateHash(sourceID, "ext-bulk-1"),
+		service.CalculateHash(sourceID, "ext-bulk-2"),
+		service.CalculateHash(sourceID, "ext-bulk-3"),
+	}
+
+	result, err := service.MarkSeenBulk(ctx, contextID, hashes, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, result, len(hashes))
+
+	for _, hash := range hashes {
+		require.True(t, result[hash], "expected hash to be newly set")
+
+		isDup, dupErr := service.IsDuplicate(ctx, contextID, hash)
+		require.NoError(t, dupErr)
+		require.True(t, isDup)
+	}
+}
+
+func TestDedupeServiceMarkSeenBulkReportsDuplicates(t *testing.T) {
+	t.Parallel()
+
+	_, client := setupRedis(t)
+	conn := testutil.NewRedisClientWithMock(client)
+	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
+	service := NewDedupeService(provider)
+
+	ctx := context.Background()
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	sourceID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+
+	existingHash := service.CalculateHash(sourceID, "existing")
+	require.NoError(t, service.MarkSeen(ctx, contextID, existingHash, time.Minute))
+
+	newHash := service.CalculateHash(sourceID, "brand-new")
+
+	result, err := service.MarkSeenBulk(ctx, contextID, []string{existingHash, newHash}, time.Minute)
+	require.NoError(t, err)
+	require.False(t, result[existingHash], "pre-existing hash should not be newly set")
+	require.True(t, result[newHash])
+}
+
+func TestDedupeServiceMarkSeenBulkEmpty(t *testing.T) {
+	t.Parallel()
+
+	_, client := setupRedis(t)
+	conn := testutil.NewRedisClientWithMock(client)
+	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
+	service := NewDedupeService(provider)
+
+	result, err := service.MarkSeenBulk(context.Background(), uuid.New(), nil, time.Minute)
+	require.NoError(t, err)
+	require.Empty(t, result)
+}
+
+func TestDedupeServiceMarkSeenBulkNilConnection(t *testing.T) {
+	t.Parallel()
+
+	service := &DedupeService{}
+	_, err := service.MarkSeenBulk(context.Background(), uuid.New(), []string{"h"}, time.Minute)
+	require.ErrorIs(t, err, errRedisConnRequired)
+}
+
+func TestDedupeServiceMarkSeenBulkZeroTTLKeysPersist(t *testing.T) {
+	t.Parallel()
+
+	srv, client := setupRedis(t)
+	conn := testutil.NewRedisClientWithMock(client)
+	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
+	service := NewDedupeService(provider)
+
+	ctx := context.Background()
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	sourceID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	hash := service.CalculateHash(sourceID, "no-ttl")
+
+	result, err := service.MarkSeenBulk(ctx, contextID, []string{hash}, 0)
+	require.NoError(t, err)
+	require.True(t, result[hash])
+
+	key, err := service.buildKey(ctx, contextID, hash)
+	require.NoError(t, err)
+
+	require.Equal(t, time.Duration(0), srv.TTL(key), "zero TTL should leave the key without expiration")
 }

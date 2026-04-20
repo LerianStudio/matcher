@@ -11,10 +11,10 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/common"
@@ -70,7 +70,7 @@ func (repo *Repository) Create(
 			wrappedErr,
 		)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to create reconciliation context")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to create reconciliation context")
 
 		return nil, wrappedErr
 	}
@@ -117,7 +117,7 @@ func (repo *Repository) CreateWithTx(
 			wrappedErr,
 		)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to create reconciliation context")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to create reconciliation context")
 
 		return nil, wrappedErr
 	}
@@ -194,7 +194,7 @@ func (repo *Repository) FindByID(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to find reconciliation context by id", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find reconciliation context by id")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to find reconciliation context by id")
 		}
 
 		return nil, fmt.Errorf("find reconciliation context by id: %w", err)
@@ -274,7 +274,7 @@ func (repo *Repository) FindByName(
 			err,
 		)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find reconciliation context by name")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to find reconciliation context by name")
 
 		return nil, fmt.Errorf("find reconciliation context by name: %w", err)
 	}
@@ -349,7 +349,7 @@ func (repo *Repository) FindAll(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list reconciliation contexts", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list reconciliation contexts")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list reconciliation contexts")
 
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("find all reconciliation contexts: %w", err)
 	}
@@ -391,7 +391,7 @@ func (repo *Repository) Update(
 				wrappedErr,
 			)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to update reconciliation context")
+			logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to update reconciliation context")
 
 			return nil, wrappedErr
 		}
@@ -442,7 +442,7 @@ func (repo *Repository) UpdateWithTx(
 				wrappedErr,
 			)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to update reconciliation context")
+			logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to update reconciliation context")
 
 			return nil, wrappedErr
 		}
@@ -521,7 +521,7 @@ func (repo *Repository) Delete(ctx stdctx.Context, id uuid.UUID) error {
 				wrappedErr,
 			)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to delete reconciliation context")
+			logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to delete reconciliation context")
 
 			return wrappedErr
 		}
@@ -564,7 +564,7 @@ func (repo *Repository) DeleteWithTx(ctx stdctx.Context, tx *sql.Tx, id uuid.UUI
 				wrappedErr,
 			)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to delete reconciliation context")
+			logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to delete reconciliation context")
 
 			return wrappedErr
 		}
@@ -632,7 +632,7 @@ func (repo *Repository) Count(ctx stdctx.Context) (int64, error) {
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to count reconciliation contexts", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to count reconciliation contexts")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to count reconciliation contexts")
 
 		return 0, fmt.Errorf("count reconciliation contexts: %w", err)
 	}

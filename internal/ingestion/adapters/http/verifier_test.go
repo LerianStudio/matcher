@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 )
 
 var errMockContextProvider = errors.New("mock context provider error")
@@ -36,8 +36,12 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 
 	validTenantID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	validContextID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	differentContextID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
 
+	// NOTE: The verifier no longer carries a ctxInfo.ID != contextID
+	// defence-in-depth branch. The backing repository's FindByID matches
+	// `WHERE tenant_id = $1 AND id = $2`, so the only way a different
+	// context ID could come back is a repository bug serious enough that
+	// no verifier-level branch is the appropriate place to catch it.
 	tests := []struct {
 		name          string
 		verifier      libHTTP.TenantOwnershipVerifier
@@ -66,13 +70,6 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 			tenantID:    validTenantID,
 			contextID:   validContextID,
 			expectedErr: libHTTP.ErrContextNotFound,
-		},
-		{
-			name:        "context found but ID mismatch returns libHTTP.ErrContextNotOwned",
-			verifier:    createMockVerifierWithContext(differentContextID, true),
-			tenantID:    validTenantID,
-			contextID:   validContextID,
-			expectedErr: libHTTP.ErrContextNotOwned,
 		},
 		{
 			name:          "context found but inactive returns libHTTP.ErrContextNotActive",

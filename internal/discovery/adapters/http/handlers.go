@@ -4,14 +4,14 @@ package http
 import (
 	"context"
 	"errors"
-	"sync/atomic"
+	"fmt"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/discovery/adapters/http/dto"
 	discoveryCommand "github.com/LerianStudio/matcher/internal/discovery/services/command"
@@ -27,16 +27,19 @@ var (
 	ErrNilQueryUseCase = errors.New("query use case is required")
 )
 
-// productionMode indicates whether the application is running in production.
-// Set once during handler construction via NewHandler; governs SafeError behavior
-// when logging internal failures.
-var productionMode atomic.Bool
-
 // Handler handles discovery HTTP requests.
+//
+// productionMode is captured as a per-handler bool rather than a package-
+// level atomic.Bool. The previous shared-global state was fine at runtime
+// (the flag is written once in NewHandler) but leaked across tests: any
+// test that constructed a handler with production=true silently changed
+// the observable error-message behavior for every other test in the
+// package. Per-handler state eliminates that cross-test coupling.
 type Handler struct {
-	command   *discoveryCommand.UseCase
-	query     *discoveryQuery.UseCase
-	staleness stalenessProvider
+	command        *discoveryCommand.UseCase
+	query          *discoveryQuery.UseCase
+	staleness      stalenessProvider
+	productionMode bool
 }
 
 // NewHandler creates a new discovery HTTP handler.
@@ -53,11 +56,10 @@ func NewHandler(
 		return nil, ErrNilQueryUseCase
 	}
 
-	productionMode.Store(production)
-
 	return &Handler{
-		command: command,
-		query:   query,
+		command:        command,
+		query:          query,
+		productionMode: production,
 	}, nil
 }
 
@@ -65,8 +67,10 @@ func startHandlerSpan(fiberCtx *fiber.Ctx, name string) (context.Context, trace.
 	return sharedhttp.StartHandlerSpan(fiberCtx, name)
 }
 
-func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
-	sharedhttp.LogSpanError(ctx, span, logger, productionMode.Load(), message, err)
+// logSpanError forwards to sharedhttp.LogSpanError using this handler's
+// productionMode. Unexported method — call sites read `handler.logSpanError`.
+func (handler *Handler) logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
+	sharedhttp.LogSpanError(ctx, span, logger, handler.productionMode, message, err)
 }
 
 //nolint:wrapcheck // HTTP transport response is the terminal error boundary.
@@ -94,7 +98,7 @@ func (handler *Handler) GetDiscoveryStatus(fiberCtx *fiber.Ctx) error {
 
 	status, err := handler.query.GetDiscoveryStatus(ctx)
 	if err != nil {
-		logSpanError(ctx, span, logger, "get discovery status", err)
+		handler.logSpanError(ctx, span, logger, "get discovery status", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "failed to get discovery status")
 	}
@@ -109,7 +113,11 @@ func (handler *Handler) GetDiscoveryStatus(fiberCtx *fiber.Ctx) error {
 		response.LastSyncAt = &lastSyncAt
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, response)
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, response); err != nil {
+		return fmt.Errorf("respond get discovery status: %w", err)
+	}
+
+	return nil
 }
 
 // ListConnections handles GET /v1/discovery/connections.
@@ -132,7 +140,7 @@ func (handler *Handler) ListConnections(fiberCtx *fiber.Ctx) error {
 
 	conns, err := handler.query.ListConnections(ctx)
 	if err != nil {
-		logSpanError(ctx, span, logger, "list connections", err)
+		handler.logSpanError(ctx, span, logger, "list connections", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "failed to list connections")
 	}
@@ -142,7 +150,11 @@ func (handler *Handler) ListConnections(fiberCtx *fiber.Ctx) error {
 		responses = append(responses, dto.ConnectionFromEntity(conn))
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ConnectionListResponse{Connections: responses})
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ConnectionListResponse{Connections: responses}); err != nil {
+		return fmt.Errorf("respond list connections: %w", err)
+	}
+
+	return nil
 }
 
 // GetConnection handles GET /v1/discovery/connections/:connectionId.
@@ -169,14 +181,14 @@ func (handler *Handler) GetConnection(fiberCtx *fiber.Ctx) error {
 
 	connID, err := uuid.Parse(connIDStr)
 	if err != nil {
-		logSpanError(ctx, span, logger, "invalid connection id", err)
+		handler.logSpanError(ctx, span, logger, "invalid connection id", err)
 
 		return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid connection ID")
 	}
 
 	conn, err := handler.query.GetConnection(ctx, connID)
 	if err != nil {
-		logSpanError(ctx, span, logger, "get connection", err)
+		handler.logSpanError(ctx, span, logger, "get connection", err)
 
 		// Check if it's actually a not-found error
 		if errors.Is(err, discoveryQuery.ErrConnectionNotFound) {
@@ -186,7 +198,11 @@ func (handler *Handler) GetConnection(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "failed to get connection")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ConnectionFromEntity(conn))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ConnectionFromEntity(conn)); err != nil {
+		return fmt.Errorf("respond get connection: %w", err)
+	}
+
+	return nil
 }
 
 // GetConnectionSchema handles GET /v1/discovery/connections/:connectionId/schema.
@@ -214,14 +230,14 @@ func (handler *Handler) GetConnectionSchema(fiberCtx *fiber.Ctx) error {
 
 	connID, err := uuid.Parse(connIDStr)
 	if err != nil {
-		logSpanError(ctx, span, logger, "invalid connection id", err)
+		handler.logSpanError(ctx, span, logger, "invalid connection id", err)
 
 		return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid connection ID")
 	}
 
 	_, err = handler.query.GetConnection(ctx, connID)
 	if err != nil {
-		logSpanError(ctx, span, logger, "get connection for schema", err)
+		handler.logSpanError(ctx, span, logger, "get connection for schema", err)
 
 		if errors.Is(err, discoveryQuery.ErrConnectionNotFound) {
 			return respondError(fiberCtx, fiber.StatusNotFound, "discovery_connection_not_found", "connection not found")
@@ -232,7 +248,7 @@ func (handler *Handler) GetConnectionSchema(fiberCtx *fiber.Ctx) error {
 
 	schemas, err := handler.query.GetConnectionSchema(ctx, connID)
 	if err != nil {
-		logSpanError(ctx, span, logger, "get schema", err)
+		handler.logSpanError(ctx, span, logger, "get schema", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "failed to get schema")
 	}
@@ -258,10 +274,14 @@ func (handler *Handler) GetConnectionSchema(fiberCtx *fiber.Ctx) error {
 		})
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ConnectionSchemaResponse{
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ConnectionSchemaResponse{
 		ConnectionID: connID,
 		Tables:       tables,
-	})
+	}); err != nil {
+		return fmt.Errorf("respond get connection schema: %w", err)
+	}
+
+	return nil
 }
 
 // TestConnection handles POST /v1/discovery/connections/:connectionId/test.
@@ -291,7 +311,7 @@ func (handler *Handler) TestConnection(fiberCtx *fiber.Ctx) error {
 
 	connID, err := uuid.Parse(connIDStr)
 	if err != nil {
-		logSpanError(ctx, span, logger, "invalid connection id", err)
+		handler.logSpanError(ctx, span, logger, "invalid connection id", err)
 
 		return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid connection ID")
 	}
@@ -299,28 +319,32 @@ func (handler *Handler) TestConnection(fiberCtx *fiber.Ctx) error {
 	result, err := handler.command.TestConnection(ctx, connID)
 	if err != nil {
 		if errors.Is(err, discoveryCommand.ErrConnectionNotFound) {
-			logSpanError(ctx, span, logger, "connection not found", err)
+			handler.logSpanError(ctx, span, logger, "connection not found", err)
 
 			return respondError(fiberCtx, fiber.StatusNotFound, "discovery_connection_not_found", "connection not found")
 		}
 
 		if errors.Is(err, discoveryCommand.ErrFetcherUnavailable) {
-			logSpanError(ctx, span, logger, "fetcher unavailable", err)
+			handler.logSpanError(ctx, span, logger, "fetcher unavailable", err)
 
 			return respondError(fiberCtx, fiber.StatusServiceUnavailable, "discovery_fetcher_unavailable", "fetcher service unavailable")
 		}
 
-		logSpanError(ctx, span, logger, "test connection", err)
+		handler.logSpanError(ctx, span, logger, "test connection", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "failed to test connection")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.TestConnectionResponse{
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.TestConnectionResponse{
 		ConnectionID: result.ConnectionID,
 		Healthy:      result.Healthy,
 		LatencyMs:    result.LatencyMs,
 		ErrorMessage: sanitizedConnectionTestError(result),
-	})
+	}); err != nil {
+		return fmt.Errorf("respond test connection: %w", err)
+	}
+
+	return nil
 }
 
 func sanitizedConnectionTestError(result *discoveryCommand.ConnectionTestResult) string {
@@ -355,21 +379,25 @@ func (handler *Handler) RefreshDiscovery(fiberCtx *fiber.Ctx) error {
 	synced, err := handler.command.RefreshDiscovery(ctx)
 	if err != nil {
 		if errors.Is(err, discoveryCommand.ErrDiscoveryRefreshInProgress) {
-			logSpanError(ctx, span, logger, "refresh discovery in progress", err)
+			handler.logSpanError(ctx, span, logger, "refresh discovery in progress", err)
 
 			return respondError(fiberCtx, fiber.StatusConflict, "refresh_in_progress", "discovery refresh already in progress")
 		}
 
 		if errors.Is(err, discoveryCommand.ErrFetcherUnavailable) {
-			logSpanError(ctx, span, logger, "fetcher unavailable", err)
+			handler.logSpanError(ctx, span, logger, "fetcher unavailable", err)
 
 			return respondError(fiberCtx, fiber.StatusServiceUnavailable, "discovery_fetcher_unavailable", "fetcher service unavailable")
 		}
 
-		logSpanError(ctx, span, logger, "refresh discovery", err)
+		handler.logSpanError(ctx, span, logger, "refresh discovery", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "failed to refresh discovery")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.RefreshDiscoveryResponse{ConnectionsSynced: synced})
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.RefreshDiscoveryResponse{ConnectionsSynced: synced}); err != nil {
+		return fmt.Errorf("respond refresh discovery: %w", err)
+	}
+
+	return nil
 }

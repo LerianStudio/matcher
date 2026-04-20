@@ -102,11 +102,25 @@ const (
 
 // Governance module actions.
 const (
-	ActionAuditRead          = "audit:read"
-	ActionArchiveRead        = "archive:read"
+	ActionAuditRead   = "audit:read"
+	ActionArchiveRead = "archive:read"
+
+	// ActionActorMappingRead gates metadata reads that do not expose
+	// PII. Retained for future list/index endpoints. The single cleartext-
+	// returning read is now gated by ActionActorMappingDeanonymize so that
+	// reviewing an actor roster and resolving a specific actor's identity
+	// are separately auditable operations.
 	ActionActorMappingRead   = "actor-mapping:read"
 	ActionActorMappingWrite  = "actor-mapping:write"
 	ActionActorMappingDelete = "actor-mapping:delete"
+
+	// ActionActorMappingDeanonymize gates endpoints that resolve a hashed
+	// actor ID back to its cleartext display name / email. Intentionally
+	// distinct from ActionActorMappingRead: operators investigating a
+	// specific audit entry can be granted this narrow permission without
+	// receiving broader mapping access, and the audit log records which
+	// individual exercised a de-anonymization step.
+	ActionActorMappingDeanonymize = "actor-mapping:deanonymize"
 )
 
 // Reporting module actions.
@@ -121,21 +135,6 @@ const (
 const (
 	ActionDiscoveryRead  = "discovery:read"
 	ActionDiscoveryWrite = "discovery:write"
-)
-
-// System module actions.
-const (
-	ActionConfigRead          = "config:read"
-	ActionConfigWrite         = "config:write"
-	ActionConfigSchemaRead    = "config/schema:read"
-	ActionConfigHistoryRead   = "config/history:read"
-	ActionConfigReloadWrite   = "config/reload:write"
-	ActionSettingsRead        = "settings:read"
-	ActionSettingsWrite       = "settings:write"
-	ActionSettingsSchemaRead  = "settings/schema:read"
-	ActionSettingsHistoryRead = "settings/history:read"
-	ActionSettingsGlobalRead  = "settings/global:read"
-	ActionSettingsGlobalWrite = "settings/global:write"
 )
 
 // Exception module actions.

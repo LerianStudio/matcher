@@ -5,14 +5,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"sync/atomic"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
@@ -31,29 +30,31 @@ var (
 	ErrRuleIDsRequired = errors.New("rule IDs are required")
 )
 
-// productionMode indicates whether the application is running in production.
-// Set once during handler construction via NewHandler; governs SafeError behavior
-// (suppresses internal error details in client responses when true).
-// Uses atomic.Bool because parallel tests construct handlers concurrently.
-var productionMode atomic.Bool
-
 // Handler handles HTTP requests for configuration operations.
+//
+// productionMode governs SafeError behavior (suppresses internal error
+// details in client responses when true). Stored as a per-handler bool
+// rather than a package-level atomic.Bool — the previous shared-global
+// state coupled every test in the package to whichever test last
+// constructed a handler, regardless of the production flag each test
+// wanted to exercise.
 type Handler struct {
 	command         *command.UseCase
 	query           *query.UseCase
 	contextVerifier libHTTP.TenantOwnershipVerifier
+	productionMode  bool
 }
 
 func startHandlerSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, libLog.Logger) {
 	return sharedhttp.StartHandlerSpan(c, name)
 }
 
-func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
-	sharedhttp.LogSpanError(ctx, span, logger, productionMode.Load(), message, err)
+func (handler *Handler) logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
+	sharedhttp.LogSpanError(ctx, span, logger, handler.productionMode, message, err)
 }
 
 //nolint:wrapcheck // HTTP transport response is the terminal error boundary.
-func badRequest(
+func (handler *Handler) badRequest(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -61,11 +62,11 @@ func badRequest(
 	message string,
 	err error,
 ) error {
-	return sharedhttp.BadRequest(ctx, fiberCtx, span, logger, productionMode.Load(), safeClientMessage(message, err), err)
+	return sharedhttp.BadRequest(ctx, fiberCtx, span, logger, handler.productionMode, safeClientMessage(message, err), err)
 }
 
-func unauthorized(ctx context.Context, c *fiber.Ctx, span trace.Span, logger libLog.Logger, err error) error {
-	logSpanError(ctx, span, logger, "invalid tenant id", err)
+func (handler *Handler) unauthorized(ctx context.Context, c *fiber.Ctx, span trace.Span, logger libLog.Logger, err error) error {
+	handler.logSpanError(ctx, span, logger, "invalid tenant id", err)
 	return respondError(c, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
 }
 
@@ -122,7 +123,7 @@ func (handler *Handler) ensureSourceAccess(
 ) error {
 	_, err := handler.query.GetSource(ctx, contextID, sourceID)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to load source", err)
+		handler.logSpanError(ctx, span, logger, "failed to load source", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
 			return writeNotFound(fiberCtx, "configuration_source_not_found", "source not found")
@@ -134,14 +135,14 @@ func (handler *Handler) ensureSourceAccess(
 	return nil
 }
 
-func handleContextVerificationError(
+func (handler *Handler) handleContextVerificationError(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
 	logger libLog.Logger,
 	err error,
 ) error {
-	logSpanError(ctx, span, logger, "context verification failed", err)
+	handler.logSpanError(ctx, span, logger, "context verification failed", err)
 
 	if errors.Is(err, libHTTP.ErrContextNotFound) {
 		return writeNotFound(fiberCtx, "configuration_context_not_found", "context not found")
@@ -150,7 +151,7 @@ func handleContextVerificationError(
 	return respondContextVerificationError(fiberCtx, err)
 }
 
-func handleOwnershipVerificationError(
+func (handler *Handler) handleOwnershipVerificationError(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -158,7 +159,7 @@ func handleOwnershipVerificationError(
 	err error,
 	notFoundSlug, notFoundMessage string,
 ) error {
-	logSpanError(ctx, span, logger, "context ownership verification failed", err)
+	handler.logSpanError(ctx, span, logger, "context ownership verification failed", err)
 
 	return respondOwnershipVerificationError(fiberCtx, err, notFoundSlug, notFoundMessage)
 }
@@ -173,12 +174,11 @@ func NewHandler(commandUseCase *command.UseCase, queryUseCase *query.UseCase, pr
 		return nil, ErrNilQueryUseCase
 	}
 
-	productionMode.Store(production)
-
 	return &Handler{
 		command:         commandUseCase,
 		query:           queryUseCase,
 		contextVerifier: NewTenantOwnershipVerifier(queryUseCase),
+		productionMode:  production,
 	}, nil
 }
 

@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/adapters/http/dto"
@@ -1924,7 +1924,7 @@ func TestMapJobToResponse_WithErrorField(t *testing.T) {
 	querySvc, err := query.NewExportJobQueryService(repo)
 	require.NoError(t, err)
 
-	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 	require.NoError(t, err)
 
 	startedAt := time.Now().UTC().Add(-time.Hour)
@@ -1971,7 +1971,7 @@ func TestMapJobToResponse_DownloadableWithFutureExpiry(t *testing.T) {
 	querySvc, err := query.NewExportJobQueryService(repo)
 	require.NoError(t, err)
 
-	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 	require.NoError(t, err)
 
 	job := &entities.ExportJob{
@@ -2009,7 +2009,7 @@ func TestMapJobToResponse_NilJobReturnsEmptyResponse(t *testing.T) {
 	querySvc, err := query.NewExportJobQueryService(repo)
 	require.NoError(t, err)
 
-	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 	require.NoError(t, err)
 
 	response := handlers.mapJobToResponse(context.Background(), nil)
@@ -2057,7 +2057,7 @@ func setupListByContextHandlers(
 	querySvc, err := query.NewExportJobQueryService(repo)
 	require.NoError(t, err)
 
-	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 	require.NoError(t, err)
 
 	return handlers
@@ -2084,8 +2084,8 @@ func TestExportJobHandlers_ListExportJobsByContext_Success(t *testing.T) {
 
 	repo := newExportJobRepoMock(t)
 	repo.EXPECT().
-		ListByContext(gomock.Any(), contextID, gomock.Any()).
-		Return(jobs, nil).
+		ListByContext(gomock.Any(), contextID, gomock.Any(), gomock.Any()).
+		Return(jobs, libHTTP.CursorPagination{}, nil).
 		Times(1)
 
 	storage := newStorageClientMock(t, storageClientMockConfig{})
@@ -2114,6 +2114,8 @@ func TestExportJobHandlers_ListExportJobsByContext_Success(t *testing.T) {
 	err = json.NewDecoder(resp.Body).Decode(&response)
 	require.NoError(t, err)
 	assert.Len(t, response.Items, 1)
+	assert.False(t, response.HasMore, "single-item page within limit should not report more pages")
+	assert.Empty(t, response.NextCursor, "no next cursor when page is not full")
 }
 
 func TestExportJobHandlers_ListExportJobsByContext_ContextNotFound(t *testing.T) {
@@ -2177,8 +2179,8 @@ func TestExportJobHandlers_ListExportJobsByContext_ServiceError(t *testing.T) {
 
 	repo := newExportJobRepoMock(t)
 	repo.EXPECT().
-		ListByContext(gomock.Any(), contextID, gomock.Any()).
-		Return(nil, errTestStorageError).
+		ListByContext(gomock.Any(), contextID, gomock.Any(), gomock.Any()).
+		Return(nil, libHTTP.CursorPagination{}, errTestStorageError).
 		Times(1)
 
 	storage := newStorageClientMock(t, storageClientMockConfig{})

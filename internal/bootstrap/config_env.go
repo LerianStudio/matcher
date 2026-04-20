@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -319,6 +319,26 @@ func (cfg *Config) IdempotencySuccessTTL() time.Duration {
 	}
 
 	return time.Duration(cfg.Idempotency.SuccessTTLHours) * time.Hour
+}
+
+// OutboxRetryWindow returns the outbox dispatcher retry cooldown as a time.Duration.
+// Falls back to defaultOutboxRetryWindow (seconds) if configured value is non-positive.
+func (cfg *Config) OutboxRetryWindow() time.Duration {
+	if cfg.Outbox.RetryWindowSec <= 0 {
+		return time.Duration(defaultOutboxRetryWindow) * time.Second
+	}
+
+	return time.Duration(cfg.Outbox.RetryWindowSec) * time.Second
+}
+
+// OutboxDispatchInterval returns the outbox dispatcher poll interval as a time.Duration.
+// Falls back to defaultOutboxDispatchIntervalSec (seconds) if configured value is non-positive.
+func (cfg *Config) OutboxDispatchInterval() time.Duration {
+	if cfg.Outbox.DispatchIntervalSec <= 0 {
+		return time.Duration(defaultOutboxDispatchIntervalSec) * time.Second
+	}
+
+	return time.Duration(cfg.Outbox.DispatchIntervalSec) * time.Second
 }
 
 // WebhookTimeout returns the default webhook dispatch timeout as a time.Duration.

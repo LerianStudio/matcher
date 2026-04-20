@@ -12,9 +12,9 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
@@ -57,7 +57,7 @@ func (repo *Repository) MarkCustodyDeleted(
 	if err != nil {
 		wrappedErr := fmt.Errorf("mark custody deleted: %w", err)
 		libOpentelemetry.HandleSpanError(span, "mark custody deleted", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).
+		logger.With(libLog.Err(wrappedErr)).
 			Log(ctx, libLog.LevelError, "mark custody deleted")
 
 		return wrappedErr
@@ -97,7 +97,7 @@ func (repo *Repository) MarkCustodyDeletedWithTx(
 	if err != nil {
 		wrappedErr := fmt.Errorf("mark custody deleted with tx: %w", err)
 		libOpentelemetry.HandleSpanError(span, "mark custody deleted", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).
+		logger.With(libLog.Err(wrappedErr)).
 			Log(ctx, libLog.LevelError, "mark custody deleted")
 
 		return wrappedErr

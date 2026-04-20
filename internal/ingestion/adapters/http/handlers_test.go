@@ -25,8 +25,8 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
@@ -105,6 +105,24 @@ func (d *stubDedupe) MarkSeenWithRetry(
 	_ int,
 ) error {
 	return d.markErr
+}
+
+func (d *stubDedupe) MarkSeenBulk(
+	_ context.Context,
+	_ uuid.UUID,
+	hashes []string,
+	_ time.Duration,
+) (map[string]bool, error) {
+	if d.markErr != nil {
+		return nil, d.markErr
+	}
+
+	result := make(map[string]bool, len(hashes))
+	for _, h := range hashes {
+		result[h] = true
+	}
+
+	return result, nil
 }
 
 func (d *stubDedupe) Clear(_ context.Context, _ uuid.UUID, _ string) error {
@@ -2201,7 +2219,7 @@ func TestLogSpanError_WithNilLogger(t *testing.T) {
 	defer span.End()
 
 	require.NotPanics(t, func() {
-		logSpanError(ctx, span, nil, "test message", errors.New("test error"))
+		(&Handlers{}).logSpanError(ctx, span, nil, "test message", errors.New("test error"))
 	})
 }
 
@@ -2214,6 +2232,6 @@ func TestLogSpanError_WithLogger(t *testing.T) {
 	defer span.End()
 
 	mock := &testutil.TestLogger{}
-	logSpanError(ctx, span, mock, "test message", errors.New("test error"))
+	(&Handlers{}).logSpanError(ctx, span, mock, "test message", errors.New("test error"))
 	require.True(t, mock.ErrorCalled)
 }

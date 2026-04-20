@@ -9,9 +9,9 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 )
@@ -39,7 +39,7 @@ func (uc *UseCase) CreateMatchRule(
 
 		libOpentelemetry.HandleSpanError(span, "failed to check match rule priority", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to check match rule priority")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to check match rule priority")
 
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func (uc *UseCase) CreateMatchRule(
 
 		logger.With(
 			libLog.Any("rule.type", string(input.Type)),
-			libLog.Any("error", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "invalid rule config schema")
 
 		return nil, err
@@ -70,7 +70,7 @@ func (uc *UseCase) CreateMatchRule(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to create match rule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to create match rule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to create match rule")
 
 		return nil, fmt.Errorf("creating match rule: %w", err)
 	}
@@ -139,7 +139,7 @@ func (uc *UseCase) loadMatchRuleForUpdate(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to load match rule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to load match rule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to load match rule")
 
 		return nil, fmt.Errorf("finding match rule: %w", err)
 	}
@@ -171,7 +171,7 @@ func (uc *UseCase) validatePriorityUpdate(
 			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "match rule priority conflict", err)
 		} else {
 			libOpentelemetry.HandleSpanError(span, "match rule priority conflict", err)
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to check match rule priority")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to check match rule priority")
 		}
 
 		return err
@@ -199,7 +199,7 @@ func (uc *UseCase) validateRuleConfig(
 
 		logger.With(
 			libLog.Any("rule.type", string(ruleType)),
-			libLog.Any("error", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "invalid rule config schema")
 
 		return err
@@ -266,7 +266,7 @@ func (uc *UseCase) UpdateMatchRule(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to update match rule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to update match rule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to update match rule")
 
 		return nil, fmt.Errorf("updating match rule: %w", err)
 	}
@@ -294,7 +294,7 @@ func (uc *UseCase) DeleteMatchRule(ctx context.Context, contextID, ruleID uuid.U
 	if err := uc.matchRuleRepo.Delete(ctx, contextID, ruleID); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to delete match rule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to delete match rule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to delete match rule")
 
 		return fmt.Errorf("deleting match rule: %w", err)
 	}
@@ -322,7 +322,7 @@ func (uc *UseCase) ReorderMatchRulePriorities(ctx context.Context, contextID uui
 	if err := uc.matchRuleRepo.ReorderPriorities(ctx, contextID, ruleIDs); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to reorder match rules", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to reorder match rules")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to reorder match rules")
 
 		return fmt.Errorf("reordering match rules: %w", err)
 	}

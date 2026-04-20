@@ -86,7 +86,7 @@ func MarshalCasdoorInitData() ([]byte, error) {
 
 // BuildCasdoorInitData builds the Casdoor seed payload from Matcher's RBAC catalog.
 func BuildCasdoorInitData() (CasdoorInitData, error) {
-	permissionSpecs := matcherCasdoorPermissionSpecs()
+	permissionSpecs := matcherCasdoorAvailablePermissionSpecs()
 	permissions := make([]CasdoorPermission, 0, len(permissionSpecs))
 	permissionNames := make(map[string]struct{}, len(permissionSpecs))
 
@@ -141,7 +141,31 @@ func BuildCasdoorInitData() (CasdoorInitData, error) {
 	}, nil
 }
 
-func matcherCasdoorPermissionSpecs() []casdoorPermissionSpec {
+// matcherCasdoorAvailablePermissionSpecs returns the full catalog of
+// permissions registered with Casdoor — including break-glass actions like
+// ActionActorMappingDeanonymize that must NEVER be inherited by a default
+// role. Call sites that seed per-role permissions must use
+// matcherCasdoorAdminRolePermissionSpecs (or a similarly curated helper)
+// rather than this function, otherwise the "available vs granted" contract
+// is violated.
+func matcherCasdoorAvailablePermissionSpecs() []casdoorPermissionSpec {
+	return appendAllPermissionSpecs(
+		matcherCasdoorAdminRolePermissionSpecs(),
+		// ActorMappingDeanonymize is registered as an available permission so
+		// Casdoor admins can grant it to specific users/roles, but it is
+		// intentionally omitted from every default role (including
+		// matcher-admin-role). Resolving a hashed actor back to cleartext PII
+		// must be an explicit, audited assignment — never an inherited
+		// capability.
+		permissionSpecs(ResourceGovernance, ActionActorMappingDeanonymize),
+	)
+}
+
+// matcherCasdoorAdminRolePermissionSpecs returns the permissions granted to
+// matcher-admin-role by default. It deliberately excludes
+// ActionActorMappingDeanonymize; see matcherCasdoorAvailablePermissionSpecs
+// for the rationale.
+func matcherCasdoorAdminRolePermissionSpecs() []casdoorPermissionSpec {
 	return appendAllPermissionSpecs(
 		permissionSpecs(ResourceConfiguration,
 			ActionContextCreate, ActionContextRead, ActionContextUpdate, ActionContextDelete,
@@ -159,7 +183,8 @@ func matcherCasdoorPermissionSpecs() []casdoorPermissionSpec {
 			ActionMatchRun, ActionMatchRead, ActionMatchDelete, ActionManualMatch, ActionAdjustmentCreate,
 		),
 		permissionSpecs(ResourceGovernance,
-			ActionAuditRead, ActionArchiveRead, ActionActorMappingRead, ActionActorMappingWrite, ActionActorMappingDelete,
+			ActionAuditRead, ActionArchiveRead,
+			ActionActorMappingRead, ActionActorMappingWrite, ActionActorMappingDelete,
 		),
 		permissionSpecs(ResourceReporting,
 			ActionDashboardRead, ActionExportRead, ActionExportJobWrite, ActionExportJobRead,
@@ -171,11 +196,7 @@ func matcherCasdoorPermissionSpecs() []casdoorPermissionSpec {
 		permissionSpecs(ResourceDiscovery,
 			ActionDiscoveryRead, ActionDiscoveryWrite,
 		),
-		permissionSpecs(ResourceSystem,
-			ActionConfigRead, ActionConfigWrite, ActionConfigSchemaRead, ActionConfigHistoryRead, ActionConfigReloadWrite,
-			ActionSettingsRead, ActionSettingsWrite, ActionSettingsSchemaRead, ActionSettingsHistoryRead,
-			ActionSettingsGlobalRead, ActionSettingsGlobalWrite,
-		),
+		permissionSpecs(ResourceSystem, ActionAdmin),
 	)
 }
 
@@ -196,7 +217,7 @@ func matcherCasdoorRoleSpecs() []casdoorRoleSpec {
 			Name:        "matcher-admin-role",
 			DisplayName: "Matcher Admin",
 			Description: "Full access to all Matcher resources and actions.",
-			Permissions: matcherCasdoorPermissionSpecs(),
+			Permissions: matcherCasdoorAdminRolePermissionSpecs(),
 		},
 		{
 			Name:        "matcher-operator-role",
@@ -270,9 +291,6 @@ func matcherCasdoorRoleSpecs() []casdoorRoleSpec {
 					ActionExceptionRead, ActionDisputeRead,
 				),
 				permissionSpecs(ResourceDiscovery, ActionDiscoveryRead),
-				permissionSpecs(ResourceSystem,
-					ActionConfigSchemaRead, ActionSettingsSchemaRead,
-				),
 			),
 		},
 		{
@@ -285,11 +303,7 @@ func matcherCasdoorRoleSpecs() []casdoorRoleSpec {
 					ActionAuditRead, ActionArchiveRead, ActionActorMappingRead, ActionActorMappingWrite, ActionActorMappingDelete,
 				),
 				reportingRead,
-				permissionSpecs(ResourceSystem,
-					ActionConfigRead, ActionConfigWrite, ActionConfigSchemaRead, ActionConfigHistoryRead, ActionConfigReloadWrite,
-					ActionSettingsRead, ActionSettingsWrite, ActionSettingsSchemaRead, ActionSettingsHistoryRead,
-					ActionSettingsGlobalRead, ActionSettingsGlobalWrite,
-				),
+				permissionSpecs(ResourceSystem, ActionAdmin),
 			),
 		},
 	}

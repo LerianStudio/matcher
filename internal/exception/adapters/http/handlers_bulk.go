@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/exception/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
@@ -43,12 +43,12 @@ func (handler *Handlers) BulkAssign(fiberCtx *fiber.Ctx) error {
 	var req dto.BulkAssignRequest
 
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
 	}
 
 	exceptionIDs, err := parseUUIDs(req.ExceptionIDs)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid exception id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid exception id", err)
 	}
 
 	result, err := handler.exceptionUC.BulkAssign(ctx, command.BulkAssignInput{
@@ -56,10 +56,14 @@ func (handler *Handlers) BulkAssign(fiberCtx *fiber.Ctx) error {
 		Assignee:     req.Assignee,
 	})
 	if err != nil {
-		return handleBulkError(ctx, fiberCtx, span, logger, "bulk assign failed", err)
+		return handler.handleBulkError(ctx, fiberCtx, span, logger, "bulk assign failed", err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, toBulkActionResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, toBulkActionResponse(result)); err != nil {
+		return fmt.Errorf("respond bulk assign: %w", err)
+	}
+
+	return nil
 }
 
 // BulkResolve resolves multiple exceptions with the specified resolution.
@@ -85,12 +89,12 @@ func (handler *Handlers) BulkResolve(fiberCtx *fiber.Ctx) error {
 	var req dto.BulkResolveRequest
 
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
 	}
 
 	exceptionIDs, err := parseUUIDs(req.ExceptionIDs)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid exception id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid exception id", err)
 	}
 
 	result, err := handler.exceptionUC.BulkResolve(ctx, command.BulkResolveInput{
@@ -99,10 +103,14 @@ func (handler *Handlers) BulkResolve(fiberCtx *fiber.Ctx) error {
 		Reason:       req.Reason,
 	})
 	if err != nil {
-		return handleBulkError(ctx, fiberCtx, span, logger, "bulk resolve failed", err)
+		return handler.handleBulkError(ctx, fiberCtx, span, logger, "bulk resolve failed", err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, toBulkActionResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, toBulkActionResponse(result)); err != nil {
+		return fmt.Errorf("respond bulk resolve: %w", err)
+	}
+
+	return nil
 }
 
 // BulkDispatch dispatches multiple exceptions to an external system.
@@ -128,12 +136,12 @@ func (handler *Handlers) BulkDispatch(fiberCtx *fiber.Ctx) error {
 	var req dto.BulkDispatchRequest
 
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
 	}
 
 	exceptionIDs, err := parseUUIDs(req.ExceptionIDs)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid exception id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid exception id", err)
 	}
 
 	result, err := handler.dispatchUC.BulkDispatch(ctx, command.BulkDispatchInput{
@@ -142,14 +150,18 @@ func (handler *Handlers) BulkDispatch(fiberCtx *fiber.Ctx) error {
 		Queue:        req.Queue,
 	})
 	if err != nil {
-		return handleBulkError(ctx, fiberCtx, span, logger, "bulk dispatch failed", err)
+		return handler.handleBulkError(ctx, fiberCtx, span, logger, "bulk dispatch failed", err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, toBulkActionResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, toBulkActionResponse(result)); err != nil {
+		return fmt.Errorf("respond bulk dispatch: %w", err)
+	}
+
+	return nil
 }
 
 // handleBulkError maps bulk command errors to HTTP responses.
-func handleBulkError(
+func (handler *Handlers) handleBulkError(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -157,7 +169,7 @@ func handleBulkError(
 	message string,
 	err error,
 ) error {
-	logSpanError(ctx, span, logger, message, err)
+	handler.logSpanError(ctx, span, logger, message, err)
 
 	if errors.Is(err, command.ErrBulkEmptyIDs) ||
 		errors.Is(err, command.ErrBulkTooManyIDs) ||

@@ -10,8 +10,21 @@ import (
 	"time"
 )
 
-// privateIPNets contains pre-parsed CIDR ranges for private IP detection.
-// Parsed at init time for performance.
+// privateIPNets contains pre-parsed CIDR ranges for SSRF rejection.
+// Parsed at init time for performance. Covers:
+//   - RFC 1918 private (10/8, 172.16/12, 192.168/16)
+//   - IPv6 ULA (fc00::/7)
+//   - Link-local (169.254/16, fe80::/10)
+//   - Loopback (127/8, ::1/128)
+//   - Unspecified (0.0.0.0/32, ::/128) — some kernels treat as localhost
+//   - IPv4 multicast (224/4) and IPv6 multicast (ff00::/8) — never a valid
+//     external-service target
+//   - CGNAT shared space (100.64/10, RFC 6598) — routable to internal
+//     metadata in some cloud providers and NOT covered by IsPrivate
+//
+// RFC 5737 TEST-NET ranges are intentionally NOT blocked here so
+// integration tests that resolve them in controlled environments
+// still work.
 var privateIPNets []*net.IPNet
 
 func init() {
@@ -24,6 +37,11 @@ func init() {
 		"::1/128",
 		"fe80::/10",
 		"fc00::/7",
+		"0.0.0.0/32",
+		"::/128",
+		"224.0.0.0/4",
+		"ff00::/8",
+		"100.64.0.0/10",
 	}
 
 	privateIPNets = make([]*net.IPNet, 0, len(privateRanges))

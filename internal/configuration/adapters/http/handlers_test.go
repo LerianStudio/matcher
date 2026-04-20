@@ -22,8 +22,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
@@ -2481,7 +2481,7 @@ func TestLogSpanError_WithNilLogger(t *testing.T) {
 	defer span.End()
 
 	require.NotPanics(t, func() {
-		logSpanError(context.Background(), span, nil, "test message", errors.New("test error"))
+		(&Handler{}).logSpanError(context.Background(), span, nil, "test message", errors.New("test error"))
 	})
 }
 
@@ -2494,7 +2494,7 @@ func TestLogSpanError_WithLogger(t *testing.T) {
 	defer span.End()
 
 	mock := &testutil.TestLogger{}
-	logSpanError(context.Background(), span, mock, "test message", errors.New("test error"))
+	(&Handler{}).logSpanError(context.Background(), span, mock, "test message", errors.New("test error"))
 	require.True(t, mock.ErrorCalled)
 }
 

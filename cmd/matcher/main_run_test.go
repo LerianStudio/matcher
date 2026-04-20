@@ -7,8 +7,8 @@ import (
 	"errors"
 	"testing"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libZap "github.com/LerianStudio/lib-commons/v5/commons/zap"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

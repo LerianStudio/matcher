@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace/noop"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
@@ -1076,7 +1076,7 @@ func TestHandleRunMatchError(t *testing.T) {
 				}
 				_, span := tracer.Start(ctx, "test")
 				defer span.End()
-				return handleRunMatchError(ctx, c, span, logger, tc.err)
+				return (&Handler{}).handleRunMatchError(ctx, c, span, logger, tc.err)
 			})
 
 			ctx := libCommons.ContextWithTracer(
@@ -1114,7 +1114,7 @@ func TestHandleRunMatchError_FeeRulesMissing_Returns422(t *testing.T) {
 		}
 		_, span := tracer.Start(ctx, "test")
 		defer span.End()
-		return handleRunMatchError(ctx, c, span, logger, command.ErrFeeRulesRequiredForNormalization)
+		return (&Handler{}).handleRunMatchError(ctx, c, span, logger, command.ErrFeeRulesRequiredForNormalization)
 	})
 
 	ctx := libCommons.ContextWithTracer(
@@ -1150,7 +1150,7 @@ func TestHandleRunMatchError_FeeRulesMisconfigured_Returns422(t *testing.T) {
 		}
 		_, span := tracer.Start(ctx, "test")
 		defer span.End()
-		return handleRunMatchError(ctx, c, span, logger, command.ErrFeeRulesReferenceMissingSchedules)
+		return (&Handler{}).handleRunMatchError(ctx, c, span, logger, command.ErrFeeRulesReferenceMissingSchedules)
 	})
 
 	ctx := libCommons.ContextWithTracer(

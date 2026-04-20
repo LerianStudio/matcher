@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/core"
+	"github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	sharedTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
@@ -30,7 +30,7 @@ func TestMultiTenant_BackwardCompatibility(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Tenancy.MultiTenantEnabled = false
 
-	provider, manager, tenantDBHandler := createInfraProviderWithBundleState(cfg, nil, postgresConn, redisConn, nil)
+	provider, manager, tenantDBHandler := createInfraProvider(cfg, nil, postgresConn, redisConn)
 	require.NotNil(t, manager)
 	assert.Nil(t, tenantDBHandler, "single-tenant mode should not create tenant DB middleware")
 
@@ -77,7 +77,7 @@ func TestMultiTenant_BackwardCompatibility_NoTenantManagerRequired(t *testing.T)
 	cfg := defaultConfig()
 	cfg.Tenancy.MultiTenantEnabled = false
 
-	provider, manager, tenantDBHandler := createInfraProviderWithBundleState(cfg, nil, postgresConn, redisConn, nil)
+	provider, manager, tenantDBHandler := createInfraProvider(cfg, nil, postgresConn, redisConn)
 	require.NotNil(t, manager, "config manager should be created in single-tenant mode")
 	assert.Nil(t, tenantDBHandler, "no tenant DB handler in single-tenant mode")
 
@@ -100,7 +100,7 @@ func TestMultiTenant_BackwardCompatibility_ConnectionResolutionWithoutTenantCont
 	cfg := defaultConfig()
 	cfg.Tenancy.MultiTenantEnabled = false
 
-	provider, _, _ := createInfraProviderWithBundleState(cfg, nil, postgresConn, redisConn, nil)
+	provider, _, _ := createInfraProvider(cfg, nil, postgresConn, redisConn)
 
 	tests := []struct {
 		name string
@@ -190,7 +190,7 @@ func TestCreateInfraProvider_MultiTenantEnabled_CreatesCanonicalManager(t *testi
 	cfg.Tenancy.MultiTenantCircuitBreakerThreshold = 5
 	cfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec = 30
 
-	provider, manager, tenantDBHandler := createInfraProviderWithBundleState(cfg, nil, nil, nil, nil)
+	provider, manager, tenantDBHandler := createInfraProvider(cfg, nil, nil, nil)
 	require.NotNil(t, manager)
 	assert.NotNil(t, tenantDBHandler, "multi-tenant mode should create tenant DB middleware")
 

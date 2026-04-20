@@ -17,10 +17,10 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
-	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
@@ -587,7 +587,7 @@ func (worker *CustodyRetentionWorker) releaseLock(ctx context.Context, token str
 
 	rdb, clientErr := conn.GetClient(ctx)
 	if clientErr != nil {
-		worker.logger.With(libLog.Any("error", clientErr.Error())).
+		worker.logger.With(libLog.Err(clientErr)).
 			Log(ctx, libLog.LevelWarn, "custody retention: failed to get redis client for lock release")
 
 		return

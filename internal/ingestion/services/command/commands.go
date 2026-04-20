@@ -14,9 +14,9 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
@@ -490,7 +490,7 @@ func (uc *UseCase) cleanupOnFailure(ctx context.Context, state *ingestionState) 
 
 	if clearErr := uc.dedupe.ClearBatch(ctx, state.job.ContextID, state.markedHashes); clearErr != nil {
 		logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
-		logger.With(libLog.Any("error", clearErr.Error())).Log(ctx, libLog.LevelWarn, "failed to clear dedup keys on failure")
+		logger.With(libLog.Err(clearErr)).Log(ctx, libLog.LevelWarn, "failed to clear dedup keys on failure")
 	}
 }
 
@@ -504,7 +504,7 @@ func (uc *UseCase) clearDedupKeys(ctx context.Context, state *ingestionState) {
 
 	if clearErr := uc.dedupe.ClearBatch(ctx, state.job.ContextID, state.markedHashes); clearErr != nil {
 		logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
-		logger.With(libLog.Any("error", clearErr.Error())).Log(ctx, libLog.LevelWarn, "failed to clear dedup keys after successful ingestion")
+		logger.With(libLog.Err(clearErr)).Log(ctx, libLog.LevelWarn, "failed to clear dedup keys after successful ingestion")
 	}
 }
 
@@ -705,11 +705,14 @@ func (uc *UseCase) filterAndInsertChunk(
 	}
 
 	keys := make([]ingestionRepositories.ExternalIDKey, 0, len(transactions))
+	hashes := make([]string, 0, len(transactions))
+
 	for _, tx := range transactions {
 		keys = append(keys, ingestionRepositories.ExternalIDKey{
 			SourceID:   tx.SourceID,
 			ExternalID: tx.ExternalID,
 		})
+		hashes = append(hashes, uc.dedupe.CalculateHash(tx.SourceID, tx.ExternalID))
 	}
 
 	existsMap, err := uc.transactionRepo.ExistsBulkBySourceAndExternalID(ctx, keys)
@@ -717,17 +720,19 @@ func (uc *UseCase) filterAndInsertChunk(
 		return 0, nil, fmt.Errorf("failed to check existing transactions: %w", err)
 	}
 
+	markedByHash, err := uc.dedupe.MarkSeenBulk(ctx, job.ContextID, hashes, uc.currentDedupeTTL(ctx))
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed to mark transactions seen: %w", err)
+	}
+
 	filtered := make([]*shared.Transaction, 0, len(transactions))
 	markedHashes := make([]string, 0, len(transactions))
 
-	for _, tx := range transactions {
-		hash := uc.dedupe.CalculateHash(tx.SourceID, tx.ExternalID)
-		if err := uc.dedupe.MarkSeenWithRetry(ctx, job.ContextID, hash, uc.currentDedupeTTL(ctx), defaultDedupeRetries); err != nil {
-			if errors.Is(err, ports.ErrDuplicateTransaction) {
-				continue
-			}
-
-			return 0, markedHashes, err
+	for i, tx := range transactions {
+		hash := hashes[i]
+		if !markedByHash[hash] {
+			// Already present in Redis — treat as duplicate.
+			continue
 		}
 
 		markedHashes = append(markedHashes, hash)
@@ -843,7 +848,7 @@ func (uc *UseCase) failJob(
 	// Clean up dedup keys to allow retries
 	if job != nil && len(markedHashes) > 0 {
 		if clearErr := uc.dedupe.ClearBatch(persistCtx, job.ContextID, markedHashes); clearErr != nil {
-			logger.With(libLog.Any("error", clearErr.Error())).Log(persistCtx, libLog.LevelWarn, "failed to clear dedup keys on job failure")
+			logger.With(libLog.Err(clearErr)).Log(persistCtx, libLog.LevelWarn, "failed to clear dedup keys on job failure")
 		}
 	}
 
@@ -920,7 +925,7 @@ func (uc *UseCase) cleanupPartialTransactionsBestEffort(ctx context.Context, job
 			logger.With(
 				libLog.String("job_id", jobID.String()),
 				libLog.Any("header_id", headerID),
-				libLog.Any("error", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelWarn, "failed to execute best-effort partial transaction cleanup")
 		}
 	}
@@ -944,7 +949,7 @@ func (uc *UseCase) triggerAutoMatchIfEnabled(ctx context.Context, contextID uuid
 		logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
 		logger.With(
 			libLog.String("context_id", contextID.String()),
-			libLog.Any("error", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelWarn, "failed to check auto-match status")
 
 		return
@@ -961,7 +966,7 @@ func (uc *UseCase) triggerAutoMatchIfEnabled(ctx context.Context, contextID uuid
 		logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
 		logger.With(
 			libLog.String("tenant_id", tenantIDStr),
-			libLog.Any("error", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelWarn, "auto-match skipped: invalid tenant ID")
 
 		return

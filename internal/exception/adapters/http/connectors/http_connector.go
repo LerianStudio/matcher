@@ -21,11 +21,11 @@ import (
 	"github.com/sony/gobreaker"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	"github.com/LerianStudio/lib-commons/v4/commons/backoff"
-	"github.com/LerianStudio/lib-commons/v4/commons/circuitbreaker"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	"github.com/LerianStudio/lib-commons/v5/commons/backoff"
+	"github.com/LerianStudio/lib-commons/v5/commons/circuitbreaker"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/services"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
@@ -282,6 +282,23 @@ func (conn *HTTPConnector) dispatchToWebhook(
 	}
 
 	webhookConfig := conn.config.Webhook
+
+	// SEC-27: fail closed when the deployment has opted in to signed
+	// payloads but has not configured a shared secret. Without this check
+	// the earlier warn-log path would silently dispatch unsigned payloads
+	// — the whole point of RequireSignedPayloads is to make that
+	// combination refuse to send rather than only log about it.
+	if webhookConfig.RequireSignedPayloads && strings.TrimSpace(webhookConfig.SharedSecret) == "" {
+		err := ErrWebhookMissingSharedSecret
+		libOpentelemetry.HandleSpanError(span, "webhook missing shared secret", err)
+		logger.With(
+			libLog.String("exception_id", exceptionID),
+			libLog.String("target", string(decision.Target)),
+		).Log(ctx, libLog.LevelError, "refusing unsigned webhook dispatch: RequireSignedPayloads is true but SharedSecret is empty")
+
+		return ports.DispatchResult{}, fmt.Errorf("dispatch to webhook: %w", err)
+	}
+
 	timeout := webhookConfig.TimeoutOrDefault()
 
 	if conn.webhookTimeoutResolver != nil {

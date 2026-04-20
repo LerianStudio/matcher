@@ -1,13 +1,16 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	"go.opentelemetry.io/otel/trace"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/governance/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
@@ -29,15 +32,22 @@ var (
 )
 
 // ActorMappingHandler handles HTTP requests for actor mapping operations.
+//
+// productionMode governs SafeError behavior (suppresses internal error
+// details in client responses when true). Stored per-handler rather than
+// on a package-level atomic.Bool to avoid cross-test coupling via shared
+// global state.
 type ActorMappingHandler struct {
-	commandUC *command.ActorMappingUseCase
-	queryUC   *query.ActorMappingQueryUseCase
+	commandUC      *command.ActorMappingUseCase
+	queryUC        *query.ActorMappingQueryUseCase
+	productionMode bool
 }
 
 // NewActorMappingHandler creates a new actor mapping HTTP handler.
 func NewActorMappingHandler(
 	commandUC *command.ActorMappingUseCase,
 	queryUC *query.ActorMappingQueryUseCase,
+	production bool,
 ) (*ActorMappingHandler, error) {
 	if commandUC == nil {
 		return nil, ErrActorMappingCommandUCRequired
@@ -48,8 +58,9 @@ func NewActorMappingHandler(
 	}
 
 	return &ActorMappingHandler{
-		commandUC: commandUC,
-		queryUC:   queryUC,
+		commandUC:      commandUC,
+		queryUC:        queryUC,
+		productionMode: production,
 	}, nil
 }
 
@@ -76,34 +87,34 @@ func (ha *ActorMappingHandler) UpsertActorMapping(fiberCtx *fiber.Ctx) error {
 
 	actorID := strings.TrimSpace(fiberCtx.Params("actorId"))
 	if actorID == "" {
-		return badRequest(ctx, fiberCtx, span, logger, "actor id is required", ErrMissingActorID)
+		return ha.badRequest(ctx, fiberCtx, span, logger, "actor id is required", ErrMissingActorID)
 	}
 
 	var req dto.UpsertActorMappingRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
+		return ha.badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
 	}
 
 	// At least one field must be provided to avoid no-op upserts.
 	if req.DisplayName == nil && req.Email == nil {
-		return badRequest(ctx, fiberCtx, span, logger, ErrAtLeastOneFieldRequired.Error(), ErrAtLeastOneFieldRequired)
+		return ha.badRequest(ctx, fiberCtx, span, logger, ErrAtLeastOneFieldRequired.Error(), ErrAtLeastOneFieldRequired)
 	}
 
 	if len(actorID) > entities.MaxActorMappingActorIDLength {
-		return badRequest(ctx, fiberCtx, span, logger, "actor id exceeds maximum length", entities.ErrActorIDExceedsMaxLen)
+		return ha.badRequest(ctx, fiberCtx, span, logger, "actor id exceeds maximum length", entities.ErrActorIDExceedsMaxLen)
 	}
 
 	mapping, err := ha.commandUC.UpsertActorMapping(ctx, actorID, req.DisplayName, req.Email)
 	if err != nil {
 		if errors.Is(err, entities.ErrActorIDRequired) || errors.Is(err, entities.ErrActorIDExceedsMaxLen) {
-			return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
+			return ha.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 		}
 
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to upsert actor mapping", err)
+		return ha.writeServiceError(ctx, fiberCtx, span, logger, "failed to upsert actor mapping", err)
 	}
 
 	if mapping == nil {
-		return writeServiceError(ctx, fiberCtx, span, logger, "upsert returned nil mapping", ErrNilActorMappingResponse)
+		return ha.writeServiceError(ctx, fiberCtx, span, logger, "upsert returned nil mapping", ErrNilActorMappingResponse)
 	}
 
 	if writeErr := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ActorMappingToResponse(mapping)); writeErr != nil {
@@ -135,20 +146,20 @@ func (ha *ActorMappingHandler) GetActorMapping(fiberCtx *fiber.Ctx) error {
 
 	actorID := fiberCtx.Params("actorId")
 	if actorID == "" {
-		return badRequest(ctx, fiberCtx, span, logger, "actor id is required", ErrMissingActorID)
+		return ha.badRequest(ctx, fiberCtx, span, logger, "actor id is required", ErrMissingActorID)
 	}
 
 	mapping, err := ha.queryUC.GetActorMapping(ctx, actorID)
 	if err != nil {
 		if errors.Is(err, governanceErrors.ErrActorMappingNotFound) {
-			return writeNotFound(ctx, fiberCtx, span, logger, "governance_actor_mapping_not_found", "actor mapping not found", err)
+			return ha.writeNotFound(ctx, fiberCtx, span, logger, err)
 		}
 
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to get actor mapping", err)
+		return ha.writeServiceError(ctx, fiberCtx, span, logger, "failed to get actor mapping", err)
 	}
 
 	if mapping == nil {
-		return writeNotFound(ctx, fiberCtx, span, logger, "governance_actor_mapping_not_found", "actor mapping not found", governanceErrors.ErrActorMappingNotFound)
+		return ha.writeNotFound(ctx, fiberCtx, span, logger, governanceErrors.ErrActorMappingNotFound)
 	}
 
 	if writeErr := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ActorMappingToResponse(mapping)); writeErr != nil {
@@ -180,15 +191,15 @@ func (ha *ActorMappingHandler) PseudonymizeActor(fiberCtx *fiber.Ctx) error {
 
 	actorID := fiberCtx.Params("actorId")
 	if actorID == "" {
-		return badRequest(ctx, fiberCtx, span, logger, "actor id is required", ErrMissingActorID)
+		return ha.badRequest(ctx, fiberCtx, span, logger, "actor id is required", ErrMissingActorID)
 	}
 
 	if err := ha.commandUC.PseudonymizeActor(ctx, actorID); err != nil {
 		if errors.Is(err, governanceErrors.ErrActorMappingNotFound) {
-			return writeNotFound(ctx, fiberCtx, span, logger, "governance_actor_mapping_not_found", "actor mapping not found", err)
+			return ha.writeNotFound(ctx, fiberCtx, span, logger, err)
 		}
 
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to pseudonymize actor", err)
+		return ha.writeServiceError(ctx, fiberCtx, span, logger, "failed to pseudonymize actor", err)
 	}
 
 	return fiberCtx.SendStatus(fiber.StatusNoContent)
@@ -216,16 +227,60 @@ func (ha *ActorMappingHandler) DeleteActorMapping(fiberCtx *fiber.Ctx) error {
 
 	actorID := fiberCtx.Params("actorId")
 	if actorID == "" {
-		return badRequest(ctx, fiberCtx, span, logger, "actor id is required", ErrMissingActorID)
+		return ha.badRequest(ctx, fiberCtx, span, logger, "actor id is required", ErrMissingActorID)
 	}
 
 	if err := ha.commandUC.DeleteActorMapping(ctx, actorID); err != nil {
 		if errors.Is(err, governanceErrors.ErrActorMappingNotFound) {
-			return writeNotFound(ctx, fiberCtx, span, logger, "governance_actor_mapping_not_found", "actor mapping not found", err)
+			return ha.writeNotFound(ctx, fiberCtx, span, logger, err)
 		}
 
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to delete actor mapping", err)
+		return ha.writeServiceError(ctx, fiberCtx, span, logger, "failed to delete actor mapping", err)
 	}
 
 	return fiberCtx.SendStatus(fiber.StatusNoContent)
+}
+
+// Response helpers — see note on *Handler methods in handlers.go for why
+// these live on the receiver rather than in package-global state.
+
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
+func (ha *ActorMappingHandler) badRequest(
+	ctx context.Context,
+	fiberCtx *fiber.Ctx,
+	span trace.Span,
+	logger libLog.Logger,
+	message string,
+	err error,
+) error {
+	return sharedhttp.BadRequest(ctx, fiberCtx, span, logger, ha.productionMode, message, err)
+}
+
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
+func (ha *ActorMappingHandler) writeServiceError(
+	ctx context.Context,
+	fiberCtx *fiber.Ctx,
+	span trace.Span,
+	logger libLog.Logger,
+	message string,
+	err error,
+) error {
+	return sharedhttp.InternalError(ctx, fiberCtx, span, logger, ha.productionMode, message, err)
+}
+
+func (ha *ActorMappingHandler) writeNotFound(
+	ctx context.Context,
+	fiberCtx *fiber.Ctx,
+	span trace.Span,
+	logger libLog.Logger,
+	err error,
+) error {
+	const (
+		slug    = "governance_actor_mapping_not_found"
+		message = "actor mapping not found"
+	)
+
+	sharedhttp.LogSpanError(ctx, span, logger, ha.productionMode, message, err)
+
+	return respondError(fiberCtx, fiber.StatusNotFound, slug, message)
 }

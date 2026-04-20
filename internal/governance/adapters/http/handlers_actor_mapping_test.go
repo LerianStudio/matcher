@@ -38,7 +38,7 @@ func newTestActorMappingHandler(
 	queryUC, err := query.NewActorMappingQueryUseCase(repo)
 	require.NoError(t, err)
 
-	handler, err := NewActorMappingHandler(cmdUC, queryUC)
+	handler, err := NewActorMappingHandler(cmdUC, queryUC, false)
 	require.NoError(t, err)
 
 	return handler
@@ -66,7 +66,7 @@ func TestNewActorMappingHandler(t *testing.T) {
 		queryUC, err := query.NewActorMappingQueryUseCase(repo)
 		require.NoError(t, err)
 
-		handler, err := NewActorMappingHandler(nil, queryUC)
+		handler, err := NewActorMappingHandler(nil, queryUC, false)
 		require.ErrorIs(t, err, ErrActorMappingCommandUCRequired)
 		require.Nil(t, handler)
 	})
@@ -80,7 +80,7 @@ func TestNewActorMappingHandler(t *testing.T) {
 		cmdUC, err := command.NewActorMappingUseCase(repo)
 		require.NoError(t, err)
 
-		handler, err := NewActorMappingHandler(cmdUC, nil)
+		handler, err := NewActorMappingHandler(cmdUC, nil, false)
 		require.ErrorIs(t, err, ErrActorMappingQueryUCRequired)
 		require.Nil(t, handler)
 	})

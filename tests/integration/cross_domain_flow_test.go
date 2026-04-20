@@ -11,6 +11,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
+	outboxEntities "github.com/LerianStudio/lib-commons/v5/commons/outbox"
 	contextRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/context"
 	fieldMapRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/field_map"
 	matchRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/match_rule"
@@ -28,8 +29,6 @@ import (
 	matchingRepositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	matchingPorts "github.com/LerianStudio/matcher/internal/matching/ports"
-	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
-	outboxRepo "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/outbox"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
@@ -48,7 +47,7 @@ func TestCrossDomainFlow_EndToEndReconciliation(t *testing.T) {
 		groupRepo := matchGroupRepo.NewRepository(provider)
 		itemRepo := matchItemRepo.NewRepository(provider)
 		excRepo := exceptionRepo.NewRepository(provider)
-		obRepo := outboxRepo.NewRepository(provider)
+		obRepo := NewTestOutboxRepository(t, h.Connection)
 
 		ctx := h.Ctx()
 

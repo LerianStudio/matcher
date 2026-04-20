@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
+	libRabbitmq "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
 	toxiproxy "github.com/Shopify/toxiproxy/v2/client"
 	"github.com/google/uuid"
 	"github.com/testcontainers/testcontainers-go"

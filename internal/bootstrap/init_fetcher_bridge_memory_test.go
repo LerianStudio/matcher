@@ -302,4 +302,3 @@ func TestParseCgroupMemoryLimit_EmptyString(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), bytes)
 }
-

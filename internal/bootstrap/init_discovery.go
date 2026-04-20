@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	discoveryFetcher "github.com/LerianStudio/matcher/internal/discovery/adapters/fetcher"
 	discoveryHTTP "github.com/LerianStudio/matcher/internal/discovery/adapters/http"
@@ -85,11 +85,11 @@ func initOptionalDiscoveryWorker(
 // Fetcher HTTP client when cfg.Auth.Enabled is true.
 //
 // Lifecycle note: The TokenExchanger is created once with cfg.Auth.Host as its
-// authURL. This URL is bootstrap-only (ApplyBootstrapOnly in systemplane keys,
-// see systemplane_keys_runtime_http.go), so the exchanger remains valid across
-// dynamic fetcher client reinjections. If Auth.Host ever becomes
-// runtime-mutable, this function must be extended to recreate the exchanger
-// on config change.
+// authURL. This URL is bootstrap-only (auth.host is intentionally omitted from
+// matcherKeyDefs in systemplane_keys.go — see the "Auth" section), so the
+// exchanger remains valid across dynamic fetcher client reinjections. If
+// Auth.Host ever becomes runtime-mutable, this function must be extended to
+// recreate the exchanger on config change.
 //
 // Failures (missing host, exchanger creation error) are logged as warnings and
 // fall back to BasicAuth, letting startup succeed.

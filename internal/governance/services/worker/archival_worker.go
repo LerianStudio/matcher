@@ -2,7 +2,6 @@ package worker
 
 import (
 	"bufio"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -11,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash"
+	"io"
 	"regexp"
 	"slices"
 	"strings"
@@ -23,11 +23,11 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
-	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
-	libS3 "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/s3"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
+	libS3 "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/s3"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
@@ -297,7 +297,7 @@ func (aw *ArchivalWorker) archiveCycle(ctx context.Context) {
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to acquire archival lock", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to acquire archival lock")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to acquire archival lock")
 
 		return
 	}
@@ -318,7 +318,7 @@ func (aw *ArchivalWorker) archiveCycle(ctx context.Context) {
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list tenants", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list tenants for archival")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list tenants for archival")
 
 		return
 	}
@@ -350,7 +350,7 @@ func (aw *ArchivalWorker) processTenant(ctx context.Context, tenantID string) {
 	if err := aw.provisionPartitions(ctx); err != nil {
 		logger.With(
 			libLog.String("tenant_id", tenantID),
-			libLog.Any("error", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelWarn, "failed to provision partitions for tenant")
 	}
 
@@ -359,7 +359,7 @@ func (aw *ArchivalWorker) processTenant(ctx context.Context, tenantID string) {
 	if parseErr != nil {
 		logger.With(
 			libLog.String("tenant_id", tenantID),
-			libLog.Any("error", parseErr.Error()),
+			libLog.Err(parseErr),
 		).Log(ctx, libLog.LevelWarn, "invalid tenant ID, skipping archival")
 
 		return
@@ -368,7 +368,7 @@ func (aw *ArchivalWorker) processTenant(ctx context.Context, tenantID string) {
 	if err := aw.archiveTenant(ctx, tid); err != nil {
 		logger.With(
 			libLog.String("tenant_id", tenantID),
-			libLog.Any("error", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelWarn, "archival failed for tenant")
 	}
 }
@@ -478,22 +478,13 @@ func (aw *ArchivalWorker) archivePartition(ctx context.Context, metadata *entiti
 		}
 	}
 
-	// EXPORTING -> EXPORTED: export data from partition
-	var exportBuf *bytes.Buffer
-
-	var rowCount int64
-
-	var checksum string
-
+	// EXPORTING -> EXPORTED: streaming is deferred to the UPLOADING phase where
+	// it is coupled with the S3 upload via io.Pipe. This avoids buffering the
+	// full partition in memory. We still advance the state-machine waypoint so
+	// crash-recovery semantics (EXPORTED can resume at UPLOADING, UPLOADING can
+	// re-stream) are preserved.
 	if metadata.Status == entities.StatusExporting {
-		var err error
-
-		exportBuf, rowCount, checksum, err = aw.exportPartition(ctx, metadata)
-		if err != nil {
-			return aw.handlePartitionError(ctx, metadata, "export partition", err)
-		}
-
-		if err := aw.transitionToExported(ctx, metadata, rowCount); err != nil {
+		if err := aw.transitionToExported(ctx, metadata, 0); err != nil {
 			return aw.handlePartitionError(ctx, metadata, "mark exported", err)
 		}
 	}
@@ -505,9 +496,12 @@ func (aw *ArchivalWorker) archivePartition(ctx context.Context, metadata *entiti
 		}
 	}
 
-	// UPLOADING -> UPLOADED: upload to object storage
+	// UPLOADING -> UPLOADED: stream partition rows directly into object storage.
+	// This replaces the prior buffer-then-upload approach with io.Pipe so memory
+	// stays O(chunk size) regardless of partition size. On crash recovery (re-entry
+	// from UPLOADING) the same streaming path is used — there is no special-case.
 	if metadata.Status == entities.StatusUploading {
-		if err := aw.handleUploadingState(ctx, metadata, exportBuf, checksum); err != nil {
+		if err := aw.handleUploadingState(ctx, metadata); err != nil {
 			return err
 		}
 	}
@@ -547,41 +541,28 @@ func (aw *ArchivalWorker) archivePartition(ctx context.Context, metadata *entiti
 	return nil
 }
 
-// handleUploadingState handles the UPLOADING -> UPLOADED transition.
-// If the export buffer is nil (crash recovery), it re-exports the partition data.
+// handleUploadingState handles the UPLOADING -> UPLOADED transition by streaming
+// the partition rows directly into object storage via io.Pipe. Memory stays
+// O(chunk size) regardless of partition row count. On crash-recovery re-entry,
+// the same streaming path is used — there is no buffered-vs-reexport split.
 func (aw *ArchivalWorker) handleUploadingState(
 	ctx context.Context,
 	metadata *entities.ArchiveMetadata,
-	exportBuf *bytes.Buffer,
-	checksum string,
 ) error {
-	// If we don't have the buffer (resuming from crash), re-export.
-	if exportBuf == nil {
-		var err error
-
-		exportBuf, _, checksum, err = aw.exportPartition(ctx, metadata)
-		if err != nil {
-			return aw.handlePartitionError(ctx, metadata, "re-export partition", err)
-		}
-	}
-
 	archiveKey, err := aw.archiveKey(metadata)
 	if err != nil {
 		return aw.handlePartitionError(ctx, metadata, "build archive key", err)
 	}
 
-	compressedSize := int64(exportBuf.Len())
-
-	_, err = aw.storage.UploadWithOptions(
-		ctx,
-		archiveKey,
-		exportBuf,
-		archiveContentType,
-		storageopt.WithStorageClass(aw.cfg.StorageClass),
-	)
+	rowCount, checksum, compressedSize, err := aw.streamPartitionUpload(ctx, metadata, archiveKey)
 	if err != nil {
-		return aw.handlePartitionError(ctx, metadata, "upload archive", err)
+		return aw.handlePartitionError(ctx, metadata, "stream and upload partition", err)
 	}
+
+	// Persist the row count that we only learned after consuming the stream.
+	// The earlier MarkExported transition used 0 as a placeholder; update now so
+	// downstream verification and operators see the real count.
+	metadata.RowCount = rowCount
 
 	if err := aw.transitionToUploaded(ctx, metadata, archiveKey, checksum, compressedSize); err != nil {
 		return aw.handlePartitionError(ctx, metadata, "mark uploaded", err)
@@ -592,6 +573,7 @@ func (aw *ArchivalWorker) handleUploadingState(
 	logger.With(
 		libLog.String("partition_name", metadata.PartitionName),
 		libLog.String("archive_key", archiveKey),
+		libLog.Any("row_count", rowCount),
 		libLog.Any("compressed_size", compressedSize),
 	).Log(ctx, libLog.LevelInfo, "uploaded archive for partition")
 
@@ -674,114 +656,196 @@ func (aw *ArchivalWorker) transitionToUploaded(
 	return nil
 }
 
-// exportPartition streams all rows from the partition into a gzip-compressed
-// JSON-lines buffer, computing a SHA-256 checksum as it writes.
-func (aw *ArchivalWorker) exportPartition(
+// countingWriter wraps an io.Writer and counts the bytes written to it.
+// Used to measure compressed archive size without buffering.
+type countingWriter struct {
+	w io.Writer
+	n int64
+}
+
+func (cw *countingWriter) Write(p []byte) (int, error) {
+	written, err := cw.w.Write(p)
+	cw.n += int64(written)
+
+	if err != nil {
+		return written, fmt.Errorf("archival writer write: %w", err)
+	}
+
+	return written, nil
+}
+
+// streamPartitionUpload streams all rows from the partition through gzip
+// compression into the object-storage upload via io.Pipe. The producer side
+// runs in a goroutine; any error is propagated to the consumer via
+// pw.CloseWithError so UploadWithOptions observes it and fails.
+//
+// Memory is bounded by the pipe's internal buffer plus the gzip window —
+// typically a few hundred KB — regardless of partition row count. This
+// replaces the prior approach that buffered the full gzipped partition in
+// memory before uploading.
+func (aw *ArchivalWorker) streamPartitionUpload(
 	ctx context.Context,
 	metadata *entities.ArchiveMetadata,
-) (*bytes.Buffer, int64, string, error) {
+	archiveKey string,
+) (int64, string, int64, error) {
 	_, tracer := aw.tracking(ctx)
 
-	ctx, span := tracer.Start(ctx, "governance.archival.export")
+	ctx, span := tracer.Start(ctx, "governance.archival.stream_upload")
 	defer span.End()
 
 	span.SetAttributes(attribute.String("partition.name", metadata.PartitionName))
 
 	result, err := withArchivalCurrentDBResult(ctx, aw, func(currentDB *sql.DB) (struct {
-		buf      *bytes.Buffer
-		rowCount int64
-		checksum string
+		rowCount       int64
+		checksum       string
+		compressedSize int64
 	}, error,
 	) {
-		tx, err := currentDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-		if err != nil {
-			return struct {
-				buf      *bytes.Buffer
-				rowCount int64
-				checksum string
-			}{}, fmt.Errorf("begin read transaction: %w", err)
-		}
-
-		defer func() { _ = tx.Rollback() }()
-
-		if err := auth.ApplyTenantSchema(ctx, tx); err != nil {
-			return struct {
-				buf      *bytes.Buffer
-				rowCount int64
-				checksum string
-			}{}, fmt.Errorf("apply tenant schema: %w", err)
-		}
-
-		query, err := buildPartitionExportQuery(metadata.PartitionName)
-		if err != nil {
-			return struct {
-				buf      *bytes.Buffer
-				rowCount int64
-				checksum string
-			}{}, err
-		}
-
-		rows, err := tx.QueryContext(ctx, query)
-		if err != nil {
-			return struct {
-				buf      *bytes.Buffer
-				rowCount int64
-				checksum string
-			}{}, fmt.Errorf("query partition %s: %w", metadata.PartitionName, err)
-		}
-		defer rows.Close()
-
-		var buf bytes.Buffer
-
-		hasher := sha256.New()
-
-		gzWriter, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
-		if err != nil {
-			return struct {
-				buf      *bytes.Buffer
-				rowCount int64
-				checksum string
-			}{}, fmt.Errorf("create gzip writer: %w", err)
-		}
-
-		rowCount, err := encodePartitionRows(rows, gzWriter, hasher)
-		if err != nil {
-			return struct {
-				buf      *bytes.Buffer
-				rowCount int64
-				checksum string
-			}{}, err
-		}
-
-		if err := gzWriter.Close(); err != nil {
-			return struct {
-				buf      *bytes.Buffer
-				rowCount int64
-				checksum string
-			}{}, fmt.Errorf("close gzip writer: %w", err)
-		}
-
-		if err := tx.Commit(); err != nil {
-			return struct {
-				buf      *bytes.Buffer
-				rowCount int64
-				checksum string
-			}{}, fmt.Errorf("commit read transaction: %w", err)
-		}
-
-		return struct {
-			buf      *bytes.Buffer
-			rowCount int64
-			checksum string
-		}{buf: &buf, rowCount: rowCount, checksum: hex.EncodeToString(hasher.Sum(nil))}, nil
+		return streamPartitionViaPipe(ctx, aw, currentDB, metadata, archiveKey)
 	})
 	if err != nil {
-		return nil, 0, "", err
+		return 0, "", 0, err
 	}
 
-	span.SetAttributes(attribute.Int64("archival.row_count", result.rowCount), attribute.Int("archival.compressed_bytes", result.buf.Len()))
+	span.SetAttributes(
+		attribute.Int64("archival.row_count", result.rowCount),
+		attribute.Int64("archival.compressed_bytes", result.compressedSize),
+	)
 
-	return result.buf, result.rowCount, result.checksum, nil
+	return result.rowCount, result.checksum, result.compressedSize, nil
+}
+
+// streamPartitionViaPipe runs the producer (DB query → gzip → pipe writer)
+// and consumer (pipe reader → object storage) concurrently. The producer
+// closes the pipe writer with any error so the uploader observes it.
+func streamPartitionViaPipe(
+	ctx context.Context,
+	aw *ArchivalWorker,
+	currentDB *sql.DB,
+	metadata *entities.ArchiveMetadata,
+	archiveKey string,
+) (struct {
+	rowCount       int64
+	checksum       string
+	compressedSize int64
+}, error,
+) {
+	var zero struct {
+		rowCount       int64
+		checksum       string
+		compressedSize int64
+	}
+
+	tx, err := currentDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return zero, fmt.Errorf("begin read transaction: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	if err := auth.ApplyTenantSchema(ctx, tx); err != nil {
+		return zero, fmt.Errorf("apply tenant schema: %w", err)
+	}
+
+	query, err := buildPartitionExportQuery(metadata.PartitionName)
+	if err != nil {
+		return zero, err
+	}
+
+	//nolint:rowserrcheck // rows.Err() is checked inside encodePartitionRows after iteration completes.
+	rows, err := tx.QueryContext(ctx, query)
+	if err != nil {
+		return zero, fmt.Errorf("query partition %s: %w", metadata.PartitionName, err)
+	}
+
+	defer rows.Close()
+
+	pipeReader, pipeWriter := io.Pipe()
+
+	counter := &countingWriter{w: pipeWriter}
+	hasher := sha256.New()
+
+	gzWriter, err := gzip.NewWriterLevel(counter, gzip.BestCompression)
+	if err != nil {
+		_ = pipeWriter.Close()
+
+		return zero, fmt.Errorf("create gzip writer: %w", err)
+	}
+
+	type producerResult struct {
+		rowCount int64
+		err      error
+	}
+
+	producerCh := make(chan producerResult, 1)
+
+	runtime.SafeGoWithContextAndComponent(
+		ctx,
+		aw.logger,
+		"governance",
+		"archival_worker.encode_partition_producer",
+		runtime.KeepRunning,
+		func(_ context.Context) {
+			var (
+				count     int64
+				encodeErr error
+			)
+			// Deferred inside the passed function so the pipe always closes
+			// and the consumer unblocks — even if a panic is recovered by the
+			// SafeGo wrapper's outer defer.
+			defer func() {
+				// CloseWithError(nil) is equivalent to Close(); closing the
+				// pipe writer signals EOF (or the error) to the uploader.
+				_ = pipeWriter.CloseWithError(encodeErr)
+				producerCh <- producerResult{rowCount: count, err: encodeErr}
+			}()
+
+			count, encodeErr = encodePartitionRows(rows, gzWriter, hasher)
+			// Closing gzWriter flushes remaining compressed bytes to the pipe.
+			if closeErr := gzWriter.Close(); encodeErr == nil {
+				encodeErr = closeErr
+			}
+		},
+	)
+
+	_, uploadErr := aw.storage.UploadWithOptions(
+		ctx,
+		archiveKey,
+		pipeReader,
+		archiveContentType,
+		storageopt.WithStorageClass(aw.cfg.StorageClass),
+	)
+	// Ensure the reader side is closed so the producer unblocks even if the
+	// uploader returned early (e.g. auth failure without reading to EOF).
+	_ = pipeReader.Close()
+
+	prod := <-producerCh
+
+	// Upload error takes precedence over producer error because a closed-pipe
+	// producer error is typically a *consequence* of the uploader abandoning
+	// the reader. Reporting the upload failure gives operators the actual
+	// root cause.
+	if uploadErr != nil {
+		return zero, fmt.Errorf("upload archive: %w", uploadErr)
+	}
+
+	if prod.err != nil {
+		return zero, fmt.Errorf("encode partition rows: %w", prod.err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return zero, fmt.Errorf("commit read transaction: %w", err)
+	}
+
+	return struct {
+		rowCount       int64
+		checksum       string
+		compressedSize int64
+	}{
+		rowCount:       prod.rowCount,
+		checksum:       hex.EncodeToString(hasher.Sum(nil)),
+		compressedSize: counter.n,
+	}, nil
 }
 
 // encodePartitionRows iterates over all rows from a partition query, encodes each
@@ -939,7 +1003,7 @@ func (aw *ArchivalWorker) handlePartitionError(
 	if updateErr := aw.archiveRepo.Update(ctx, metadata); updateErr != nil {
 		aw.logger.With(
 			libLog.String("partition_name", metadata.PartitionName),
-			libLog.Any("error", updateErr.Error()),
+			libLog.Err(updateErr),
 		).Log(ctx, libLog.LevelError, "failed to persist error state for partition")
 	}
 
@@ -955,7 +1019,7 @@ func (aw *ArchivalWorker) handlePartitionError(
 		case reloadErr != nil && aw.logger != nil:
 			aw.logger.With(
 				libLog.String("partition_name", metadata.PartitionName),
-				libLog.Any("error", reloadErr.Error()),
+				libLog.Err(reloadErr),
 			).Log(ctx, libLog.LevelWarn, "failed to reload metadata for partition after error")
 		}
 	}
@@ -995,19 +1059,23 @@ func (aw *ArchivalWorker) resumeIncomplete(ctx context.Context) {
 
 	incomplete, err := aw.archiveRepo.ListIncomplete(ctx)
 	if err != nil {
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list incomplete archives")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list incomplete archives")
 
 		return
 	}
 
 	for _, metadata := range incomplete {
+		if metadata == nil {
+			continue
+		}
+
 		// Set tenant context for each incomplete archive.
 		tenantCtx := context.WithValue(ctx, auth.TenantIDKey, metadata.TenantID.String())
 
 		if err := aw.archivePartition(tenantCtx, metadata); err != nil {
 			logger.With(
 				libLog.String("partition_name", metadata.PartitionName),
-				libLog.Any("error", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelWarn, "failed to resume incomplete archive")
 		}
 	}
@@ -1158,7 +1226,7 @@ func (aw *ArchivalWorker) acquireLock(ctx context.Context) (bool, string, error)
 func (aw *ArchivalWorker) releaseLock(ctx context.Context, token string) {
 	connLease, err := aw.infraProvider.GetRedisConnection(ctx)
 	if err != nil {
-		aw.logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelWarn, "failed to get redis connection for lock release")
+		aw.logger.With(libLog.Err(err)).Log(ctx, libLog.LevelWarn, "failed to get redis connection for lock release")
 
 		return
 	}
@@ -1171,7 +1239,7 @@ func (aw *ArchivalWorker) releaseLock(ctx context.Context, token string) {
 
 	rdb, rdbErr := conn.GetClient(ctx)
 	if rdbErr != nil {
-		aw.logger.With(libLog.Any("error", rdbErr.Error())).Log(ctx, libLog.LevelWarn, "failed to get redis client for lock release")
+		aw.logger.With(libLog.Err(rdbErr)).Log(ctx, libLog.LevelWarn, "failed to get redis client for lock release")
 
 		return
 	}
@@ -1185,7 +1253,7 @@ end
 `
 
 	if _, err := rdb.Eval(ctx, script, []string{lockKey}, token).Result(); err != nil {
-		aw.logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelWarn, "failed to release archival lock")
+		aw.logger.With(libLog.Err(err)).Log(ctx, libLog.LevelWarn, "failed to release archival lock")
 	}
 }
 

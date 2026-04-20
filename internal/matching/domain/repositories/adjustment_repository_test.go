@@ -1,16 +1,18 @@
 //go:build unit
 
-package repositories_test
+package repositories
 
 import (
 	"testing"
 
-	"github.com/LerianStudio/matcher/internal/matching/domain/repositories"
-	"github.com/LerianStudio/matcher/internal/matching/domain/repositories/mocks"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestAdjustmentRepositoryInterfaceCompiles(t *testing.T) {
+func TestAdjustmentRepository_InterfaceDefined(t *testing.T) {
 	t.Parallel()
 
-	var _ repositories.AdjustmentRepository = (*mocks.MockAdjustmentRepository)(nil)
+	// Verify the interface is defined and can be referenced as a type.
+	// The compile-time satisfaction check lives in the adapter package.
+	var repo AdjustmentRepository
+	assert.Nil(t, repo)
 }

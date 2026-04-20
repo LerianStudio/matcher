@@ -36,14 +36,14 @@ Architectural constraints and design decisions for the Matcher codebase. This pr
 - **Type-alias pattern**: When a type migrates to `shared/domain/`, the original package re-exports via type alias for backward compatibility.
 - **Worker directories**: `services/worker/` for background jobs (configuration scheduler, governance archival, reporting export/cleanup, discovery poller/worker).
 - **Syncer directories**: `services/syncer/` for data synchronization (discovery syncer).
-- **Outbox dispatcher exception**: Lives at `outbox/services/dispatcher.go` (services root, not in command/query/worker) because it is pure infrastructure.
+- **Outbox dispatcher**: Provided by `lib-commons/v5/commons/outbox`. Wired in `internal/bootstrap/outbox_wiring.go`; matcher registers one handler per event type on the canonical HandlerRegistry instead of hosting its own dispatcher package.
 - **Cross-context communication**: Via shared ports, outbox events, and cross adapters in `internal/shared/adapters/cross/`. Current cross adapters: auto_match, configuration, exception_context_lookup, exception_matching_gateway, ingestion, matching, transaction_repository.
 
 ## 2. Required Libraries
 
-- **AuthN/AuthZ**: `github.com/LerianStudio/lib-auth/v2` only (v2.5.0).
-- **Commons/Telemetry**: `github.com/LerianStudio/lib-commons/v4` (v4.6.0-beta.5).
-- **Assertions**: `github.com/LerianStudio/lib-commons/v4/commons/assert` (no panics; referred to as `pkg/assert` in shorthand).
+- **AuthN/AuthZ**: `github.com/LerianStudio/lib-auth/v3` only (`v3.0.0-20260415175119-1568b252d48a`, pre-release pseudo-version pending upstream tag).
+- **Commons/Telemetry**: `github.com/LerianStudio/lib-commons/v5` (v5.0.0).
+- **Assertions**: `github.com/LerianStudio/lib-commons/v5/commons/assert` (no panics; referred to as `pkg/assert` in shorthand).
 - **lib-commons submodules**:
   - Tracking/logging: `commons/log` (`libLog`), `commons/commons` (`libCommons.NewTrackingFromContext`).
   - OpenTelemetry: `commons/opentelemetry` (`libOpentelemetry`).
@@ -68,6 +68,29 @@ Architectural constraints and design decisions for the Matcher codebase. This pr
 - Structured logging: `logger.With(libLog.String("key", "val")).Log(ctx, level, "msg")`.
 - Ensure adapters handle nil tracers/loggers gracefully (provide fallbacks) for testing contexts.
 - Do not log inside domain entities/value objects.
+
+### SetSpanAttributesFromValue: Redactor Contract
+
+When calling `libOpentelemetry.SetSpanAttributesFromValue(span, name, value, redactor)`
+to attach a struct payload to a span, the 4th argument is a `*Redactor` from
+`lib-commons/v5/commons/opentelemetry`. Matcher today passes `nil` at all 35+
+call sites because the payloads used are synthetic query descriptors composed
+of already-scoped field names (context_id, limit, cursor) — they contain no
+PII, credentials, or tenant-bearing secrets.
+
+This `nil`-by-default is conditional on payload purity. When a new call site
+introduces any of the following into its attached struct, a non-nil Redactor
+with explicit field masking MUST be passed:
+  - plaintext tenant identifiers beyond the ID/slug already in tracking
+  - user-supplied free-text (filter values, search queries, comments)
+  - credentials, tokens, or any field stored encrypted at rest
+  - third-party payloads (e.g., Fetcher bridge responses)
+
+CI does not enforce this contract today. Reviewers must check the 4th
+argument during PR review whenever a new `SetSpanAttributesFromValue` call
+site is added or an existing struct is extended. Consider adding a custom
+linter to `tools/linters/observability` if the call-site count grows
+materially (>100) or if a sensitive field leaks into a span attribute.
 
 ## 4. HTTP Handler Patterns
 
@@ -235,7 +258,7 @@ Every aggregate-based postgres adapter directory uses Pattern A:
 | `{name}.postgresql.go` | Repository implementation |
 | `errors.go` | Adapter-specific sentinel errors |
 
-**Flat layout exceptions**: `reporting/adapters/postgres/` (read-only projections), `shared/adapters/postgres/common/` (utilities), `governance/adapters/postgres/` (audit_log, no model file), `outbox/adapters/postgres/` (repository only).
+**Flat layout exceptions**: `reporting/adapters/postgres/` (read-only projections), `shared/adapters/postgres/common/` (utilities), `governance/adapters/postgres/` (audit_log, no model file).
 
 ### Command/Query Service Files
 
@@ -393,7 +416,7 @@ All CI uses shared workflows from `LerianStudio/github-actions-shared-workflows`
 
 - Bootstrap-only keys (require restart): See `config/.config-map.example`.
 - Runtime keys: hot-reloadable via API, no restart needed.
-- API endpoints: `GET /v1/system/configs` (view), `PATCH /v1/system/configs` (update), `GET /v1/system/configs/schema` (metadata), `GET /v1/system/configs/history` (audit trail).
+- API endpoints (canonical lib-commons v5 admin surface, management-plane only; intentionally excluded from public OpenAPI): `GET /system/matcher` (list with inline schema metadata), `GET /system/matcher/:key` (read a single key), `PUT /system/matcher/:key` (write a single key). The previous v4 `/v1/system/configs[...]` paths and the `/schema`, `/history`, `/reload` sub-endpoints were removed in the v5 migration. Reference: `lib-commons/v5/commons/systemplane/admin`.
 - Key definitions in `internal/bootstrap/systemplane_keys_*.go`.
 - Reconcilers in `internal/bootstrap/systemplane_reconciler_*.go` apply changes to running components.
 - Never read Viper directly at runtime — use `configManager.Get()` which returns systemplane-backed config.

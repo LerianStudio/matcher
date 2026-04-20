@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
@@ -579,73 +579,6 @@ func TestWithTenantTxOrExisting_CommitError(t *testing.T) {
 	assert.Empty(t, result)
 }
 
-func TestBeginTenantTx_NilProvider(t *testing.T) {
-	t.Parallel()
-
-	tx, cancel, err := BeginTenantTx(context.Background(), nil)
-
-	require.Error(t, err)
-	require.ErrorIs(t, err, ErrConnectionRequired)
-	assert.Nil(t, tx)
-	assert.NotNil(t, cancel, "cancel must always be non-nil")
-	cancel() // safe to call (no-op)
-}
-
-func TestBeginTenantTx_ProviderReturnsError(t *testing.T) {
-	t.Parallel()
-
-	expectedErr := errors.New("connection error")
-	provider := &testutil.MockInfrastructureProvider{
-		PostgresErr: expectedErr,
-	}
-
-	tx, cancel, err := BeginTenantTx(context.Background(), provider)
-
-	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to begin transaction")
-	assert.Nil(t, tx)
-	assert.NotNil(t, cancel)
-	cancel()
-}
-
-func TestBeginTenantTx_ProviderReturnsNilConnection(t *testing.T) {
-	t.Parallel()
-
-	provider := &testutil.MockInfrastructureProvider{
-		PostgresConn: nil,
-	}
-
-	tx, cancel, err := BeginTenantTx(context.Background(), provider)
-
-	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to begin transaction")
-	assert.Nil(t, tx)
-	assert.NotNil(t, cancel)
-	cancel()
-}
-
-func TestBeginTenantTx_NilTxLease(t *testing.T) {
-	t.Parallel()
-
-	tx, cancel, err := BeginTenantTx(context.Background(), nilTxLeaseProvider{})
-
-	require.ErrorIs(t, err, ErrNilTxLease)
-	assert.Nil(t, tx)
-	assert.NotNil(t, cancel)
-	cancel()
-}
-
-func TestBeginTenantTx_EmptyTxLease(t *testing.T) {
-	t.Parallel()
-
-	tx, cancel, err := BeginTenantTx(context.Background(), emptyTxLeaseProvider{})
-
-	require.ErrorIs(t, err, ErrNilTxLease)
-	assert.Nil(t, tx)
-	assert.NotNil(t, cancel)
-	cancel()
-}
-
 func TestWithTenantTxOrExistingProvider_AddsDefaultDeadlineWhenMissing(t *testing.T) {
 	t.Parallel()
 
@@ -670,68 +603,6 @@ func TestWithTenantTxOrExistingProvider_PreservesExistingDeadline(t *testing.T) 
 	})
 	require.Error(t, err)
 	assert.True(t, provider.deadlineSet)
-}
-
-func TestBeginTenantTx_AddsDefaultDeadlineWhenMissing(t *testing.T) {
-	t.Parallel()
-
-	provider := &deadlineCapturingProvider{ctxErr: errors.New("stop")}
-
-	tx, cancel, err := BeginTenantTx(context.Background(), provider)
-	require.Error(t, err)
-	require.Nil(t, tx)
-	assert.True(t, provider.deadlineSet)
-	cancel()
-}
-
-func TestBeginTenantTx_Success_DefaultTenant(t *testing.T) {
-	t.Parallel()
-
-	conn, mock, db := setupMockConnection(t)
-	defer db.Close()
-
-	provider := &testutil.MockInfrastructureProvider{
-		PostgresConn: conn,
-	}
-
-	ctx := contextWithDefaultTenant()
-
-	mock.ExpectBegin()
-	mock.ExpectRollback()
-
-	tx, cancel, err := BeginTenantTx(ctx, provider)
-
-	require.NoError(t, err)
-	require.NotNil(t, tx)
-	assert.NotNil(t, cancel)
-
-	_ = tx.Rollback()
-	cancel()
-
-	require.NoError(t, mock.ExpectationsWereMet())
-}
-
-func TestBeginTenantTx_BeginTxError(t *testing.T) {
-	t.Parallel()
-
-	conn, mock, db := setupMockConnection(t)
-	defer db.Close()
-
-	provider := &testutil.MockInfrastructureProvider{
-		PostgresConn: conn,
-	}
-
-	ctx := contextWithDefaultTenant()
-
-	mock.ExpectBegin().WillReturnError(errors.New("begin failed"))
-
-	tx, cancel, err := BeginTenantTx(ctx, provider)
-
-	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to begin transaction")
-	assert.Nil(t, tx)
-	assert.NotNil(t, cancel)
-	cancel()
 }
 
 func TestWithTenantTx_DelegatesCorrectly(t *testing.T) {
@@ -921,85 +792,3 @@ func TestWithTenantTxProvider_NonDefaultTenant_Success(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestBeginTenantTx_NonDefaultTenant_Success(t *testing.T) {
-	t.Parallel()
-
-	conn, mock, db := setupMockConnection(t)
-	defer db.Close()
-
-	provider := &testutil.MockInfrastructureProvider{
-		PostgresConn: conn,
-	}
-
-	ctx := contextWithNonDefaultTenant()
-
-	mock.ExpectBegin()
-	mock.ExpectExec("SET LOCAL search_path").
-		WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectRollback()
-
-	tx, cancel, err := BeginTenantTx(ctx, provider)
-
-	require.NoError(t, err)
-	require.NotNil(t, tx)
-	assert.NotNil(t, cancel)
-
-	_ = tx.Rollback()
-	cancel()
-
-	require.NoError(t, mock.ExpectationsWereMet())
-}
-
-func TestBeginTenantTx_NonDefaultTenant_SchemaError(t *testing.T) {
-	t.Parallel()
-
-	conn, mock, db := setupMockConnection(t)
-	defer db.Close()
-
-	provider := &testutil.MockInfrastructureProvider{
-		PostgresConn: conn,
-	}
-
-	ctx := contextWithNonDefaultTenant()
-
-	mock.ExpectBegin()
-	mock.ExpectExec("SET LOCAL search_path").
-		WillReturnError(errors.New("schema not found"))
-	mock.ExpectRollback()
-
-	tx, cancel, err := BeginTenantTx(ctx, provider)
-
-	require.Error(t, err)
-	require.ErrorContains(t, err, "apply tenant schema")
-	assert.Nil(t, tx)
-	assert.NotNil(t, cancel)
-	cancel()
-
-	require.NoError(t, mock.ExpectationsWereMet())
-}
-
-func TestBeginTenantTx_CancelFunc_IsCallableAfterCommit(t *testing.T) {
-	t.Parallel()
-
-	conn, mock, db := setupMockConnection(t)
-	defer db.Close()
-
-	provider := &testutil.MockInfrastructureProvider{
-		PostgresConn: conn,
-	}
-
-	ctx := contextWithDefaultTenant()
-
-	mock.ExpectBegin()
-	mock.ExpectCommit()
-
-	tx, cancel, err := BeginTenantTx(ctx, provider)
-
-	require.NoError(t, err)
-	require.NotNil(t, tx)
-
-	require.NoError(t, tx.Commit())
-	cancel() // must not panic
-
-	require.NoError(t, mock.ExpectationsWereMet())
-}

@@ -9,9 +9,9 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	"github.com/LerianStudio/lib-commons/v4/commons/assert"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	"github.com/LerianStudio/lib-commons/v5/commons/assert"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )

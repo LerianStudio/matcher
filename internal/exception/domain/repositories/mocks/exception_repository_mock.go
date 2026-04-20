@@ -13,7 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	http "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	http "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	entities "github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	repositories "github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	uuid "github.com/google/uuid"
@@ -57,6 +57,21 @@ func (m *MockExceptionRepository) FindByID(ctx context.Context, id uuid.UUID) (*
 func (mr *MockExceptionRepositoryMockRecorder) FindByID(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByID", reflect.TypeOf((*MockExceptionRepository)(nil).FindByID), ctx, id)
+}
+
+// FindByIDs mocks base method.
+func (m *MockExceptionRepository) FindByIDs(ctx context.Context, ids []uuid.UUID) ([]*entities.Exception, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindByIDs", ctx, ids)
+	ret0, _ := ret[0].([]*entities.Exception)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindByIDs indicates an expected call of FindByIDs.
+func (mr *MockExceptionRepositoryMockRecorder) FindByIDs(ctx, ids any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByIDs", reflect.TypeOf((*MockExceptionRepository)(nil).FindByIDs), ctx, ids)
 }
 
 // List mocks base method.

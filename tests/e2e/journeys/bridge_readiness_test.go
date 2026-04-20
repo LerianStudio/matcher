@@ -25,20 +25,20 @@ const bridgeStaleThresholdKey = "fetcher.bridge_stale_threshold_sec"
 // fetcher.bridge_stale_threshold_sec so the subtest can restore it regardless
 // of success or failure.
 func readBridgeStaleThresholdSnapshot(appBaseURL string) (map[string]any, error) {
-	current, err := readSystemplaneConfig(appBaseURL)
+	value, found, err := readSystemplaneKeyValue(appBaseURL, bridgeStaleThresholdKey)
 	if err != nil {
 		return nil, err
 	}
 
 	snap := make(map[string]any, 1)
-	if entry, ok := current.Values[bridgeStaleThresholdKey]; ok {
-		snap[bridgeStaleThresholdKey] = entry.Value
+	if found {
+		snap[bridgeStaleThresholdKey] = value
 	}
 
 	return snap, nil
 }
 
-// restoreBridgeStaleThresholdSnapshot PATCHes the captured value back. A nil
+// restoreBridgeStaleThresholdSnapshot PUTs the captured value back. A nil
 // or empty snapshot is a no-op so absent-key restores don't shadow registry
 // defaults.
 func restoreBridgeStaleThresholdSnapshot(appBaseURL string, snapshot map[string]any) error {
@@ -46,7 +46,7 @@ func restoreBridgeStaleThresholdSnapshot(appBaseURL string, snapshot map[string]
 		return nil
 	}
 
-	return patchSystemplaneConfigValues(appBaseURL, snapshot)
+	return putSystemplaneValues(appBaseURL, snapshot)
 }
 
 // TestBridgeReadiness_Journey exercises GET /v1/discovery/extractions/bridge/summary
@@ -454,7 +454,7 @@ func TestBridgeReadiness_Journey(t *testing.T) {
 			const lowThresholdSec = 60
 
 			require.NoError(t,
-				patchSystemplaneConfigValues(tc.Config().AppBaseURL, map[string]any{
+				putSystemplaneValues(tc.Config().AppBaseURL, map[string]any{
 					"fetcher.bridge_stale_threshold_sec": lowThresholdSec,
 				}),
 				"patching bridge stale threshold to %d seconds", lowThresholdSec)

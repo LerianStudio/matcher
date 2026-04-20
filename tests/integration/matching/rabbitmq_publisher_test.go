@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libRabbitmq "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/require"

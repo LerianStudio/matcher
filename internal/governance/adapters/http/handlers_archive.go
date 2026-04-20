@@ -9,8 +9,10 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/governance/adapters/http/dto"
@@ -35,11 +37,17 @@ var (
 )
 
 // ArchiveHandler handles HTTP requests for archive retrieval.
+//
+// productionMode governs SafeError behavior (suppresses internal error
+// details in client responses when true). Stored per-handler rather than
+// on a package-level atomic.Bool to avoid cross-test coupling via shared
+// global state.
 type ArchiveHandler struct {
 	archiveRepo           repositories.ArchiveMetadataRepository
 	storage               sharedPorts.ObjectStorageClient
 	presignExpiry         time.Duration
 	presignExpiryResolver func(context.Context) time.Duration
+	productionMode        bool
 }
 
 type (
@@ -56,6 +64,7 @@ func NewArchiveHandler(
 	repo repositories.ArchiveMetadataRepository,
 	storage sharedPorts.ObjectStorageClient,
 	presignExpiry time.Duration,
+	production bool,
 ) (*ArchiveHandler, error) {
 	if repo == nil {
 		return nil, ErrArchiveRepoRequired
@@ -70,9 +79,10 @@ func NewArchiveHandler(
 	}
 
 	return &ArchiveHandler{
-		archiveRepo:   repo,
-		storage:       storage,
-		presignExpiry: presignExpiry,
+		archiveRepo:    repo,
+		storage:        storage,
+		presignExpiry:  presignExpiry,
+		productionMode: production,
 	}, nil
 }
 
@@ -97,6 +107,51 @@ func (ah *ArchiveHandler) currentPresignExpiryForContext(ctx context.Context) ti
 	}
 
 	return ah.presignExpiry
+}
+
+// Response helpers — see note on *Handler methods in handlers.go for why
+// these live on the receiver rather than in package-global state.
+
+func (ah *ArchiveHandler) logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
+	sharedhttp.LogSpanError(ctx, span, logger, ah.productionMode, message, err)
+}
+
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
+func (ah *ArchiveHandler) badRequest(
+	ctx context.Context,
+	fiberCtx *fiber.Ctx,
+	span trace.Span,
+	logger libLog.Logger,
+	message string,
+	err error,
+) error {
+	return sharedhttp.BadRequest(ctx, fiberCtx, span, logger, ah.productionMode, message, err)
+}
+
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
+func (ah *ArchiveHandler) writeServiceError(
+	ctx context.Context,
+	fiberCtx *fiber.Ctx,
+	span trace.Span,
+	logger libLog.Logger,
+	message string,
+	err error,
+) error {
+	return sharedhttp.InternalError(ctx, fiberCtx, span, logger, ah.productionMode, message, err)
+}
+
+func (ah *ArchiveHandler) writeNotFound(
+	ctx context.Context,
+	fiberCtx *fiber.Ctx,
+	span trace.Span,
+	logger libLog.Logger,
+	slug string,
+	message string,
+	err error,
+) error {
+	sharedhttp.LogSpanError(ctx, span, logger, ah.productionMode, message, err)
+
+	return respondError(fiberCtx, fiber.StatusNotFound, slug, message)
 }
 
 // ListArchives retrieves completed audit log archives for the tenant.
@@ -127,12 +182,12 @@ func (ah *ArchiveHandler) ListArchives(fiberCtx *fiber.Ctx) error {
 
 	tenantID, err := uuid.Parse(tenantIDStr)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid tenant id", err)
+		return ah.badRequest(ctx, fiberCtx, span, logger, "invalid tenant id", err)
 	}
 
 	limit, offset, err := libHTTP.ParsePagination(fiberCtx)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+		return ah.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 	}
 
 	var from, to *time.Time
@@ -140,7 +195,7 @@ func (ah *ArchiveHandler) ListArchives(fiberCtx *fiber.Ctx) error {
 	if fromStr := fiberCtx.Query("from"); fromStr != "" {
 		parsed, parseErr := parseDate(fromStr)
 		if parseErr != nil {
-			return badRequest(ctx, fiberCtx, span, logger, ErrArchiveDateFromInvalid.Error(), ErrArchiveDateFromInvalid)
+			return ah.badRequest(ctx, fiberCtx, span, logger, ErrArchiveDateFromInvalid.Error(), ErrArchiveDateFromInvalid)
 		}
 
 		from = &parsed
@@ -149,7 +204,7 @@ func (ah *ArchiveHandler) ListArchives(fiberCtx *fiber.Ctx) error {
 	if toStr := fiberCtx.Query("to"); toStr != "" {
 		parsed, parseErr := parseDateTo(toStr)
 		if parseErr != nil {
-			return badRequest(ctx, fiberCtx, span, logger, ErrArchiveDateToInvalid.Error(), ErrArchiveDateToInvalid)
+			return ah.badRequest(ctx, fiberCtx, span, logger, ErrArchiveDateToInvalid.Error(), ErrArchiveDateToInvalid)
 		}
 
 		to = &parsed
@@ -158,7 +213,7 @@ func (ah *ArchiveHandler) ListArchives(fiberCtx *fiber.Ctx) error {
 	// Fetch limit+1 to determine if more pages exist without an extra COUNT query.
 	archives, err := ah.archiveRepo.ListByTenant(ctx, tenantID, entities.StatusComplete, from, to, limit+1, offset)
 	if err != nil {
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to list archives", err)
+		return ah.writeServiceError(ctx, fiberCtx, span, logger, "failed to list archives", err)
 	}
 
 	hasMore := len(archives) > limit
@@ -203,12 +258,12 @@ func (ah *ArchiveHandler) DownloadArchive(fiberCtx *fiber.Ctx) error {
 
 	idStr := fiberCtx.Params("id")
 	if idStr == "" {
-		return badRequest(ctx, fiberCtx, span, logger, "archive id is required", ErrMissingArchiveID)
+		return ah.badRequest(ctx, fiberCtx, span, logger, "archive id is required", ErrMissingArchiveID)
 	}
 
 	archiveID, err := uuid.Parse(idStr)
 	if err != nil {
-		return badRequest(
+		return ah.badRequest(
 			ctx,
 			fiberCtx,
 			span,
@@ -221,14 +276,14 @@ func (ah *ArchiveHandler) DownloadArchive(fiberCtx *fiber.Ctx) error {
 	archive, err := ah.archiveRepo.GetByID(ctx, archiveID)
 	if err != nil {
 		if errors.Is(err, governanceErrors.ErrMetadataNotFound) {
-			return writeNotFound(ctx, fiberCtx, span, logger, "governance_archive_not_found", "archive not found", err)
+			return ah.writeNotFound(ctx, fiberCtx, span, logger, "governance_archive_not_found", "archive not found", err)
 		}
 
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to get archive", err)
+		return ah.writeServiceError(ctx, fiberCtx, span, logger, "failed to get archive", err)
 	}
 
 	if archive == nil {
-		return writeNotFound(ctx, fiberCtx, span, logger, "governance_archive_not_found", "archive not found", governanceErrors.ErrMetadataNotFound)
+		return ah.writeNotFound(ctx, fiberCtx, span, logger, "governance_archive_not_found", "archive not found", governanceErrors.ErrMetadataNotFound)
 	}
 
 	// Verify tenant ownership
@@ -236,11 +291,11 @@ func (ah *ArchiveHandler) DownloadArchive(fiberCtx *fiber.Ctx) error {
 
 	tenantID, err := uuid.Parse(tenantIDStr)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid tenant id", err)
+		return ah.badRequest(ctx, fiberCtx, span, logger, "invalid tenant id", err)
 	}
 
 	if archive.TenantID != tenantID {
-		return writeNotFound(ctx, fiberCtx, span, logger, "governance_archive_not_found", "archive not found", governanceErrors.ErrMetadataNotFound)
+		return ah.writeNotFound(ctx, fiberCtx, span, logger, "governance_archive_not_found", "archive not found", governanceErrors.ErrMetadataNotFound)
 	}
 
 	presignExpiry := ah.currentPresignExpiryForContext(ctx)
@@ -248,12 +303,12 @@ func (ah *ArchiveHandler) DownloadArchive(fiberCtx *fiber.Ctx) error {
 	downloadURL, err := ah.storage.GeneratePresignedURL(ctx, archive.ArchiveKey, presignExpiry)
 	if err != nil {
 		if errors.Is(err, sharedPorts.ErrObjectStorageUnavailable) {
-			logSpanError(ctx, span, logger, "archive storage unavailable", err)
+			ah.logSpanError(ctx, span, logger, "archive storage unavailable", err)
 
 			return respondError(fiberCtx, fiber.StatusServiceUnavailable, "object_storage_unavailable", "archive storage is unavailable")
 		}
 
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to generate download url", err)
+		return ah.writeServiceError(ctx, fiberCtx, span, logger, "failed to generate download url", err)
 	}
 
 	expiresAt := time.Now().UTC().Add(presignExpiry)

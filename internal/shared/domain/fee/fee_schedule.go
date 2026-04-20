@@ -3,11 +3,12 @@ package fee
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+	"github.com/LerianStudio/lib-commons/v5/commons/assert"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
@@ -107,17 +108,18 @@ type NewFeeScheduleInput struct {
 // NewFeeSchedule creates and validates a new FeeSchedule from the given input.
 func NewFeeSchedule(ctx context.Context, input NewFeeScheduleInput) (*FeeSchedule, error) {
 	asserter := assert.New(ctx, nil, constants.ApplicationName, "matching.fee.schedule.new")
+	trimmedName := strings.TrimSpace(input.Name)
 
 	if err := asserter.That(ctx, input.TenantID != uuid.Nil, ErrScheduleTenantIDRequired.Error()); err != nil {
 		return nil, fmt.Errorf("fee schedule tenant id: %w", ErrScheduleTenantIDRequired)
 	}
 
-	if err := asserter.NotEmpty(ctx, input.Name, ErrScheduleNameRequired.Error()); err != nil {
+	if err := asserter.NotEmpty(ctx, trimmedName, ErrScheduleNameRequired.Error()); err != nil {
 		return nil, fmt.Errorf("fee schedule name: %w", ErrScheduleNameRequired)
 	}
 
-	if err := asserter.That(ctx, len(input.Name) <= maxScheduleNameLength,
-		ErrScheduleNameTooLong.Error(), "length", len(input.Name)); err != nil {
+	if err := asserter.That(ctx, len(trimmedName) <= maxScheduleNameLength,
+		ErrScheduleNameTooLong.Error(), "length", len(trimmedName)); err != nil {
 		return nil, fmt.Errorf("fee schedule name: %w", ErrScheduleNameTooLong)
 	}
 
@@ -156,7 +158,7 @@ func NewFeeSchedule(ctx context.Context, input NewFeeScheduleInput) (*FeeSchedul
 	return &FeeSchedule{
 		ID:               uuid.New(),
 		TenantID:         input.TenantID,
-		Name:             input.Name,
+		Name:             trimmedName,
 		Currency:         currency,
 		ApplicationOrder: input.ApplicationOrder,
 		RoundingScale:    input.RoundingScale,

@@ -145,6 +145,28 @@ func TestNewFeeSchedule(t *testing.T) {
 		assert.Len(t, schedule.Name, 100)
 	})
 
+	t.Run("trims whitespace from name", func(t *testing.T) {
+		t.Parallel()
+
+		input := validScheduleInput()
+		input.Name = "   My Schedule   "
+
+		schedule, err := NewFeeSchedule(ctx, input)
+		require.NoError(t, err)
+		assert.Equal(t, "My Schedule", schedule.Name)
+	})
+
+	t.Run("fails with whitespace-only name", func(t *testing.T) {
+		t.Parallel()
+
+		input := validScheduleInput()
+		input.Name = "   \t\n   "
+
+		_, err := NewFeeSchedule(ctx, input)
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrScheduleNameRequired)
+	})
+
 	t.Run("fails with empty items", func(t *testing.T) {
 		t.Parallel()
 

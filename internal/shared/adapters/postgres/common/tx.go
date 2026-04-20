@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
@@ -82,7 +82,7 @@ func WithTenantTxOrExisting[Result any](
 	}
 
 	primaryDBs := db.PrimaryDBs()
-	if len(primaryDBs) == 0 {
+	if len(primaryDBs) == 0 || primaryDBs[0] == nil {
 		return zero, ErrNoPrimaryDB
 	}
 
@@ -194,48 +194,4 @@ func WithTenantTxOrExistingProvider[Result any](
 	}
 
 	return result, nil
-}
-
-// BeginTenantTx begins a tenant-scoped transaction that the caller must manage.
-// The caller is responsible for calling Commit() or Rollback() on the returned transaction,
-// and must call the returned CancelFunc after the transaction is committed or rolled back
-// to release the timeout context resources.
-//
-// If the incoming context already has a deadline, the returned CancelFunc is a no-op.
-// If no deadline is present, a default timeout of 30 seconds is applied to prevent
-// indefinite hangs from connection pool exhaustion.
-func BeginTenantTx(ctx context.Context, provider ports.InfrastructureProvider) (*sql.Tx, context.CancelFunc, error) {
-	noop := func() {} // returned when no timeout context was created
-
-	if provider == nil {
-		return nil, noop, ErrConnectionRequired
-	}
-
-	if ports.IsNilValue(provider) {
-		return nil, noop, ErrConnectionRequired
-	}
-
-	txCtx := ctx
-	cancel := noop
-
-	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-		txCtx, cancel = context.WithTimeout(ctx, defaultTxTimeout)
-	}
-
-	txLease, err := provider.BeginTx(txCtx)
-	if err != nil {
-		cancel()
-		return nil, noop, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-
-	if txLease == nil || txLease.SQLTx() == nil {
-		cancel()
-		return nil, noop, ErrNilTxLease
-	}
-
-	return txLease.SQLTx(), func() {
-		_ = txLease.Rollback()
-
-		cancel()
-	}, nil
 }

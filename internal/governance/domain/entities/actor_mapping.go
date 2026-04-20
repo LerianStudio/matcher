@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+	"github.com/LerianStudio/lib-commons/v5/commons/assert"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
@@ -15,7 +15,14 @@ import (
 // MaxActorMappingActorIDLength matches the database column VARCHAR(255) constraint.
 const MaxActorMappingActorIDLength = 255
 
-// redactedValue is the placeholder used when pseudonymizing PII fields.
+// redactedValue is the placeholder written by the repository when it
+// pseudonymizes PII fields for GDPR compliance. The value is duplicated in
+// the SQL UPDATE that performs the pseudonymization (see
+// actor_mapping.postgresql.go) and in the database column comments in
+// migrations/000001_init_schema.up.sql — that SQL path is the single source
+// of truth for what a redacted value looks like. This const exists so
+// IsRedacted() can recognise rows that have been redacted without an
+// additional round-trip.
 const redactedValue = "[REDACTED]"
 
 // Sentinel errors for actor mapping validation.
@@ -79,20 +86,6 @@ func NewActorMapping(
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}, nil
-}
-
-// Pseudonymize replaces PII fields with [REDACTED] for GDPR compliance.
-// After pseudonymization, the actor mapping retains the actor ID link
-// but no longer exposes personal data.
-func (am *ActorMapping) Pseudonymize() {
-	if am == nil {
-		return
-	}
-
-	redacted := redactedValue
-	am.DisplayName = &redacted
-	am.Email = &redacted
-	am.UpdatedAt = time.Now().UTC()
 }
 
 // IsRedacted returns true if both DisplayName and Email are set to [REDACTED].

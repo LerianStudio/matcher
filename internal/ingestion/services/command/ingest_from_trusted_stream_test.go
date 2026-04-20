@@ -50,6 +50,22 @@ func (d *countingDedupe) MarkSeenWithRetry(
 	return nil
 }
 
+func (d *countingDedupe) MarkSeenBulk(
+	_ context.Context,
+	_ uuid.UUID,
+	hashes []string,
+	_ time.Duration,
+) (map[string]bool, error) {
+	d.markSeenCalls.Add(int64(len(hashes)))
+
+	result := make(map[string]bool, len(hashes))
+	for _, h := range hashes {
+		result[h] = true
+	}
+
+	return result, nil
+}
+
 func (d *countingDedupe) Clear(_ context.Context, _ uuid.UUID, _ string) error { return nil }
 func (d *countingDedupe) ClearBatch(_ context.Context, _ uuid.UUID, _ []string) error {
 	return nil

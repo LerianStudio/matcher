@@ -5,6 +5,7 @@ package exception
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"regexp"
 	"testing"
@@ -15,8 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	pkgHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	pkgHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
@@ -60,9 +61,7 @@ func TestRepository_FindByID_NotFound(t *testing.T) {
 			WHERE id = $1
 		`)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(missingID.String()).WillReturnError(sql.ErrNoRows)
-	mock.ExpectRollback()
 
 	_, err := repo.FindByID(ctx, missingID)
 	require.ErrorIs(t, err, entities.ErrExceptionNotFound)
@@ -122,9 +121,7 @@ func TestRepository_FindByID_NullableFields(t *testing.T) {
 		updatedAt,
 	)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(exceptionID.String()).WillReturnRows(rows)
-	mock.ExpectCommit()
 
 	result, err := repo.FindByID(ctx, exceptionID)
 	require.NoError(t, err)
@@ -136,6 +133,94 @@ func TestRepository_FindByID_NullableFields(t *testing.T) {
 	require.Nil(t, result.DueAt)
 	require.Nil(t, result.ResolutionNotes)
 	require.Nil(t, result.Reason)
+}
+
+func TestRepository_FindByIDs_Success(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupRepository(t)
+	defer finish()
+
+	ctx := context.Background()
+	ids := []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}
+	transactionID := uuid.New()
+	createdAt := time.Now().UTC().Add(-time.Hour)
+	updatedAt := time.Now().UTC()
+
+	// FindByIDs builds `SELECT ... FROM exceptions WHERE id IN ($1,$2,$3)`
+	// via squirrel. The regex tolerates squirrel's exact whitespace.
+	query := `SELECT id, transaction_id, severity, status, external_system, external_issue_id, assigned_to, due_at, resolution_notes, resolution_type, resolution_reason, reason, version, created_at, updated_at FROM exceptions WHERE id IN \(\$1,\$2,\$3\)`
+
+	rows := sqlmock.NewRows([]string{
+		"id",
+		"transaction_id",
+		"severity",
+		"status",
+		"external_system",
+		"external_issue_id",
+		"assigned_to",
+		"due_at",
+		"resolution_notes",
+		"resolution_type",
+		"resolution_reason",
+		"reason",
+		"version",
+		"created_at",
+		"updated_at",
+	})
+
+	for _, id := range ids {
+		rows.AddRow(
+			id.String(),
+			transactionID.String(),
+			"HIGH",
+			"OPEN",
+			sql.NullString{},
+			sql.NullString{},
+			sql.NullString{},
+			sql.NullTime{},
+			sql.NullString{},
+			sql.NullString{},
+			sql.NullString{},
+			sql.NullString{},
+			int64(1),
+			createdAt,
+			updatedAt,
+		)
+	}
+
+	expectedArgs := []driver.Value{ids[0].String(), ids[1].String(), ids[2].String()}
+
+	mock.ExpectQuery(query).
+		WithArgs(expectedArgs...).
+		WillReturnRows(rows)
+
+	result, err := repo.FindByIDs(ctx, ids)
+	require.NoError(t, err)
+	require.Len(t, result, len(ids))
+
+	// The slice ordering mirrors the rows mock returned them in.
+	for i, id := range ids {
+		assert.Equal(t, id, result[i].ID)
+	}
+}
+
+func TestRepository_FindByIDs_EmptyInput(t *testing.T) {
+	t.Parallel()
+
+	repo, _, finish := setupRepository(t)
+	defer finish()
+
+	ctx := context.Background()
+
+	result, err := repo.FindByIDs(ctx, nil)
+	require.NoError(t, err)
+	assert.Empty(t, result)
+
+	result, err = repo.FindByIDs(ctx, []uuid.UUID{})
+	require.NoError(t, err)
+	assert.Empty(t, result)
+	// no sqlmock expectations -- empty input short-circuits before any DB call.
 }
 
 func TestRepository_Update_NotFound(t *testing.T) {
@@ -209,6 +294,13 @@ func TestRepository_NilConnection(t *testing.T) {
 		t.Parallel()
 
 		_, err := repo.FindByID(ctx, uuid.New())
+		require.ErrorIs(t, err, ErrRepoNotInitialized)
+	})
+
+	t.Run("FindByIDs", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := repo.FindByIDs(ctx, []uuid.UUID{uuid.New()})
 		require.ErrorIs(t, err, ErrRepoNotInitialized)
 	})
 
@@ -898,9 +990,7 @@ func TestRepository_FindByID_Success(t *testing.T) {
 		now,
 	)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(exceptionID.String()).WillReturnRows(rows)
-	mock.ExpectCommit()
 
 	result, err := repo.FindByID(ctx, exceptionID)
 	require.NoError(t, err)
@@ -935,11 +1025,9 @@ func TestRepository_FindByID_QueryError(t *testing.T) {
 			WHERE id = $1
 		`)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).
 		WithArgs(exceptionID.String()).
 		WillReturnError(errors.New("database error"))
-	mock.ExpectRollback()
 
 	result, err := repo.FindByID(ctx, exceptionID)
 	require.Error(t, err)
@@ -997,9 +1085,7 @@ func TestRepository_List_Success(t *testing.T) {
 		now,
 	)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
-	mock.ExpectCommit()
 
 	result, pagination, err := repo.List(
 		ctx,
@@ -1047,9 +1133,7 @@ func TestRepository_List_WithStatusFilter(t *testing.T) {
 		now,
 	)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
-	mock.ExpectCommit()
 
 	filter := repositories.ExceptionFilter{Status: &status}
 	result, _, err := repo.List(ctx, filter, repositories.CursorFilter{Limit: 10})
@@ -1072,9 +1156,7 @@ func TestRepository_List_EmptyResult(t *testing.T) {
 		"reason", "version", "created_at", "updated_at",
 	})
 
-	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
-	mock.ExpectCommit()
 
 	result, pagination, err := repo.List(
 		ctx,
@@ -1095,9 +1177,7 @@ func TestRepository_List_QueryError(t *testing.T) {
 
 	ctx := context.Background()
 
-	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT").WillReturnError(errors.New("query error"))
-	mock.ExpectRollback()
 
 	result, _, err := repo.List(
 		ctx,
@@ -1300,11 +1380,9 @@ func TestRepository_ExistsForTenant_Success(t *testing.T) {
 
 	query := regexp.QuoteMeta(`SELECT EXISTS(SELECT 1 FROM exceptions WHERE id = $1)`)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).
 		WithArgs(exceptionID.String()).
 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectCommit()
 
 	exists, err := repo.ExistsForTenant(ctx, exceptionID)
 	require.NoError(t, err)
@@ -1322,11 +1400,9 @@ func TestRepository_ExistsForTenant_NotExists(t *testing.T) {
 
 	query := regexp.QuoteMeta(`SELECT EXISTS(SELECT 1 FROM exceptions WHERE id = $1)`)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).
 		WithArgs(exceptionID.String()).
 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
-	mock.ExpectCommit()
 
 	exists, err := repo.ExistsForTenant(ctx, exceptionID)
 	require.NoError(t, err)
@@ -1344,9 +1420,7 @@ func TestRepository_ExistsForTenant_QueryError(t *testing.T) {
 
 	query := regexp.QuoteMeta(`SELECT EXISTS(SELECT 1 FROM exceptions WHERE id = $1)`)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(exceptionID.String()).WillReturnError(errors.New("db error"))
-	mock.ExpectRollback()
 
 	exists, err := repo.ExistsForTenant(ctx, exceptionID)
 	require.Error(t, err)
@@ -1423,9 +1497,7 @@ func TestRepository_List_WithPagination(t *testing.T) {
 		)
 	}
 
-	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
-	mock.ExpectCommit()
 
 	result, pagination, err := repo.List(
 		ctx,
@@ -1470,9 +1542,7 @@ func TestRepository_List_SortByCreatedAt(t *testing.T) {
 		now,
 	)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
-	mock.ExpectCommit()
 
 	cursor := repositories.CursorFilter{
 		Limit:     10,
@@ -1525,9 +1595,7 @@ func TestRepository_FindByID_InvalidSeverity(t *testing.T) {
 		now,
 	)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(exceptionID.String()).WillReturnRows(rows)
-	mock.ExpectRollback()
 
 	result, err := repo.FindByID(ctx, exceptionID)
 	require.Error(t, err)
@@ -1576,9 +1644,7 @@ func TestRepository_FindByID_InvalidStatus(t *testing.T) {
 		now,
 	)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(exceptionID.String()).WillReturnRows(rows)
-	mock.ExpectRollback()
 
 	result, err := repo.FindByID(ctx, exceptionID)
 	require.Error(t, err)
@@ -1627,9 +1693,7 @@ func TestRepository_FindByID_InvalidExceptionID(t *testing.T) {
 		now,
 	)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(exceptionID.String()).WillReturnRows(rows)
-	mock.ExpectRollback()
 
 	result, err := repo.FindByID(ctx, exceptionID)
 	require.Error(t, err)
@@ -1677,9 +1741,7 @@ func TestRepository_FindByID_InvalidTransactionID(t *testing.T) {
 		now,
 	)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(exceptionID.String()).WillReturnRows(rows)
-	mock.ExpectRollback()
 
 	result, err := repo.FindByID(ctx, exceptionID)
 	require.Error(t, err)
@@ -1720,9 +1782,7 @@ func TestRepository_List_RowsError(t *testing.T) {
 		now,
 	).RowError(0, errors.New("row iteration error"))
 
-	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
-	mock.ExpectRollback()
 
 	result, _, err := repo.List(
 		ctx,

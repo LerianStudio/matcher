@@ -46,7 +46,7 @@ func (repo *stubCommentRepository) FindByExceptionID(
 	return repo.comments, nil
 }
 
-func (repo *stubCommentRepository) Delete(_ context.Context, _ uuid.UUID) error {
+func (repo *stubCommentRepository) DeleteByExceptionAndID(_ context.Context, _, _ uuid.UUID) error {
 	return nil
 }
 

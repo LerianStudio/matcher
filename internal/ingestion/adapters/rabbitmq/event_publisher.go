@@ -52,10 +52,10 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
-	tmrabbitmq "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/rabbitmq"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	tmrabbitmq "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/rabbitmq"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
@@ -284,7 +284,7 @@ func (publisher *EventPublisher) dispatchEvent(
 		if err := publisher.publishMultiTenant(ctx, tenantID, sharedRabbitmq.ExchangeName, routingKey, msg); err != nil {
 			libOpentelemetry.HandleSpanError(span, "failed to publish event via tenant vhost", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to publish event via tenant vhost")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to publish event via tenant vhost")
 
 			return fmt.Errorf("failed to publish event via tenant vhost: %w", err)
 		}
@@ -295,7 +295,7 @@ func (publisher *EventPublisher) dispatchEvent(
 	if err := publisher.confirmablePublisher.Publish(ctx, sharedRabbitmq.ExchangeName, routingKey, false, false, msg); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to publish event with confirm", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to publish event")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to publish event")
 
 		return fmt.Errorf("failed to publish event: %w", err)
 	}
@@ -314,6 +314,13 @@ func (publisher *EventPublisher) publish(
 	}
 
 	if !publisher.multiTenant && publisher.confirmablePublisher == nil {
+		return errPublisherNotInit
+	}
+
+	// Multi-tenant mode relies on the rmq manager to resolve per-tenant
+	// channels. If the manager is nil, dispatch would nil-deref inside
+	// publishMultiTenant — fail fast with the wiring sentinel instead.
+	if publisher.multiTenant && publisher.rmqManager == nil {
 		return errPublisherNotInit
 	}
 

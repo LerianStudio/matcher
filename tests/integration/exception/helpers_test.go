@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
@@ -60,7 +60,6 @@ import (
 
 	sharedCross "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
-	outboxRepo "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/outbox"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 
@@ -221,7 +220,7 @@ func wireServices(t *testing.T, h *integration.TestHarness) wiredServices {
 	jobRepo := ingestionJobRepo.NewRepository(provider)
 	txRepo := ingestionTxRepo.NewRepository(provider)
 	dedupe := ingestionRedis.NewDedupeService(provider)
-	outbox := outboxRepo.NewRepository(provider)
+	outbox := integration.NewTestOutboxRepository(t, h.Connection)
 
 	parserRegistry := ingestionParsers.NewParserRegistry()
 	parserRegistry.Register(ingestionParsers.NewCSVParser())
@@ -594,7 +593,7 @@ func wireExceptionUseCase(
 	provider := infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
 
 	exceptionRepo := exceptionRepoAdapter.NewRepository(provider)
-	outbox := outboxRepo.NewRepository(provider)
+	outbox := integration.NewTestOutboxRepository(t, h.Connection)
 
 	auditPub, err := exceptionAudit.NewOutboxPublisher(outbox)
 	require.NoError(t, err)
@@ -625,7 +624,7 @@ func wireDisputeUseCase(
 
 	exceptionRepo := exceptionRepoAdapter.NewRepository(provider)
 	disputeRepo := disputeRepoAdapter.NewRepository(provider)
-	outbox := outboxRepo.NewRepository(provider)
+	outbox := integration.NewTestOutboxRepository(t, h.Connection)
 
 	auditPub, err := exceptionAudit.NewOutboxPublisher(outbox)
 	require.NoError(t, err)

@@ -135,7 +135,7 @@ func TestCommentCRUD_DeleteOwnComment(t *testing.T) {
 		require.NotNil(t, comment)
 
 		// Delete as the same actor who created it.
-		err = cmdUC.DeleteComment(ctx, comment.ID)
+		err = cmdUC.DeleteComment(ctx, excID, comment.ID)
 		require.NoError(t, err)
 
 		// Verify the comment no longer appears in the list.
@@ -162,7 +162,7 @@ func TestCommentCRUD_DeleteOtherActorComment_Fails(t *testing.T) {
 		// user-B tries to delete it.
 		ctxB := testCtxWithActor(t, h, "user-B")
 
-		err = cmdUC.DeleteComment(ctxB, comment.ID)
+		err = cmdUC.DeleteComment(ctxB, excID, comment.ID)
 		require.Error(t, err)
 		require.ErrorIs(t, err, exceptionCommand.ErrNotCommentAuthor)
 	})

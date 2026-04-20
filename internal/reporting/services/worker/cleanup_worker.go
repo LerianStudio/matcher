@@ -11,10 +11,10 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
-	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
@@ -218,9 +218,65 @@ func (worker *CleanupWorker) cleanupExpired(ctx context.Context) {
 
 	now := time.Now().UTC()
 
-	for _, job := range jobs {
-		worker.cleanupJob(ctx, job, now)
+	// Parallelize cleanupJob across the listed expired jobs. Each call does
+	// two DB updates plus at most one S3 Delete; on a batch of 100 jobs the
+	// sequential walk can take 10-30s, holding open a worker goroutine and
+	// eating pool capacity the whole time. cleanupJob is idempotent and each
+	// job's work is scoped to its own record, so independent goroutines are
+	// safe. We cap concurrency to cleanupJobConcurrency to avoid blowing up
+	// the S3 / DB connection pool under a surprise large batch.
+	//
+	// No errgroup: cleanupJob already logs per-job failures internally and
+	// returns nothing — we explicitly want to process every job regardless
+	// of peer failures, which is the opposite of errgroup's fail-fast.
+	worker.runCleanupJobsParallel(ctx, jobs, now)
+}
+
+// cleanupJobConcurrency caps the number of in-flight cleanupJob goroutines.
+// Each goroutine issues two DB updates + one S3 delete; 10 matches the
+// connection-pool headroom tested against POSTGRES_MAX_OPEN_CONNS defaults
+// and leaves plenty of slack for other workers sharing the pool.
+const cleanupJobConcurrency = 10
+
+func (worker *CleanupWorker) runCleanupJobsParallel(
+	ctx context.Context,
+	jobs []*entities.ExportJob,
+	now time.Time,
+) {
+	limit := cleanupJobConcurrency
+	if len(jobs) < limit {
+		limit = len(jobs)
 	}
+
+	sem := make(chan struct{}, limit)
+
+	var wg sync.WaitGroup
+
+	for _, job := range jobs {
+		if job == nil {
+			continue
+		}
+
+		wg.Add(1)
+
+		sem <- struct{}{}
+
+		runtime.SafeGoWithContextAndComponent(
+			ctx,
+			worker.logger,
+			"reporting",
+			"cleanup_worker.job",
+			runtime.KeepRunning,
+			func(goCtx context.Context) {
+				defer wg.Done()
+				defer func() { <-sem }()
+
+				worker.cleanupJob(goCtx, job, now)
+			},
+		)
+	}
+
+	wg.Wait()
 }
 
 func (worker *CleanupWorker) cleanupJob(ctx context.Context, job *entities.ExportJob, now time.Time) {

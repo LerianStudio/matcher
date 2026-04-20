@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
@@ -26,9 +26,8 @@ import (
 )
 
 var (
-	errTestBoom            = errors.New("boom error")
-	errTestDatabaseError   = errors.New("database error")
-	errTestDatabaseTimeout = errors.New("database timeout")
+	errTestBoom          = errors.New("boom error")
+	errTestDatabaseError = errors.New("database error")
 )
 
 type stubMatchRunRepo struct {

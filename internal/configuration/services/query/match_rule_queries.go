@@ -6,10 +6,10 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
@@ -36,7 +36,7 @@ func (uc *UseCase) GetMatchRule(
 		logger.With(
 			libLog.Any("context.id", contextID.String()),
 			libLog.Any("rule.id", ruleID.String()),
-			libLog.Any("error.message", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "failed to get match rule")
 
 		return nil, fmt.Errorf("finding match rule: %w", err)
@@ -84,7 +84,7 @@ func (uc *UseCase) ListMatchRules(
 
 		logger.With(
 			libLog.Any("context.id", contextID.String()),
-			libLog.Any("error.message", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "failed to list match rules")
 
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("listing match rules: %w", err)

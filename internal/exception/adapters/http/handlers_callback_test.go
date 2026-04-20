@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace/noop"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
 	"github.com/LerianStudio/matcher/internal/exception/services/query"
@@ -38,7 +38,7 @@ func TestHandleCallbackError_RateLimitExceeded(t *testing.T) {
 
 		defer span.End()
 
-		return handleCallbackError(spanCtx, c, span, nil, command.ErrCallbackRateLimitExceeded)
+		return (&Handlers{}).handleCallbackError(spanCtx, c, span, nil, command.ErrCallbackRateLimitExceeded)
 	})
 
 	request := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -317,7 +317,7 @@ func executeCallbackErrorHandler(
 
 		defer span.End()
 
-		return handleCallbackError(spanCtx, c, span, nil, err)
+		return (&Handlers{}).handleCallbackError(spanCtx, c, span, nil, err)
 	})
 
 	request := httptest.NewRequest(http.MethodGet, "/", http.NoBody)

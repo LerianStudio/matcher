@@ -17,9 +17,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/core"
-	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/valkey"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	"github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
+	"github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/valkey"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 )
@@ -188,7 +188,7 @@ func TestProviderIsolation_SingleTenant_AlwaysSameConnection(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Tenancy.MultiTenantEnabled = false
 
-	provider := newDynamicInfrastructureProvider(cfg, nil, nil, pg, redis, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(cfg, nil, pg, redis, &libLog.NopLogger{}, nil)
 
 	// Multiple calls should always return the same underlying connection.
 	for i := 0; i < 5; i++ {
@@ -214,7 +214,7 @@ func TestProviderIsolation_SingleTenant_ContextDoesNotAffectConnection(t *testin
 	cfg := defaultConfig()
 	cfg.Tenancy.MultiTenantEnabled = false
 
-	provider := newDynamicInfrastructureProvider(cfg, nil, nil, pg, redis, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(cfg, nil, pg, redis, &libLog.NopLogger{}, nil)
 
 	// Use the proper typed context key from the auth package to avoid SA1029.
 	contexts := []struct {
@@ -285,7 +285,7 @@ func TestProviderIsolation_MultiTenant_TwoTenantsCallTenantManager(t *testing.T)
 	cfg.Tenancy.MultiTenantURL = server.URL
 	cfg.Tenancy.MultiTenantServiceAPIKey = "test-key"
 
-	provider := newDynamicInfrastructureProvider(cfg, func() *Config { return cfg }, nil, nil, nil, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(cfg, func() *Config { return cfg }, nil, nil, &libLog.NopLogger{}, nil)
 	defer func() { _ = provider.Close() }()
 
 	ctxA := core.ContextWithTenantID(context.Background(), "tenant-alpha")
@@ -306,7 +306,7 @@ func TestProviderIsolation_MultiTenant_TwoTenantsCallTenantManager(t *testing.T)
 func TestDynamicInfrastructureProvider_Close_Idempotent(t *testing.T) {
 	t.Parallel()
 
-	provider := newDynamicInfrastructureProvider(defaultConfig(), nil, nil, nil, nil, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(defaultConfig(), nil, nil, nil, &libLog.NopLogger{}, nil)
 
 	// First close should succeed.
 	require.NoError(t, provider.Close())
@@ -332,7 +332,7 @@ func TestDynamicInfrastructureProvider_Close_WithActiveManager(t *testing.T) {
 	cfg.Tenancy.MultiTenantURL = server.URL
 	cfg.Tenancy.MultiTenantServiceAPIKey = "test-key"
 
-	provider := newDynamicInfrastructureProvider(cfg, func() *Config { return cfg }, nil, nil, nil, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(cfg, func() *Config { return cfg }, nil, nil, &libLog.NopLogger{}, nil)
 
 	// Force creation of pgManager.
 	_, err := provider.currentPGManager(context.Background(), cfg)

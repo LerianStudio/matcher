@@ -2,11 +2,12 @@ package http
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
@@ -53,19 +54,19 @@ func (handler *Handler) CreateFeeRule(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	var payload dto.CreateFeeRuleRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &payload); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid fee rule payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid fee rule payload", err)
 	}
 
 	feeScheduleID, err := uuid.Parse(payload.FeeScheduleID)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid fee schedule id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid fee schedule id", err)
 	}
 
 	predicates := dto.ToPredicates(payload.Predicates)
@@ -80,12 +81,16 @@ func (handler *Handler) CreateFeeRule(fiberCtx *fiber.Ctx) error {
 		predicates,
 	)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to create fee rule", err)
+		handler.logSpanError(ctx, span, logger, "failed to create fee rule", err)
 
 		return mapFeeRuleError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.FeeRuleToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.FeeRuleToResponse(result)); err != nil {
+		return fmt.Errorf("respond create fee rule: %w", err)
+	}
+
+	return nil
 }
 
 // ListFeeRules lists fee rules for a context.
@@ -120,14 +125,14 @@ func (handler *Handler) ListFeeRules(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	result, err := handler.query.ListFeeRules(ctx, contextID)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to list fee rules", err)
+		handler.logSpanError(ctx, span, logger, "failed to list fee rules", err)
 		return writeServiceError(fiberCtx, err)
 	}
 
@@ -135,7 +140,11 @@ func (handler *Handler) ListFeeRules(fiberCtx *fiber.Ctx) error {
 		result = []*fee.FeeRule{}
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeRulesToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeRulesToResponse(result)); err != nil {
+		return fmt.Errorf("respond list fee rules: %w", err)
+	}
+
+	return nil
 }
 
 // GetFeeRule retrieves a fee rule.
@@ -161,19 +170,19 @@ func (handler *Handler) GetFeeRule(fiberCtx *fiber.Ctx) error {
 
 	tenantID, err := tenantIDFromContext(ctx)
 	if err != nil {
-		return unauthorized(ctx, fiberCtx, span, logger, err)
+		return handler.unauthorized(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetTenantSpanAttribute(span, tenantID)
 
 	feeRuleID, err := parseUUIDParam(fiberCtx, "feeRuleId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid fee rule id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid fee rule id", err)
 	}
 
 	result, err := handler.query.GetFeeRule(ctx, feeRuleID)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to get fee rule", err)
+		handler.logSpanError(ctx, span, logger, "failed to get fee rule", err)
 
 		if errors.Is(err, fee.ErrFeeRuleNotFound) {
 			return writeNotFound(fiberCtx, "configuration_fee_rule_not_found", "fee rule not found")
@@ -187,12 +196,16 @@ func (handler *Handler) GetFeeRule(fiberCtx *fiber.Ctx) error {
 	}
 
 	if err := handler.contextVerifier(ctx, tenantID, result.ContextID); err != nil {
-		return handleOwnershipVerificationError(ctx, fiberCtx, span, logger, err, "configuration_fee_rule_not_found", "fee rule not found")
+		return handler.handleOwnershipVerificationError(ctx, fiberCtx, span, logger, err, "configuration_fee_rule_not_found", "fee rule not found")
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, result.ContextID)
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeRuleToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeRuleToResponse(result)); err != nil {
+		return fmt.Errorf("respond get fee rule: %w", err)
+	}
+
+	return nil
 }
 
 // UpdateFeeRule updates a fee rule.
@@ -222,19 +235,19 @@ func (handler *Handler) UpdateFeeRule(fiberCtx *fiber.Ctx) error {
 
 	tenantID, err := tenantIDFromContext(ctx)
 	if err != nil {
-		return unauthorized(ctx, fiberCtx, span, logger, err)
+		return handler.unauthorized(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetTenantSpanAttribute(span, tenantID)
 
 	feeRuleID, err := parseUUIDParam(fiberCtx, "feeRuleId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid fee rule id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid fee rule id", err)
 	}
 
 	existing, err := handler.query.GetFeeRule(ctx, feeRuleID)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to get fee rule", err)
+		handler.logSpanError(ctx, span, logger, "failed to get fee rule", err)
 
 		if errors.Is(err, fee.ErrFeeRuleNotFound) {
 			return writeNotFound(fiberCtx, "configuration_fee_rule_not_found", "fee rule not found")
@@ -248,14 +261,14 @@ func (handler *Handler) UpdateFeeRule(fiberCtx *fiber.Ctx) error {
 	}
 
 	if err := handler.contextVerifier(ctx, tenantID, existing.ContextID); err != nil {
-		return handleOwnershipVerificationError(ctx, fiberCtx, span, logger, err, "configuration_fee_rule_not_found", "fee rule not found")
+		return handler.handleOwnershipVerificationError(ctx, fiberCtx, span, logger, err, "configuration_fee_rule_not_found", "fee rule not found")
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, existing.ContextID)
 
 	var payload dto.UpdateFeeRuleRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &payload); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid fee rule payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid fee rule payload", err)
 	}
 
 	var predicates *[]fee.FieldPredicate
@@ -276,12 +289,16 @@ func (handler *Handler) UpdateFeeRule(fiberCtx *fiber.Ctx) error {
 		predicates,
 	)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to update fee rule", err)
+		handler.logSpanError(ctx, span, logger, "failed to update fee rule", err)
 
 		return mapFeeRuleError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeRuleToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeRuleToResponse(result)); err != nil {
+		return fmt.Errorf("respond update fee rule: %w", err)
+	}
+
+	return nil
 }
 
 // DeleteFeeRule deletes a fee rule.
@@ -306,19 +323,19 @@ func (handler *Handler) DeleteFeeRule(fiberCtx *fiber.Ctx) error {
 
 	tenantID, err := tenantIDFromContext(ctx)
 	if err != nil {
-		return unauthorized(ctx, fiberCtx, span, logger, err)
+		return handler.unauthorized(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetTenantSpanAttribute(span, tenantID)
 
 	feeRuleID, err := parseUUIDParam(fiberCtx, "feeRuleId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid fee rule id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid fee rule id", err)
 	}
 
 	existing, err := handler.query.GetFeeRule(ctx, feeRuleID)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to get fee rule", err)
+		handler.logSpanError(ctx, span, logger, "failed to get fee rule", err)
 
 		if errors.Is(err, fee.ErrFeeRuleNotFound) {
 			return writeNotFound(fiberCtx, "configuration_fee_rule_not_found", "fee rule not found")
@@ -332,13 +349,13 @@ func (handler *Handler) DeleteFeeRule(fiberCtx *fiber.Ctx) error {
 	}
 
 	if err := handler.contextVerifier(ctx, tenantID, existing.ContextID); err != nil {
-		return handleOwnershipVerificationError(ctx, fiberCtx, span, logger, err, "configuration_fee_rule_not_found", "fee rule not found")
+		return handler.handleOwnershipVerificationError(ctx, fiberCtx, span, logger, err, "configuration_fee_rule_not_found", "fee rule not found")
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, existing.ContextID)
 
 	if err := handler.command.DeleteFeeRuleInContext(ctx, existing.ContextID, feeRuleID); err != nil {
-		logSpanError(ctx, span, logger, "failed to delete fee rule", err)
+		handler.logSpanError(ctx, span, logger, "failed to delete fee rule", err)
 
 		if errors.Is(err, fee.ErrFeeRuleNotFound) {
 			return writeNotFound(fiberCtx, "configuration_fee_rule_not_found", "fee rule not found")
@@ -347,7 +364,11 @@ func (handler *Handler) DeleteFeeRule(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	if err := libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent); err != nil {
+		return fmt.Errorf("respond delete fee rule: %w", err)
+	}
+
+	return nil
 }
 
 // mapFeeRuleError maps fee rule domain and constraint errors to HTTP responses.

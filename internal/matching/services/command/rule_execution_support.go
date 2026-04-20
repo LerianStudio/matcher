@@ -7,8 +7,8 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	matching "github.com/LerianStudio/matcher/internal/matching/domain/services"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
@@ -38,7 +38,7 @@ func loadRuleDefinitions(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to load match rules", err)
 
-		logger.With(libLog.Any("context.id", contextID.String()), libLog.Any("error.message", err.Error())).Log(ctx, libLog.LevelError, "failed to load match rules")
+		logger.With(libLog.Any("context.id", contextID.String()), libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to load match rules")
 
 		return nil, fmt.Errorf("failed to load match rules: %w", err)
 	}
@@ -49,7 +49,7 @@ func loadRuleDefinitions(
 		if err != nil {
 			libOpentelemetry.HandleSpanError(span, "failed to decode match rule", err)
 
-			logger.With(libLog.Any("context.id", contextID.String()), libLog.Any("rule.id", safeRuleID(rule)), libLog.Any("error.message", err.Error())).Log(ctx, libLog.LevelError, "failed to decode match rule")
+			logger.With(libLog.Any("context.id", contextID.String()), libLog.Any("rule.id", safeRuleID(rule)), libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to decode match rule")
 
 			return nil, fmt.Errorf("failed to decode match rule: %w", err)
 		}
@@ -108,7 +108,7 @@ func executeRulesEngineDetailed(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "rule engine failed", err)
 
-		logger.With(libLog.Any("context.id", contextID.String()), libLog.Any("error.message", err.Error())).Log(ctx, libLog.LevelError, "rule engine failed")
+		logger.With(libLog.Any("context.id", contextID.String()), libLog.Err(err)).Log(ctx, libLog.LevelError, "rule engine failed")
 
 		return nil, err
 	}

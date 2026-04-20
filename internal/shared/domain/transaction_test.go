@@ -394,6 +394,55 @@ func TestNewTransaction_MetadataDefensiveCopy(t *testing.T) {
 		"nested slice mutation must not propagate into transaction metadata")
 }
 
+func TestNewTransactionWithDonatedMetadata_StoresMapDirectly(t *testing.T) {
+	t.Parallel()
+
+	metadata := map[string]any{"key": "value"}
+
+	tx, err := shared.NewTransactionWithDonatedMetadata(
+		context.Background(),
+		uuid.New(),
+		uuid.New(),
+		uuid.New(),
+		"ext-donated",
+		decimal.NewFromInt(100),
+		"USD",
+		time.Now().UTC(),
+		"test",
+		metadata,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, tx)
+
+	// Donated path stores the caller's map directly. Mutating the original
+	// after construction should be visible on the transaction — this
+	// asserts the ownership contract the caller is opting into.
+	metadata["key"] = "mutated"
+	metadata["added"] = "later"
+
+	require.Equal(t, "mutated", tx.Metadata["key"],
+		"donated metadata must reflect caller mutations (ownership was transferred)")
+	require.Equal(t, "later", tx.Metadata["added"])
+}
+
+func TestNewTransactionWithDonatedMetadata_ValidatesRequiredFields(t *testing.T) {
+	t.Parallel()
+
+	_, err := shared.NewTransactionWithDonatedMetadata(
+		context.Background(),
+		uuid.Nil, // invalid tenant
+		uuid.New(),
+		uuid.New(),
+		"ext",
+		decimal.NewFromInt(1),
+		"USD",
+		time.Now().UTC(),
+		"",
+		nil,
+	)
+	require.ErrorIs(t, err, shared.ErrTransactionTenantIDRequired)
+}
+
 func TestNewTransaction_NilMetadata_RemainsNil(t *testing.T) {
 	t.Parallel()
 

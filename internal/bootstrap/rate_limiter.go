@@ -10,9 +10,9 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/log"
-	"github.com/LerianStudio/lib-commons/v4/commons/net/http/ratelimit"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+	"github.com/LerianStudio/lib-commons/v5/commons/log"
+	"github.com/LerianStudio/lib-commons/v5/commons/net/http/ratelimit"
+	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 )
@@ -214,6 +214,49 @@ func NewDispatchRateLimit(
 	})
 }
 
+// NewAdminRateLimit creates a fiber.Handler for the admin plane (/system)
+// rate limiter tier. Intentionally scoped separately from the global tier
+// so admin traffic and tenant traffic cannot starve each other — admin
+// storms hit their own quota and vice versa. The rlGetter is called at
+// request time to obtain the current rate limiter, allowing transparent
+// Redis client swaps via systemplane bundle reloads.
+func NewAdminRateLimit(
+	rlGetter func() *ratelimit.RateLimiter,
+	cfg *Config,
+	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
+) fiber.Handler {
+	if settingsResolver != nil {
+		return settingsBackedRateLimitHandler(rlGetter, cfg, configGetter, settingsResolver, func(currentCfg RateLimitConfig) ratelimit.Tier {
+			return ratelimit.Tier{
+				Name:   "admin",
+				Max:    currentCfg.AdminMax,
+				Window: time.Duration(safeExpiry(currentCfg.AdminExpirySec)) * time.Second,
+			}
+		})
+	}
+
+	if configGetter != nil {
+		return dynamicRateLimitHandler(rlGetter, configGetter, func(c *Config) ratelimit.Tier {
+			return ratelimit.Tier{
+				Name:   "admin",
+				Max:    c.RateLimit.AdminMax,
+				Window: time.Duration(safeExpiry(c.RateLimit.AdminExpirySec)) * time.Second,
+			}
+		})
+	}
+
+	if cfg == nil || !cfg.RateLimit.Enabled {
+		return passthrough
+	}
+
+	return staticRateLimitHandler(rlGetter, ratelimit.Tier{
+		Name:   "admin",
+		Max:    cfg.RateLimit.AdminMax,
+		Window: time.Duration(safeExpiry(cfg.RateLimit.AdminExpirySec)) * time.Second,
+	})
+}
+
 // resolveRL safely calls the getter and returns the current rate limiter.
 // Returns nil (which produces pass-through handlers) when getter is nil.
 func resolveRL(rlGetter func() *ratelimit.RateLimiter) *ratelimit.RateLimiter {
@@ -270,7 +313,7 @@ func settingsBackedRateLimitHandler(
 	return func(fiberCtx *fiber.Ctx) error {
 		currentCfg := currentRateLimitConfig(cfg, configGetter)
 
-		currentCfg = settingsResolver.rateLimit(fiberCtx.UserContext(), currentCfg)
+		currentCfg = settingsResolver.rateLimit(currentCfg)
 		if !currentCfg.Enabled {
 			return fiberCtx.Next()
 		}

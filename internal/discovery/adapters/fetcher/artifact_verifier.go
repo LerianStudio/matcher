@@ -20,8 +20,8 @@ import (
 
 	"golang.org/x/crypto/hkdf"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )

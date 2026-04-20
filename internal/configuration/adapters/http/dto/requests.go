@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
+	"github.com/LerianStudio/lib-commons/v5/commons/pointers"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"

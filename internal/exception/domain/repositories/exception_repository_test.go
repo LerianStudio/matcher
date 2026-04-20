@@ -38,7 +38,7 @@ func TestExceptionRepository_MethodCount(t *testing.T) {
 
 	repoType := reflect.TypeOf((*repositories.ExceptionRepository)(nil)).Elem()
 
-	const expectedMethodCount = 4
+	const expectedMethodCount = 5
 
 	actualCount := repoType.NumMethod()
 
@@ -46,7 +46,7 @@ func TestExceptionRepository_MethodCount(t *testing.T) {
 		t,
 		expectedMethodCount,
 		actualCount,
-		"ExceptionRepository should have exactly %d methods (FindByID, List, Update, UpdateWithTx) - found %d",
+		"ExceptionRepository should have exactly %d methods (FindByID, FindByIDs, List, Update, UpdateWithTx) - found %d",
 		expectedMethodCount,
 		actualCount,
 	)
@@ -74,6 +74,27 @@ func TestExceptionRepository_InterfaceContract(t *testing.T) {
 			"first parameter should be context.Context")
 	})
 
+	t.Run("FindByIDs method exists with correct signature", func(t *testing.T) {
+		t.Parallel()
+
+		method, exists := repoType.MethodByName("FindByIDs")
+		assert.True(t, exists, "FindByIDs method must exist")
+
+		numIn := method.Type.NumIn()
+		assert.Equal(t, 2, numIn, "FindByIDs should accept context and id slice")
+
+		numOut := method.Type.NumOut()
+		assert.Equal(t, 2, numOut, "FindByIDs should return exception slice and error")
+
+		firstParam := method.Type.In(0)
+		assert.Equal(t, "context.Context", firstParam.String(),
+			"first parameter should be context.Context")
+
+		secondParam := method.Type.In(1)
+		assert.Equal(t, "[]uuid.UUID", secondParam.String(),
+			"second parameter should be []uuid.UUID")
+	})
+
 	t.Run("Update method exists with correct signature", func(t *testing.T) {
 		t.Parallel()
 
@@ -99,6 +120,7 @@ func TestExceptionRepository_AllowedMethods(t *testing.T) {
 
 	allowedMethods := map[string]bool{
 		"FindByID":     true,
+		"FindByIDs":    true,
 		"List":         true,
 		"Update":       true,
 		"UpdateWithTx": true,

@@ -4,8 +4,8 @@ package dto
 import (
 	"time"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	"github.com/LerianStudio/lib-commons/v5/commons/pointers"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 )

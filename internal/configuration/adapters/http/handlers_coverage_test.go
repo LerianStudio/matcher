@@ -16,13 +16,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/shopspring/decimal"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
@@ -127,7 +127,7 @@ func TestHandleContextVerificationError_AllBranches(t *testing.T) {
 
 			app := fiber.New()
 			app.Get("/test", func(c *fiber.Ctx) error {
-				return handleContextVerificationError(c.UserContext(), c, span, &libLog.NopLogger{}, tt.err)
+				return (&Handler{}).handleContextVerificationError(c.UserContext(), c, span, &libLog.NopLogger{}, tt.err)
 			})
 
 			resp := performRequest(t, app, http.MethodGet, "/test", nil)
@@ -192,7 +192,7 @@ func TestHandleOwnershipVerificationError_AllBranches(t *testing.T) {
 
 			app := fiber.New()
 			app.Get("/test", func(c *fiber.Ctx) error {
-				return handleOwnershipVerificationError(c.UserContext(), c, span, &libLog.NopLogger{}, tt.err, "configuration_field_map_not_found", "field map not found")
+				return (&Handler{}).handleOwnershipVerificationError(c.UserContext(), c, span, &libLog.NopLogger{}, tt.err, "configuration_field_map_not_found", "field map not found")
 			})
 
 			resp := performRequest(t, app, http.MethodGet, "/test", nil)

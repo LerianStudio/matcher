@@ -1,3 +1,22 @@
+## [Unreleased]
+
+
+### BREAKING CHANGES
+
+* **systemplane:** admin HTTP API paths changed from `/v1/system/configs[...]` and `/v1/system/settings[...]` to the canonical lib-commons v5 layout at `/system/:namespace` (list) and `/system/:namespace/:key` (get/set). The `/schema`, `/history`, and `/reload` sub-endpoints are REMOVED ENTIRELY; schema metadata is now returned inline in list responses, history is available only via audit logs, and reload is no longer an HTTP-exposed operation (v5 auto-subscribes). Write verb changed from `PATCH` to `PUT`. Per-key writes replace bulk PATCH. Clients (including the matcher console) must update in lockstep; a short-lived `410 Gone` shim returns a structured JSON body (`code: GONE`, `hint`, `removal`) for every removed v4 path so stale tooling fails loud instead of silent-404ing. The shim is scheduled for removal four weeks after the 2026-04-18 cutover.
+
+* **systemplane:** per-tenant scope removed. v4 supported `Subject{Scope: ScopeTenant, SubjectID}` allowing tenants to override rate_limit, idempotency TTLs, etc. individually. v5 collapses to flat `namespace + key` — any tenant-scoped overrides written against v4 are silently ignored after upgrade. Audit production systemplane tables for tenant-scoped rows before deploying.
+
+* **systemplane credentials:** the following systemplane keys were REMOVED — they were bootstrap-only (connection identity / credentials) but were misleadingly registered as runtime-mutable. Editing them via admin API had no effect; rotation requires a restart and env-var change:
+  - postgres.primary_*, postgres.replica_*, postgres.connect_timeout_sec, postgres.migrations_path
+  - redis.host, redis.master_name, redis.password, redis.db, redis.protocol, redis.tls, redis.ca_cert, redis.dial_timeout_ms
+  - rabbitmq.url, rabbitmq.host, rabbitmq.port, rabbitmq.user, rabbitmq.password, rabbitmq.vhost, rabbitmq.health_url, rabbitmq.allow_insecure_health_check
+  - app.log_level (LOG_LEVEL is now documented as bootstrap-only)
+
+* **auth:** lib-auth v2 → v3 migration. Verifier pattern changed from interface-based to function-type. `SafeError` signature grew from 3 to 5 parameters (adds ctx + production flag). `ParseAndVerify*` now returns `(resourceID, tenantID, error)` tuple.
+
+* **outbox:** bespoke dispatcher (4155 lines) and PostgreSQL outbox repository (935 lines) DELETED — replaced by canonical `lib-commons/v5/commons/outbox.Dispatcher` and `/outbox/postgres.Repository`. Matcher-specific `defaultTenantDiscoverer` wrapper preserves critical default-tenant dispatch behavior. `NewOutboxEvent` now enforces 1 MiB payload cap + JSON validity.
+
 ## [1.3.0-beta.17](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.16...v1.3.0-beta.17) (2026-04-18)
 
 

@@ -9,8 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	authMiddleware "github.com/LerianStudio/lib-auth/v2/auth/middleware"
-	"github.com/LerianStudio/lib-commons/v4/commons/jwt"
+	authMiddleware "github.com/LerianStudio/lib-auth/v3/auth/middleware"
+	"github.com/LerianStudio/lib-commons/v5/commons/jwt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,19 +27,16 @@ func TestProtectedGroupWithNilExtractor(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNilTenantExtractor)
 }
 
+// TestProtectedGroupWithValidExtractorButNilAuthClient pins the fail-fast
+// contract in BuildProtectedAuthChain: a nil authClient is rejected at
+// chain-build time, including when auth is disabled. Previously this test
+// exercised the silent-degrade path where a nil authClient would build a
+// chain that returned 500 on every request — that path is the bug and is
+// now closed.
+//
 //nolint:paralleltest // This test modifies global state (default tenant settings)
 func TestProtectedGroupWithValidExtractorButNilAuthClient(t *testing.T) {
-	originalID := getDefaultTenantID()
-	originalSlug := getDefaultTenantSlug()
-
-	t.Cleanup(func() {
-		if err := SetDefaultTenantID(originalID); err != nil {
-			t.Logf("SetDefaultTenantID cleanup failed: %v", err)
-		}
-		if err := SetDefaultTenantSlug(originalSlug); err != nil {
-			t.Logf("SetDefaultTenantSlug cleanup failed: %v", err)
-		}
-	})
+	t.Parallel()
 
 	app := fiber.New()
 	router := app.Group("/api")
@@ -48,24 +45,9 @@ func TestProtectedGroupWithValidExtractorButNilAuthClient(t *testing.T) {
 	require.NoError(t, err)
 
 	group, err := ProtectedGroupWithActionsWithMiddleware(router, nil, extractor, "resource", []string{"read"})
-	require.NoError(t, err)
-	require.NotNil(t, group)
-
-	group.Get("/test", func(c *fiber.Ctx) error {
-		tenantID := GetTenantID(c.UserContext())
-		return c.SendString("tenant:" + tenantID)
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/api/test", http.NoBody)
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-
-	defer resp.Body.Close()
-
-	assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
-
-	body, _ := io.ReadAll(resp.Body)
-	assert.Contains(t, string(body), "auth client not initialized")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrNilAuthClient)
+	assert.Nil(t, group)
 }
 
 func TestProtectedGroupWithMiddleware_NilExtractor(t *testing.T) {
@@ -100,6 +82,11 @@ func TestProtectedGroupWithMiddleware_HandlerSliceConstruction(t *testing.T) {
 	)
 	require.NoError(t, err)
 
+	// Auth-disabled client: Authorize becomes a pass-through so we can
+	// observe the chain assembly (custom middleware + handler) end-to-end
+	// without needing a live authorizer.
+	authClient := authMiddleware.NewAuthClient("", false, nil)
+
 	customMiddleware1 := func(c *fiber.Ctx) error {
 		c.Set("X-Custom-1", "applied")
 		return c.Next()
@@ -112,7 +99,7 @@ func TestProtectedGroupWithMiddleware_HandlerSliceConstruction(t *testing.T) {
 
 	group, err := ProtectedGroupWithActionsWithMiddleware(
 		router,
-		nil,
+		authClient,
 		extractor,
 		"resource",
 		[]string{"read"},
@@ -132,10 +119,12 @@ func TestProtectedGroupWithMiddleware_HandlerSliceConstruction(t *testing.T) {
 
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+	assert.Equal(t, "applied", resp.Header.Get("X-Custom-1"))
+	assert.Equal(t, "applied", resp.Header.Get("X-Custom-2"))
 
 	body, _ := io.ReadAll(resp.Body)
-	assert.Contains(t, string(body), "auth client not initialized")
+	assert.Equal(t, "success", string(body))
 }
 
 func TestProtectedGroupWithDifferentResources(t *testing.T) {
@@ -151,6 +140,8 @@ func TestProtectedGroupWithDifferentResources(t *testing.T) {
 		{"sources read", "sources", "read"},
 		{"jobs create", "jobs", "create"},
 	}
+
+	authClient := authMiddleware.NewAuthClient("", false, nil)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -168,13 +159,19 @@ func TestProtectedGroupWithDifferentResources(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			group, err := ProtectedGroupWithActionsWithMiddleware(router, nil, extractor, tt.resource, []string{tt.action})
+			group, err := ProtectedGroupWithActionsWithMiddleware(router, authClient, extractor, tt.resource, []string{tt.action})
 			require.NoError(t, err)
 			assert.NotNil(t, group)
 		})
 	}
 }
 
+// TestProtectedGroupWithMiddleware_AuthRunsBeforeTenantExtraction verifies
+// the ordering contract of BuildProtectedAuthChain: when the auth stage
+// short-circuits (here via validateTenantClaims rejecting a malformed JWT),
+// ExtractTenant MUST NOT have populated tenant context by the time the error
+// handler observes the request. A forged token must never ride on a tenant
+// context populated upstream of authorization.
 func TestProtectedGroupWithMiddleware_AuthRunsBeforeTenantExtraction(t *testing.T) {
 	t.Parallel()
 
@@ -184,17 +181,21 @@ func TestProtectedGroupWithMiddleware_AuthRunsBeforeTenantExtraction(t *testing.
 			tenantID, _ = ctx.Value(TenantIDKey).(string)
 		}
 
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"tenantId": tenantID,
 			"error":    err.Error(),
 		})
 	}})
 	router := app.Group("/api")
 
-	extractor, err := NewTenantExtractor(false, false, DefaultTenantID, DefaultTenantSlug, "", "development")
+	// Auth enabled so validateTenantClaims fires on the malformed bearer
+	// and short-circuits BEFORE ExtractTenant would populate tenant context.
+	extractor, err := NewTenantExtractor(true, true, DefaultTenantID, DefaultTenantSlug, "matcher-secret", "development")
 	require.NoError(t, err)
 
-	group, err := ProtectedGroupWithActionsWithMiddleware(router, nil, extractor, "resource", []string{"read"})
+	authClient := authMiddleware.NewAuthClient("http://authz.local", true, nil)
+
+	group, err := ProtectedGroupWithActionsWithMiddleware(router, authClient, extractor, "resource", []string{"read"})
 	require.NoError(t, err)
 
 	group.Get("/test", func(c *fiber.Ctx) error {
@@ -202,6 +203,8 @@ func TestProtectedGroupWithMiddleware_AuthRunsBeforeTenantExtraction(t *testing.
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/test", http.NoBody)
+	req.Header.Set("Authorization", "Bearer not-a-jwt")
+
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
@@ -209,9 +212,9 @@ func TestProtectedGroupWithMiddleware_AuthRunsBeforeTenantExtraction(t *testing.
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 
-	assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
-	assert.Contains(t, string(body), "auth client not initialized")
-	assert.Contains(t, string(body), `"tenantId":""`)
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+	assert.Contains(t, string(body), `"tenantId":""`,
+		"ExtractTenant must not run when auth short-circuits")
 }
 
 func TestProtectedGroup_AuthEnabledInvalidTokenFailsBeforeLibAuth(t *testing.T) {
@@ -267,8 +270,12 @@ func TestProtectedGroupWithActionsWithMiddleware_EmptyActions(t *testing.T) {
 	)
 	require.NoError(t, err)
 
+	// Non-nil authClient so the nil-client guard does not mask the
+	// ErrNoActions check under test.
+	authClient := authMiddleware.NewAuthClient("", false, nil)
+
 	_, err = ProtectedGroupWithActionsWithMiddleware(
-		fiber.New().Group("/api"), nil, extractor, "resource", []string{},
+		fiber.New().Group("/api"), authClient, extractor, "resource", []string{},
 	)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrNoActions)
@@ -283,8 +290,12 @@ func TestProtectedGroupWithActionsWithMiddleware_EmptyActionString(t *testing.T)
 	)
 	require.NoError(t, err)
 
+	// Non-nil authClient so the nil-client guard does not mask the
+	// ErrEmptyAction check under test.
+	authClient := authMiddleware.NewAuthClient("", false, nil)
+
 	_, err = ProtectedGroupWithActionsWithMiddleware(
-		fiber.New().Group("/api"), nil, extractor, "resource", []string{"read", "  ", "write"},
+		fiber.New().Group("/api"), authClient, extractor, "resource", []string{"read", "  ", "write"},
 	)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrEmptyAction)
@@ -299,8 +310,10 @@ func TestProtectedGroupWithActionsWithMiddleware_ValidInputCreatesGroup(t *testi
 	)
 	require.NoError(t, err)
 
+	authClient := authMiddleware.NewAuthClient("", false, nil)
+
 	group, err := ProtectedGroupWithActionsWithMiddleware(
-		fiber.New().Group("/api"), nil, extractor, "resource", []string{"read", "write"},
+		fiber.New().Group("/api"), authClient, extractor, "resource", []string{"read", "write"},
 	)
 	require.NoError(t, err)
 	require.NotNil(t, group)

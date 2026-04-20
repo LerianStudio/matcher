@@ -13,9 +13,9 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
-	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
@@ -128,6 +128,9 @@ func deriveTelemetryTimeout(ctx context.Context) time.Duration {
 }
 
 // InitTelemetryWithTimeout wraps InitTelemetry with a deadline.
+// Returns a non-nil Telemetry in all cases: either the real telemetry instance,
+// or a no-op instance if telemetry is disabled or initialization timed out.
+// Callers can always invoke Telemetry methods without nil checks.
 // lib-commons' NewTelemetry internally uses context.Background() for gRPC dials,
 // so we can't propagate a deadline through the library. Instead, we run it in a
 // goroutine and abandon the attempt if the deadline expires.

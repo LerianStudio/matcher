@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	pkgHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	pkgHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 )
@@ -616,7 +616,7 @@ func TestRepository_ListByContext_QueryError(t *testing.T) {
 		WillReturnError(sql.ErrConnDone)
 	mock.ExpectRollback()
 
-	_, err := repo.ListByContext(ctx, contextID, 10)
+	_, _, err := repo.ListByContext(ctx, contextID, nil, 10)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "list export jobs by context")
 }
@@ -636,9 +636,11 @@ func TestRepository_ListByContext_WithResults(t *testing.T) {
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 	mock.ExpectCommit()
 
-	jobs, err := repo.ListByContext(ctx, contextID, 10)
+	jobs, pagination, err := repo.ListByContext(ctx, contextID, nil, 10)
 	require.NoError(t, err)
 	assert.Len(t, jobs, 1)
+	// Single row, limit=10 → no next page.
+	assert.Empty(t, pagination.Next)
 }
 
 // --- ListExpired error paths ---

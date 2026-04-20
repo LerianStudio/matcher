@@ -6,9 +6,9 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 )
@@ -41,7 +41,7 @@ func (uc *UseCase) CreateFieldMap(
 		logger.With(
 			libLog.Any("context.id", contextID.String()),
 			libLog.Any("source.id", sourceID.String()),
-			libLog.Any("error.message", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "failed to create field map")
 
 		return nil, fmt.Errorf("creating field map: %w", err)
@@ -76,7 +76,7 @@ func (uc *UseCase) UpdateFieldMap(
 
 		logger.With(
 			libLog.Any("field_map.id", fieldMapID.String()),
-			libLog.Any("error.message", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "failed to load field map")
 
 		return nil, fmt.Errorf("finding field map: %w", err)
@@ -87,7 +87,7 @@ func (uc *UseCase) UpdateFieldMap(
 
 		logger.With(
 			libLog.Any("field_map.id", fieldMapID.String()),
-			libLog.Any("error.message", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "invalid field map update")
 
 		return nil, err
@@ -99,7 +99,7 @@ func (uc *UseCase) UpdateFieldMap(
 
 		logger.With(
 			libLog.Any("field_map.id", fieldMapID.String()),
-			libLog.Any("error.message", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "failed to update field map")
 
 		return nil, fmt.Errorf("updating field map: %w", err)
@@ -129,7 +129,7 @@ func (uc *UseCase) DeleteFieldMap(ctx context.Context, fieldMapID uuid.UUID) err
 
 		logger.With(
 			libLog.Any("field_map.id", fieldMapID.String()),
-			libLog.Any("error.message", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "failed to delete field map")
 
 		return fmt.Errorf("deleting field map: %w", err)

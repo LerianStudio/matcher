@@ -12,11 +12,11 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
-	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/pointers"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
@@ -448,34 +448,74 @@ func (repo *Repository) List(
 	return jobs, pagination, nil
 }
 
-// ListByContext retrieves export jobs for a specific context.
+// ListByContext retrieves export jobs for a specific context using forward-only
+// cursor-based pagination. Results are ordered by created_at DESC with a stable
+// (created_at, id) keyset cursor — same ordering as List — so clients can iterate
+// pages without gaps or duplicates even if jobs share a created_at timestamp.
 func (repo *Repository) ListByContext(
 	ctx context.Context,
 	contextID uuid.UUID,
+	cursor *libHTTP.TimestampCursor,
 	limit int,
-) ([]*entities.ExportJob, error) {
+) ([]*entities.ExportJob, libHTTP.CursorPagination, error) {
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 	ctx, span := tracer.Start(ctx, "postgres.export_job.list_by_context")
 
 	defer span.End()
 
+	var pagination libHTTP.CursorPagination
+
+	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
+
 	jobs, err := pgcommon.WithTenantTxProvider(
 		ctx,
 		repo.provider,
 		func(tx *sql.Tx) ([]*entities.ExportJob, error) {
-			query, args, err := squirrel.
+			// Fetch limit+1 to detect if more pages exist without an extra COUNT query.
+			queryLimit := limit + 1
+			builder := squirrel.
 				Select(exportJobColumns()...).
 				From(exportJobsTable).
 				Where(squirrel.Eq{"context_id": contextID}).
-				OrderBy("created_at DESC").
-				Limit(safeLimit(limit)).
-				PlaceholderFormat(squirrel.Dollar).
-				ToSql()
-			if err != nil {
-				return nil, fmt.Errorf("build select query: %w", err)
+				OrderBy("created_at DESC", "id DESC").
+				Limit(safeLimit(queryLimit)).
+				PlaceholderFormat(squirrel.Dollar)
+
+			// Apply cursor-based pagination using keyset (created_at, id).
+			if cursor != nil {
+				builder = builder.Where(
+					squirrel.Or{
+						squirrel.Lt{"created_at": cursor.Timestamp},
+						squirrel.And{
+							squirrel.Eq{"created_at": cursor.Timestamp},
+							squirrel.Lt{"id": cursor.ID},
+						},
+					},
+				)
 			}
 
-			return scanExportJobs(tx.QueryContext(ctx, query, args...))
+			query, args, buildErr := builder.ToSql()
+			if buildErr != nil {
+				return nil, fmt.Errorf("build select query: %w", buildErr)
+			}
+
+			records, scanErr := scanExportJobs(tx.QueryContext(ctx, query, args...))
+			if scanErr != nil {
+				return nil, scanErr
+			}
+
+			records, nextCursor, cursorErr := trimExportJobsAndEncodeNextCursor(
+				records,
+				limit,
+				libHTTP.EncodeTimestampCursor,
+			)
+			if cursorErr != nil {
+				return nil, cursorErr
+			}
+
+			pagination.Next = nextCursor
+
+			return records, nil
 		},
 	)
 	if err != nil {
@@ -484,10 +524,10 @@ func (repo *Repository) ListByContext(
 
 		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list export jobs: %v", wrappedErr))
 
-		return nil, wrappedErr
+		return nil, libHTTP.CursorPagination{}, wrappedErr
 	}
 
-	return jobs, nil
+	return jobs, pagination, nil
 }
 
 // ListExpired retrieves jobs that have passed their expiration time.

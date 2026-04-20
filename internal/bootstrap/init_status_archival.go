@@ -14,7 +14,7 @@ import (
 
 	"go.opentelemetry.io/otel"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	governanceHTTP "github.com/LerianStudio/matcher/internal/governance/adapters/http"
 	archiveMetadataRepo "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/archive_metadata"
@@ -179,7 +179,7 @@ func newArchivalPresignExpiryResolver(
 			return fallback
 		}
 
-		return settingsResolver.archivalPresignExpiry(ctx, fallback)
+		return settingsResolver.archivalPresignExpiry(fallback)
 	}
 }
 
@@ -194,12 +194,13 @@ func registerArchiveRoutesIfAvailable(
 	archivalStorage sharedPorts.ObjectStorageClient,
 	configGetter func() *Config,
 	settingsResolver *runtimeSettingsResolver,
+	production bool,
 ) error {
 	if archivalStorage == nil {
 		return nil
 	}
 
-	archiveHandler, err := governanceHTTP.NewArchiveHandler(archiveRepo, archivalStorage, configuredArchivalPresignExpiry(context.Background(), cfg))
+	archiveHandler, err := governanceHTTP.NewArchiveHandler(archiveRepo, archivalStorage, configuredArchivalPresignExpiry(context.Background(), cfg), production)
 	if err != nil {
 		return fmt.Errorf("create archive handler: %w", err)
 	}
@@ -242,6 +243,7 @@ func initArchivalComponents(
 	provider sharedPorts.InfrastructureProvider,
 	logger libLog.Logger,
 	cleanups *[]func(),
+	production bool,
 ) (*governanceWorker.ArchivalWorker, error) {
 	archiveRepo := archiveMetadataRepo.NewRepository(provider)
 
@@ -255,7 +257,7 @@ func initArchivalComponents(
 		archivalStorage = newRuntimeArchivalStorageClient(cfg, configGetter, archivalStorage)
 	}
 
-	if err := registerArchiveRoutesIfAvailable(routes, cfg, archiveRepo, archivalStorage, configGetter, settingsResolver); err != nil {
+	if err := registerArchiveRoutesIfAvailable(routes, cfg, archiveRepo, archivalStorage, configGetter, settingsResolver, production); err != nil {
 		return nil, err
 	}
 

@@ -11,7 +11,7 @@ import (
 	"errors"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 )
 
 const (
@@ -44,10 +44,21 @@ const (
 	// defaultFetcherBridgeBatchSize is the default per-tenant batch size for
 	// the bridge worker. Mirrors FetcherConfig.BridgeBatchSize envDefault.
 	defaultFetcherBridgeBatchSize = 50
+
+	// defaultFetcherBridgeTenantConcurrency mirrors
+	// FetcherConfig.BridgeTenantConcurrency envDefault and
+	// discoveryWorker.bridgeDefaultTenantConcurrency so env-driven,
+	// snapshot-driven, and worker-internal fallbacks all agree.
+	defaultFetcherBridgeTenantConcurrency = 4
 )
 
 // ErrConfigNil indicates a nil configuration struct was provided.
 var ErrConfigNil = errors.New("config must be provided")
+
+// ErrSystemplaneClientNil indicates a nil systemplane Client was passed to
+// RegisterMatcherKeys. Defensive guard against a bootstrap wiring bug that
+// would otherwise panic on the first Client.Register call.
+var ErrSystemplaneClientNil = errors.New("systemplane client must be provided")
 
 // AppConfig holds core application metadata.
 type AppConfig struct {
@@ -179,7 +190,13 @@ type TelemetryConfig struct {
 	DBMetricsIntervalSec int `env:"DB_METRICS_INTERVAL_SEC"              envDefault:"15"                             mapstructure:"db_metrics_interval_sec"`
 }
 
-// RateLimitConfig configures global and export rate limiting.
+// RateLimitConfig configures global, export, dispatch, and admin rate limiting.
+//
+// AdminMax / AdminExpirySec apply to the /system admin plane ONLY. Before this
+// tier existed, /system shared the global quota — which, combined with
+// fail-open behavior on Redis outage, meant an admin action storm could starve
+// tenant traffic (and vice versa). The admin tier defaults are intentionally
+// low because this surface is operator-only.
 type RateLimitConfig struct {
 	Enabled           bool `env:"RATE_LIMIT_ENABLED"             envDefault:"true" mapstructure:"enabled"`
 	Max               int  `env:"RATE_LIMIT_MAX"                 envDefault:"100"  mapstructure:"max"`
@@ -188,12 +205,25 @@ type RateLimitConfig struct {
 	ExportExpirySec   int  `env:"EXPORT_RATE_LIMIT_EXPIRY_SEC"   envDefault:"60"   mapstructure:"export_expiry_sec"`
 	DispatchMax       int  `env:"DISPATCH_RATE_LIMIT_MAX"        envDefault:"50"   mapstructure:"dispatch_max"`
 	DispatchExpirySec int  `env:"DISPATCH_RATE_LIMIT_EXPIRY_SEC" envDefault:"60"   mapstructure:"dispatch_expiry_sec"`
+	AdminMax          int  `env:"ADMIN_RATE_LIMIT_MAX"           envDefault:"30"   mapstructure:"admin_max"`
+	AdminExpirySec    int  `env:"ADMIN_RATE_LIMIT_EXPIRY_SEC"    envDefault:"60"   mapstructure:"admin_expiry_sec"`
 }
 
 // InfrastructureConfig configures infrastructure-level behavior.
 type InfrastructureConfig struct {
 	ConnectTimeoutSec     int `env:"INFRA_CONNECT_TIMEOUT_SEC"  envDefault:"30" mapstructure:"connect_timeout_sec"`
 	HealthCheckTimeoutSec int `env:"HEALTH_CHECK_TIMEOUT_SEC"   envDefault:"5"  mapstructure:"health_check_timeout_sec"`
+}
+
+// OutboxConfig configures the outbox dispatcher behavior.
+type OutboxConfig struct {
+	// RetryWindowSec configures the cooldown window before failed outbox events
+	// are retried by the dispatcher. Default: 300 seconds (5 minutes).
+	RetryWindowSec int `env:"OUTBOX_RETRY_WINDOW_SEC" envDefault:"300" mapstructure:"retry_window_sec"`
+
+	// DispatchIntervalSec configures how frequently the outbox dispatcher polls
+	// for new events to dispatch. Default: 2 seconds.
+	DispatchIntervalSec int `env:"OUTBOX_DISPATCH_INTERVAL_SEC" envDefault:"2" mapstructure:"dispatch_interval_sec"`
 }
 
 // IdempotencyConfig configures idempotency behavior.
@@ -268,6 +298,14 @@ type FetcherConfig struct {
 	// bounded; raise for large backlog drain, lower for predictable
 	// latency under load.
 	BridgeBatchSize int `env:"FETCHER_BRIDGE_BATCH_SIZE" envDefault:"50" mapstructure:"bridge_batch_size"`
+
+	// BridgeTenantConcurrency caps the number of tenants the bridge worker
+	// processes in parallel per pollCycle. Extractions inside a tenant stay
+	// sequential so each tenant's downstream load (Fetcher, object storage,
+	// ingestion) remains bounded; raising this knob only widens the
+	// tenant-level fan-out. Default 4 is the smallest value that keeps
+	// cycle time under the 30s tick for deployments with several tenants.
+	BridgeTenantConcurrency int `env:"FETCHER_BRIDGE_TENANT_CONCURRENCY" envDefault:"4" mapstructure:"bridge_tenant_concurrency"`
 
 	// BridgeStaleThresholdSec partitions the operational dashboard's
 	// bridge readiness counts. COMPLETE+unlinked extractions newer than
@@ -423,6 +461,7 @@ type Config struct {
 	RateLimit         RateLimitConfig         `mapstructure:"rate_limit"`
 	Infrastructure    InfrastructureConfig    `mapstructure:"infrastructure"`
 	Idempotency       IdempotencyConfig       `mapstructure:"idempotency"`
+	Outbox            OutboxConfig            `mapstructure:"outbox"`
 	Dedupe            DedupeConfig            `mapstructure:"deduplication"`
 	ObjectStorage     ObjectStorageConfig     `mapstructure:"object_storage"`
 	ExportWorker      ExportWorkerConfig      `mapstructure:"export_worker"`
@@ -477,6 +516,19 @@ func (cfg *Config) FetcherBridgeBatchSize() int {
 	}
 
 	return cfg.Fetcher.BridgeBatchSize
+}
+
+// FetcherBridgeTenantConcurrency returns the tenant-level fan-out ceiling
+// for the bridge worker's pollCycle. Falls back to
+// defaultFetcherBridgeTenantConcurrency when the configured value is
+// non-positive so misconfiguration cannot collapse the cycle to fully
+// sequential behaviour silently.
+func (cfg *Config) FetcherBridgeTenantConcurrency() int {
+	if cfg == nil || cfg.Fetcher.BridgeTenantConcurrency <= 0 {
+		return defaultFetcherBridgeTenantConcurrency
+	}
+
+	return cfg.Fetcher.BridgeTenantConcurrency
 }
 
 // FetcherBridgeStaleThreshold returns the duration after which a

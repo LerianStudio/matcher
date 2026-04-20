@@ -12,11 +12,11 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
-	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/ports"
@@ -188,9 +188,14 @@ func (worker *SchedulerWorker) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop gracefully shuts down the worker.
+// Stop signals the worker to exit and blocks until the run loop has
+// terminated. Safe to call from any goroutine; multiple concurrent callers
+// race on the leading CompareAndSwap so exactly one observes the running→
+// stopped transition and returns nil. The losers see ErrWorkerNotRunning
+// without blocking on doneCh, eliminating the load→close→CAS TOCTOU window
+// where two concurrent stops could both close stopCh or both report success.
 func (worker *SchedulerWorker) Stop() error {
-	if !worker.running.Load() {
+	if !worker.running.CompareAndSwap(true, false) {
 		return ErrWorkerNotRunning
 	}
 
@@ -198,10 +203,6 @@ func (worker *SchedulerWorker) Stop() error {
 		close(worker.stopCh)
 	})
 	<-worker.doneCh
-
-	if !worker.running.CompareAndSwap(true, false) {
-		return ErrWorkerNotRunning
-	}
 
 	worker.logger.Log(context.Background(), libLog.LevelInfo, "scheduler worker stopped")
 
@@ -248,7 +249,7 @@ func (worker *SchedulerWorker) pollCycle(ctx context.Context) {
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to find due schedules", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "scheduler: failed to find due schedules")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "scheduler: failed to find due schedules")
 
 		return
 	}
@@ -256,6 +257,10 @@ func (worker *SchedulerWorker) pollCycle(ctx context.Context) {
 	span.SetAttributes(attribute.Int("scheduler.due_count", len(schedules)))
 
 	for _, schedule := range schedules {
+		if schedule == nil {
+			continue
+		}
+
 		worker.processSchedule(ctx, schedule, now)
 	}
 }
@@ -299,7 +304,7 @@ func (worker *SchedulerWorker) processSchedule(
 		if _, updateErr := worker.scheduleRepo.Update(lockCtx, schedule); updateErr != nil {
 			logger.With(
 				libLog.String("schedule.id", schedule.ID.String()),
-				libLog.Any("error", updateErr.Error()),
+				libLog.Err(updateErr),
 			).Log(lockCtx, libLog.LevelWarn, "scheduler: failed to update schedule after run")
 		}
 
@@ -313,7 +318,7 @@ func (worker *SchedulerWorker) processSchedule(
 	if lockErr != nil {
 		logger.With(
 			libLog.String("schedule.id", schedule.ID.String()),
-			libLog.Any("error", lockErr.Error()),
+			libLog.Err(lockErr),
 		).Log(ctx, libLog.LevelWarn, "scheduler: lock error for schedule")
 	}
 }

@@ -15,12 +15,12 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 
-	"github.com/LerianStudio/lib-auth/v2/auth/middleware"
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	"github.com/LerianStudio/lib-commons/v4/commons/assert"
-	"github.com/LerianStudio/lib-commons/v4/commons/jwt"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	"github.com/LerianStudio/lib-auth/v3/auth/middleware"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	"github.com/LerianStudio/lib-commons/v5/commons/assert"
+	"github.com/LerianStudio/lib-commons/v5/commons/jwt"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
@@ -124,9 +124,14 @@ func NewTenantExtractor(
 		}
 	}
 
-	// SECURITY: Treat empty envName as production-safe (reject X-User-ID headers).
-	// Case-insensitive check for "production" to handle Production, PRODUCTION, etc.
-	isDev := envName != "" && !strings.EqualFold(envName, "production")
+	// SECURITY: Only accept the X-User-ID dev header in explicit development or
+	// test environments. Staging, UAT, QA, preview, and any unknown env are all
+	// treated as production-adjacent because they may hold real data — allowing
+	// a client to assert any user id via a plain HTTP header would be a trivial
+	// impersonation vector. Match "development" or "test" case-insensitively;
+	// everything else rejects.
+	normalizedEnv := strings.ToLower(strings.TrimSpace(envName))
+	isDev := normalizedEnv == "development" || normalizedEnv == "test"
 
 	return &TenantExtractor{
 		authEnabled:         authEnabled,

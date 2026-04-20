@@ -12,9 +12,9 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	pgcommon "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
@@ -91,7 +91,7 @@ func (repo *Repository) FindLatestByExtractionID(
 
 		wrappedErr := fmt.Errorf("find ingestion job by extraction id: %w", err)
 		libOpentelemetry.HandleSpanError(span, "find by extraction id failed", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).
+		logger.With(libLog.Err(wrappedErr)).
 			Log(ctx, libLog.LevelError, "find ingestion job by extraction id failed")
 
 		return nil, wrappedErr

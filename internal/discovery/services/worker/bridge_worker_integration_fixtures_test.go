@@ -29,7 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
@@ -43,7 +43,6 @@ import (
 	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
 	cross "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 	custodyAdapter "github.com/LerianStudio/matcher/internal/shared/adapters/custody"
-	outboxPostgres "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/outbox"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedFee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
@@ -100,6 +99,24 @@ func (d *bridgeTestFakeDedupe) MarkSeenWithRetry(_ context.Context, _ uuid.UUID,
 	return nil
 }
 
+func (d *bridgeTestFakeDedupe) MarkSeenBulk(_ context.Context, _ uuid.UUID, hashes []string, _ time.Duration) (map[string]bool, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.seen == nil {
+		d.seen = map[string]bool{}
+	}
+	result := make(map[string]bool, len(hashes))
+	for _, h := range hashes {
+		if d.seen[h] {
+			result[h] = false
+			continue
+		}
+		d.seen[h] = true
+		result[h] = true
+	}
+	return result, nil
+}
+
 func (d *bridgeTestFakeDedupe) Clear(_ context.Context, _ uuid.UUID, hash string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -152,6 +169,7 @@ type bridgeTestIngestionPublisher struct{}
 func (*bridgeTestIngestionPublisher) PublishIngestionCompleted(_ context.Context, _ *sharedDomain.IngestionCompletedEvent) error {
 	return nil
 }
+
 func (*bridgeTestIngestionPublisher) PublishIngestionFailed(_ context.Context, _ *sharedDomain.IngestionFailedEvent) error {
 	return nil
 }
@@ -308,7 +326,7 @@ func buildBridgeWorker(
 	// --- Ingestion plumbing -------------------------------------------------
 	jobRepo := ingestionJobRepoPkg.NewRepository(provider)
 	txRepo := ingestionTxRepoPkg.NewRepository(provider)
-	outboxRepo := outboxPostgres.NewRepository(provider)
+	outboxRepo := integration.NewTestOutboxRepository(t, h.Connection)
 
 	fieldMap := &bridgeTestFieldMapStub{mapping: map[string]any{
 		"external_id": "id",

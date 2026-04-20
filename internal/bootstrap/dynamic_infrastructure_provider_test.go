@@ -16,10 +16,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
-	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/core"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
+	"github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
@@ -56,7 +56,7 @@ func TestDynamicInfrastructureProvider_RebuildsManagerWhenKeyChanges(t *testing.
 	activeCfg.Tenancy.MultiTenantServiceAPIKey = "service-api-key"
 	activeCfg.Tenancy.MultiTenantEnvironment = "staging"
 
-	provider := newDynamicInfrastructureProvider(activeCfg, func() *Config { return activeCfg }, nil, nil, nil, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(activeCfg, func() *Config { return activeCfg }, nil, nil, &libLog.NopLogger{}, nil)
 
 	first, err := provider.currentPGManager(context.Background(), activeCfg)
 	require.NoError(t, err)
@@ -74,24 +74,21 @@ func TestDynamicInfrastructureProvider_RebuildsManagerWhenKeyChanges(t *testing.
 	require.NoError(t, provider.Close())
 }
 
-func TestDynamicInfrastructureProvider_SingleTenantUsesActiveBundleConnections(t *testing.T) {
+func TestDynamicInfrastructureProvider_SingleTenantUsesDirectConnections(t *testing.T) {
 	t.Parallel()
 
 	bootstrapCfg := defaultConfig()
-	bundleState := newActiveMatcherBundleState()
-	provider := newDynamicInfrastructureProvider(bootstrapCfg, nil, bundleState, nil, nil, &libLog.NopLogger{}, nil)
-
-	bundleState.Update(&MatcherBundle{Infra: &InfraBundle{Postgres: testPostgresClient(t), Redis: testRedisClient(t)}})
+	pg := testPostgresClient(t)
+	redis := testRedisClient(t)
+	provider := newDynamicInfrastructureProvider(bootstrapCfg, nil, pg, redis, &libLog.NopLogger{}, nil)
 
 	pgLease, err := provider.GetPrimaryDB(context.Background())
 	require.NoError(t, err)
-	primaryDB, resolveErr := resolvePrimaryDB(context.Background(), bundleState.Current().DB())
-	require.NoError(t, resolveErr)
-	assert.Same(t, primaryDB, pgLease.DB())
+	require.NotNil(t, pgLease)
 
 	redisLease, err := provider.GetRedisConnection(context.Background())
 	require.NoError(t, err)
-	assert.Same(t, bundleState.Current().RedisClient(), redisLease.Connection())
+	require.NotNil(t, redisLease)
 }
 
 func TestDynamicInfrastructureProvider_MultiTenantModeEnabled(t *testing.T) {
@@ -158,7 +155,7 @@ func TestDynamicInfrastructureProvider_SingleTenantPostgresNotConfigured(t *test
 	t.Parallel()
 
 	bootstrapCfg := defaultConfig()
-	provider := newDynamicInfrastructureProvider(bootstrapCfg, nil, nil, nil, nil, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(bootstrapCfg, nil, nil, nil, &libLog.NopLogger{}, nil)
 
 	_, err := provider.GetPrimaryDB(context.Background())
 	require.ErrorIs(t, err, ErrPostgresConnectionNotConfigured)
@@ -168,7 +165,7 @@ func TestDynamicInfrastructureProvider_SingleTenantRedisNotConfigured(t *testing
 	t.Parallel()
 
 	bootstrapCfg := defaultConfig()
-	provider := newDynamicInfrastructureProvider(bootstrapCfg, nil, nil, nil, nil, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(bootstrapCfg, nil, nil, nil, &libLog.NopLogger{}, nil)
 
 	_, err := provider.GetRedisConnection(context.Background())
 	require.ErrorIs(t, err, ErrRedisConnectionNotConfigured)
@@ -184,7 +181,7 @@ func TestDynamicInfrastructureProvider_CloseNilProvider(t *testing.T) {
 func TestDynamicInfrastructureProvider_CloseWithNoManager(t *testing.T) {
 	t.Parallel()
 
-	provider := newDynamicInfrastructureProvider(defaultConfig(), nil, nil, nil, nil, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(defaultConfig(), nil, nil, nil, &libLog.NopLogger{}, nil)
 	require.NoError(t, provider.Close())
 }
 

@@ -6,10 +6,10 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
@@ -33,7 +33,7 @@ func (uc *UseCase) GetContext(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get reconciliation context", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to get reconciliation context")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to get reconciliation context")
 
 		return nil, fmt.Errorf("finding reconciliation context: %w", err)
 	}
@@ -62,7 +62,7 @@ func (uc *UseCase) ListContexts(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list reconciliation contexts", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list reconciliation contexts")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list reconciliation contexts")
 
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("listing reconciliation contexts: %w", err)
 	}
@@ -85,7 +85,7 @@ func (uc *UseCase) CountContexts(ctx context.Context) (int64, error) {
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to count reconciliation contexts", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to count reconciliation contexts")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to count reconciliation contexts")
 
 		return 0, fmt.Errorf("counting reconciliation contexts: %w", err)
 	}

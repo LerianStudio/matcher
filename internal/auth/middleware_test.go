@@ -18,9 +18,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	authMiddleware "github.com/LerianStudio/lib-auth/v2/auth/middleware"
+	authMiddleware "github.com/LerianStudio/lib-auth/v3/auth/middleware"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/jwt"
+	"github.com/LerianStudio/lib-commons/v5/commons/jwt"
 )
 
 const testTokenSecret = "secret"
@@ -973,6 +973,83 @@ func TestExtractTenant_XUserIDHeader_AcceptedInDevelopment(t *testing.T) {
 	var payload map[string]string
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
 	assert.Equal(t, "dev-user-id", payload["userId"], "X-User-ID header must be accepted in development")
+}
+
+// TestExtractTenant_XUserIDHeader_RejectedOutsideDevAndTest documents the
+// security contract: only explicit "development" and "test" environments
+// accept the X-User-ID dev header. Staging, UAT, QA, preview, empty, and
+// anything else all reject — those environments may hold real data, so a
+// plain-header impersonation vector is not acceptable.
+func TestExtractTenant_XUserIDHeader_RejectedOutsideDevAndTest(t *testing.T) {
+	t.Parallel()
+
+	for _, envName := range []string{"staging", "uat", "qa", "preview", "sandbox", "Production", ""} {
+		t.Run(envName, func(t *testing.T) {
+			t.Parallel()
+
+			extractor, err := NewTenantExtractor(
+				false, false, DefaultTenantID, DefaultTenantSlug, testTokenSecret, envName,
+			)
+			require.NoError(t, err)
+
+			app := fiber.New()
+			app.Get("/user", extractor.ExtractTenant(), func(c *fiber.Ctx) error {
+				return c.JSON(fiber.Map{"userId": GetUserID(c.UserContext())})
+			})
+
+			req := httptest.NewRequest(http.MethodGet, "/user", http.NoBody)
+			req.Header.Set("X-User-ID", "spoofed-user-id")
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+
+			defer resp.Body.Close()
+
+			require.Equal(t, http.StatusOK, resp.StatusCode)
+
+			var payload map[string]string
+			require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
+			assert.Empty(t, payload["userId"],
+				"env %q: X-User-ID header must be ignored outside dev/test", envName)
+		})
+	}
+}
+
+// TestExtractTenant_XUserIDHeader_AcceptedInTest asserts that the dev header
+// is also accepted in the "test" environment (case-insensitive). This keeps
+// in-memory test harnesses and local e2e runs working while still rejecting
+// every other deployed environment.
+func TestExtractTenant_XUserIDHeader_AcceptedInTest(t *testing.T) {
+	t.Parallel()
+
+	for _, envName := range []string{"test", "TEST", "Test", "Development", "DEVELOPMENT"} {
+		t.Run(envName, func(t *testing.T) {
+			t.Parallel()
+
+			extractor, err := NewTenantExtractor(
+				false, false, DefaultTenantID, DefaultTenantSlug, testTokenSecret, envName,
+			)
+			require.NoError(t, err)
+
+			app := fiber.New()
+			app.Get("/user", extractor.ExtractTenant(), func(c *fiber.Ctx) error {
+				return c.JSON(fiber.Map{"userId": GetUserID(c.UserContext())})
+			})
+
+			req := httptest.NewRequest(http.MethodGet, "/user", http.NoBody)
+			req.Header.Set("X-User-ID", "dev-user-id")
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+
+			defer resp.Body.Close()
+
+			require.Equal(t, http.StatusOK, resp.StatusCode)
+
+			var payload map[string]string
+			require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
+			assert.Equal(t, "dev-user-id", payload["userId"],
+				"env %q: X-User-ID header must be accepted", envName)
+		})
+	}
 }
 
 //nolint:paralleltest // This test modifies global state (default tenant settings)

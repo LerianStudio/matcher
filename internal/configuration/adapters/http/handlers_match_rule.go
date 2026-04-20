@@ -3,12 +3,13 @@ package http
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
@@ -52,24 +53,24 @@ func (handler *Handler) CreateMatchRule(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	var req dto.CreateMatchRuleRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid match rule payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid match rule payload", err)
 	}
 
 	domainInput, err := req.ToDomainInput()
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid match rule payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid match rule payload", err)
 	}
 
 	result, err := handler.command.CreateMatchRule(ctx, contextID, domainInput)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to create match rule", err)
+		handler.logSpanError(ctx, span, logger, "failed to create match rule", err)
 
 		if errors.Is(err, entities.ErrRulePriorityConflict) {
 			return respondError(fiberCtx, fiber.StatusConflict, "priority_conflict", err.Error())
@@ -78,7 +79,11 @@ func (handler *Handler) CreateMatchRule(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.MatchRuleToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.MatchRuleToResponse(result)); err != nil {
+		return fmt.Errorf("respond create match rule: %w", err)
+	}
+
+	return nil
 }
 
 // ListMatchRules lists match rules.
@@ -116,14 +121,14 @@ func (handler *Handler) ListMatchRules(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	cursor, limit, err := libHTTP.ParseOpaqueCursorPagination(fiberCtx)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination", err)
 	}
 
 	var ruleType *value_objects.RuleType
@@ -131,7 +136,7 @@ func (handler *Handler) ListMatchRules(fiberCtx *fiber.Ctx) error {
 	if typeParam := strings.TrimSpace(fiberCtx.Query("type")); typeParam != "" {
 		parsed, err := value_objects.ParseRuleType(strings.ToUpper(typeParam))
 		if err != nil {
-			return badRequest(ctx, fiberCtx, span, logger, "invalid rule type", err)
+			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid rule type", err)
 		}
 
 		ruleType = &parsed
@@ -140,10 +145,10 @@ func (handler *Handler) ListMatchRules(fiberCtx *fiber.Ctx) error {
 	result, pagination, err := handler.query.ListMatchRules(ctx, contextID, cursor, limit, ruleType)
 	if err != nil {
 		if errors.Is(err, libHTTP.ErrInvalidCursor) {
-			return badRequest(ctx, fiberCtx, span, logger, "invalid pagination", err)
+			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination", err)
 		}
 
-		logSpanError(ctx, span, logger, "failed to list match rules", err)
+		handler.logSpanError(ctx, span, logger, "failed to list match rules", err)
 
 		return writeServiceError(fiberCtx, err)
 	}
@@ -162,7 +167,11 @@ func (handler *Handler) ListMatchRules(fiberCtx *fiber.Ctx) error {
 		},
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, response)
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, response); err != nil {
+		return fmt.Errorf("respond list match rules: %w", err)
+	}
+
+	return nil
 }
 
 // GetMatchRule retrieves a match rule.
@@ -198,19 +207,19 @@ func (handler *Handler) GetMatchRule(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	ruleID, err := parseUUIDParam(fiberCtx, "ruleId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid rule id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid rule id", err)
 	}
 
 	result, err := handler.query.GetMatchRule(ctx, contextID, ruleID)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to get match rule", err)
+		handler.logSpanError(ctx, span, logger, "failed to get match rule", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
 			return writeNotFound(fiberCtx, "configuration_match_rule_not_found", "match rule not found")
@@ -219,7 +228,11 @@ func (handler *Handler) GetMatchRule(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatchRuleToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatchRuleToResponse(result)); err != nil {
+		return fmt.Errorf("respond get match rule: %w", err)
+	}
+
+	return nil
 }
 
 // UpdateMatchRule updates a match rule.
@@ -258,24 +271,24 @@ func (handler *Handler) UpdateMatchRule(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	ruleID, err := parseUUIDParam(fiberCtx, "ruleId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid rule id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid rule id", err)
 	}
 
 	var req dto.UpdateMatchRuleRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid match rule payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid match rule payload", err)
 	}
 
 	result, err := handler.command.UpdateMatchRule(ctx, contextID, ruleID, req.ToDomainInput())
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to update match rule", err)
+		handler.logSpanError(ctx, span, logger, "failed to update match rule", err)
 
 		if errors.Is(err, entities.ErrRulePriorityConflict) {
 			return respondError(fiberCtx, fiber.StatusConflict, "priority_conflict", err.Error())
@@ -288,7 +301,11 @@ func (handler *Handler) UpdateMatchRule(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatchRuleToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatchRuleToResponse(result)); err != nil {
+		return fmt.Errorf("respond update match rule: %w", err)
+	}
+
+	return nil
 }
 
 // DeleteMatchRule deletes a match rule.
@@ -323,18 +340,18 @@ func (handler *Handler) DeleteMatchRule(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	ruleID, err := parseUUIDParam(fiberCtx, "ruleId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid rule id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid rule id", err)
 	}
 
 	if err := handler.command.DeleteMatchRule(ctx, contextID, ruleID); err != nil {
-		logSpanError(ctx, span, logger, "failed to delete match rule", err)
+		handler.logSpanError(ctx, span, logger, "failed to delete match rule", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
 			return writeNotFound(fiberCtx, "configuration_match_rule_not_found", "match rule not found")
@@ -343,7 +360,11 @@ func (handler *Handler) DeleteMatchRule(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	if err := libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent); err != nil {
+		return fmt.Errorf("respond delete match rule: %w", err)
+	}
+
+	return nil
 }
 
 // ReorderRequest defines the rule ID ordering payload.
@@ -385,22 +406,22 @@ func (handler *Handler) ReorderMatchRules(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	var payload ReorderRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &payload); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid reorder payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid reorder payload", err)
 	}
 
 	if len(payload.RuleIDs) == 0 {
-		return badRequest(ctx, fiberCtx, span, logger, "missing rule IDs", ErrRuleIDsRequired)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "missing rule IDs", ErrRuleIDsRequired)
 	}
 
 	if err := handler.command.ReorderMatchRulePriorities(ctx, contextID, payload.RuleIDs); err != nil {
-		logSpanError(ctx, span, logger, "failed to reorder match rules", err)
+		handler.logSpanError(ctx, span, logger, "failed to reorder match rules", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
 			return writeNotFound(fiberCtx, "configuration_match_rule_not_found", "match rule not found")
@@ -409,5 +430,9 @@ func (handler *Handler) ReorderMatchRules(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	if err := libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent); err != nil {
+		return fmt.Errorf("respond reorder match rules: %w", err)
+	}
+
+	return nil
 }

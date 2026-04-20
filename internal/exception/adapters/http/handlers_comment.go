@@ -3,13 +3,14 @@ package http
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/exception/adapters/http/dto"
@@ -55,7 +56,7 @@ func (handler *Handlers) AddComment(fiberCtx *fiber.Ctx) error {
 		"exception",
 	)
 	if err != nil {
-		return handleExceptionVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleExceptionVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetExceptionSpanAttributes(span, tenantID, exceptionID)
@@ -63,7 +64,7 @@ func (handler *Handlers) AddComment(fiberCtx *fiber.Ctx) error {
 	var req dto.AddCommentRequest
 
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
 	}
 
 	result, err := handler.commentUC.AddComment(ctx, command.AddCommentInput{
@@ -71,10 +72,14 @@ func (handler *Handlers) AddComment(fiberCtx *fiber.Ctx) error {
 		Content:     req.Content,
 	})
 	if err != nil {
-		return handleCommentError(ctx, fiberCtx, span, logger, err)
+		return handler.handleCommentError(ctx, fiberCtx, span, logger, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.CommentToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.CommentToResponse(result)); err != nil {
+		return fmt.Errorf("respond create comment: %w", err)
+	}
+
+	return nil
 }
 
 // ListComments lists all comments for an exception.
@@ -109,19 +114,23 @@ func (handler *Handlers) ListComments(fiberCtx *fiber.Ctx) error {
 		"exception",
 	)
 	if err != nil {
-		return handleExceptionVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleExceptionVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetExceptionSpanAttributes(span, tenantID, exceptionID)
 
 	comments, err := handler.commentQueryUC.ListComments(ctx, exceptionID)
 	if err != nil {
-		return handleCommentError(ctx, fiberCtx, span, logger, err)
+		return handler.handleCommentError(ctx, fiberCtx, span, logger, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListCommentsResponse{
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListCommentsResponse{
 		Items: dto.CommentsToResponse(comments),
-	})
+	}); err != nil {
+		return fmt.Errorf("respond list comments: %w", err)
+	}
+
+	return nil
 }
 
 // DeleteComment deletes a comment by ID.
@@ -158,30 +167,34 @@ func (handler *Handlers) DeleteComment(fiberCtx *fiber.Ctx) error {
 		"exception",
 	)
 	if err != nil {
-		return handleExceptionVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleExceptionVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetExceptionSpanAttributes(span, tenantID, exceptionID)
 
 	commentIDStr := fiberCtx.Params("commentId")
 	if commentIDStr == "" {
-		return badRequest(ctx, fiberCtx, span, logger, "comment id is required", ErrMissingParameter)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "comment id is required", ErrMissingParameter)
 	}
 
 	commentID, err := uuid.Parse(commentIDStr)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid comment id", ErrInvalidParameter)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid comment id", ErrInvalidParameter)
 	}
 
-	if err := handler.commentUC.DeleteComment(ctx, commentID); err != nil {
-		return handleCommentError(ctx, fiberCtx, span, logger, err)
+	if err := handler.commentUC.DeleteComment(ctx, exceptionID, commentID); err != nil {
+		return handler.handleCommentError(ctx, fiberCtx, span, logger, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	if err := libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent); err != nil {
+		return fmt.Errorf("respond delete comment: %w", err)
+	}
+
+	return nil
 }
 
 // handleCommentError maps comment use case errors to HTTP responses.
-func handleCommentError(
+func (handler *Handlers) handleCommentError(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -189,11 +202,11 @@ func handleCommentError(
 	err error,
 ) error {
 	if errors.Is(err, entities.ErrExceptionNotFound) {
-		return notFoundWithSlug(ctx, fiberCtx, span, logger, "exception_not_found", "exception not found", err)
+		return handler.notFoundWithSlug(ctx, fiberCtx, span, logger, "exception_not_found", "exception not found", err)
 	}
 
 	if errors.Is(err, entities.ErrCommentNotFound) {
-		return notFoundWithSlug(ctx, fiberCtx, span, logger, "comment_not_found", "comment not found", err)
+		return handler.notFoundWithSlug(ctx, fiberCtx, span, logger, "comment_not_found", "comment not found", err)
 	}
 
 	if errors.Is(err, command.ErrExceptionIDRequired) ||
@@ -203,8 +216,8 @@ func handleCommentError(
 		errors.Is(err, command.ErrCommentIDRequired) ||
 		errors.Is(err, entities.ErrCommentContentRequired) ||
 		errors.Is(err, entities.ErrCommentAuthorRequired) {
-		return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
-	return internalError(ctx, fiberCtx, span, logger, "failed to process comment", err)
+	return handler.internalError(ctx, fiberCtx, span, logger, "failed to process comment", err)
 }

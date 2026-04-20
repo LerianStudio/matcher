@@ -7,7 +7,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/matching/services/command"
@@ -41,7 +41,7 @@ func (handler *Handler) Unmatch(fiberCtx *fiber.Ctx) error {
 
 	matchGroupID, err := parseUUIDParam(fiberCtx, "matchGroupId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid match group id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid match group id", err)
 	}
 
 	contextID, tenantID, err := libHTTP.ParseAndVerifyResourceScopedID(
@@ -55,7 +55,7 @@ func (handler *Handler) Unmatch(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 		"context",
 	)
-	if shouldReturn, returnErr := handleContextQueryVerificationError(ctx, fiberCtx, span, logger, err); shouldReturn {
+	if shouldReturn, returnErr := handler.handleContextQueryVerificationError(ctx, fiberCtx, span, logger, err); shouldReturn {
 		return returnErr
 	}
 
@@ -63,11 +63,11 @@ func (handler *Handler) Unmatch(fiberCtx *fiber.Ctx) error {
 
 	var payload UnmatchRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &payload); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid unmatch payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid unmatch payload", err)
 	}
 
 	if payload.Reason == "" {
-		return badRequest(ctx, fiberCtx, span, logger, "reason is required", ErrReasonRequired)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "reason is required", ErrReasonRequired)
 	}
 
 	if err := handler.command.Unmatch(ctx, command.UnmatchInput{
@@ -77,14 +77,14 @@ func (handler *Handler) Unmatch(fiberCtx *fiber.Ctx) error {
 		Reason:       payload.Reason,
 	}); err != nil {
 		if errors.Is(err, command.ErrUnmatchMatchGroupIDRequired) || errors.Is(err, command.ErrUnmatchContextIDRequired) {
-			return badRequest(ctx, fiberCtx, span, logger, "invalid unmatch parameters", err)
+			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid unmatch parameters", err)
 		}
 
 		if errors.Is(err, command.ErrMatchGroupNotFound) {
 			return writeNotFound(fiberCtx, "match group not found")
 		}
 
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to unmatch", err)
+		return handler.writeServiceError(ctx, fiberCtx, span, logger, "failed to unmatch", err)
 	}
 
 	if writeErr := libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent); writeErr != nil {

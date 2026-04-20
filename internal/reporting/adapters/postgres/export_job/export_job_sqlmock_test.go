@@ -738,62 +738,6 @@ func TestExportJob_UpdateProgress(t *testing.T) {
 		"UpdatedAt should be equal to or after original")
 }
 
-func TestIsValidExportFormat(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		format   entities.ExportFormat
-		expected bool
-	}{
-		{name: "CSV is valid", format: entities.ExportFormatCSV, expected: true},
-		{name: "JSON is valid", format: entities.ExportFormatJSON, expected: true},
-		{name: "XML is valid", format: entities.ExportFormatXML, expected: true},
-		{name: "PDF is valid", format: entities.ExportFormatPDF, expected: true},
-		{name: "lowercase csv is invalid", format: "csv", expected: false},
-		{name: "empty string is invalid", format: "", expected: false},
-		{name: "unknown format is invalid", format: "XLSX", expected: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			assert.Equal(t, tt.expected, entities.IsValidExportFormat(tt.format))
-		})
-	}
-}
-
-func TestIsValidReportType(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name       string
-		reportType entities.ExportReportType
-		expected   bool
-	}{
-		{name: "MATCHED is valid", reportType: entities.ExportReportTypeMatched, expected: true},
-		{
-			name:       "UNMATCHED is valid",
-			reportType: entities.ExportReportTypeUnmatched,
-			expected:   true,
-		},
-		{name: "SUMMARY is valid", reportType: entities.ExportReportTypeSummary, expected: true},
-		{name: "VARIANCE is valid", reportType: entities.ExportReportTypeVariance, expected: true},
-		{name: "lowercase matched is invalid", reportType: "matched", expected: false},
-		{name: "empty string is invalid", reportType: "", expected: false},
-		{name: "unknown type is invalid", reportType: "CUSTOM", expected: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			assert.Equal(t, tt.expected, entities.IsValidReportType(tt.reportType))
-		})
-	}
-}
-
 func TestIsStreamableFormat(t *testing.T) {
 	t.Parallel()
 
@@ -1119,10 +1063,11 @@ func TestRepository_ListByContext_DatabaseQuery(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows(exportJobColumns()))
 		mock.ExpectCommit()
 
-		jobs, err := repo.ListByContext(ctx, contextID, 10)
+		jobs, pagination, err := repo.ListByContext(ctx, contextID, nil, 10)
 
 		require.NoError(t, err)
 		assert.Empty(t, jobs)
+		assert.Empty(t, pagination.Next)
 	})
 }
 

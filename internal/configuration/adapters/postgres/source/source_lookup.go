@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
@@ -48,7 +48,7 @@ func (repo *Repository) FindByID(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to find reconciliation source by id", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find reconciliation source by id")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to find reconciliation source by id")
 		}
 
 		return nil, fmt.Errorf("failed to find reconciliation source by id: %w", err)
@@ -101,7 +101,7 @@ func (repo *Repository) GetContextIDBySourceID(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to find context id by source id", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find context id by source id")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to find context id by source id")
 		}
 
 		return uuid.Nil, fmt.Errorf("find context id by source id: %w", err)

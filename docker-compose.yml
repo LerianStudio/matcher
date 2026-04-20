@@ -154,8 +154,23 @@ services:
       ARCHIVAL_STORAGE_BUCKET: matcher-archives
       EXPORT_WORKER_ENABLED: "true"
       CLEANUP_WORKER_ENABLED: "true"
-      # Rate limiting - disabled for development/e2e testing
-      RATE_LIMIT_ENABLED: "false"
+      # Rate limiting — enabled at the lib-commons layer so the RateLimiter
+      # object is created at boot (ratelimit.New returns nil when
+      # RATE_LIMIT_ENABLED=false, which makes the runtime mutation path
+      # untestable). The systemplane key rate_limit.enabled defaults to
+      # false so dev traffic is not throttled by default; e2e tests flip it
+      # to true via PUT /system/matcher/rate_limit.enabled when they need
+      # to exercise throttling.
+      RATE_LIMIT_ENABLED: "true"
+      # Permissive per-tier maxes so if a test or manual session does flip
+      # rate_limit.enabled=true without squeezing the per-tier max, it
+      # still won't throttle normal-volume traffic. The e2e journey tests
+      # (see systemplane_settings_test.go) squeeze admin_max=1 explicitly
+      # and restore on cleanup.
+      RATE_LIMIT_MAX: "10000"
+      ADMIN_RATE_LIMIT_MAX: "10000"
+      EXPORT_RATE_LIMIT_MAX: "1000"
+      DISPATCH_RATE_LIMIT_MAX: "1000"
       # Discovery / Fetcher — disabled by default; E2E discovery tests enable
       # these via env vars before starting the stack (see make test-e2e-discovery).
       FETCHER_ENABLED: "${FETCHER_ENABLED:-false}"

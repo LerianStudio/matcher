@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"sync"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -33,24 +33,6 @@ func NewSwappableLogger(initial libLog.Logger) *SwappableLogger {
 	state.swap(initial)
 
 	return &SwappableLogger{state: state}
-}
-
-// Swap replaces the underlying logger implementation.
-func (logger *SwappableLogger) Swap(next libLog.Logger) {
-	if logger == nil || logger.state == nil {
-		return
-	}
-
-	logger.state.swap(next)
-}
-
-// Current returns the currently active logger implementation.
-func (logger *SwappableLogger) Current() libLog.Logger {
-	if logger == nil || logger.state == nil {
-		return &libLog.NopLogger{}
-	}
-
-	return logger.state.currentLogger()
 }
 
 // Log writes a structured log entry using the current logger delegate.

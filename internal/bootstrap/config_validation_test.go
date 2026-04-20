@@ -210,6 +210,7 @@ func TestValidateProductionConfig_GuestRabbitMQ(t *testing.T) {
 	cfg.App.EnvName = "production"
 	cfg.Postgres.PrimaryPassword = "secure-password"
 	cfg.Server.CORSAllowedOrigins = "https://app.example.com"
+	cfg.Server.TrustedProxies = "10.0.0.0/8" // satisfy prod+rate-limit precondition
 	cfg.RabbitMQ.User = "guest"
 	cfg.RabbitMQ.Password = "guest"
 	cfg.Redis.Password = "redis-pass"
@@ -332,6 +333,7 @@ func TestValidateProductionConfig_RejectsDevRabbitMQPassword(t *testing.T) {
 			cfg.App.EnvName = "production"
 			cfg.Postgres.PrimaryPassword = "secure-pg-password"
 			cfg.Server.CORSAllowedOrigins = "https://app.example.com"
+			cfg.Server.TrustedProxies = "10.0.0.0/8" // satisfy prod+rate-limit precondition
 			cfg.RabbitMQ.User = "produser"
 			cfg.RabbitMQ.Password = devPwd
 			cfg.RabbitMQ.AllowInsecureHealthCheck = false
@@ -351,6 +353,7 @@ func TestValidateProductionConfig_AcceptsStrongCredentials(t *testing.T) {
 	cfg.App.EnvName = "production"
 	cfg.Postgres.PrimaryPassword = "xK9!mPq2@vR7wL4z"
 	cfg.Server.CORSAllowedOrigins = "https://app.example.com"
+	cfg.Server.TrustedProxies = "10.0.0.0/8" // required when rate-limit enabled in prod
 	cfg.RabbitMQ.User = "matcher_prod"
 	cfg.RabbitMQ.Password = "rQ3$nT8&jF5yB2mX"
 	cfg.RabbitMQ.AllowInsecureHealthCheck = false
@@ -358,6 +361,55 @@ func TestValidateProductionConfig_AcceptsStrongCredentials(t *testing.T) {
 
 	// Production endpoint validation requires HTTPS for configured service URLs.
 	// The default config uses http://localhost:* which is rejected in production.
+	cfg.ObjectStorage.Endpoint = "https://s3.example.com"
+	cfg.Fetcher.URL = ""
+
+	err := cfg.Validate()
+	assert.NoError(t, err)
+}
+
+// TestValidateProductionConfig_RejectsEmptyTrustedProxiesWithRateLimit asserts
+// that production + rate-limit-enabled requires TRUSTED_PROXIES to be set. Without
+// trusted proxies, Fiber's c.IP() returns the ingress address behind any TLS-
+// terminating proxy, causing the rate limiter to throttle the ingress as one
+// client instead of individual callers.
+func TestValidateProductionConfig_RejectsEmptyTrustedProxiesWithRateLimit(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.App.EnvName = "production"
+	cfg.Postgres.PrimaryPassword = "xK9!mPq2@vR7wL4z"
+	cfg.Server.CORSAllowedOrigins = "https://app.example.com"
+	cfg.Server.TrustedProxies = "" // the failure trigger
+	cfg.RabbitMQ.User = "matcher_prod"
+	cfg.RabbitMQ.Password = "rQ3$nT8&jF5yB2mX"
+	cfg.RabbitMQ.AllowInsecureHealthCheck = false
+	cfg.Redis.Password = "redis-prod-pass"
+	cfg.RateLimit.Enabled = true
+	cfg.ObjectStorage.Endpoint = "https://s3.example.com"
+	cfg.Fetcher.URL = ""
+
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "TRUSTED_PROXIES")
+}
+
+// TestValidateProductionConfig_AllowsEmptyTrustedProxiesWithoutRateLimit asserts
+// the rule is scoped: if rate limiting is disabled, TRUSTED_PROXIES is optional
+// even in production (the service isn't making IP-based trust decisions).
+func TestValidateProductionConfig_AllowsEmptyTrustedProxiesWithoutRateLimit(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.App.EnvName = "production"
+	cfg.Postgres.PrimaryPassword = "xK9!mPq2@vR7wL4z"
+	cfg.Server.CORSAllowedOrigins = "https://app.example.com"
+	cfg.Server.TrustedProxies = "" // allowed when rate-limit off
+	cfg.RabbitMQ.User = "matcher_prod"
+	cfg.RabbitMQ.Password = "rQ3$nT8&jF5yB2mX"
+	cfg.RabbitMQ.AllowInsecureHealthCheck = false
+	cfg.Redis.Password = "redis-prod-pass"
+	cfg.RateLimit.Enabled = false
 	cfg.ObjectStorage.Endpoint = "https://s3.example.com"
 	cfg.Fetcher.URL = ""
 
@@ -412,6 +464,7 @@ func TestValidateInsecureObjectStoragePolicy_RejectsProduction(t *testing.T) {
 	cfg.App.EnvName = "production"
 	cfg.Postgres.PrimaryPassword = "xK9!mPq2@vR7wL4z"
 	cfg.Server.CORSAllowedOrigins = "https://app.example.com"
+	cfg.Server.TrustedProxies = "10.0.0.0/8" // satisfy prod+rate-limit precondition
 	cfg.RabbitMQ.User = "matcher_prod"
 	cfg.RabbitMQ.Password = "rQ3$nT8&jF5yB2mX"
 	cfg.RabbitMQ.AllowInsecureHealthCheck = false

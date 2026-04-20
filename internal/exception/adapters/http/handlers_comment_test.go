@@ -16,7 +16,7 @@ import (
 func TestHandleCommentError_ExceptionNotFound(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleCommentError, entities.ErrExceptionNotFound)
+	resp := executeErrorHandler(t, (&Handlers{}).handleCommentError, entities.ErrExceptionNotFound)
 
 	requireErrorResponse(
 		t,
@@ -31,7 +31,7 @@ func TestHandleCommentError_ExceptionNotFound(t *testing.T) {
 func TestHandleCommentError_CommentNotFound(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleCommentError, entities.ErrCommentNotFound)
+	resp := executeErrorHandler(t, (&Handlers{}).handleCommentError, entities.ErrCommentNotFound)
 
 	requireErrorResponse(
 		t,
@@ -46,7 +46,7 @@ func TestHandleCommentError_CommentNotFound(t *testing.T) {
 func TestHandleCommentError_ExceptionIDRequired(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleCommentError, command.ErrExceptionIDRequired)
+	resp := executeErrorHandler(t, (&Handlers{}).handleCommentError, command.ErrExceptionIDRequired)
 
 	requireErrorResponse(
 		t,
@@ -61,7 +61,7 @@ func TestHandleCommentError_ExceptionIDRequired(t *testing.T) {
 func TestHandleCommentError_ActorRequired(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleCommentError, command.ErrActorRequired)
+	resp := executeErrorHandler(t, (&Handlers{}).handleCommentError, command.ErrActorRequired)
 
 	requireErrorResponse(
 		t,
@@ -76,7 +76,7 @@ func TestHandleCommentError_ActorRequired(t *testing.T) {
 func TestHandleCommentError_CommentContentEmpty(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleCommentError, command.ErrCommentContentEmpty)
+	resp := executeErrorHandler(t, (&Handlers{}).handleCommentError, command.ErrCommentContentEmpty)
 
 	requireErrorResponse(
 		t,
@@ -91,7 +91,7 @@ func TestHandleCommentError_CommentContentEmpty(t *testing.T) {
 func TestHandleCommentError_CommentIDRequired(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleCommentError, command.ErrCommentIDRequired)
+	resp := executeErrorHandler(t, (&Handlers{}).handleCommentError, command.ErrCommentIDRequired)
 
 	requireErrorResponse(
 		t,
@@ -106,7 +106,7 @@ func TestHandleCommentError_CommentIDRequired(t *testing.T) {
 func TestHandleCommentError_CommentContentRequired(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleCommentError, entities.ErrCommentContentRequired)
+	resp := executeErrorHandler(t, (&Handlers{}).handleCommentError, entities.ErrCommentContentRequired)
 
 	requireErrorResponse(
 		t,
@@ -121,7 +121,7 @@ func TestHandleCommentError_CommentContentRequired(t *testing.T) {
 func TestHandleCommentError_CommentAuthorRequired(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleCommentError, entities.ErrCommentAuthorRequired)
+	resp := executeErrorHandler(t, (&Handlers{}).handleCommentError, entities.ErrCommentAuthorRequired)
 
 	requireErrorResponse(
 		t,
@@ -136,7 +136,7 @@ func TestHandleCommentError_CommentAuthorRequired(t *testing.T) {
 func TestHandleCommentError_CommentExceptionIDRequired(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleCommentError, query.ErrCommentExceptionIDRequired)
+	resp := executeErrorHandler(t, (&Handlers{}).handleCommentError, query.ErrCommentExceptionIDRequired)
 
 	requireErrorResponse(
 		t,
@@ -152,7 +152,7 @@ func TestHandleCommentError_UnknownError(t *testing.T) {
 	t.Parallel()
 
 	unknownErr := errors.New("unexpected storage error")
-	resp := executeErrorHandler(t, handleCommentError, unknownErr)
+	resp := executeErrorHandler(t, (&Handlers{}).handleCommentError, unknownErr)
 
 	requireErrorResponse(
 		t,

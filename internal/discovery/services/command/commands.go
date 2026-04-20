@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/discovery/ports"

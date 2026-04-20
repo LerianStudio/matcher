@@ -7,7 +7,7 @@ package bootstrap
 import (
 	"strings"
 
-	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
+	libZap "github.com/LerianStudio/lib-commons/v5/commons/zap"
 )
 
 const defaultLoggerLevel = "info"
@@ -27,6 +27,21 @@ func ResolveLoggerEnvironment(envName string) libZap.Environment {
 // IsProductionEnvironment reports whether envName should be treated as production.
 func IsProductionEnvironment(envName string) bool {
 	return strings.EqualFold(strings.TrimSpace(envName), envProduction)
+}
+
+// IsDevelopmentOrTestEnvironment reports whether envName is an explicit
+// development or test environment. Used to gate behaviors that should ONLY
+// be allowed in local-dev / test harnesses — staging, UAT, QA, preview, and
+// any unknown environment are treated as production-adjacent.
+//
+// Matches "development" or "test" case-insensitively. Empty string is NOT
+// considered dev (contrast with isLocalDevelopmentEnvironment, which is
+// scoped to a different concern — permissive HTTP for tenant-manager
+// communication and therefore keeps empty-string as dev for backward
+// compatibility).
+func IsDevelopmentOrTestEnvironment(envName string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(envName))
+	return normalized == "development" || normalized == "test"
 }
 
 // isLocalDevelopmentEnvironment reports whether envName is a local development

@@ -10,9 +10,9 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepos "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
@@ -125,7 +125,7 @@ func (repo *Repository) createBatch(
 		wrappedErr := fmt.Errorf("create match item batch transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create match item batch", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to create match item batch")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to create match item batch")
 
 		return nil, wrappedErr
 	}
@@ -188,7 +188,7 @@ func (repo *Repository) ListByMatchGroupID(
 		wrappedErr := fmt.Errorf("list match items by group: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list match items by group", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to list match items by group")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to list match items by group")
 
 		return nil, wrappedErr
 	}
@@ -226,7 +226,7 @@ func (repo *Repository) ListByMatchGroupIDs(
 		wrappedErr := fmt.Errorf("list match items by group ids: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list match items by group ids", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to list match items by group ids")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to list match items by group ids")
 
 		return nil, wrappedErr
 	}

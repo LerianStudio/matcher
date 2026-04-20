@@ -9,14 +9,61 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
 )
+
+// preloadExceptions fetches all exceptions for the given ids in a single
+// query and returns them keyed by id. Ids not present in the returned map
+// are treated as ErrExceptionNotFound by the per-item caller. The map
+// replaces the N round-trip pre-load that bulk paths previously made,
+// one FindByID per item, without changing the per-item transaction
+// boundary: the map is read before each per-item tx begins, so any item
+// hitting ErrConcurrentModification or a transient failure still rolls
+// back only that item's UPDATE and leaves the rest of the batch
+// independently committable.
+func (uc *UseCase) preloadExceptions(
+	ctx context.Context,
+	ids []uuid.UUID,
+) (map[uuid.UUID]*entities.Exception, error) {
+	found, err := uc.exceptionRepo.FindByIDs(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("preload exceptions: %w", err)
+	}
+
+	byID := make(map[uuid.UUID]*entities.Exception, len(found))
+	for _, ex := range found {
+		if ex == nil {
+			continue
+		}
+
+		byID[ex.ID] = ex
+	}
+
+	return byID, nil
+}
+
+// resolvePreloaded returns the preloaded entity for exceptionID or
+// entities.ErrExceptionNotFound when the id was requested but absent
+// from the store. Keeps the sentinel flow identical to the previous
+// FindByID-per-item call path so `isBusinessError` still classifies the
+// not-found case as a business error (kept out of span.ERROR status).
+func resolvePreloaded(
+	preloaded map[uuid.UUID]*entities.Exception,
+	exceptionID uuid.UUID,
+) (*entities.Exception, error) {
+	ex, ok := preloaded[exceptionID]
+	if !ok {
+		return nil, fmt.Errorf("find exception: %w", entities.ErrExceptionNotFound)
+	}
+
+	return ex, nil
+}
 
 // Bulk operation errors.
 var (
@@ -63,6 +110,18 @@ type BulkItemFailure struct {
 }
 
 // BulkAssign assigns multiple exceptions to the specified assignee.
+//
+// Execution shape:
+//   - 1 FindByIDs preload (replaces N FindByID round-trips).
+//   - N small transactions (one BEGIN + UPDATE + outbox insert + COMMIT
+//     per exception).
+//
+// The per-item transaction boundary is preserved on purpose: the repository's
+// optimistic-locking UPDATE (WHERE version=$13) returns
+// ErrConcurrentModification on 0 rows affected, and existing partial-success
+// reporting relies on each item's commit being independent of its peers.
+// A single outer transaction would couple all items' fates and regress both
+// guarantees on any single infrastructure blip mid-batch.
 func (uc *UseCase) BulkAssign(ctx context.Context, input BulkAssignInput) (*BulkActionResult, error) {
 	dedupedIDs, err := validateBulkIDs(input.ExceptionIDs)
 	if err != nil {
@@ -84,13 +143,20 @@ func (uc *UseCase) BulkAssign(ctx context.Context, input BulkAssignInput) (*Bulk
 		return nil, ErrActorRequired
 	}
 
+	preloaded, err := uc.preloadExceptions(ctx, dedupedIDs)
+	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "bulk assign preload failed", err)
+
+		return nil, err
+	}
+
 	result := &BulkActionResult{
 		Succeeded: make([]uuid.UUID, 0, len(dedupedIDs)),
 		Failed:    make([]BulkItemFailure, 0),
 	}
 
 	for _, exceptionID := range dedupedIDs {
-		err := uc.assignSingle(ctx, exceptionID, assignee, actor)
+		err := uc.assignSingle(ctx, preloaded, exceptionID, assignee, actor)
 		if err != nil {
 			if isBusinessError(err) {
 				libOpentelemetry.HandleSpanBusinessErrorEvent(span, "bulk assign item failed", err)
@@ -116,13 +182,14 @@ func (uc *UseCase) BulkAssign(ctx context.Context, input BulkAssignInput) (*Bulk
 
 func (uc *UseCase) assignSingle(
 	ctx context.Context,
+	preloaded map[uuid.UUID]*entities.Exception,
 	exceptionID uuid.UUID,
 	assignee string,
 	actor string,
 ) error {
-	exception, err := uc.exceptionRepo.FindByID(ctx, exceptionID)
+	exception, err := resolvePreloaded(preloaded, exceptionID)
 	if err != nil {
-		return fmt.Errorf("find exception: %w", err)
+		return err
 	}
 
 	if err := exception.Assign(ctx, assignee, nil); err != nil {
@@ -163,6 +230,11 @@ func (uc *UseCase) assignSingle(
 }
 
 // BulkResolve resolves multiple exceptions with the specified resolution.
+//
+// Execution shape matches BulkAssign: one FindByIDs preload feeds N small
+// per-item transactions. See BulkAssign for the rationale on why the
+// per-item transaction boundary is deliberate (optimistic-locking
+// detection and partial-success reporting).
 func (uc *UseCase) BulkResolve(ctx context.Context, input BulkResolveInput) (*BulkActionResult, error) {
 	dedupedIDs, err := validateBulkIDs(input.ExceptionIDs)
 	if err != nil {
@@ -184,6 +256,13 @@ func (uc *UseCase) BulkResolve(ctx context.Context, input BulkResolveInput) (*Bu
 		return nil, ErrActorRequired
 	}
 
+	preloaded, err := uc.preloadExceptions(ctx, dedupedIDs)
+	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "bulk resolve preload failed", err)
+
+		return nil, err
+	}
+
 	result := &BulkActionResult{
 		Succeeded: make([]uuid.UUID, 0, len(dedupedIDs)),
 		Failed:    make([]BulkItemFailure, 0),
@@ -192,7 +271,7 @@ func (uc *UseCase) BulkResolve(ctx context.Context, input BulkResolveInput) (*Bu
 	reason := strings.TrimSpace(input.Reason)
 
 	for _, exceptionID := range dedupedIDs {
-		err := uc.resolveSingle(ctx, exceptionID, resolution, reason, actor)
+		err := uc.resolveSingle(ctx, preloaded, exceptionID, resolution, reason, actor)
 		if err != nil {
 			if isBusinessError(err) {
 				libOpentelemetry.HandleSpanBusinessErrorEvent(span, "bulk resolve item failed", err)
@@ -218,14 +297,15 @@ func (uc *UseCase) BulkResolve(ctx context.Context, input BulkResolveInput) (*Bu
 
 func (uc *UseCase) resolveSingle(
 	ctx context.Context,
+	preloaded map[uuid.UUID]*entities.Exception,
 	exceptionID uuid.UUID,
 	resolution string,
 	reason string,
 	actor string,
 ) error {
-	exception, err := uc.exceptionRepo.FindByID(ctx, exceptionID)
+	exception, err := resolvePreloaded(preloaded, exceptionID)
 	if err != nil {
-		return fmt.Errorf("find exception: %w", err)
+		return err
 	}
 
 	// Guard: skip exceptions that are already being resolved by another process.

@@ -12,9 +12,9 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
@@ -55,7 +55,7 @@ func (repo *Repository) MarkBridgeFailed(ctx context.Context, req *entities.Extr
 	if err != nil {
 		wrappedErr := fmt.Errorf("mark extraction bridge failed: %w", err)
 		libOpentelemetry.HandleSpanError(span, "mark extraction bridge failed", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).
+		logger.With(libLog.Err(wrappedErr)).
 			Log(ctx, libLog.LevelError, "mark extraction bridge failed")
 
 		return wrappedErr
@@ -99,7 +99,7 @@ func (repo *Repository) MarkBridgeFailedWithTx(
 	if err != nil {
 		wrappedErr := fmt.Errorf("mark extraction bridge failed with tx: %w", err)
 		libOpentelemetry.HandleSpanError(span, "mark extraction bridge failed", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).
+		logger.With(libLog.Err(wrappedErr)).
 			Log(ctx, libLog.LevelError, "mark extraction bridge failed")
 
 		return wrappedErr
@@ -142,7 +142,7 @@ func (repo *Repository) IncrementBridgeAttempts(
 	if err != nil {
 		wrappedErr := fmt.Errorf("increment bridge attempts: %w", err)
 		libOpentelemetry.HandleSpanError(span, "increment bridge attempts", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).
+		logger.With(libLog.Err(wrappedErr)).
 			Log(ctx, libLog.LevelError, "increment bridge attempts")
 
 		return wrappedErr
@@ -182,7 +182,7 @@ func (repo *Repository) IncrementBridgeAttemptsWithTx(
 	if err != nil {
 		wrappedErr := fmt.Errorf("increment bridge attempts with tx: %w", err)
 		libOpentelemetry.HandleSpanError(span, "increment bridge attempts", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).
+		logger.With(libLog.Err(wrappedErr)).
 			Log(ctx, libLog.LevelError, "increment bridge attempts")
 
 		return wrappedErr

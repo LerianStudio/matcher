@@ -10,9 +10,9 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
@@ -24,6 +24,12 @@ const (
 	matchGroupStatusConfirmed = "CONFIRMED"
 	exceptionStatusResolved   = "RESOLVED"
 	exceptionSeverityCritical = "CRITICAL"
+
+	// matchRatePercentageScale converts a ratio (0.0-1.0) into a percentage
+	// (0-100). SummaryMetrics.MatchRate, DailyTrendPoint.MatchRate, and
+	// SourceBreakdown.MatchRate are all expressed on the percentage scale
+	// to align with MatchRateStats and the console display.
+	matchRatePercentageScale = 100.0
 )
 
 // Repository persists dashboard data in Postgres.
@@ -335,17 +341,18 @@ func (repo *Repository) GetSummaryMetrics(
 				return nil, fmt.Errorf("scanning summary metrics: %w", err)
 			}
 
-			// Match rate as decimal (0.0-1.0) for frontend compatibility
-			// Match rate = matched transactions / total transactions
+			// Match rate as percentage (0-100) to match MatchRateStats and
+			// the console display convention (page renders `toFixed(1)%`).
+			// Computed as (matched / total) * 100.
 			var matchRate float64
 
 			if totalTxn > 0 {
-				rawRate := float64(matchedCount) / float64(totalTxn)
+				rawRate := float64(matchedCount) / float64(totalTxn) * matchRatePercentageScale
 				matchRate = rawRate
 
-				if matchRate > 1.0 {
+				if matchRate > matchRatePercentageScale {
 					logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf(
-						"match rate over 1.0 detected: matched=%d, total=%d, rate=%.6f; clamping to 1.0",
+						"match rate over 100%% detected: matched=%d, total=%d, rate=%.4f; clamping to 100",
 						matchedCount,
 						totalTxn,
 						rawRate,
@@ -358,7 +365,7 @@ func (repo *Repository) GetSummaryMetrics(
 						attribute.Float64("raw_rate", rawRate),
 					))
 
-					matchRate = 1.0
+					matchRate = matchRatePercentageScale
 				}
 			}
 
@@ -474,10 +481,11 @@ func (repo *Repository) GetTrendMetrics(
 				}
 
 				if point.Ingested > 0 {
-					// Return match rate as decimal (0.0-1.0) for frontend compatibility
-					point.MatchRate = float64(point.Matched) / float64(point.Ingested)
-					if point.MatchRate > 1.0 {
-						point.MatchRate = 1.0
+					// Return match rate as percentage (0-100) to match
+					// SummaryMetrics.MatchRate and the console chart scale.
+					point.MatchRate = float64(point.Matched) / float64(point.Ingested) * matchRatePercentageScale
+					if point.MatchRate > matchRatePercentageScale {
+						point.MatchRate = matchRatePercentageScale
 					}
 				}
 
@@ -835,9 +843,11 @@ func (repo *Repository) GetSourceBreakdown(
 				sb.UnmatchedTxns = max(sb.TotalTxns-matchedTxns, 0)
 
 				if sb.TotalTxns > 0 {
-					sb.MatchRate = float64(matchedTxns) / float64(sb.TotalTxns)
-					if sb.MatchRate > 1.0 {
-						sb.MatchRate = 1.0
+					// Percentage scale (0-100), aligned with SummaryMetrics
+					// and DailyTrendPoint so the dashboard is consistent.
+					sb.MatchRate = float64(matchedTxns) / float64(sb.TotalTxns) * matchRatePercentageScale
+					if sb.MatchRate > matchRatePercentageScale {
+						sb.MatchRate = matchRatePercentageScale
 					}
 				}
 

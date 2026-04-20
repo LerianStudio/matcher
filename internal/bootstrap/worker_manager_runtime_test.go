@@ -173,9 +173,10 @@ func TestExtractWorkerConfig_AllNames(t *testing.T) {
 		{"scheduler", false, schedulerWorkerComparableConfig{IntervalSec: cfg.Scheduler.IntervalSec}},
 		{"discovery", false, discoveryWorkerRuntimeConfig{Interval: cfg.FetcherDiscoveryInterval()}},
 		{"fetcher_bridge", false, fetcherBridgeWorkerComparableConfig{
-			IntervalSec:      cfg.Fetcher.BridgeIntervalSec,
-			BatchSize:        cfg.Fetcher.BridgeBatchSize,
-			RetryMaxAttempts: cfg.Fetcher.BridgeRetryMaxAttempts,
+			IntervalSec:       cfg.Fetcher.BridgeIntervalSec,
+			BatchSize:         cfg.Fetcher.BridgeBatchSize,
+			TenantConcurrency: cfg.Fetcher.BridgeTenantConcurrency,
+			RetryMaxAttempts:  cfg.Fetcher.BridgeRetryMaxAttempts,
 		}},
 		{"unknown", true, nil},
 	}
@@ -431,6 +432,7 @@ func TestApplyFetcherBridgeRuntimeConfig_UpdatesWorkerOnMutation(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Fetcher.BridgeIntervalSec = 75
 	cfg.Fetcher.BridgeBatchSize = 25
+	cfg.Fetcher.BridgeTenantConcurrency = 8
 
 	require.NoError(t, applyWorkerRuntimeConfig(context.Background(), workerNameFetcherBridge, worker, cfg))
 
@@ -440,4 +442,6 @@ func TestApplyFetcherBridgeRuntimeConfig_UpdatesWorkerOnMutation(t *testing.T) {
 		"interval must be derived via FetcherBridgeInterval helper for default-coalescing")
 	assert.Equal(t, cfg.FetcherBridgeBatchSize(), last.BatchSize,
 		"batch size must be derived via FetcherBridgeBatchSize helper for default-coalescing")
+	assert.Equal(t, cfg.FetcherBridgeTenantConcurrency(), last.TenantConcurrency,
+		"tenant concurrency must be derived via FetcherBridgeTenantConcurrency helper for default-coalescing")
 }

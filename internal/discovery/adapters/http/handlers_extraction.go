@@ -2,11 +2,12 @@ package http
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/discovery/adapters/http/dto"
 	discoveryCommand "github.com/LerianStudio/matcher/internal/discovery/services/command"
@@ -43,14 +44,14 @@ func (handler *Handler) StartExtraction(fiberCtx *fiber.Ctx) error {
 
 	connectionID, err := uuid.Parse(fiberCtx.Params("connectionId"))
 	if err != nil {
-		logSpanError(ctx, span, logger, "invalid connection id", err)
+		handler.logSpanError(ctx, span, logger, "invalid connection id", err)
 
 		return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid connection ID")
 	}
 
 	var request dto.StartExtractionRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &request); err != nil {
-		logSpanError(ctx, span, logger, "invalid extraction payload", err)
+		handler.logSpanError(ctx, span, logger, "invalid extraction payload", err)
 
 		return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid extraction request body")
 	}
@@ -68,21 +69,25 @@ func (handler *Handler) StartExtraction(fiberCtx *fiber.Ctx) error {
 	if err != nil {
 		switch {
 		case errors.Is(err, discoveryCommand.ErrInvalidExtractionRequest):
-			logSpanError(ctx, span, logger, "invalid extraction request", err)
+			handler.logSpanError(ctx, span, logger, "invalid extraction request", err)
 			return respondError(fiberCtx, fiber.StatusBadRequest, "discovery_invalid_extraction", err.Error())
 		case errors.Is(err, discoveryCommand.ErrConnectionNotFound):
-			logSpanError(ctx, span, logger, "connection not found", err)
+			handler.logSpanError(ctx, span, logger, "connection not found", err)
 			return respondError(fiberCtx, fiber.StatusNotFound, "discovery_connection_not_found", "connection not found")
 		case errors.Is(err, discoveryCommand.ErrFetcherUnavailable):
-			logSpanError(ctx, span, logger, "fetcher unavailable", err)
+			handler.logSpanError(ctx, span, logger, "fetcher unavailable", err)
 			return respondError(fiberCtx, fiber.StatusServiceUnavailable, "discovery_fetcher_unavailable", "fetcher service unavailable")
 		default:
-			logSpanError(ctx, span, logger, "start extraction", err)
+			handler.logSpanError(ctx, span, logger, "start extraction", err)
 			return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "failed to start extraction")
 		}
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.ExtractionRequestFromEntity(extraction))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.ExtractionRequestFromEntity(extraction)); err != nil {
+		return fmt.Errorf("respond start extraction: %w", err)
+	}
+
+	return nil
 }
 
 // GetExtraction handles GET /v1/discovery/extractions/:extractionId.
@@ -108,14 +113,14 @@ func (handler *Handler) GetExtraction(fiberCtx *fiber.Ctx) error {
 
 	extractionID, err := uuid.Parse(fiberCtx.Params("extractionId"))
 	if err != nil {
-		logSpanError(ctx, span, logger, "invalid extraction id", err)
+		handler.logSpanError(ctx, span, logger, "invalid extraction id", err)
 
 		return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid extraction ID")
 	}
 
 	extraction, err := handler.query.GetExtraction(ctx, extractionID)
 	if err != nil {
-		logSpanError(ctx, span, logger, "get extraction", err)
+		handler.logSpanError(ctx, span, logger, "get extraction", err)
 
 		if errors.Is(err, discoveryQuery.ErrExtractionNotFound) {
 			return respondError(fiberCtx, fiber.StatusNotFound, "discovery_extraction_not_found", "extraction not found")
@@ -124,7 +129,11 @@ func (handler *Handler) GetExtraction(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "failed to get extraction")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExtractionRequestFromEntity(extraction))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExtractionRequestFromEntity(extraction)); err != nil {
+		return fmt.Errorf("respond get extraction: %w", err)
+	}
+
+	return nil
 }
 
 func rawExtractionTables(tables map[string]dto.ExtractionTableRequest) map[string]any {
@@ -169,14 +178,14 @@ func (handler *Handler) PollExtraction(fiberCtx *fiber.Ctx) error {
 
 	extractionID, err := uuid.Parse(fiberCtx.Params("extractionId"))
 	if err != nil {
-		logSpanError(ctx, span, logger, "invalid extraction id", err)
+		handler.logSpanError(ctx, span, logger, "invalid extraction id", err)
 
 		return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid extraction ID")
 	}
 
 	extraction, err := handler.command.PollExtractionStatus(ctx, extractionID)
 	if err != nil {
-		logSpanError(ctx, span, logger, "poll extraction", err)
+		handler.logSpanError(ctx, span, logger, "poll extraction", err)
 
 		if errors.Is(err, discoveryCommand.ErrExtractionNotFound) {
 			return respondError(fiberCtx, fiber.StatusNotFound, "discovery_extraction_not_found", "extraction not found")
@@ -189,5 +198,9 @@ func (handler *Handler) PollExtraction(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "failed to poll extraction")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExtractionRequestFromEntity(extraction))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExtractionRequestFromEntity(extraction)); err != nil {
+		return fmt.Errorf("respond poll extraction: %w", err)
+	}
+
+	return nil
 }

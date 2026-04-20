@@ -10,7 +10,7 @@ import (
 	"reflect"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	configWorker "github.com/LerianStudio/matcher/internal/configuration/services/worker"
 	discoveryWorker "github.com/LerianStudio/matcher/internal/discovery/services/worker"
@@ -77,9 +77,10 @@ type discoveryWorkerRuntimeConfig struct {
 // removed the dead Initial/Max-Backoff knobs along with the inert
 // exponential-backoff helpers.
 type fetcherBridgeWorkerComparableConfig struct {
-	IntervalSec      int
-	BatchSize        int
-	RetryMaxAttempts int
+	IntervalSec       int
+	BatchSize         int
+	TenantConcurrency int
+	RetryMaxAttempts  int
 }
 
 // custodyRetentionWorkerComparableConfig (T-006) is the
@@ -467,8 +468,8 @@ func applyDiscoveryRuntimeConfig(worker WorkerLifecycle, cfg *Config) error {
 // Wired here as part of Fix 4: prior to this fix the systemplane keys
 // `fetcher.bridge_interval_sec` / `fetcher.bridge_batch_size` were
 // registered with ApplyWorkerReconcile + MutableAtRuntime=true, so an
-// operator changing them via PUT /v1/system/configs saw audit logs but
-// the worker silently kept its old values.
+// operator changing them via PUT /system/matcher/<key> saw audit logs
+// but the worker silently kept its old values.
 func applyFetcherBridgeRuntimeConfig(worker WorkerLifecycle, cfg *Config) error {
 	bridgeWorker, ok := worker.(interface {
 		UpdateRuntimeConfig(discoveryWorker.BridgeWorkerConfig) error
@@ -478,8 +479,9 @@ func applyFetcherBridgeRuntimeConfig(worker WorkerLifecycle, cfg *Config) error 
 	}
 
 	if err := bridgeWorker.UpdateRuntimeConfig(discoveryWorker.BridgeWorkerConfig{
-		Interval:  cfg.FetcherBridgeInterval(),
-		BatchSize: cfg.FetcherBridgeBatchSize(),
+		Interval:          cfg.FetcherBridgeInterval(),
+		BatchSize:         cfg.FetcherBridgeBatchSize(),
+		TenantConcurrency: cfg.FetcherBridgeTenantConcurrency(),
 		Retry: discoveryWorker.BridgeRetryBackoff{
 			MaxAttempts: cfg.FetcherBridgeRetryMaxAttempts(),
 		},
@@ -577,9 +579,10 @@ func extractWorkerConfig(name string, cfg *Config) any {
 		return discoveryWorkerRuntimeConfig{Interval: cfg.FetcherDiscoveryInterval()}
 	case workerNameFetcherBridge:
 		return fetcherBridgeWorkerComparableConfig{
-			IntervalSec:      cfg.Fetcher.BridgeIntervalSec,
-			BatchSize:        cfg.Fetcher.BridgeBatchSize,
-			RetryMaxAttempts: cfg.Fetcher.BridgeRetryMaxAttempts,
+			IntervalSec:       cfg.Fetcher.BridgeIntervalSec,
+			BatchSize:         cfg.Fetcher.BridgeBatchSize,
+			TenantConcurrency: cfg.Fetcher.BridgeTenantConcurrency,
+			RetryMaxAttempts:  cfg.Fetcher.BridgeRetryMaxAttempts,
 		}
 	case workerNameCustodyRetention:
 		return custodyRetentionWorkerComparableConfig{

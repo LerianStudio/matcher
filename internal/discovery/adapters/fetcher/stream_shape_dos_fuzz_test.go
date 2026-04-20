@@ -78,7 +78,6 @@ func FuzzFlattenFetcherJSON_DoSGuard(f *testing.F) {
 		const capBytes = 4096
 
 		out, err := fetcher.FlattenFetcherJSON(strings.NewReader(payload), capBytes)
-
 		if err != nil {
 			// Any error is legitimate — hostile input earns a rejection.
 			return

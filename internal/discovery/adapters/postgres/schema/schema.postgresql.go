@@ -7,9 +7,9 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
@@ -61,7 +61,7 @@ func (repo *Repository) UpsertBatch(ctx context.Context, schemas []*entities.Dis
 	if err != nil {
 		wrappedErr := fmt.Errorf("upsert batch discovered schemas: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to upsert batch discovered schemas", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to upsert batch discovered schemas")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to upsert batch discovered schemas")
 
 		return wrappedErr
 	}
@@ -99,7 +99,7 @@ func (repo *Repository) UpsertBatchWithTx(ctx context.Context, tx *sql.Tx, schem
 	if err != nil {
 		wrappedErr := fmt.Errorf("upsert batch discovered schemas with tx: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to upsert batch discovered schemas", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to upsert batch discovered schemas")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to upsert batch discovered schemas")
 
 		return wrappedErr
 	}
@@ -213,7 +213,7 @@ func (repo *Repository) FindByConnectionID(ctx context.Context, connectionID uui
 	if err != nil {
 		wrappedErr := fmt.Errorf("find schemas by connection id: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to find schemas by connection id", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to find schemas by connection id")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to find schemas by connection id")
 
 		return nil, wrappedErr
 	}
@@ -238,7 +238,7 @@ func (repo *Repository) DeleteByConnectionID(ctx context.Context, connectionID u
 	if err != nil {
 		wrappedErr := fmt.Errorf("delete schemas by connection id: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to delete schemas by connection id", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to delete schemas by connection id")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to delete schemas by connection id")
 
 		return wrappedErr
 	}
@@ -267,7 +267,7 @@ func (repo *Repository) DeleteByConnectionIDWithTx(ctx context.Context, tx *sql.
 	if err != nil {
 		wrappedErr := fmt.Errorf("delete schemas by connection id with tx: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to delete schemas by connection id", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to delete schemas by connection id")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to delete schemas by connection id")
 
 		return wrappedErr
 	}

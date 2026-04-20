@@ -9,9 +9,9 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
@@ -73,7 +73,7 @@ func (uc *UseCase) RefreshDiscovery(ctx context.Context) (int, error) {
 		if err := uc.syncConnection(ctx, logger, fc); err != nil {
 			logger.With(
 				libLog.Any("fetcherConnID", fc.ID),
-				libLog.Any("error", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelWarn, "failed to sync connection")
 
 			continue
@@ -193,7 +193,7 @@ func (uc *UseCase) reconcileStaleConnections(ctx context.Context, logger libLog.
 			if logger != nil {
 				logger.With(
 					libLog.String("connection.id", conn.ID.String()),
-					libLog.Any("error", err.Error()),
+					libLog.Err(err),
 				).Log(ctx, libLog.LevelWarn, "failed to mark stale connection unreachable during manual refresh")
 			}
 		}

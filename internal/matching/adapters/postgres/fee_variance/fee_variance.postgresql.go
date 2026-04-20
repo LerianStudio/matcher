@@ -6,9 +6,9 @@ import (
 	"database/sql"
 	"fmt"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepos "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
@@ -116,7 +116,7 @@ func (repo *Repository) createBatch(
 		wrappedErr := fmt.Errorf("create fee variance batch transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create fee variance batch", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to create fee variance batch")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to create fee variance batch")
 
 		return nil, wrappedErr
 	}

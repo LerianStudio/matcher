@@ -11,11 +11,11 @@ import (
 	"fmt"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	tmcache "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/cache"
-	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/client"
-	tmpostgres "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/postgres"
-	tmrabbitmq "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/rabbitmq"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	tmcache "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/cache"
+	"github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/client"
+	tmpostgres "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/postgres"
+	tmrabbitmq "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/rabbitmq"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
@@ -103,15 +103,6 @@ func buildCanonicalTenantManager(cfg *Config, logger libLog.Logger) (*client.Cli
 	pgManager := tmpostgres.NewManager(tmClient, constants.ApplicationName, pgOpts...)
 
 	return tmClient, pgManager, nil
-}
-
-// buildRabbitMQTenantManager creates a tmrabbitmq.Manager for per-tenant
-// RabbitMQ vhost isolation (Layer 1). It is a convenience wrapper that discards
-// the tenant-manager client. Use buildRabbitMQTenantManagerWithClient when the
-// caller needs to store the client for shutdown cleanup.
-func buildRabbitMQTenantManager(ctx context.Context, cfg *Config, logger libLog.Logger) *tmrabbitmq.Manager {
-	_, mgr := buildRabbitMQTenantManagerWithClient(ctx, cfg, logger)
-	return mgr
 }
 
 // buildRabbitMQTenantManagerWithClient creates a tmrabbitmq.Manager for per-tenant

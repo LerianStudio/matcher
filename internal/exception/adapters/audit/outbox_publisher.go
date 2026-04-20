@@ -11,8 +11,8 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
@@ -22,24 +22,68 @@ import (
 
 const entityTypeException = "exception"
 
+// auditExceptionEntityType labels truncation metrics emitted from this
+// publisher so operators can distinguish exception-diff truncation from
+// the configuration-context publisher.
+const auditExceptionEntityType = "audit_exception"
+
 // Sentinel errors for outbox publisher.
 var (
 	ErrNilOutboxRepository = errors.New("outbox repository is required")
 	ErrTenantIDRequired    = errors.New("tenant id required for audit logging")
 )
 
-// OutboxPublisher publishes exception audit events to the outbox for asynchronous processing.
+// OutboxPublisher publishes exception audit events to the outbox for
+// asynchronous processing. The optional saltProvider keys the actor hash
+// via HMAC-SHA-256; when nil or returning an empty string, actor hashes
+// degrade to unsalted SHA-256 truncations for backwards compatibility.
+// See ports.HashActor for the exact semantics.
 type OutboxPublisher struct {
-	outboxRepo sharedPorts.OutboxRepository
+	outboxRepo   sharedPorts.OutboxRepository
+	saltProvider ports.SaltProvider
+}
+
+// PublisherOption configures NewOutboxPublisher.
+type PublisherOption func(*OutboxPublisher)
+
+// WithSaltProvider wires a SaltProvider into the publisher so that actor
+// hashes written to the audit outbox are HMAC-keyed by the provider's
+// tenant-aware salt lookup. Passing a nil provider is a no-op; hashes
+// remain unsalted. Callers should register a real provider in production
+// to close the offline rainbow-table attack vector on exfiltrated audit
+// rows.
+func WithSaltProvider(provider ports.SaltProvider) PublisherOption {
+	return func(pub *OutboxPublisher) {
+		pub.saltProvider = provider
+	}
 }
 
 // NewOutboxPublisher creates a new outbox-based audit publisher.
-func NewOutboxPublisher(repo sharedPorts.OutboxRepository) (*OutboxPublisher, error) {
+func NewOutboxPublisher(repo sharedPorts.OutboxRepository, opts ...PublisherOption) (*OutboxPublisher, error) {
 	if repo == nil {
 		return nil, ErrNilOutboxRepository
 	}
 
-	return &OutboxPublisher{outboxRepo: repo}, nil
+	pub := &OutboxPublisher{outboxRepo: repo}
+
+	for _, opt := range opts {
+		if opt != nil {
+			opt(pub)
+		}
+	}
+
+	return pub, nil
+}
+
+// resolveSalt returns the salt for ctx via the configured provider. Nil or
+// missing providers yield an empty string, which HashActor treats as the
+// unsalted fallback.
+func (pub *OutboxPublisher) resolveSalt(ctx context.Context) string {
+	if pub == nil || pub.saltProvider == nil {
+		return ""
+	}
+
+	return pub.saltProvider.SaltFor(ctx)
 }
 
 // PublishExceptionEvent publishes an exception audit event to the outbox.
@@ -60,7 +104,11 @@ func (pub *OutboxPublisher) PublishExceptionEvent(ctx context.Context, event por
 	return nil
 }
 
-// buildOutboxEvent constructs the outbox event payload from an audit event.
+// buildOutboxEvent constructs the outbox event payload from an audit
+// event using the single-marshal gating strategy: the complete
+// AuditLogCreatedEvent is serialized once, and only if the resulting
+// payload exceeds the broker's per-event cap does Changes get swapped
+// for a truncation marker and re-marshaled.
 func (pub *OutboxPublisher) buildOutboxEvent(
 	ctx context.Context,
 	event ports.AuditEvent,
@@ -79,14 +127,14 @@ func (pub *OutboxPublisher) buildOutboxEvent(
 		return nil, fmt.Errorf("parse tenant id: %w", err)
 	}
 
-	actorHash := event.GetActorHash()
+	salt := pub.resolveSalt(ctx)
+
+	actorHash := event.ResolveActorHash(salt)
 
 	var actor *string
 	if actorHash != "" {
 		actor = &actorHash
 	}
-
-	changes := buildOutboxChangesMap(event)
 
 	auditEvent := sharedDomain.AuditLogCreatedEvent{
 		UniqueID:   uuid.New(),
@@ -96,14 +144,14 @@ func (pub *OutboxPublisher) buildOutboxEvent(
 		EntityID:   event.ExceptionID,
 		Action:     event.Action,
 		Actor:      actor,
-		Changes:    changes,
+		Changes:    buildOutboxChangesMap(event, salt),
 		OccurredAt: event.OccurredAt,
 		Timestamp:  time.Now().UTC(),
 	}
 
-	payload, err := json.Marshal(auditEvent)
+	payload, err := marshalOrTruncate(ctx, &auditEvent)
 	if err != nil {
-		return nil, fmt.Errorf("marshal audit event: %w", err)
+		return nil, err
 	}
 
 	outboxEvent, err := sharedDomain.NewOutboxEvent(
@@ -157,8 +205,8 @@ func (pub *OutboxPublisher) PublishExceptionEventWithTx(
 	return nil
 }
 
-func buildOutboxChangesMap(event ports.AuditEvent) map[string]any {
-	actorHash := event.GetActorHash()
+func buildOutboxChangesMap(event ports.AuditEvent, salt string) map[string]any {
+	actorHash := event.ResolveActorHash(salt)
 
 	changes := map[string]any{
 		"exception_id": event.ExceptionID.String(),
@@ -186,3 +234,43 @@ func buildOutboxChangesMap(event ports.AuditEvent) map[string]any {
 }
 
 var _ ports.AuditPublisher = (*OutboxPublisher)(nil)
+
+// marshalOrTruncate serializes the audit event and, if the resulting
+// payload exceeds the broker's cap, replaces Changes with a truncation
+// marker and re-marshals. The final payload is returned or a marshal
+// error wrapped for the caller.
+func marshalOrTruncate(
+	ctx context.Context,
+	event *sharedDomain.AuditLogCreatedEvent,
+) ([]byte, error) {
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return nil, fmt.Errorf("marshal audit event: %w", err)
+	}
+
+	if len(payload) <= sharedDomain.DefaultOutboxMaxPayloadBytes {
+		return payload, nil
+	}
+
+	originalSize := len(payload)
+
+	sharedDomain.RecordOutboxTruncation(
+		ctx,
+		auditExceptionEntityType,
+		event.EntityID,
+		originalSize,
+		sharedDomain.DefaultOutboxMaxPayloadBytes,
+	)
+
+	event.Changes = sharedDomain.BuildAuditChangesTruncationMarker(
+		originalSize,
+		sharedDomain.DefaultOutboxMaxPayloadBytes,
+	)
+
+	payload, err = json.Marshal(event)
+	if err != nil {
+		return nil, fmt.Errorf("marshal truncated audit event: %w", err)
+	}
+
+	return payload, nil
+}

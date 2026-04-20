@@ -16,8 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/core"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	"github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	sharedTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
@@ -61,7 +61,7 @@ func TestDynamicInfrastructureProvider_MultiTenant_MissingTenantInContext(t *tes
 	cfg.Tenancy.MultiTenantURL = server.URL
 	cfg.Tenancy.MultiTenantServiceAPIKey = "test-key"
 
-	provider := newDynamicInfrastructureProvider(cfg, func() *Config { return cfg }, nil, nil, nil, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(cfg, func() *Config { return cfg }, nil, nil, &libLog.NopLogger{}, nil)
 	defer func() { _ = provider.Close() }()
 
 	// Bare context: no tenant set => fail closed with ErrTenantContextRequired.
@@ -104,7 +104,7 @@ func TestDynamicInfrastructureProvider_MultiTenant_FallbackToAuthGetTenantID(t *
 	cfg.Tenancy.MultiTenantURL = server.URL
 	cfg.Tenancy.MultiTenantServiceAPIKey = "test-key"
 
-	provider := newDynamicInfrastructureProvider(cfg, func() *Config { return cfg }, nil, nil, nil, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(cfg, func() *Config { return cfg }, nil, nil, &libLog.NopLogger{}, nil)
 	defer func() { _ = provider.Close() }()
 
 	// Use auth context key (not core)
@@ -135,7 +135,7 @@ func TestDynamicInfrastructureProvider_MultiTenant_EmptyTenantIDInContext(t *tes
 	cfg.Tenancy.MultiTenantURL = server.URL
 	cfg.Tenancy.MultiTenantServiceAPIKey = "test-key"
 
-	provider := newDynamicInfrastructureProvider(cfg, func() *Config { return cfg }, nil, nil, nil, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(cfg, func() *Config { return cfg }, nil, nil, &libLog.NopLogger{}, nil)
 	defer func() { _ = provider.Close() }()
 
 	// Set empty string for both core and auth tenant ID contexts
@@ -179,7 +179,7 @@ func TestDynamicInfrastructureProvider_BeginTx_MissingTenantContext(t *testing.T
 	cfg.Tenancy.MultiTenantURL = server.URL
 	cfg.Tenancy.MultiTenantServiceAPIKey = "test-key"
 
-	provider := newDynamicInfrastructureProvider(cfg, func() *Config { return cfg }, nil, nil, nil, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(cfg, func() *Config { return cfg }, nil, nil, &libLog.NopLogger{}, nil)
 	defer func() { _ = provider.Close() }()
 
 	_, err := provider.BeginTx(context.Background())
@@ -193,7 +193,7 @@ func TestDynamicInfrastructureProvider_BeginTx_SingleTenant_NoPostgres(t *testin
 	cfg := defaultConfig()
 	cfg.Tenancy.MultiTenantEnabled = false
 
-	provider := newDynamicInfrastructureProvider(cfg, nil, nil, nil, nil, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(cfg, nil, nil, nil, &libLog.NopLogger{}, nil)
 
 	_, err := provider.BeginTx(context.Background())
 	require.ErrorIs(t, err, ErrPostgresConnectionNotConfigured)
@@ -230,7 +230,7 @@ func TestDynamicInfrastructureProvider_GetReplicaDB_MissingTenantContext(t *test
 	cfg.Tenancy.MultiTenantURL = server.URL
 	cfg.Tenancy.MultiTenantServiceAPIKey = "test-key"
 
-	provider := newDynamicInfrastructureProvider(cfg, func() *Config { return cfg }, nil, nil, nil, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(cfg, func() *Config { return cfg }, nil, nil, &libLog.NopLogger{}, nil)
 	defer func() { _ = provider.Close() }()
 
 	_, err := provider.GetReplicaDB(context.Background())
@@ -244,7 +244,7 @@ func TestDynamicInfrastructureProvider_GetReplicaDB_SingleTenant_NoPostgres(t *t
 	cfg := defaultConfig()
 	cfg.Tenancy.MultiTenantEnabled = false
 
-	provider := newDynamicInfrastructureProvider(cfg, nil, nil, nil, nil, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(cfg, nil, nil, nil, &libLog.NopLogger{}, nil)
 
 	_, err := provider.GetReplicaDB(context.Background())
 	require.ErrorIs(t, err, ErrPostgresConnectionNotConfigured)
@@ -255,7 +255,7 @@ func TestDynamicInfrastructureProvider_GetReplicaDB_SingleTenant_NilReplica(t *t
 
 	cfg := defaultConfig()
 	pg := testPostgresClient(t)
-	provider := newDynamicInfrastructureProvider(cfg, nil, nil, pg, nil, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(cfg, nil, pg, nil, &libLog.NopLogger{}, nil)
 
 	lease, err := provider.GetReplicaDB(context.Background())
 	// The test postgres client only has primary, no replica => should return nil, nil.
@@ -276,7 +276,7 @@ func TestDynamicInfrastructureProvider_Redis_MultiTenantMode_UsesSingleton(t *te
 	cfg.Tenancy.MultiTenantURL = "http://localhost:9999"
 	cfg.Tenancy.MultiTenantServiceAPIKey = "test-key"
 
-	provider := newDynamicInfrastructureProvider(cfg, func() *Config { return cfg }, nil, nil, redisConn, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(cfg, func() *Config { return cfg }, nil, redisConn, &libLog.NopLogger{}, nil)
 	defer func() { _ = provider.Close() }()
 
 	lease, err := provider.GetRedisConnection(context.Background())
@@ -293,7 +293,7 @@ func TestDynamicInfrastructureProvider_Redis_MultiTenantMode_NilRedis(t *testing
 	cfg.Tenancy.MultiTenantURL = "http://localhost:9999"
 	cfg.Tenancy.MultiTenantServiceAPIKey = "test-key"
 
-	provider := newDynamicInfrastructureProvider(cfg, func() *Config { return cfg }, nil, nil, nil, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(cfg, func() *Config { return cfg }, nil, nil, &libLog.NopLogger{}, nil)
 	defer func() { _ = provider.Close() }()
 
 	_, err := provider.GetRedisConnection(context.Background())
@@ -306,7 +306,7 @@ func TestDynamicInfrastructureProvider_NilConfigGetter_FallsBackToInitial(t *tes
 	t.Parallel()
 
 	initialCfg := defaultConfig()
-	provider := newDynamicInfrastructureProvider(initialCfg, nil, nil, nil, nil, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(initialCfg, nil, nil, nil, &libLog.NopLogger{}, nil)
 
 	got := provider.currentConfig()
 	assert.Same(t, initialCfg, got)
@@ -316,7 +316,7 @@ func TestDynamicInfrastructureProvider_ConfigGetterReturnsNil_FallsBackToInitial
 	t.Parallel()
 
 	initialCfg := defaultConfig()
-	provider := newDynamicInfrastructureProvider(initialCfg, func() *Config { return nil }, nil, nil, nil, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(initialCfg, func() *Config { return nil }, nil, nil, &libLog.NopLogger{}, nil)
 
 	got := provider.currentConfig()
 	assert.Same(t, initialCfg, got)
@@ -347,7 +347,7 @@ func TestBuildRabbitMQTenantManager_ValidConfig(t *testing.T) {
 	cfg.Tenancy.MultiTenantMaxTenantPools = 5
 	cfg.Tenancy.MultiTenantIdleTimeoutSec = 60
 
-	mgr := buildRabbitMQTenantManager(context.Background(), cfg, &libLog.NopLogger{})
+	_, mgr := buildRabbitMQTenantManagerWithClient(context.Background(), cfg, &libLog.NopLogger{})
 	require.NotNil(t, mgr, "valid config should create a non-nil RabbitMQ tenant manager")
 }
 
@@ -359,7 +359,7 @@ func TestBuildRabbitMQTenantManager_InvalidURL_ReturnsNil(t *testing.T) {
 	cfg.Tenancy.MultiTenantURL = ""
 	cfg.Tenancy.MultiTenantServiceAPIKey = "test-key"
 
-	mgr := buildRabbitMQTenantManager(context.Background(), cfg, &libLog.NopLogger{})
+	_, mgr := buildRabbitMQTenantManagerWithClient(context.Background(), cfg, &libLog.NopLogger{})
 	assert.Nil(t, mgr, "invalid config should return nil RabbitMQ tenant manager (fallback to single-tenant)")
 }
 
@@ -376,7 +376,7 @@ func TestBuildRabbitMQTenantManager_NonProductionAllowsInsecureHTTP(t *testing.T
 	cfg.Tenancy.MultiTenantURL = server.URL // http:// (not https://)
 	cfg.Tenancy.MultiTenantServiceAPIKey = "test-key"
 
-	mgr := buildRabbitMQTenantManager(context.Background(), cfg, &libLog.NopLogger{})
+	_, mgr := buildRabbitMQTenantManagerWithClient(context.Background(), cfg, &libLog.NopLogger{})
 	require.NotNil(t, mgr, "non-production env should allow insecure HTTP")
 }
 
@@ -420,7 +420,7 @@ func TestBuildCanonicalTenantManager_EmptyURL_Fails(t *testing.T) {
 	require.Contains(t, err.Error(), "create tenant manager client")
 }
 
-// Section 8: createInfraProviderWithBundleState — Integration of all pieces.
+// Section 8: createInfraProvider — Integration of all pieces.
 
 func TestCreateInfraProvider_SingleTenant_ReturnsNilTenantDBHandler(t *testing.T) {
 	t.Parallel()
@@ -430,7 +430,7 @@ func TestCreateInfraProvider_SingleTenant_ReturnsNilTenantDBHandler(t *testing.T
 	cfg := defaultConfig()
 	cfg.Tenancy.MultiTenantEnabled = false
 
-	provider, closer, tenantDBHandler := createInfraProviderWithBundleState(cfg, nil, pg, redis, nil)
+	provider, closer, tenantDBHandler := createInfraProvider(cfg, nil, pg, redis)
 	require.NotNil(t, provider)
 	require.NotNil(t, closer)
 	assert.Nil(t, tenantDBHandler, "single-tenant mode must return nil tenant DB handler")
@@ -453,7 +453,7 @@ func TestCreateInfraProvider_MultiTenant_ReturnsTenantDBHandler(t *testing.T) {
 	cfg.Tenancy.MultiTenantURL = server.URL
 	cfg.Tenancy.MultiTenantServiceAPIKey = "test-key"
 
-	provider, closer, tenantDBHandler := createInfraProviderWithBundleState(cfg, nil, nil, nil, nil)
+	provider, closer, tenantDBHandler := createInfraProvider(cfg, nil, nil, nil)
 	require.NotNil(t, provider)
 	require.NotNil(t, closer)
 	assert.NotNil(t, tenantDBHandler, "multi-tenant mode must return non-nil tenant DB handler")
@@ -662,7 +662,7 @@ func TestDynamicInfrastructureProvider_PGManager_RebuildOnServiceAPIKeyChange(t 
 	cfg.Tenancy.MultiTenantURL = server.URL
 	cfg.Tenancy.MultiTenantServiceAPIKey = "key-v1"
 
-	provider := newDynamicInfrastructureProvider(cfg, func() *Config { return cfg }, nil, nil, nil, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(cfg, func() *Config { return cfg }, nil, nil, &libLog.NopLogger{}, nil)
 	defer func() { _ = provider.Close() }()
 
 	first, err := provider.currentPGManager(context.Background(), cfg)
@@ -686,7 +686,7 @@ func TestDynamicInfrastructureProvider_PGManager_RebuildOnServiceAPIKeyChange(t 
 func TestDynamicInfrastructureProvider_PGManager_NilConfig_ReturnsError(t *testing.T) {
 	t.Parallel()
 
-	provider := newDynamicInfrastructureProvider(defaultConfig(), nil, nil, nil, nil, &libLog.NopLogger{}, nil)
+	provider := newDynamicInfrastructureProvider(defaultConfig(), nil, nil, nil, &libLog.NopLogger{}, nil)
 
 	_, err := provider.currentPGManager(context.Background(), nil)
 	require.Error(t, err)

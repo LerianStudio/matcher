@@ -40,20 +40,24 @@ var fetcherConfigKeys = []string{
 	"fetcher.allow_private_ips",
 }
 
-type systemplaneConfigResponse struct {
-	Revision int `json:"revision"`
-	Values   map[string]struct {
-		Value any `json:"value"`
-	} `json:"values"`
+// systemplaneNamespace is the namespace used by Matcher for all runtime
+// config keys in the v5 systemplane admin API.
+const systemplaneNamespace = "matcher"
+
+// systemplaneListResponse matches the v5 admin GET /system/:namespace response.
+type systemplaneListResponse struct {
+	Namespace string `json:"namespace"`
+	Entries   []struct {
+		Key   string `json:"key"`
+		Value any    `json:"value"`
+	} `json:"entries"`
 }
 
-type systemplaneSettingsResponse struct {
-	Revision int    `json:"revision"`
-	Scope    string `json:"scope"`
-	Values   map[string]struct {
-		Value  any    `json:"value"`
-		Source string `json:"source"`
-	} `json:"values"`
+// systemplaneGetResponse matches the v5 admin GET /system/:namespace/:key response.
+type systemplaneGetResponse struct {
+	Namespace string `json:"namespace"`
+	Key       string `json:"key"`
+	Value     any    `json:"value"`
 }
 
 func doSystemplaneRequest(method, url string, body io.Reader, headers map[string]string) (*http.Response, []byte, error) {
@@ -80,162 +84,137 @@ func doSystemplaneRequest(method, url string, body io.Reader, headers map[string
 	return resp, bodyBytes, nil
 }
 
-func readSystemplaneConfig(appBaseURL string) (*systemplaneConfigResponse, error) {
-	resp, err := systemplaneHTTPClient.Get(appBaseURL + "/v1/system/configs") //nolint:noctx // test helper
+// readSystemplaneKeyValue reads a single key from the v5 systemplane admin API.
+// Returns (value, true, nil) if the key exists, (nil, false, nil) if 404.
+func readSystemplaneKeyValue(appBaseURL, key string) (any, bool, error) {
+	url := fmt.Sprintf("%s/system/%s/%s", appBaseURL, systemplaneNamespace, key)
+
+	resp, err := systemplaneHTTPClient.Get(url) //nolint:noctx // test helper
 	if err != nil {
-		return nil, fmt.Errorf("get systemplane config: %w", err)
+		return nil, false, fmt.Errorf("get systemplane key %s: %w", key, err)
 	}
 	defer resp.Body.Close() //nolint:errcheck // test helper
 
 	body, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
-		return nil, fmt.Errorf("read systemplane config body: %w", readErr)
+		return nil, false, fmt.Errorf("read systemplane key %s body: %w", key, readErr)
+	}
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, false, nil
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("systemplane config returned %d: %s", resp.StatusCode, string(body))
+		return nil, false, fmt.Errorf("systemplane key %s returned %d: %s", key, resp.StatusCode, string(body))
 	}
 
-	var current systemplaneConfigResponse
-	if err := json.Unmarshal(body, &current); err != nil {
-		return nil, fmt.Errorf("parse systemplane config: %w", err)
+	var entry systemplaneGetResponse
+	if err := json.Unmarshal(body, &entry); err != nil {
+		return nil, false, fmt.Errorf("parse systemplane key %s: %w", key, err)
 	}
 
-	return &current, nil
+	return entry.Value, true, nil
 }
 
 // readFetcherSnapshot captures the current values of fetcher config keys.
-// Only keys that are actually present in the systemplane response are included;
-// absent keys are omitted so the restore PATCH won't create them.
+// Only keys that are actually present in the systemplane are included;
+// absent keys are omitted so the restore PUT won't create them.
 func readFetcherSnapshot(appBaseURL string) (map[string]any, error) {
-	current, err := readSystemplaneConfig(appBaseURL)
-	if err != nil {
-		return nil, err
-	}
-
 	snap := make(map[string]any, len(fetcherConfigKeys))
+
 	for _, key := range fetcherConfigKeys {
-		if entry, ok := current.Values[key]; ok {
-			snap[key] = entry.Value
+		value, found, err := readSystemplaneKeyValue(appBaseURL, key)
+		if err != nil {
+			return nil, fmt.Errorf("snapshot key %s: %w", key, err)
+		}
+
+		if found {
+			snap[key] = value
 		}
 	}
 
 	return snap, nil
 }
 
-func patchSystemplaneConfigValues(appBaseURL string, values map[string]any) error {
-	current, err := readSystemplaneConfig(appBaseURL)
-	if err != nil {
-		return err
-	}
+// putSystemplaneValues sets each key individually using the v5 admin
+// PUT /system/:namespace/:key endpoint. No revision/If-Match required.
+func putSystemplaneValues(appBaseURL string, values map[string]any) error {
+	for key, value := range values {
+		body, marshalErr := json.Marshal(map[string]any{"value": value})
+		if marshalErr != nil {
+			return fmt.Errorf("marshal systemplane value for %s: %w", key, marshalErr)
+		}
 
-	patch := map[string]any{"values": values}
-	patchBody, marshalErr := json.Marshal(patch)
-	if marshalErr != nil {
-		return fmt.Errorf("marshal systemplane patch: %w", marshalErr)
-	}
+		url := fmt.Sprintf("%s/system/%s/%s", appBaseURL, systemplaneNamespace, key)
 
-	req, err := http.NewRequest(http.MethodPatch, appBaseURL+"/v1/system/configs", bytes.NewReader(patchBody)) //nolint:noctx // test helper
-	if err != nil {
-		return fmt.Errorf("create patch request: %w", err)
-	}
+		req, err := http.NewRequest(http.MethodPut, url, bytes.NewReader(body)) //nolint:noctx // test helper
+		if err != nil {
+			return fmt.Errorf("create put request for %s: %w", key, err)
+		}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("If-Match", fmt.Sprintf("%d", current.Revision))
+		req.Header.Set("Content-Type", "application/json")
 
-	patchResp, err := systemplaneHTTPClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("patch systemplane: %w", err)
-	}
-	defer patchResp.Body.Close() //nolint:errcheck // test helper
+		resp, err := systemplaneHTTPClient.Do(req)
+		if err != nil {
+			return fmt.Errorf("put systemplane key %s: %w", key, err)
+		}
 
-	if patchResp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(patchResp.Body)
-		return fmt.Errorf("patch systemplane returned %d: %s", patchResp.StatusCode, string(respBody))
+		respBody, _ := io.ReadAll(resp.Body)
+		resp.Body.Close() //nolint:errcheck // test helper
+
+		// v5 returns 204 No Content on success.
+		if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("put systemplane key %s returned %d: %s", key, resp.StatusCode, string(respBody))
+		}
 	}
 
 	return nil
 }
 
-func readSystemplaneSettings(appBaseURL, scope, userID string) (*systemplaneSettingsResponse, error) {
-	path := appBaseURL + "/v1/system/settings"
-	if scope == "global" {
-		path += "?scope=global"
-	}
+// readSystemplaneSettings reads keys from the v5 systemplane namespace.
+// In v5, settings are merged into config — scope and userID are no longer used
+// but kept in the signature for compatibility with the skip-gated settings test.
+func readSystemplaneSettings(appBaseURL, _ /* scope */, _ /* userID */ string) (*systemplaneListResponse, error) {
+	url := fmt.Sprintf("%s/system/%s", appBaseURL, systemplaneNamespace)
 
-	headers := map[string]string{"Accept": "application/json"}
-	if userID != "" {
-		headers["X-User-ID"] = userID
-	}
-
-	resp, body, err := doSystemplaneRequest(http.MethodGet, path, nil, headers)
+	resp, err := systemplaneHTTPClient.Get(url) //nolint:noctx // test helper
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get systemplane namespace: %w", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck // test helper
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("systemplane settings returned %d: %s", resp.StatusCode, string(body))
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, fmt.Errorf("read systemplane namespace body: %w", readErr)
 	}
 
-	var current systemplaneSettingsResponse
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("systemplane namespace returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var current systemplaneListResponse
 	if err := json.Unmarshal(body, &current); err != nil {
-		return nil, fmt.Errorf("parse systemplane settings: %w", err)
+		return nil, fmt.Errorf("parse systemplane namespace: %w", err)
 	}
 
 	return &current, nil
 }
 
-func patchSystemplaneSettingValues(appBaseURL, scope string, values map[string]any, userID string) error {
-	current, err := readSystemplaneSettings(appBaseURL, scope, userID)
-	if err != nil {
-		return err
-	}
-
-	patch := map[string]any{"values": values}
-	patchBody, marshalErr := json.Marshal(patch)
-	if marshalErr != nil {
-		return fmt.Errorf("marshal systemplane settings patch: %w", marshalErr)
-	}
-
-	path := appBaseURL + "/v1/system/settings"
-	if scope == "global" {
-		path += "?scope=global"
-	}
-
-	headers := map[string]string{
-		"Accept":            "application/json",
-		"Content-Type":      "application/json",
-		"If-Match":          fmt.Sprintf("%d", current.Revision),
-		"X-Idempotency-Key": fmt.Sprintf("settings-%d", time.Now().UnixNano()),
-	}
-	if userID != "" {
-		headers["X-User-ID"] = userID
-	}
-
-	resp, body, err := doSystemplaneRequest(http.MethodPatch, path, bytes.NewReader(patchBody), headers)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close() //nolint:errcheck // test helper
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("patch systemplane settings returned %d: %s", resp.StatusCode, string(body))
-	}
-
-	return nil
+// patchSystemplaneSettingValues sets each key via PUT in the v5 systemplane.
+// scope and userID are no longer used in v5 but kept for signature compatibility.
+func patchSystemplaneSettingValues(appBaseURL, _ /* scope */ string, values map[string]any, _ /* userID */ string) error {
+	return putSystemplaneValues(appBaseURL, values)
 }
 
-// patchSystemplaneFetcherConfig updates the systemplane runtime config to point
-// the Fetcher client at the mock server. The systemplane uses optimistic
-// concurrency via the If-Match header (current revision).
+// patchSystemplaneFetcherConfig updates the v5 systemplane runtime config to
+// point the Fetcher client at the mock server.
 func patchSystemplaneFetcherConfig(appBaseURL string, port int) (func() error, error) {
 	snapshot, err := readFetcherSnapshot(appBaseURL)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := patchSystemplaneConfigValues(appBaseURL, map[string]any{
+	if err := putSystemplaneValues(appBaseURL, map[string]any{
 		"fetcher.enabled":           true,
 		"fetcher.url":               fmt.Sprintf("http://host.docker.internal:%d", port),
 		"fetcher.allow_private_ips": true,
@@ -249,6 +228,7 @@ func patchSystemplaneFetcherConfig(appBaseURL string, port int) (func() error, e
 		if len(snapshot) == 0 {
 			return nil
 		}
-		return patchSystemplaneConfigValues(appBaseURL, snapshot)
+
+		return putSystemplaneValues(appBaseURL, snapshot)
 	}, nil
 }

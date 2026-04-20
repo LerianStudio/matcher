@@ -26,9 +26,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	"github.com/LerianStudio/lib-commons/v4/commons/net/http/ratelimit"
-	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	"github.com/LerianStudio/lib-commons/v5/commons/net/http/ratelimit"
+	libRabbitmq "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
 
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/pkg/constant"

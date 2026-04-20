@@ -3,12 +3,13 @@ package http
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
@@ -42,24 +43,24 @@ func (handler *Handler) CreateContext(fiberCtx *fiber.Ctx) error {
 
 	var req dto.CreateContextRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid context payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid context payload", err)
 	}
 
 	tenantID, err := tenantIDFromContext(ctx)
 	if err != nil {
-		return unauthorized(ctx, fiberCtx, span, logger, err)
+		return handler.unauthorized(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetTenantSpanAttribute(span, tenantID)
 
 	domainInput, err := req.ToDomainInput()
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid context payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid context payload", err)
 	}
 
 	result, err := handler.command.CreateContext(ctx, tenantID, domainInput)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to create context", err)
+		handler.logSpanError(ctx, span, logger, "failed to create context", err)
 
 		if errors.Is(err, command.ErrContextNameAlreadyExists) {
 			return respondError(fiberCtx, fiber.StatusConflict, "duplicate_name", err.Error())
@@ -72,7 +73,11 @@ func (handler *Handler) CreateContext(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.ReconciliationContextToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.ReconciliationContextToResponse(result)); err != nil {
+		return fmt.Errorf("respond create context: %w", err)
+	}
+
+	return nil
 }
 
 // ListContexts lists reconciliation contexts.
@@ -100,14 +105,14 @@ func (handler *Handler) ListContexts(fiberCtx *fiber.Ctx) error {
 
 	tenantID, err := tenantIDFromContext(ctx)
 	if err != nil {
-		return unauthorized(ctx, fiberCtx, span, logger, err)
+		return handler.unauthorized(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetTenantSpanAttribute(span, tenantID)
 
 	cursor, limit, err := libHTTP.ParseOpaqueCursorPagination(fiberCtx)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination", err)
 	}
 
 	var contextType *value_objects.ContextType
@@ -115,7 +120,7 @@ func (handler *Handler) ListContexts(fiberCtx *fiber.Ctx) error {
 	if typeParam := strings.TrimSpace(fiberCtx.Query("type")); typeParam != "" {
 		parsed, err := value_objects.ParseContextType(strings.ToUpper(typeParam))
 		if err != nil {
-			return badRequest(ctx, fiberCtx, span, logger, "invalid context type", err)
+			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid context type", err)
 		}
 
 		contextType = &parsed
@@ -126,7 +131,7 @@ func (handler *Handler) ListContexts(fiberCtx *fiber.Ctx) error {
 	if statusParam := strings.TrimSpace(fiberCtx.Query("status")); statusParam != "" {
 		parsed, err := value_objects.ParseContextStatus(strings.ToUpper(statusParam))
 		if err != nil {
-			return badRequest(ctx, fiberCtx, span, logger, "invalid context status", err)
+			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid context status", err)
 		}
 
 		status = &parsed
@@ -135,10 +140,10 @@ func (handler *Handler) ListContexts(fiberCtx *fiber.Ctx) error {
 	result, pagination, err := handler.query.ListContexts(ctx, cursor, limit, contextType, status)
 	if err != nil {
 		if errors.Is(err, libHTTP.ErrInvalidCursor) {
-			return badRequest(ctx, fiberCtx, span, logger, "invalid pagination", err)
+			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination", err)
 		}
 
-		logSpanError(ctx, span, logger, "failed to list contexts", err)
+		handler.logSpanError(ctx, span, logger, "failed to list contexts", err)
 
 		return writeServiceError(fiberCtx, err)
 	}
@@ -157,7 +162,11 @@ func (handler *Handler) ListContexts(fiberCtx *fiber.Ctx) error {
 		},
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, response)
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, response); err != nil {
+		return fmt.Errorf("respond list contexts: %w", err)
+	}
+
+	return nil
 }
 
 // GetContext retrieves a reconciliation context.
@@ -192,14 +201,14 @@ func (handler *Handler) GetContext(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	result, err := handler.query.GetContext(ctx, contextID)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to get context", err)
+		handler.logSpanError(ctx, span, logger, "failed to get context", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
 			return writeNotFound(fiberCtx, "configuration_context_not_found", "context not found")
@@ -208,7 +217,11 @@ func (handler *Handler) GetContext(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationContextToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationContextToResponse(result)); err != nil {
+		return fmt.Errorf("respond get context: %w", err)
+	}
+
+	return nil
 }
 
 // UpdateContext updates a reconciliation context.
@@ -246,29 +259,33 @@ func (handler *Handler) UpdateContext(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	var req dto.UpdateContextRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid context payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid context payload", err)
 	}
 
 	domainInput, err := req.ToDomainInput()
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid context payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid context payload", err)
 	}
 
 	result, err := handler.command.UpdateContext(ctx, contextID, domainInput)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to update context", err)
+		handler.logSpanError(ctx, span, logger, "failed to update context", err)
 
 		return mapUpdateContextError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationContextToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationContextToResponse(result)); err != nil {
+		return fmt.Errorf("respond update context: %w", err)
+	}
+
+	return nil
 }
 
 // DeleteContext deletes a reconciliation context.
@@ -302,13 +319,13 @@ func (handler *Handler) DeleteContext(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	if err := handler.command.DeleteContext(ctx, contextID); err != nil {
-		logSpanError(ctx, span, logger, "failed to delete context", err)
+		handler.logSpanError(ctx, span, logger, "failed to delete context", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
 			return writeNotFound(fiberCtx, "configuration_context_not_found", "context not found")
@@ -321,7 +338,11 @@ func (handler *Handler) DeleteContext(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	if err := libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent); err != nil {
+		return fmt.Errorf("respond delete context: %w", err)
+	}
+
+	return nil
 }
 
 // CloneContext creates a deep copy of a reconciliation context with all its configuration.
@@ -359,14 +380,14 @@ func (handler *Handler) CloneContext(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	var payload dto.CloneContextRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &payload); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid clone payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid clone payload", err)
 	}
 
 	input := command.CloneContextInput{
@@ -378,7 +399,7 @@ func (handler *Handler) CloneContext(fiberCtx *fiber.Ctx) error {
 
 	result, err := handler.command.CloneContext(ctx, input)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to clone context", err)
+		handler.logSpanError(ctx, span, logger, "failed to clone context", err)
 
 		if errors.Is(err, command.ErrCloneNameRequired) {
 			return respondError(fiberCtx, fiber.StatusBadRequest, "configuration_context_name_required", err.Error())
@@ -396,5 +417,9 @@ func (handler *Handler) CloneContext(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.CloneResultToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.CloneResultToResponse(result)); err != nil {
+		return fmt.Errorf("respond clone context: %w", err)
+	}
+
+	return nil
 }
