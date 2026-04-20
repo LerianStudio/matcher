@@ -302,13 +302,19 @@ func TestOutboxPublisher_Publish_OversizedChangesTruncated(t *testing.T) {
 
 // TestOutboxPublisher_Publish_ExactlyAtCap verifies that a payload at or just
 // under the cap is published without truncation (boundary inclusive of cap).
-// Uses a binary search over Changes value length to land at exactly the cap,
+// Uses a binary search over Changes value length to land exactly at the cap,
 // accounting for JSON encoding overhead (quotes, escapes, key names).
+//
+// The envelope Timestamp is pinned to a fixed instant via WithClock so the
+// serialized envelope width is deterministic across the binary search and the
+// verification Publish call. Zero nanoseconds are used to avoid any RFC3339Nano
+// trailing-zero trimming jitter if the serialization format ever changes.
 func TestOutboxPublisher_Publish_ExactlyAtCap(t *testing.T) {
 	t.Parallel()
 
+	fixedNow := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	repo := &stubOutboxRepo{}
-	publisher, err := NewOutboxPublisher(repo)
+	publisher, err := NewOutboxPublisher(repo, WithClock(func() time.Time { return fixedNow }))
 	require.NoError(t, err)
 
 	tenantID := uuid.New()
@@ -316,7 +322,7 @@ func TestOutboxPublisher_Publish_ExactlyAtCap(t *testing.T) {
 
 	entityID := uuid.New()
 	// Binary search for the largest Changes value length that lands the
-	// payload at or below the cap.
+	// payload at or below the literal broker cap.
 	lo, hi := 0, shared.DefaultOutboxMaxPayloadBytes
 	for lo < hi {
 		mid := (lo + hi + 1) / 2

@@ -432,7 +432,7 @@ See [`config/.config-map.example`](config/.config-map.example) for all bootstrap
 - **lib-auth/v3** (`v3.0.0-20260415175119-1568b252d48a`): JWT extraction, RBAC authorization, tenant schema application. This is a pre-release pseudo-version pending upstream tag — see the `lib-auth/v3 Pseudo-version Tracking` appendix below for action items.
   - `auth.GetTenantID(ctx)`, `auth.GetTenantSlug(ctx)`, `auth.ApplyTenantSchema(ctx, tx)`
 
-- **lib-commons/v5** (`v5.0.0`): Common utilities, telemetry, infrastructure
+- **lib-commons/v5** (`v5.0.2`): Common utilities, telemetry, infrastructure
   - Tracking: `libCommons.NewTrackingFromContext(ctx)` → logger, tracer, headerID
   - OpenTelemetry: `libOpentelemetry.HandleSpanError(span, "msg", err)`
   - Database: `libPostgres.New()` / `libPostgres.NewPrimaryReplica()`

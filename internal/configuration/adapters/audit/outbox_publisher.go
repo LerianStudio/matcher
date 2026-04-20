@@ -27,15 +27,39 @@ const auditConfigEntityType = "audit_config"
 // OutboxPublisher publishes configuration audit events to the outbox for asynchronous processing.
 type OutboxPublisher struct {
 	outboxRepo sharedPorts.OutboxRepository
+	now        func() time.Time
+}
+
+// PublisherOption configures NewOutboxPublisher.
+type PublisherOption func(*OutboxPublisher)
+
+// WithClock injects a time source for the envelope Timestamp. Intended for
+// tests that need deterministic serialized envelope widths; production
+// callers should omit this option and rely on the default time.Now().UTC().
+func WithClock(now func() time.Time) PublisherOption {
+	return func(pub *OutboxPublisher) {
+		pub.now = now
+	}
 }
 
 // NewOutboxPublisher creates a new outbox-based audit publisher.
-func NewOutboxPublisher(repo sharedPorts.OutboxRepository) (*OutboxPublisher, error) {
+func NewOutboxPublisher(repo sharedPorts.OutboxRepository, opts ...PublisherOption) (*OutboxPublisher, error) {
 	if repo == nil {
 		return nil, ErrNilOutboxRepository
 	}
 
-	return &OutboxPublisher{outboxRepo: repo}, nil
+	pub := &OutboxPublisher{
+		outboxRepo: repo,
+		now:        func() time.Time { return time.Now().UTC() },
+	}
+
+	for _, opt := range opts {
+		if opt != nil {
+			opt(pub)
+		}
+	}
+
+	return pub, nil
 }
 
 // Publish enqueues a configuration audit event on the outbox.
@@ -75,7 +99,7 @@ func (pub *OutboxPublisher) Publish(ctx context.Context, event ports.AuditEvent)
 		Actor:      actor,
 		Changes:    event.Changes,
 		OccurredAt: event.OccurredAt,
-		Timestamp:  time.Now().UTC(),
+		Timestamp:  pub.now(),
 	}
 
 	payload, err := marshalOrTruncate(ctx, &auditEvent)
