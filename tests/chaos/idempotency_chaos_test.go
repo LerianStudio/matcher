@@ -285,8 +285,8 @@ func TestCHAOS20_RedisDown_FailOpenVsFailClosed(t *testing.T) {
 	getResp2, _ := cs.DoGet(t, "/health")
 	getWorks := getResp2.StatusCode == http.StatusOK
 
-	// Test 2: GET /ready — depends on Redis optionality (FIX-1 may affect this).
-	readyReq := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	// Test 2: GET /readyz — depends on Redis optionality (FIX-1 may affect this).
+	readyReq := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 
 	readyResp, _ := cs.App.Test(readyReq, 10000)
 	if readyResp != nil && readyResp.Body != nil {
@@ -321,7 +321,7 @@ func TestCHAOS20_RedisDown_FailOpenVsFailClosed(t *testing.T) {
 
 	t.Logf("With Redis DOWN:")
 	t.Logf("  GET /health: works=%v", getWorks)
-	t.Logf("  GET /ready:  status=%d (FIX-1 should make this 503 with rate limiting enabled)", readyStatus)
+	t.Logf("  GET /readyz: status=%d (FIX-1 should make this 503 with rate limiting enabled)", readyStatus)
 	t.Logf("  POST:        status=%d (idempotency fail-closed = 500)", postStatus)
 	t.Logf("  50 rapid GETs: %d/50 succeeded (rate limiter fail-open = no protection)", rapidGetCount)
 

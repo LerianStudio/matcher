@@ -106,7 +106,7 @@ func TestServiceStartup_Integration(t *testing.T) {
 			default:
 			}
 
-			return hasStatus(client, "http://localhost:18080/ready", http.StatusOK)
+			return hasStatus(client, "http://localhost:18080/readyz", http.StatusOK)
 		}, 30*time.Second, 200*time.Millisecond)
 	})
 }
@@ -235,7 +235,7 @@ func TestServiceStartupAndShutdown_Integration(t *testing.T) {
 		}, 30*time.Second, 200*time.Millisecond)
 
 		require.Eventually(t, func() bool {
-			return hasStatus(client, "http://localhost:18081/ready", http.StatusOK)
+			return hasStatus(client, "http://localhost:18081/readyz", http.StatusOK)
 		}, 30*time.Second, 200*time.Millisecond)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

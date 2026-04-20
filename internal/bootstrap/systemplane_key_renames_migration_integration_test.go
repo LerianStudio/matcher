@@ -329,7 +329,7 @@ func newSystemplaneRenameTestDB(t *testing.T, ctx context.Context, dbName string
 }
 
 // insertRuntimeEntry inserts a single row into system.runtime_entries at
-// (config, global, '', key) — the same tuple matcher uses for global
+// (config, global, ”, key) — the same tuple matcher uses for global
 // systemplane configuration — with a JSON-encoded string value.
 func insertRuntimeEntry(t *testing.T, ctx context.Context, db *sql.DB, key, value string) {
 	t.Helper()
@@ -353,7 +353,7 @@ func insertRuntimeHistory(t *testing.T, ctx context.Context, db *sql.DB, key, ol
 }
 
 // runtimeEntryCount returns the number of runtime_entries rows at the
-// canonical (config, global, '') scope with the given key.
+// canonical (config, global, ”) scope with the given key.
 func runtimeEntryCount(t *testing.T, ctx context.Context, db *sql.DB, key string) int {
 	t.Helper()
 
@@ -369,7 +369,7 @@ func runtimeEntryCount(t *testing.T, ctx context.Context, db *sql.DB, key string
 }
 
 // runtimeHistoryCount returns the number of runtime_history rows at the
-// canonical (config, global, '') scope with the given key.
+// canonical (config, global, ”) scope with the given key.
 func runtimeHistoryCount(t *testing.T, ctx context.Context, db *sql.DB, key string) int {
 	t.Helper()
 

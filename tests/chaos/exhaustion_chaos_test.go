@@ -290,7 +290,7 @@ func TestCHAOS17_PoolDeadlockUnderConcurrency(t *testing.T) {
 
 			start := time.Now()
 
-			req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+			req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 
 			resp, err := cs.App.Test(req, 10000)
 			if resp != nil && resp.Body != nil {

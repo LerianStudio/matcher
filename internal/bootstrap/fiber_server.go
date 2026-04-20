@@ -32,7 +32,6 @@ const (
 	defaultReadTimeout  = 30
 	defaultWriteTimeout = 30
 	defaultIdleTimeout  = 120
-	statusUnknown       = "unknown"
 )
 
 var (

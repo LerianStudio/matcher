@@ -104,7 +104,7 @@ func RegisterRoutes(
 	}
 
 	app.Get("/health", livenessHandler)
-	app.Get("/ready", readinessHandler(cfg, configGetter, drainingGetter, deps, logger))
+	app.Get("/readyz", readinessHandler(cfg, configGetter, drainingGetter, deps, logger))
 
 	// /version is registered unconditionally (including production).
 	// This is intentional: operational tooling (Kubernetes probes, deployment
@@ -131,7 +131,7 @@ func RegisterRoutes(
 			KeyPrefix:  "matcher",
 			SkipPaths: []string{
 				"/health",
-				"/ready",
+				"/readyz",
 				"/version",
 				// /system/* is the v5 systemplane admin plane. Its PUTs are the
 				// canonical "write runtime config" mutation — callers are

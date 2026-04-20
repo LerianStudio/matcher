@@ -10,7 +10,7 @@ This package handles:
 2. **Infrastructure**: PostgreSQL (primary/replica), Redis, RabbitMQ connections.
 3. **Observability**: OpenTelemetry initialization plus request-scoped tracking helpers.
 4. **Server Setup**: Fiber server with standardized middleware and error handling.
-5. **Routing & Auth**: `/health`, `/ready`, and protected `/api` routes.
+5. **Routing & Auth**: `/health`, `/readyz`, and protected `/api` routes.
 6. **Lifecycle**: service startup/shutdown via `lib-commons` launcher.
 7. **Systemplane**: Runtime configuration authority with hot-reloadable settings, change history, and schema.
 8. **Dynamic Infrastructure**: Runtime switching of database connections, Redis, object storage, and partition management.
@@ -40,8 +40,8 @@ This package handles:
 
 `RegisterRoutes` configures:
 
-- `GET /health`: returns `healthy`.
-- `GET /ready`: returns JSON readiness status; includes detailed dependency checks outside production.
+- `GET /health`: liveness endpoint, returns 503 until startup self-probe succeeds, then returns `healthy`.
+- `GET /readyz`: returns JSON readiness status using the canonical contract; always includes detailed dependency checks.
 
 Readiness uses `HealthDependencies`. Redis is optional by default; dependencies can be marked optional via `HealthDependencies.{Postgres,Redis,RabbitMQ}Optional`.
 

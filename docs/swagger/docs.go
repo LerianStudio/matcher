@@ -26,7 +26,7 @@ const docTemplate = `{
     "paths": {
         "/health": {
             "get": {
-                "description": "Returns a simple health check response to indicate the service is alive.\nUsed by Kubernetes liveness probes to detect if the service needs to be restarted.",
+                "description": "Returns HTTP 200 with \"healthy\" once the startup self-probe\nhas confirmed every required dependency. Returns 503 before\nthat gate is cleared so Kubernetes does not route traffic\nto a partially-initialised pod. Separate from /readyz, which\nprobes on every request.",
                 "produces": [
                     "text/plain"
                 ],
@@ -41,13 +41,19 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    "503": {
+                        "description": "self-probe failed",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             }
         },
-        "/ready": {
+        "/readyz": {
             "get": {
-                "description": "Checks if the service is ready to accept traffic by verifying all required dependencies.\nUsed by Kubernetes readiness probes to control traffic routing.\nReturns 200 OK when all required dependencies are healthy, 503 Service Unavailable otherwise.\nDependency check details are only included in development/test environments.",
+                "description": "Canonical Kubernetes readiness probe. Per-check status\nvocabulary: up, down, degraded, skipped, n/a. Top-level\n\"healthy\" iff every required dep is in {up, skipped, n/a};\nanything else yields \"unhealthy\" and HTTP 503.",
                 "produces": [
                     "application/json"
                 ],
@@ -55,16 +61,16 @@ const docTemplate = `{
                     "Health"
                 ],
                 "summary": "Readiness check",
-                "operationId": "getReady",
+                "operationId": "getReadyz",
                 "responses": {
                     "200": {
-                        "description": "Service is ready to accept traffic",
+                        "description": "Service is ready",
                         "schema": {
                             "$ref": "#/definitions/internal_bootstrap.ReadinessResponse"
                         }
                     },
                     "503": {
-                        "description": "Service is not ready (degraded state)",
+                        "description": "Service is not ready",
                         "schema": {
                             "$ref": "#/definitions/internal_bootstrap.ReadinessResponse"
                         }
@@ -9991,7 +9997,7 @@ const docTemplate = `{
         },
         "/version": {
             "get": {
-                "description": "Returns the service version from the VERSION environment variable (defaults to \"0.0.0\").",
+                "description": "Returns the service version from the VERSION environment\nvariable (defaults to \"0.0.0\").",
                 "produces": [
                     "application/json"
                 ],
@@ -13711,82 +13717,66 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_bootstrap.DependencyChecks": {
-            "description": "Individual dependency health status",
+        "internal_bootstrap.CheckResult": {
             "type": "object",
             "properties": {
-                "database": {
-                    "description": "Database check status: ok, down, or unknown",
-                    "type": "string",
-                    "enum": [
-                        "ok",
-                        "down",
-                        "unknown"
-                    ],
-                    "example": "ok"
+                "error": {
+                    "type": "string"
                 },
-                "databaseReplica": {
-                    "description": "DatabaseReplica check status: ok, down, or unknown",
-                    "type": "string",
-                    "enum": [
-                        "ok",
-                        "down",
-                        "unknown"
-                    ],
-                    "example": "ok"
+                "latency_ms": {
+                    "type": "integer",
+                    "example": 2
                 },
-                "objectStorage": {
-                    "description": "ObjectStorage check status: ok, down, or unknown",
-                    "type": "string",
-                    "enum": [
-                        "ok",
-                        "down",
-                        "unknown"
-                    ],
-                    "example": "ok"
+                "reason": {
+                    "type": "string"
                 },
-                "rabbitmq": {
-                    "description": "RabbitMQ check status: ok, down, or unknown",
+                "status": {
                     "type": "string",
                     "enum": [
-                        "ok",
+                        "up",
                         "down",
-                        "unknown"
+                        "degraded",
+                        "skipped",
+                        "n/a"
                     ],
-                    "example": "ok"
+                    "example": "up"
                 },
-                "redis": {
-                    "description": "Redis check status: ok, down, or unknown",
-                    "type": "string",
-                    "enum": [
-                        "ok",
-                        "down",
-                        "unknown"
-                    ],
-                    "example": "ok"
+                "tls": {
+                    "description": "TLS is a pointer so json omitempty drops it for deps that have no TLS\nconcept (e.g., in-process cache). For deps that do have TLS posture,\nfalse and true are both meaningful and must serialise.",
+                    "type": "boolean"
                 }
             }
         },
         "internal_bootstrap.ReadinessResponse": {
-            "description": "Service readiness status with optional dependency checks",
+            "description": "Kubernetes readiness probe response in the canonical contract shape (dev-readyz skill). Top-level \"status\" is \"healthy\" iff every check is in {up, skipped, n/a}; any \"down\" or \"degraded\" in a required dep yields \"unhealthy\" and HTTP 503.",
             "type": "object",
             "properties": {
                 "checks": {
-                    "description": "Checks contains individual dependency status (only in development/test environments)",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/internal_bootstrap.DependencyChecks"
-                        }
-                    ]
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/internal_bootstrap.CheckResult"
+                    }
                 },
-                "status": {
-                    "description": "Status is \"ok\" when all required dependencies are available, \"degraded\" otherwise",
+                "deployment_mode": {
                     "type": "string",
                     "enum": [
-                        "ok",
-                        "degraded"
+                        "saas",
+                        "byoc",
+                        "local"
                     ],
-                    "example": "ok"
+                    "example": "local"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "healthy",
+                        "unhealthy"
+                    ],
+                    "example": "healthy"
+                },
+                "version": {
+                    "type": "string",
+                    "example": "1.3.0"
                 }
             }
         },

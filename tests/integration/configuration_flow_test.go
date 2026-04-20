@@ -118,7 +118,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 			default:
 			}
 
-			return hasStatus(client, baseURL+"/ready", http.StatusOK)
+			return hasStatus(client, baseURL+"/readyz", http.StatusOK)
 		}, 30*time.Second, 200*time.Millisecond, "Server failed to start")
 
 		select {

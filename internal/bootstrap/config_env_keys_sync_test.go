@@ -49,12 +49,23 @@ func TestConfigEnvVarKeys_SyncWithStructTags(t *testing.T) {
 		structKeySet[key] = true
 	}
 
+	// Hand-parsed env vars: read directly by config_loading.go (not via env:
+	// struct tags). These must still appear in configEnvVarKeys so
+	// clearConfigEnvVars unsets them before each test, but they legitimately
+	// have no struct-tag counterpart. Adding to this allowlist is a
+	// declaration that the field is deliberately non-tagged.
+	handParsedEnvVars := map[string]bool{
+		"SHUTDOWN_GRACE_PERIOD_SEC": true, // top-level Config.ShutdownGracePeriod (mapstructure:"-")
+	}
+
 	var stale []string
 
 	for _, key := range configEnvVarKeys {
-		if !structKeySet[key] {
-			stale = append(stale, key)
+		if structKeySet[key] || handParsedEnvVars[key] {
+			continue
 		}
+
+		stale = append(stale, key)
 	}
 
 	assert.Empty(t, stale,

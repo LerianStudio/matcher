@@ -235,6 +235,7 @@ func buildWatchedSystemplaneKeys() []string {
 		// Infrastructure
 		"infrastructure.connect_timeout_sec",
 		"infrastructure.health_check_timeout_sec",
+		"infrastructure.health_check_timeout_ms",
 
 		// Idempotency
 		"idempotency.retry_window_sec",
@@ -402,6 +403,7 @@ func applySystemplaneOverrides(base Config, client *systemplane.Client) Config {
 	// --- Infrastructure ---
 	base.Infrastructure.ConnectTimeoutSec = SystemplaneGetInt(client, "infrastructure.connect_timeout_sec", base.Infrastructure.ConnectTimeoutSec)
 	base.Infrastructure.HealthCheckTimeoutSec = SystemplaneGetInt(client, "infrastructure.health_check_timeout_sec", base.Infrastructure.HealthCheckTimeoutSec)
+	base.Infrastructure.HealthCheckTimeoutMs = SystemplaneGetInt(client, "infrastructure.health_check_timeout_ms", base.Infrastructure.HealthCheckTimeoutMs)
 
 	// --- Idempotency ---
 	base.Idempotency.RetryWindowSec = SystemplaneGetInt(client, "idempotency.retry_window_sec", base.Idempotency.RetryWindowSec)

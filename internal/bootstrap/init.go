@@ -476,6 +476,22 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	configDone()
 
+	// Per-stack TLS enforcement. Runs BEFORE any connection opens so a stack
+	// flagged X_TLS_REQUIRED=true but configured without TLS cannot produce a
+	// silent insecure start. Stacks without the flag set are not enforced.
+	// See tls_enforcement.go for the full contract.
+	tlsRequiredDone := timer.track("tls_required_enforcement")
+
+	if err := ValidateRequiredTLS(cfg); err != nil {
+		// Close the span on the error path too; otherwise the phase record is
+		// never emitted and startup-latency telemetry misses the failure case.
+		tlsRequiredDone()
+
+		return nil, fmt.Errorf("bootstrap: tls_required enforcement: %w", err)
+	}
+
+	tlsRequiredDone()
+
 	done = timer.track("telemetry")
 
 	asserter := assert.New(ctx, logger, constants.ApplicationName, "bootstrap")
@@ -753,6 +769,17 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	infraStatus := buildInfraStatus(cfg, postgresConnection, redisConnection, rabbitMQConnection, modules, healthDeps, telemetry)
 	logStartupInfo(logger, cfg, infraStatus)
 	logStartupTiming(logger, timer)
+
+	// Startup self-probe. Flips selfProbeOK atomically after confirming every
+	// required dependency. A probe failure is logged but does NOT abort
+	// startup — the /health endpoint returns 503 until the flag flips, and
+	// the K8s livenessProbe restarts the pod if the condition persists.
+	// Keeping startup non-abortive preserves log collection for post-mortem.
+	selfProbeDone := timer.track("self_probe")
+
+	runStartupSelfProbe(ctx, healthDeps, logger, RunSelfProbe)
+
+	selfProbeDone()
 
 	// Register ConfigManager Stop() in cleanups so resources are torn down on shutdown.
 	if configManager != nil {
@@ -1171,6 +1198,7 @@ func newRabbitMQHealthCheck(
 }
 
 func attachBundleHealthChecks(
+	cfg *Config,
 	deps *HealthDependencies,
 	postgres *libPostgres.Client,
 	redis *libRedis.Client,
@@ -1180,7 +1208,16 @@ func attachBundleHealthChecks(
 	deps.RedisCheck = newRedisHealthCheck(redis)
 	// Preserve a DSN-based replica probe installed by assignReplicaHealthCheck.
 	// Overwriting would neutralise its dedicated connection + cleanup pair.
-	if deps.PostgresReplicaCheck == nil {
+	//
+	// Only install a primary-backed fallback when a DISTINCT replica is
+	// configured. Otherwise the fallback calls resolveReplicaDB on the primary
+	// client, which returns errNoReplicasConfigured → status=down on every
+	// /readyz hit — noisy dashboards for a legitimately absent dep. The
+	// evaluator's applyReadinessCheckResult treats an unresolved optional dep
+	// as "skipped, reason=postgres_replica not configured", which is the
+	// accurate story.
+	if deps.PostgresReplicaCheck == nil && cfg != nil &&
+		cfg.Postgres.ReplicaHost != "" && cfg.Postgres.ReplicaHost != cfg.Postgres.PrimaryHost {
 		deps.PostgresReplicaCheck = newPostgresReplicaHealthCheck(postgres)
 	}
 
@@ -1238,7 +1275,7 @@ func createHealthDependencies(
 	deps.RedisOptional = false
 
 	assignReplicaHealthCheck(ctx, cfg, logger, deps, cleanups)
-	attachBundleHealthChecks(deps, postgres, redis, rabbitmq)
+	attachBundleHealthChecks(cfg, deps, postgres, redis, rabbitmq)
 
 	if err := configureObjectStorageHealthChecks(ctx, cfg, deps, logger); err != nil {
 		return nil, err

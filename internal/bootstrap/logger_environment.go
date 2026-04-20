@@ -29,6 +29,42 @@ func IsProductionEnvironment(envName string) bool {
 	return strings.EqualFold(strings.TrimSpace(envName), envProduction)
 }
 
+// deploymentModeSaaS is the canonical SaaS deployment-mode value. Matching
+// against this constant is case-insensitive and trimmed.
+const deploymentModeSaaS = "saas"
+
+// deploymentModeByoc is the canonical BYOC deployment-mode value.
+const deploymentModeByoc = "byoc"
+
+// deploymentModeLocal is the default deployment-mode value when none is set.
+const deploymentModeLocal = "local"
+
+// IsSaaSMode reports whether the deployment-mode is the SaaS profile.
+// Deployment mode is informational only — it surfaces in the /readyz
+// response envelope and drives logger configuration defaults. It does NOT
+// gate TLS enforcement; use the per-stack X_TLS_REQUIRED flags consumed by
+// ValidateRequiredTLS for that.
+func (c AppConfig) IsSaaSMode() bool {
+	return strings.EqualFold(strings.TrimSpace(c.Mode), deploymentModeSaaS)
+}
+
+// DeploymentMode returns the configured mode (trimmed, lowercased), falling
+// back to "local" when empty. This is the value surfaced in the /readyz
+// response as "deployment_mode".
+func (c AppConfig) DeploymentMode() string {
+	mode := strings.ToLower(strings.TrimSpace(c.Mode))
+	if mode == "" {
+		return deploymentModeLocal
+	}
+
+	switch mode {
+	case deploymentModeSaaS, deploymentModeByoc, deploymentModeLocal:
+		return mode
+	default:
+		return deploymentModeLocal
+	}
+}
+
 // IsDevelopmentOrTestEnvironment reports whether envName is an explicit
 // development or test environment. Used to gate behaviors that should ONLY
 // be allowed in local-dev / test harnesses — staging, UAT, QA, preview, and

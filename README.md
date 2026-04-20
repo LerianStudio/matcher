@@ -93,7 +93,7 @@ make migrate-up
 
 ```bash
 curl http://localhost:4018/health
-# {"status":"ok"}
+# Returns plain text "healthy" or HTTP 503
 ```
 
 The API is available at `http://localhost:4018`. Swagger UI is accessible at `http://localhost:4018/swagger/index.html` when running in non-production mode.
