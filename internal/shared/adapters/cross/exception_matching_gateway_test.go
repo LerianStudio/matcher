@@ -481,7 +481,7 @@ func (r *recordingLogger) Log(_ context.Context, level libLog.Level, _ string, _
 	}
 }
 
-func (r *recordingLogger) With(_ ...libLog.Field) libLog.Logger    { return r }
-func (r *recordingLogger) WithGroup(_ string) libLog.Logger         { return r }
-func (r *recordingLogger) Enabled(_ libLog.Level) bool              { return true }
-func (r *recordingLogger) Sync(_ context.Context) error             { return nil }
+func (r *recordingLogger) With(_ ...libLog.Field) libLog.Logger { return r }
+func (r *recordingLogger) WithGroup(_ string) libLog.Logger     { return r }
+func (r *recordingLogger) Enabled(_ libLog.Level) bool          { return true }
+func (r *recordingLogger) Sync(_ context.Context) error         { return nil }

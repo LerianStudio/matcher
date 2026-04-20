@@ -771,4 +771,3 @@ func (h *ChaosHarness) SetEnvForBootstrap(t *testing.T) {
 		t.Setenv(k, v)
 	}
 }
-
