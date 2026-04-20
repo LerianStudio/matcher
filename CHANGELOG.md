@@ -1,3 +1,34 @@
+# Matcher Changelog
+
+## [1.3.0](https://github.com/LerianStudio/matcher/releases/tag/v1.3.0)
+
+Features:
+- Added cursor-based pagination for export job listings.
+- Introduced a fan-out mechanism for tenants in the BridgeWorker.
+- Implemented a systemplane config with legacy key aliases.
+- Added a logger bundle for structured logging.
+- Integrated multi-tenant vhost isolation for RabbitMQ event publishers.
+
+Fixes:
+- Addressed CodeRabbit review feedback on lib-commons v5 migration.
+- Eliminated race conditions in ExactlyAtCap outbox payload test.
+- Hardened streaming iterators against nil rows in reporting.
+- Applied typed-nil guard to ingestion and match publish helpers.
+- Scoped idempotency keys by principal and query string for added security.
+
+Improvements:
+- Migrated services and bootstrap to lib-commons v5 and lib-auth v3.
+- Enhanced archival worker resilience in governance.
+- Reduced N+1 queries in bulk operations via FindByIDs preload.
+- Improved dispatch error handling in exceptions.
+- Optimized HTTP requests by skipping url.Values allocation when request has 0-1 query params.
+
+Contributors: @bedatty, @dependabot[bot], @fred, @gandalf, @jeff, @lerian-studio-midaz-push-bot[bot], @lucas.bedatty
+
+[Compare changes](https://github.com/LerianStudio/matcher/compare/v1.2.1...v1.3.0)
+
+---
+
 ## [1.3.0](https://github.com/LerianStudio/matcher/compare/v1.2.1...v1.3.0) (2026-04-20)
 
 
@@ -854,3 +885,4 @@ Contributors: @bedatty, @dependabot[bot], @ferr3ira-gabriel, @ferr3ira.gabriel, 
 * **e2e:** resolve dashboard stresser flakiness with unique names ([7e93cfc](https://github.com/LerianStudio/matcher/commit/7e93cfcc13d9d074eceebe09b39e9f8b7f7f42ed))
 
 ## 1.0.0 (2026-02-19)
+
