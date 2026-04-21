@@ -3008,16 +3008,6 @@ func initMatchingModule(
 		return nil, fmt.Errorf("create matching configuration provider: %w", err)
 	}
 
-	sourceAdapter, err := crossAdapters.NewSourceProviderAdapter(repos.configSource)
-	if err != nil {
-		return nil, fmt.Errorf("create source provider adapter for matching: %w", err)
-	}
-
-	feeRuleAdapter, err := crossAdapters.NewFeeRuleProviderAdapter(repos.configFeeRule)
-	if err != nil {
-		return nil, fmt.Errorf("create fee rule provider adapter for matching: %w", err)
-	}
-
 	transactionAdapter, err := crossAdapters.NewTransactionRepositoryAdapterFromRepo(
 		provider,
 		repos.ingestionTx,
@@ -3035,7 +3025,7 @@ func initMatchingModule(
 
 	useCase, err := matchingCommand.New(matchingCommand.UseCaseDeps{
 		ContextProvider:  configProvider.ContextProvider(),
-		SourceProvider:   sourceAdapter,
+		SourceProvider:   configProvider.SourceProvider(),
 		RuleProvider:     configProvider.MatchRuleProvider(),
 		TxRepo:           transactionAdapter,
 		LockManager:      lockManager,
@@ -3049,7 +3039,7 @@ func initMatchingModule(
 		InfraProvider:    provider,
 		AuditLogRepo:     repos.governanceAuditLog,
 		FeeScheduleRepo:  repos.feeSchedule,
-		FeeRuleProvider:  feeRuleAdapter,
+		FeeRuleProvider:  configProvider.FeeRuleProvider(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create matching command use case: %w", err)

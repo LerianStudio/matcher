@@ -55,6 +55,32 @@ func newTestContextProviderAdapter(repo configRepositories.ContextRepository) (*
 	return provider.ContextProvider(), nil
 }
 
+func newTestSourceProviderAdapter(repo configRepositories.SourceRepository) (*SourceProviderAdapter, error) {
+	if repo == nil {
+		return nil, ErrSourceRepositoryRequired
+	}
+
+	provider, err := NewMatchingConfigurationProvider(nil, repo, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return provider.SourceProvider(), nil
+}
+
+func newTestFeeRuleProviderAdapter(repo configRepositories.FeeRuleRepository) (*FeeRuleProviderAdapter, error) {
+	if repo == nil {
+		return nil, ErrFeeRuleRepositoryRequired
+	}
+
+	provider, err := NewMatchingConfigurationProvider(nil, nil, nil, repo)
+	if err != nil {
+		return nil, err
+	}
+
+	return provider.FeeRuleProvider(), nil
+}
+
 type feeRuleRepositoryStub struct {
 	rules []*fee.FeeRule
 	err   error
@@ -350,42 +376,12 @@ func TestContextProviderAdapter_FindByID_NilResult(t *testing.T) {
 	assert.Nil(t, result)
 }
 
-func TestNewSourceProviderAdapter_NilRepo(t *testing.T) {
-	t.Parallel()
-
-	adapter, err := NewSourceProviderAdapter(nil)
-	require.ErrorIs(t, err, ErrSourceRepositoryRequired)
-	assert.Nil(t, adapter)
-}
-
-func TestNewSourceProviderAdapter_ValidRepo(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRepo := mocks.NewMockSourceRepository(ctrl)
-	adapter, err := NewSourceProviderAdapter(mockRepo)
-
-	require.NoError(t, err)
-	require.NotNil(t, adapter)
-	assert.Equal(t, mockRepo, adapter.provider.sourceRepo)
-}
-
-func TestNewFeeRuleProviderAdapter_NilRepo(t *testing.T) {
-	t.Parallel()
-
-	adapter, err := NewFeeRuleProviderAdapter(nil)
-	require.ErrorIs(t, err, ErrFeeRuleRepositoryRequired)
-	assert.Nil(t, adapter)
-}
-
 func TestFeeRuleProviderAdapter_FindByContextID_Success(t *testing.T) {
 	t.Parallel()
 
 	contextID := uuid.New()
 	rules := []*fee.FeeRule{{ID: uuid.New(), ContextID: contextID, Name: "fee-rule"}}
-	adapter, err := NewFeeRuleProviderAdapter(&feeRuleRepositoryStub{rules: rules})
+	adapter, err := newTestFeeRuleProviderAdapter(&feeRuleRepositoryStub{rules: rules})
 	require.NoError(t, err)
 
 	result, err := adapter.FindByContextID(context.Background(), contextID)
@@ -397,7 +393,7 @@ func TestFeeRuleProviderAdapter_FindByContextID_Success(t *testing.T) {
 func TestFeeRuleProviderAdapter_FindByContextID_Empty(t *testing.T) {
 	t.Parallel()
 
-	adapter, err := NewFeeRuleProviderAdapter(&feeRuleRepositoryStub{rules: nil})
+	adapter, err := newTestFeeRuleProviderAdapter(&feeRuleRepositoryStub{rules: nil})
 	require.NoError(t, err)
 
 	result, err := adapter.FindByContextID(context.Background(), uuid.New())
@@ -408,7 +404,7 @@ func TestFeeRuleProviderAdapter_FindByContextID_Empty(t *testing.T) {
 func TestFeeRuleProviderAdapter_FindByContextID_Error(t *testing.T) {
 	t.Parallel()
 
-	adapter, err := NewFeeRuleProviderAdapter(&feeRuleRepositoryStub{err: errTestRepo})
+	adapter, err := newTestFeeRuleProviderAdapter(&feeRuleRepositoryStub{err: errTestRepo})
 	require.NoError(t, err)
 
 	result, err := adapter.FindByContextID(context.Background(), uuid.New())
@@ -448,7 +444,7 @@ func TestSourceProviderAdapter_FindByContextID_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockSourceRepository(ctrl)
-	adapter, err := NewSourceProviderAdapter(mockRepo)
+	adapter, err := newTestSourceProviderAdapter(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -501,7 +497,7 @@ func TestSourceProviderAdapter_FindByContextID_PaginatesAllSources(t *testing.T)
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockSourceRepository(ctrl)
-	adapter, err := NewSourceProviderAdapter(mockRepo)
+	adapter, err := newTestSourceProviderAdapter(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -553,7 +549,7 @@ func TestSourceProviderAdapter_FindByContextID_SkipsNilSources(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockSourceRepository(ctrl)
-	adapter, err := NewSourceProviderAdapter(mockRepo)
+	adapter, err := newTestSourceProviderAdapter(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -601,7 +597,7 @@ func TestSourceProviderAdapter_FindByContextID_Error(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockSourceRepository(ctrl)
-	adapter, err := NewSourceProviderAdapter(mockRepo)
+	adapter, err := newTestSourceProviderAdapter(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -626,7 +622,7 @@ func TestSourceProviderAdapter_FindByContextID_EmptySources(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockSourceRepository(ctrl)
-	adapter, err := NewSourceProviderAdapter(mockRepo)
+	adapter, err := newTestSourceProviderAdapter(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()

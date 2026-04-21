@@ -131,34 +131,6 @@ func (provider *MatchingConfigurationProvider) FeeRuleProvider() *FeeRuleProvide
 	return &FeeRuleProviderAdapter{provider: provider}
 }
 
-// NewSourceProviderAdapter creates a new adapter for SourceRepository.
-func NewSourceProviderAdapter(repo configRepositories.SourceRepository) (*SourceProviderAdapter, error) {
-	if repo == nil {
-		return nil, ErrSourceRepositoryRequired
-	}
-
-	provider, err := NewMatchingConfigurationProvider(nil, repo, nil, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return provider.SourceProvider(), nil
-}
-
-// NewFeeRuleProviderAdapter creates a new adapter for FeeRuleRepository.
-func NewFeeRuleProviderAdapter(repo configRepositories.FeeRuleRepository) (*FeeRuleProviderAdapter, error) {
-	if repo == nil {
-		return nil, ErrFeeRuleRepositoryRequired
-	}
-
-	provider, err := NewMatchingConfigurationProvider(nil, nil, nil, repo)
-	if err != nil {
-		return nil, err
-	}
-
-	return provider.FeeRuleProvider(), nil
-}
-
 // ListByContextID retrieves match rules and converts them to shared types.
 func (provider *MatchingConfigurationProvider) listMatchRulesByContextID(
 	ctx context.Context,

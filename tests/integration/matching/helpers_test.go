@@ -245,8 +245,7 @@ func wireE4T9UseCases(t *testing.T, h *integration.TestHarness) e4t9Wired {
 		configFeeRuleRepo.NewRepository(provider),
 	)
 	require.NoError(t, err)
-	srcProvider, err := sharedCross.NewSourceProviderAdapter(cfgSourceRepo)
-	require.NoError(t, err)
+	srcProvider := configProvider.SourceProvider()
 
 	txAdapter, err := sharedCross.NewTransactionRepositoryAdapterFromRepo(provider, txRepo)
 	require.NoError(t, err)
@@ -261,8 +260,7 @@ func wireE4T9UseCases(t *testing.T, h *integration.TestHarness) e4t9Wired {
 	adjustment := adjustmentRepo.NewRepository(provider, auditLogRepo)
 	feeSchedule := feeScheduleRepo.NewRepository(provider)
 
-	feeRuleProvider, err := sharedCross.NewFeeRuleProviderAdapter(configFeeRuleRepo.NewRepository(provider))
-	require.NoError(t, err)
+	feeRuleProvider := configProvider.FeeRuleProvider()
 
 	matchingUC, err := matchingCommand.New(matchingCommand.UseCaseDeps{
 		ContextProvider:  configProvider.ContextProvider(),
