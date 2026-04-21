@@ -702,6 +702,47 @@ func TestNewContextProviderAdapter_ValidRepo(t *testing.T) {
 	assert.Equal(t, mockRepo, adapter.provider.contextRepo)
 }
 
+func TestNewSourceProviderAdapter_NilRepo(t *testing.T) {
+	t.Parallel()
+
+	adapter, err := newTestSourceProviderAdapter(nil)
+	require.ErrorIs(t, err, ErrSourceRepositoryRequired)
+	assert.Nil(t, adapter)
+}
+
+func TestNewSourceProviderAdapter_ValidRepo(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRepo := mocks.NewMockSourceRepository(ctrl)
+	adapter, err := newTestSourceProviderAdapter(mockRepo)
+
+	require.NoError(t, err)
+	require.NotNil(t, adapter)
+	assert.Equal(t, mockRepo, adapter.provider.sourceRepo)
+}
+
+func TestNewFeeRuleProviderAdapter_NilRepo(t *testing.T) {
+	t.Parallel()
+
+	adapter, err := newTestFeeRuleProviderAdapter(nil)
+	require.ErrorIs(t, err, ErrFeeRuleRepositoryRequired)
+	assert.Nil(t, adapter)
+}
+
+func TestNewFeeRuleProviderAdapter_ValidRepo(t *testing.T) {
+	t.Parallel()
+
+	repo := &feeRuleRepositoryStub{}
+	adapter, err := newTestFeeRuleProviderAdapter(repo)
+
+	require.NoError(t, err)
+	require.NotNil(t, adapter)
+	assert.Equal(t, repo, adapter.provider.feeRuleRepo)
+}
+
 func TestMatchRuleProviderAdapter_ListByContextID_SkipsNilRules(t *testing.T) {
 	t.Parallel()
 
