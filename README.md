@@ -144,8 +144,7 @@ matcher/
 │   └── testutil/         # Shared test helpers
 ├── migrations/           # PostgreSQL schema migrations (21 migrations)
 ├── pkg/                  # Reusable library packages
-│   ├── chanutil/         # Safe channel utilities
-│   └── storageopt/       # Object storage functional options
+│   └── chanutil/         # Safe channel utilities
 ├── scripts/              # Dev and CI utility scripts
 ├── tests/                # Integration, E2E, chaos, and static analysis tests
 └── tools/                # Custom linters and dev tooling

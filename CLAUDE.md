@@ -456,7 +456,6 @@ See [`config/.config-map.example`](config/.config-map.example) for all bootstrap
 ### Internal Packages (`pkg/`)
 
 - **pkg/chanutil** — Safe channel utilities for goroutine communication
-- **pkg/storageopt** — Functional options for object storage operations
 
 ## Linting & Security
 
