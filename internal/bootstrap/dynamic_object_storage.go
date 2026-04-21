@@ -12,7 +12,6 @@ import (
 	"time"
 
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
-	"github.com/LerianStudio/matcher/pkg/storageopt"
 )
 
 type dynamicObjectStorageClient struct {
@@ -68,7 +67,7 @@ func (client *dynamicObjectStorageClient) UploadIfAbsent(ctx context.Context, ke
 }
 
 // UploadWithOptions delegates object upload with options to the current runtime storage client.
-func (client *dynamicObjectStorageClient) UploadWithOptions(ctx context.Context, key string, reader io.Reader, contentType string, opts ...storageopt.UploadOption) (string, error) {
+func (client *dynamicObjectStorageClient) UploadWithOptions(ctx context.Context, key string, reader io.Reader, contentType string, opts ...sharedPorts.UploadOption) (string, error) {
 	delegate, err := client.current()
 	if err != nil {
 		return "", fmt.Errorf("resolve object storage client for upload with options: %w", err)

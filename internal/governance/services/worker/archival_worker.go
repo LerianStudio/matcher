@@ -35,7 +35,6 @@ import (
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
-	"github.com/LerianStudio/matcher/pkg/storageopt"
 )
 
 const (
@@ -813,7 +812,7 @@ func streamPartitionViaPipe(
 		archiveKey,
 		pipeReader,
 		archiveContentType,
-		storageopt.WithStorageClass(aw.cfg.StorageClass),
+		sharedPorts.WithStorageClass(aw.cfg.StorageClass),
 	)
 	// Ensure the reader side is closed so the producer unblocks even if the
 	// uploader returned early (e.g. auth failure without reading to EOF).

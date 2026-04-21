@@ -1,4 +1,3 @@
-// Package chanutil provides utilities for Go channel operations.
 package chanutil
 
 // ClosedSignalChannel reports whether a close-only lifecycle channel is nil or

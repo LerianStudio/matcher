@@ -21,7 +21,6 @@ import (
 	discoveryExtractionRepo "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres/extraction"
 	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
-	"github.com/LerianStudio/matcher/pkg/storageopt"
 )
 
 // stubObjectStorage is the minimal ObjectStorageClient needed to exercise
@@ -52,7 +51,7 @@ func (s *stubObjectStorage) UploadWithOptions(
 	_ string,
 	_ io.Reader,
 	_ string,
-	_ ...storageopt.UploadOption,
+	_ ...sharedPorts.UploadOption,
 ) (string, error) {
 	return "", nil
 }

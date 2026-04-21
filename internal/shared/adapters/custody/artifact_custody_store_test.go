@@ -23,7 +23,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
-	"github.com/LerianStudio/matcher/pkg/storageopt"
 )
 
 // fakeObjectStorage is a manual mock of ObjectStorageClient. The custody
@@ -120,7 +119,7 @@ func (f *fakeObjectStorage) UploadWithOptions(
 	key string,
 	reader io.Reader,
 	contentType string,
-	_ ...storageopt.UploadOption,
+	_ ...sharedPorts.UploadOption,
 ) (string, error) {
 	return f.Upload(ctx, key, reader, contentType)
 }

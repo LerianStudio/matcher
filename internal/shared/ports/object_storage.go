@@ -6,17 +6,26 @@ import (
 	"errors"
 	"io"
 	"time"
-
-	"github.com/LerianStudio/matcher/pkg/storageopt"
 )
 
-// UploadOption is a functional option for configuring upload parameters.
-// Re-exported from pkg/storageopt to provide a convenient single-import experience.
-type UploadOption = storageopt.UploadOption
+// UploadOption configures optional upload parameters for ObjectStorageClient.
+type UploadOption func(*UploadOptions)
 
 // UploadOptions holds optional parameters for upload operations.
-// Re-exported from pkg/storageopt to provide a convenient single-import experience.
-type UploadOptions = storageopt.UploadOptions
+type UploadOptions struct {
+	StorageClass         string
+	ServerSideEncryption string
+}
+
+// WithStorageClass sets the storage class for the upload (e.g., "GLACIER", "DEEP_ARCHIVE").
+func WithStorageClass(class string) UploadOption {
+	return func(o *UploadOptions) { o.StorageClass = class }
+}
+
+// WithServerSideEncryption sets server-side encryption (e.g., "aws:kms", "AES256").
+func WithServerSideEncryption(sse string) UploadOption {
+	return func(o *UploadOptions) { o.ServerSideEncryption = sse }
+}
 
 // ErrObjectStorageUnavailable indicates runtime object storage is not currently available.
 var ErrObjectStorageUnavailable = errors.New("object storage is unavailable")
@@ -61,7 +70,7 @@ type ObjectStorageClient interface {
 	UploadIfAbsent(ctx context.Context, key string, reader io.Reader, contentType string) (string, error)
 
 	// UploadWithOptions stores content with configurable storage options.
-	UploadWithOptions(ctx context.Context, key string, reader io.Reader, contentType string, opts ...storageopt.UploadOption) (string, error)
+	UploadWithOptions(ctx context.Context, key string, reader io.Reader, contentType string, opts ...UploadOption) (string, error)
 
 	// Download retrieves content from the given key.
 	// The caller must close the returned ReadCloser.

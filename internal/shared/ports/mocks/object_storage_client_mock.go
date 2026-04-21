@@ -15,7 +15,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/LerianStudio/matcher/pkg/storageopt"
+	ports "github.com/LerianStudio/matcher/internal/shared/ports"
 
 	"go.uber.org/mock/gomock"
 )
@@ -133,7 +133,7 @@ func (mr *MockObjectStorageClientMockRecorder) UploadIfAbsent(ctx, key, reader, 
 }
 
 // UploadWithOptions mocks base method.
-func (m *MockObjectStorageClient) UploadWithOptions(ctx context.Context, key string, reader io.Reader, contentType string, opts ...storageopt.UploadOption) (string, error) {
+func (m *MockObjectStorageClient) UploadWithOptions(ctx context.Context, key string, reader io.Reader, contentType string, opts ...ports.UploadOption) (string, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{ctx, key, reader, contentType}
 	for _, a := range opts {
