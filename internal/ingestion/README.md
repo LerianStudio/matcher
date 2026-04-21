@@ -32,9 +32,8 @@ internal/ingestion/
 │   ├── repositories/    # Job and transaction repository interfaces
 │   └── value_objects/   # JobStatus
 ├── ports/               # Parser, DedupeService, FieldMapRepository, SourceRepository,
-│                        #   EventPublisher, MatchTrigger, Dispatcher
-│   ├── match_trigger.go # Triggers auto-matching after ingestion completes
-│   └── dispatcher.go    # Dispatcher port
+│                        #   EventPublisher, MatchTrigger
+│   └── match_trigger.go # Triggers auto-matching after ingestion completes
 └── services/
     ├── command/         # Upload & processing logic
     └── query/           # Job, transaction, preview, and search queries

@@ -427,8 +427,7 @@ func matcherKeyDefs(cfg *Config) []matcherKeyDef {
 
 	// --- App ---
 	// app.log_level intentionally NOT registered: LOG_LEVEL is bootstrap-only.
-	// Runtime log-level swapping would require re-wiring SwappableLogger.Swap to
-	// systemplane OnChange, which is not implemented. Set LOG_LEVEL via env var
+	// Runtime log-level swapping is not implemented. Set LOG_LEVEL via env var
 	// and restart to change.
 	//
 	// app.mode intentionally NOT registered: DEPLOYMENT_MODE is bootstrap-only.

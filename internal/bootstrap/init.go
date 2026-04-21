@@ -435,8 +435,6 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		return nil, fmt.Errorf("initialize logger: %w", err)
 	}
 
-	logger = NewSwappableLogger(logger)
-
 	done()
 
 	configDone := timer.track("config")
