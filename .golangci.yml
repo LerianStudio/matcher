@@ -392,21 +392,20 @@ linters:
             - pkg: "github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
               desc: "Cross-context violation: Matching cannot import Ingestion repo interfaces. Domain data types (entities, value_objects) only — repo-interface coupling is a port-layer concern."
             # ──────────────────────────────────────────────────────────────
-            # CARVE-OUT #4 (matching half): matching → governance/adapters/postgres/audit_log ALLOWED.
-            # Grants access to the governance audit log repository package
-            # so T-016 can collapse the AuditLogRepository port. Depguard
-            # can only enforce package-path granularity — the concrete type
-            # at this path exposes read methods (GetByID, ListByEntity, List)
-            # alongside append. This carve-out does not widen the read
-            # surface beyond what `sharedPorts.AuditLogRepository` already
-            # allowed today; it replaces the port with direct concrete-type
-            # access. Reviewers of changes to the governance audit repo
-            # MUST consider cross-context read implications from matching.
-            # Sibling sub-packages (actor_mapping/, archive_metadata/) are
-            # explicitly denied below to prevent prefix-match leaks.
+            # CARVE-OUT #4 (matching half): matching → governance/domain/repositories ALLOWED.
+            # After T-016 deleted internal/shared/ports/audit.go, the canonical
+            # AuditLogRepository interface lives in governance/domain/repositories
+            # (governance-native layering). Matching imports this interface; the
+            # concrete *governancePostgres.Repository is wired by bootstrap and
+            # satisfies the interface by shape. Sibling governance/domain
+            # sub-packages (entities, errors, hashchain) remain denied below to
+            # confine the carve-out to the one repo interface matching needs.
+            # The broader `governance/adapters/postgres` path is ALSO permitted
+            # by omission here so matching's bootstrap + tests that reference
+            # the concrete type continue to work. actor_mapping/ and
+            # archive_metadata/ sub-packages stay explicitly denied below.
             # Service-layer callers in `matching/services/**` route through
-            # this carve-out because service-no-adapters is split in parallel
-            # to leave `governance/adapters/postgres/audit_log` permitted.
+            # service-no-adapters which is split in parallel.
             # Consumed by: T-016 (R-09 AuditLogRepository port collapse).
             # ──────────────────────────────────────────────────────────────
             - pkg: "github.com/LerianStudio/matcher/internal/governance/adapters/http"
@@ -417,8 +416,12 @@ linters:
               desc: "Cross-context violation: Matching cannot import governance's actor_mapping adapter. Audit log is the only carved-out governance path."
             - pkg: "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/archive_metadata"
               desc: "Cross-context violation: Matching cannot import governance's archive_metadata adapter. Audit log is the only carved-out governance path."
-            - pkg: "github.com/LerianStudio/matcher/internal/governance/domain"
-              desc: "Cross-context violation: Matching cannot import Governance domain. Use shared/ports or shared kernel."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/domain/entities"
+              desc: "Cross-context violation: Matching cannot import Governance entities. Use shared kernel (internal/shared/domain) for cross-context types."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/domain/errors"
+              desc: "Cross-context violation: Matching cannot import Governance errors. Governance sentinels are internal to that context."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/domain/hashchain"
+              desc: "Cross-context violation: Matching cannot import Governance hashchain logic. Hash chain is a governance implementation detail."
             - pkg: "github.com/LerianStudio/matcher/internal/governance/ports"
               desc: "Cross-context violation: Matching cannot import Governance ports. Close the hole before governance/ports/ is populated."
             - pkg: "github.com/LerianStudio/matcher/internal/governance/services"
@@ -444,21 +447,17 @@ linters:
             - pkg: "github.com/LerianStudio/matcher/internal/matching"
               desc: "Cross-context violation: Exception cannot import Matching directly."
             # ──────────────────────────────────────────────────────────────
-            # CARVE-OUT #4 (exception half): exception → governance/adapters/postgres/audit_log ALLOWED.
+            # CARVE-OUT #4 (exception half): exception → governance/domain/repositories ALLOWED.
             # Same rationale as carve-out #4 in `cross-context-matching`.
-            # Depguard can only enforce package-path granularity — the
-            # concrete type at this path exposes read methods (GetByID,
-            # ListByEntity, List); exception/services/query/queries.go
-            # already uses ListByEntity today via `sharedPorts.AuditLogRepository`.
-            # This carve-out does not widen the read surface beyond what
-            # that port already allowed; it replaces the port with direct
-            # concrete-type access. Reviewers of governance audit repo
-            # changes MUST consider cross-context read implications from
-            # exception. Sibling sub-packages (actor_mapping/,
-            # archive_metadata/) are explicitly denied below to prevent
-            # prefix-match leaks. Service-layer callers in
-            # `exception/services/**` route through this carve-out because
-            # service-no-adapters is split in parallel.
+            # After T-016 deleted internal/shared/ports/audit.go, the canonical
+            # AuditLogRepository interface lives in governance/domain/repositories.
+            # exception/services/query/queries.go holds the interface value and
+            # uses ListByEntity; the concrete governance repo is wired by
+            # bootstrap. Sibling governance/domain sub-packages (entities,
+            # errors, hashchain) remain denied below; governance/adapters/postgres
+            # (root + audit_log) remains permitted by omission for symmetry with
+            # bootstrap wiring. actor_mapping/ and archive_metadata/ sub-packages
+            # stay explicitly denied to prevent prefix-match leaks.
             # Consumed by: T-016 (R-09 AuditLogRepository port collapse).
             # ──────────────────────────────────────────────────────────────
             - pkg: "github.com/LerianStudio/matcher/internal/governance/adapters/http"
@@ -469,8 +468,12 @@ linters:
               desc: "Cross-context violation: Exception cannot import governance's actor_mapping adapter. Audit log is the only carved-out governance path."
             - pkg: "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/archive_metadata"
               desc: "Cross-context violation: Exception cannot import governance's archive_metadata adapter. Audit log is the only carved-out governance path."
-            - pkg: "github.com/LerianStudio/matcher/internal/governance/domain"
-              desc: "Cross-context violation: Exception cannot import Governance domain. Use shared/ports or shared kernel."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/domain/entities"
+              desc: "Cross-context violation: Exception cannot import Governance entities. Use shared kernel (internal/shared/domain) for cross-context types."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/domain/errors"
+              desc: "Cross-context violation: Exception cannot import Governance errors. Governance sentinels are internal to that context."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/domain/hashchain"
+              desc: "Cross-context violation: Exception cannot import Governance hashchain logic. Hash chain is a governance implementation detail."
             - pkg: "github.com/LerianStudio/matcher/internal/governance/ports"
               desc: "Cross-context violation: Exception cannot import Governance ports. Close the hole before governance/ports/ is populated."
             - pkg: "github.com/LerianStudio/matcher/internal/governance/services"

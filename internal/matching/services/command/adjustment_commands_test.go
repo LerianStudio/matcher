@@ -80,7 +80,7 @@ func (s *stubInfraProvider) GetPrimaryDB(ctx context.Context) (*sharedPorts.DBLe
 	return sharedPorts.NewDBLease(db, nil), nil
 }
 
-// stubAuditLogRepo implements sharedPorts.AuditLogRepository for testing.
+// stubAuditLogRepo implements governanceRepositories.AuditLogRepository for testing.
 type stubAuditLogRepo struct {
 	createErr error
 }

@@ -14,8 +14,8 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/dispute"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
+	governanceRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
-	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // Query use case errors.
@@ -37,7 +37,7 @@ type TenantExtractor interface {
 type UseCase struct {
 	exceptionRepo   repositories.ExceptionRepository
 	disputeRepo     repositories.DisputeRepository
-	auditRepo       sharedPorts.AuditLogRepository
+	auditRepo       governanceRepositories.AuditLogRepository
 	tenantExtractor TenantExtractor
 }
 
@@ -45,7 +45,7 @@ type UseCase struct {
 func NewUseCase(
 	exceptionRepo repositories.ExceptionRepository,
 	disputeRepo repositories.DisputeRepository,
-	auditRepo sharedPorts.AuditLogRepository,
+	auditRepo governanceRepositories.AuditLogRepository,
 	tenantExtractor TenantExtractor,
 ) (*UseCase, error) {
 	if exceptionRepo == nil {

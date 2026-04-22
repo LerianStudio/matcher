@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	governanceRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	matchingRepositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	matching "github.com/LerianStudio/matcher/internal/matching/domain/services"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
@@ -59,7 +60,7 @@ type UseCase struct {
 	feeVarianceRepo      matchingRepositories.FeeVarianceRepository
 	adjustmentRepo       matchingRepositories.AdjustmentRepository
 	infraProvider        sharedPorts.InfrastructureProvider
-	auditLogRepo         sharedPorts.AuditLogRepository
+	auditLogRepo         governanceRepositories.AuditLogRepository
 	feeScheduleRepo      sharedPorts.FeeScheduleRepository
 	feeRuleProvider      ports.FeeRuleProvider
 	executeRules         func(context.Context, ExecuteRulesInput) ([]matching.MatchProposal, error)
@@ -83,7 +84,7 @@ type UseCaseDeps struct {
 	FeeVarianceRepo  matchingRepositories.FeeVarianceRepository
 	AdjustmentRepo   matchingRepositories.AdjustmentRepository
 	InfraProvider    sharedPorts.InfrastructureProvider
-	AuditLogRepo     sharedPorts.AuditLogRepository
+	AuditLogRepo     governanceRepositories.AuditLogRepository
 	FeeScheduleRepo  sharedPorts.FeeScheduleRepository
 	FeeRuleProvider  ports.FeeRuleProvider
 }

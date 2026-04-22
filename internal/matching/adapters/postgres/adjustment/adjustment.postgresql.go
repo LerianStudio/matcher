@@ -17,6 +17,7 @@ import (
 	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
+	governanceRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepos "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
@@ -40,11 +41,14 @@ const (
 // Repository persists adjustments in Postgres.
 type Repository struct {
 	provider     ports.InfrastructureProvider
-	auditLogRepo ports.AuditLogRepository
+	auditLogRepo governanceRepositories.AuditLogRepository
 }
 
 // NewRepository creates a new adjustment repository.
-func NewRepository(provider ports.InfrastructureProvider, auditLogRepo ports.AuditLogRepository) *Repository {
+func NewRepository(
+	provider ports.InfrastructureProvider,
+	auditLogRepo governanceRepositories.AuditLogRepository,
+) *Repository {
 	return &Repository{provider: provider, auditLogRepo: auditLogRepo}
 }
 

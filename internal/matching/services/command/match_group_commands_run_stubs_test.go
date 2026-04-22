@@ -15,6 +15,7 @@ import (
 
 	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
+	governanceRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	matching "github.com/LerianStudio/matcher/internal/matching/domain/services"
@@ -761,7 +762,7 @@ func (s *stubInfraProviderForRun) GetPrimaryDB(_ context.Context) (*sharedPorts.
 	return nil, nil
 }
 
-// stubAuditLogRepoForRun implements sharedPorts.AuditLogRepository for testing.
+// stubAuditLogRepoForRun implements governanceRepositories.AuditLogRepository for testing.
 type stubAuditLogRepoForRun struct {
 	createErr error
 }
@@ -838,5 +839,5 @@ var (
 	_ matchingRepositories.FeeVarianceRepository = (*stubFeeVarianceRepo)(nil)
 	_ matchingRepositories.AdjustmentRepository  = (*stubAdjustmentRepo)(nil)
 	_ sharedPorts.InfrastructureProvider         = (*stubInfraProviderForRun)(nil)
-	_ sharedPorts.AuditLogRepository             = (*stubAuditLogRepoForRun)(nil)
+	_ governanceRepositories.AuditLogRepository  = (*stubAuditLogRepoForRun)(nil)
 )
