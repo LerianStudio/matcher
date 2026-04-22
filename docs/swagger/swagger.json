@@ -11738,7 +11738,7 @@
                     "type": "string",
                     "example": "exception not found"
                 },
-                "exception_id": {
+                "exceptionId": {
                     "description": "Exception ID that failed",
                     "type": "string",
                     "example": "550e8400-e29b-41d4-a716-446655440000"
@@ -11749,11 +11749,11 @@
             "description": "Bulk resolve request payload",
             "type": "object",
             "required": [
-                "exception_ids",
+                "exceptionIds",
                 "resolution"
             ],
             "properties": {
-                "exception_ids": {
+                "exceptionIds": {
                     "description": "Exception IDs to resolve",
                     "type": "array",
                     "maxItems": 100,
@@ -12361,17 +12361,17 @@
             "description": "Actor mapping entry linking an opaque actor ID to PII",
             "type": "object",
             "properties": {
-                "actor_id": {
+                "actorId": {
                     "description": "Opaque actor identifier",
                     "type": "string",
                     "example": "user:550e8400-e29b-41d4-a716-446655440000"
                 },
-                "created_at": {
+                "createdAt": {
                     "description": "Timestamp when the mapping was created (RFC3339)",
                     "type": "string",
                     "example": "2026-01-15T10:30:00Z"
                 },
-                "display_name": {
+                "displayName": {
                     "description": "Human-readable display name",
                     "type": "string",
                     "example": "John Doe"
@@ -12381,7 +12381,7 @@
                     "type": "string",
                     "example": "john.doe@example.com"
                 },
-                "updated_at": {
+                "updatedAt": {
                     "description": "Timestamp when the mapping was last updated (RFC3339)",
                     "type": "string",
                     "example": "2026-01-15T10:30:00Z"
@@ -12392,22 +12392,22 @@
             "description": "Completed audit log archive metadata",
             "type": "object",
             "properties": {
-                "archived_at": {
+                "archivedAt": {
                     "description": "Timestamp when archival completed (RFC3339)",
                     "type": "string",
                     "example": "2024-04-01T02:30:00Z"
                 },
-                "compressed_size_bytes": {
+                "compressedSizeBytes": {
                     "description": "Compressed file size in bytes",
                     "type": "integer",
                     "example": 10485760
                 },
-                "date_range_end": {
+                "dateRangeEnd": {
                     "description": "End of the archived date range (RFC3339)",
                     "type": "string",
                     "example": "2024-03-31T23:59:59Z"
                 },
-                "date_range_start": {
+                "dateRangeStart": {
                     "description": "Start of the archived date range (RFC3339)",
                     "type": "string",
                     "example": "2024-01-01T00:00:00Z"
@@ -12417,12 +12417,12 @@
                     "type": "string",
                     "example": "550e8400-e29b-41d4-a716-446655440000"
                 },
-                "partition_name": {
+                "partitionName": {
                     "description": "Name of the database partition that was archived",
                     "type": "string",
                     "example": "audit_logs_2024_q1"
                 },
-                "row_count": {
+                "rowCount": {
                     "description": "Number of rows archived",
                     "type": "integer",
                     "example": 150000
@@ -12435,7 +12435,7 @@
                     ],
                     "example": "COMPLETE"
                 },
-                "storage_class": {
+                "storageClass": {
                     "description": "Object storage class",
                     "type": "string",
                     "enum": [

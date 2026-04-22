@@ -10,23 +10,23 @@ import (
 // @Description Completed audit log archive metadata
 type ArchiveMetadataResponse struct {
 	// Unique identifier for the archive
-	ID string `json:"id"                    example:"550e8400-e29b-41d4-a716-446655440000"`
+	ID string `json:"id"                   example:"550e8400-e29b-41d4-a716-446655440000"`
 	// Name of the database partition that was archived
-	PartitionName string `json:"partition_name"         example:"audit_logs_2024_q1"`
+	PartitionName string `json:"partitionName"        example:"audit_logs_2024_q1"`
 	// Start of the archived date range (RFC3339)
-	DateRangeStart string `json:"date_range_start"       example:"2024-01-01T00:00:00Z"`
+	DateRangeStart string `json:"dateRangeStart"       example:"2024-01-01T00:00:00Z"`
 	// End of the archived date range (RFC3339)
-	DateRangeEnd string `json:"date_range_end"         example:"2024-03-31T23:59:59Z"`
+	DateRangeEnd string `json:"dateRangeEnd"         example:"2024-03-31T23:59:59Z"`
 	// Number of rows archived
-	RowCount int64 `json:"row_count"              example:"150000"`
+	RowCount int64 `json:"rowCount"             example:"150000"`
 	// Compressed file size in bytes
-	CompressedSizeBytes int64 `json:"compressed_size_bytes"  example:"10485760"`
+	CompressedSizeBytes int64 `json:"compressedSizeBytes"  example:"10485760"`
 	// Object storage class
-	StorageClass string `json:"storage_class"          example:"GLACIER"  enums:"STANDARD,GLACIER,DEEP_ARCHIVE"`
+	StorageClass string `json:"storageClass"         example:"GLACIER"  enums:"STANDARD,GLACIER,DEEP_ARCHIVE"`
 	// Archive status
-	Status string `json:"status"                 example:"COMPLETE" enums:"COMPLETE"`
+	Status string `json:"status"               example:"COMPLETE" enums:"COMPLETE"`
 	// Timestamp when archival completed (RFC3339)
-	ArchivedAt *string `json:"archived_at,omitempty"   example:"2024-04-01T02:30:00Z"`
+	ArchivedAt *string `json:"archivedAt,omitempty" example:"2024-04-01T02:30:00Z"`
 }
 
 // ArchiveDownloadResponse provides a time-limited download URL for an archive.

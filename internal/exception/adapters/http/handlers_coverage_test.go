@@ -1028,7 +1028,7 @@ func TestBulkResolve_NilUUIDs(t *testing.T) {
 	handlers := newExceptionHandlers(t, &stubExceptionRepo{})
 	app.Post("/v1/exceptions/bulk/resolve", handlers.BulkResolve)
 
-	body := strings.NewReader(`{"exception_ids":["00000000-0000-0000-0000-000000000000"],"resolution":"fixed"}`)
+	body := strings.NewReader(`{"exceptionIds":["00000000-0000-0000-0000-000000000000"],"resolution":"fixed"}`)
 	request := httptest.NewRequest(http.MethodPost, "/v1/exceptions/bulk/resolve", body)
 	request.Header.Set("Content-Type", "application/json")
 

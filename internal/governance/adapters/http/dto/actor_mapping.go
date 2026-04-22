@@ -20,15 +20,15 @@ type UpsertActorMappingRequest struct {
 // @Description Actor mapping entry linking an opaque actor ID to PII
 type ActorMappingResponse struct {
 	// Opaque actor identifier
-	ActorID string `json:"actor_id" example:"user:550e8400-e29b-41d4-a716-446655440000"`
+	ActorID string `json:"actorId" example:"user:550e8400-e29b-41d4-a716-446655440000"`
 	// Human-readable display name
-	DisplayName *string `json:"display_name,omitempty" example:"John Doe"`
+	DisplayName *string `json:"displayName,omitempty" example:"John Doe"`
 	// Email address
 	Email *string `json:"email,omitempty" example:"john.doe@example.com"`
 	// Timestamp when the mapping was created (RFC3339)
-	CreatedAt string `json:"created_at" example:"2026-01-15T10:30:00Z"`
+	CreatedAt string `json:"createdAt" example:"2026-01-15T10:30:00Z"`
 	// Timestamp when the mapping was last updated (RFC3339)
-	UpdatedAt string `json:"updated_at" example:"2026-01-15T10:30:00Z"`
+	UpdatedAt string `json:"updatedAt" example:"2026-01-15T10:30:00Z"`
 }
 
 // ActorMappingToResponse converts a domain entity to an API response.
