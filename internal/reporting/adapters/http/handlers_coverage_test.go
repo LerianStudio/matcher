@@ -25,7 +25,7 @@ import (
 	repomocks "github.com/LerianStudio/matcher/internal/reporting/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/reporting/services/command"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query"
-	portsmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
+	storageMocks "github.com/LerianStudio/matcher/internal/shared/objectstorage/mocks"
 )
 
 // --- mock dashboard repository that supports source breakdown and cash impact ---
@@ -2046,7 +2046,7 @@ func setupListByContextApp(handler fiber.Handler) *fiber.App {
 func setupListByContextHandlers(
 	t *testing.T,
 	repo *repomocks.MockExportJobRepository,
-	storage *portsmocks.MockObjectStorageClient,
+	storage *storageMocks.MockBackend,
 	ctxProvider *mockContextProvider,
 ) *ExportJobHandlers {
 	t.Helper()

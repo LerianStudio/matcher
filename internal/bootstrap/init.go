@@ -114,6 +114,7 @@ import (
 	sharedRabbitmq "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
+	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -2262,7 +2263,7 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
-	storage, err := createObjectStorage(ctx, cfg)
+	storageBackend, err := createObjectStorage(ctx, cfg)
 	if err != nil {
 		if reportingStorageRequired(cfg) {
 			return nil, fmt.Errorf("create object storage: %w", err)
@@ -2271,17 +2272,14 @@ func initModulesAndMessaging(
 		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("Object storage not available, reporting background workers disabled: %v", err))
 	}
 
-	// Wrap storage in a dynamic client that always exposes a non-nil interface,
+	// Wrap the startup-time backend in the hot-reloadable *objectstorage.Client
 	// so reporting handlers/workers can be constructed even when object storage
 	// is unconfigured (e.g. in tests with EXPORT_WORKER_ENABLED=false). Actual
 	// calls on an unconfigured client return ErrObjectStorageUnavailable at
-	// invocation time. The wrapper also re-resolves the concrete client from
-	// the runtime config on each call, so /system changes to object_storage.*
-	// propagate without a restart.
-	//
-	//nolint:contextcheck // Re-resolution runs on demand after startup ctx is
-	// cancelled; the getter intentionally uses context.TODO() internally, mirroring newRuntimeArchivalStorageClient.
-	storage = newRuntimeReportingStorageClient(cfg, configGetter, storage)
+	// invocation time. The Client's resolver re-reads object_storage.* config
+	// on each call, so /system changes propagate without a restart; the swap
+	// itself uses atomic.Pointer so in-flight operations never race.
+	storage := newRuntimeReportingStorageClient(cfg, configGetter, storageBackend)
 
 	//nolint:contextcheck // Reporting config accessors are not context-aware.
 	exportWorker, cleanupWorker, err := initReportingModule(
@@ -2730,7 +2728,7 @@ func createIdempotencyRepository(
 func createObjectStorage(
 	ctx context.Context,
 	cfg *Config,
-) (sharedPorts.ObjectStorageClient, error) {
+) (objectstorage.Backend, error) {
 	if !reportingStorageRequired(cfg) {
 		return nil, nil
 	}
@@ -2783,18 +2781,9 @@ func reportingStorageRequired(cfg *Config) bool {
 func newRuntimeReportingStorageClient(
 	initialCfg *Config,
 	configGetter func() *Config,
-	fallback sharedPorts.ObjectStorageClient,
-) sharedPorts.ObjectStorageClient {
-	var (
-		mu           sync.Mutex
-		activeClient sharedPorts.ObjectStorageClient
-		activeKey    string
-	)
-
-	activeClient = fallback
-	activeKey = reportingStorageCacheKey(initialCfg)
-
-	return newDynamicObjectStorageClient(func() sharedPorts.ObjectStorageClient {
+	fallback objectstorage.Backend,
+) *objectstorage.Client {
+	resolver := func(ctx context.Context) (objectstorage.Backend, string, error) {
 		cfg := initialCfg
 
 		if configGetter != nil {
@@ -2803,25 +2792,19 @@ func newRuntimeReportingStorageClient(
 			}
 		}
 
-		cacheKey := reportingStorageCacheKey(cfg)
-
-		mu.Lock()
-		defer mu.Unlock()
-
-		if activeClient != nil && cacheKey == activeKey {
-			return activeClient
+		backend, err := createObjectStorage(ctx, cfg)
+		if err != nil {
+			return nil, "", err
 		}
 
-		client, err := createObjectStorage(context.TODO(), cfg)
-		if err != nil || client == nil {
-			return activeClient
+		if backend == nil {
+			return nil, reportingStorageCacheKey(cfg), nil
 		}
 
-		activeClient = client
-		activeKey = cacheKey
+		return backend, reportingStorageCacheKey(cfg), nil
+	}
 
-		return activeClient
-	}, fallback)
+	return objectstorage.NewClientWithResolver(fallback, resolver)
 }
 
 func reportingStorageCacheKey(cfg *Config) string {
@@ -3073,7 +3056,7 @@ func initReportingModule(
 	configGetter func() *Config,
 	settingsResolver *runtimeSettingsResolver,
 	provider sharedPorts.InfrastructureProvider,
-	storage sharedPorts.ObjectStorageClient,
+	storage *objectstorage.Client,
 	rateLimiterGetter func() *ratelimit.RateLimiter,
 	logger libLog.Logger,
 	repos *sharedRepositories,
@@ -3133,7 +3116,7 @@ func initExportWorkers(
 	settingsResolver *runtimeSettingsResolver,
 	exportJobRepository *reportExportJob.Repository,
 	reportRepository *reportRepo.Repository,
-	storage sharedPorts.ObjectStorageClient,
+	storage *objectstorage.Client,
 	contextAdapter sharedPorts.ContextAccessProvider,
 	exportLimiter fiber.Handler,
 	logger libLog.Logger,

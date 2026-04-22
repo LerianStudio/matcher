@@ -26,6 +26,7 @@ import (
 	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
 	crossAdapters "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 	"github.com/LerianStudio/matcher/internal/shared/adapters/custody"
+	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -121,7 +122,7 @@ type FetcherBridgeDeps struct {
 	// ObjectStorage is the shared object storage client used to persist
 	// custody copies. When nil, the verified-artifact pipeline is
 	// disabled (artifacts cannot be stored anywhere).
-	ObjectStorage sharedPorts.ObjectStorageClient
+	ObjectStorage objectstorage.Backend
 	// Logger is used for bootstrap warnings. Required.
 	Logger libLog.Logger
 }
@@ -378,7 +379,7 @@ func newArtifactHTTPClient(cfg *Config) *http.Client {
 // not block the whole service from coming up.
 //
 // T-003 P5 hardening.
-func objectStorageAvailable(ctx context.Context, client sharedPorts.ObjectStorageClient) bool {
+func objectStorageAvailable(ctx context.Context, client objectstorage.Backend) bool {
 	if client == nil {
 		return false
 	}

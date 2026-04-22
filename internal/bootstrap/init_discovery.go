@@ -19,6 +19,9 @@ import (
 	discoveryExtractionRepo "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres/extraction"
 	discoverySchemaRepo "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres/schema"
 	discoveryRedis "github.com/LerianStudio/matcher/internal/discovery/adapters/redis"
+	discoveryRepos "github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
+	"github.com/LerianStudio/matcher/internal/discovery/extractionpoller"
+	"github.com/LerianStudio/matcher/internal/discovery/schemacache"
 	discoveryCommand "github.com/LerianStudio/matcher/internal/discovery/services/command"
 	discoveryQuery "github.com/LerianStudio/matcher/internal/discovery/services/query"
 	discoveryWorker "github.com/LerianStudio/matcher/internal/discovery/services/worker"
@@ -135,30 +138,60 @@ func wireDiscoveryExtractionPoller(
 	configGetter func() *Config,
 	logger libLog.Logger,
 ) {
-	extractionPoller := newDynamicExtractionPoller(fetcherClient, extractionRepo, func() discoveryWorker.ExtractionPollerConfig {
-		runtimeCfg := cfg
+	extractionPoller := extractionpoller.NewPoller(
+		fetcherClient,
+		extractionRepo,
+		func() extractionpoller.RunnerConfig {
+			runtimeCfg := cfg
 
-		if configGetter != nil {
-			if currentCfg := configGetter(); currentCfg != nil {
-				runtimeCfg = currentCfg
+			if configGetter != nil {
+				if currentCfg := configGetter(); currentCfg != nil {
+					runtimeCfg = currentCfg
+				}
 			}
-		}
 
-		return discoveryWorker.ExtractionPollerConfig{
-			PollInterval: runtimeCfg.FetcherExtractionPollInterval(),
-			Timeout:      runtimeCfg.FetcherExtractionTimeout(),
-		}
-	}, logger)
-
-	if extractionPoller == nil {
-		return
-	}
+			return extractionpoller.RunnerConfig{
+				PollInterval: runtimeCfg.FetcherExtractionPollInterval(),
+				Timeout:      runtimeCfg.FetcherExtractionTimeout(),
+			}
+		},
+		newExtractionPollerRunnerFactory(),
+		logger,
+	)
 
 	cmdUseCase.WithExtractionPoller(extractionPoller)
 
 	logger.Log(context.Background(), libLog.LevelInfo,
 		fmt.Sprintf("discovery: extraction poller wired into command use case (poll: %s, timeout: %s)",
 			cfg.FetcherExtractionPollInterval(), cfg.FetcherExtractionTimeout()))
+}
+
+// newExtractionPollerRunnerFactory builds the runner factory that
+// extractionpoller.Poller uses to construct a fresh worker-backed
+// poller on config change. Isolated here so init_discovery stays free
+// of the worker import contract detail.
+func newExtractionPollerRunnerFactory() extractionpoller.RunnerFactory {
+	return func(
+		fetcherClient sharedPorts.FetcherClient,
+		extractionRepo discoveryRepos.ExtractionRepository,
+		cfg extractionpoller.RunnerConfig,
+		logger libLog.Logger,
+	) (extractionpoller.Runner, error) {
+		runner, err := discoveryWorker.NewExtractionPoller(
+			fetcherClient,
+			extractionRepo,
+			discoveryWorker.ExtractionPollerConfig{
+				PollInterval: cfg.PollInterval,
+				Timeout:      cfg.Timeout,
+			},
+			logger,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("new worker extraction poller: %w", err)
+		}
+
+		return runner, nil
+	}
 }
 
 // initDiscoveryModule initializes the Fetcher discovery module including HTTP handlers,
@@ -367,6 +400,9 @@ func wireDiscoverySchemaCacheFromRedis(
 		return
 	}
 
+	// Preflight check: ensure the redis client can build a schema cache
+	// value. If it cannot today, it will not succeed at request time, so
+	// bail out before wiring the hot-reloadable cache into use cases.
 	if _, cacheErr := discoveryRedis.NewSchemaCache(redisClient, !cfg.Auth.Enabled); cacheErr != nil {
 		logger.Log(ctx, libLog.LevelWarn,
 			fmt.Sprintf("discovery: failed to create schema cache: %v", cacheErr))
@@ -374,7 +410,7 @@ func wireDiscoverySchemaCacheFromRedis(
 		return
 	}
 
-	ttlGetter := func() time.Duration {
+	ttlResolver := func() time.Duration {
 		runtimeCfg := cfg
 
 		if configGetter != nil {
@@ -385,11 +421,12 @@ func wireDiscoverySchemaCacheFromRedis(
 
 		return runtimeCfg.FetcherSchemaCacheTTL()
 	}
-	dynamicCache := newDynamicSchemaCache(newProviderBackedSchemaCache(provider, !cfg.Auth.Enabled), ttlGetter)
-	ttl := ttlGetter()
-	queryUseCase.WithSchemaCache(dynamicCache, ttl)
-	cmdUseCase.WithSchemaCache(dynamicCache, ttl)
-	worker.WithSchemaCache(dynamicCache, ttl)
+
+	ttl := ttlResolver()
+	cache := schemacache.NewCache(provider, !cfg.Auth.Enabled, ttl, ttlResolver)
+	queryUseCase.WithSchemaCache(cache, ttl)
+	cmdUseCase.WithSchemaCache(cache, ttl)
+	worker.WithSchemaCache(cache, ttl)
 
 	logger.Log(ctx, libLog.LevelInfo,
 		"discovery: schema cache wired into discovery module (TTL: "+ttl.String()+")")

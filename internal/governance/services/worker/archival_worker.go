@@ -33,6 +33,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
+	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
@@ -80,7 +81,7 @@ type ArchivalWorker struct {
 	mu            sync.Mutex
 	archiveRepo   repositories.ArchiveMetadataRepository
 	partitionMgr  PartitionManager
-	storage       sharedPorts.ObjectStorageClient
+	storage       objectstorage.Backend
 	db            *sql.DB
 	infraProvider sharedPorts.InfrastructureProvider
 	cfg           ArchivalWorkerConfig
@@ -113,7 +114,7 @@ func (aw *ArchivalWorker) UpdateRuntimeConfig(cfg ArchivalWorkerConfig) error {
 // UpdateRuntimeStorage swaps the storage client used on the next start/restart.
 // It must only be called while the worker is stopped so the next archive cycle
 // uses dependencies that match the pending runtime configuration.
-func (aw *ArchivalWorker) UpdateRuntimeStorage(storage sharedPorts.ObjectStorageClient) error {
+func (aw *ArchivalWorker) UpdateRuntimeStorage(storage objectstorage.Backend) error {
 	aw.mu.Lock()
 	defer aw.mu.Unlock()
 
@@ -170,7 +171,7 @@ func normalizeArchivalWorkerConfig(cfg ArchivalWorkerConfig) ArchivalWorkerConfi
 func NewArchivalWorker(
 	archiveRepo repositories.ArchiveMetadataRepository,
 	partitionMgr PartitionManager,
-	storage sharedPorts.ObjectStorageClient,
+	storage objectstorage.Backend,
 	db *sql.DB,
 	infraProvider sharedPorts.InfrastructureProvider,
 	cfg ArchivalWorkerConfig,

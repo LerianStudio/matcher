@@ -56,6 +56,7 @@ import (
 	discoveryCommand "github.com/LerianStudio/matcher/internal/discovery/services/command"
 	reportingStorage "github.com/LerianStudio/matcher/internal/reporting/adapters/storage"
 	custodyAdapter "github.com/LerianStudio/matcher/internal/shared/adapters/custody"
+	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -342,7 +343,7 @@ func buildVerifiedPipeline(
 ) (
 	*discoveryCommand.VerifiedArtifactRetrievalOrchestrator,
 	sharedPorts.ArtifactCustodyStore,
-	sharedPorts.ObjectStorageClient,
+	objectstorage.Backend,
 ) {
 	tb.Helper()
 

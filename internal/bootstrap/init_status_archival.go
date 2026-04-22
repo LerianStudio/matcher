@@ -9,7 +9,6 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"fmt"
-	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -21,6 +20,7 @@ import (
 	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
 	reportingStorage "github.com/LerianStudio/matcher/internal/reporting/adapters/storage"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -191,7 +191,7 @@ func registerArchiveRoutesIfAvailable(
 	routes *Routes,
 	cfg *Config,
 	archiveRepo *archiveMetadataRepo.Repository,
-	archivalStorage sharedPorts.ObjectStorageClient,
+	archivalStorage *objectstorage.Client,
 	configGetter func() *Config,
 	settingsResolver *runtimeSettingsResolver,
 	production bool,
@@ -247,14 +247,20 @@ func initArchivalComponents(
 ) (*governanceWorker.ArchivalWorker, error) {
 	archiveRepo := archiveMetadataRepo.NewRepository(provider)
 
-	archivalStorage, err := createArchivalStorage(context.TODO(), cfg)
+	initialBackend, err := createArchivalStorage(context.TODO(), cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create archival storage: %w", err)
 	}
 
-	// Create runtime wrapper BEFORE passing to routes so handler and worker share the same dynamic client.
-	if configGetter != nil && archivalStorage != nil {
-		archivalStorage = newRuntimeArchivalStorageClient(cfg, configGetter, archivalStorage)
+	// Create runtime wrapper BEFORE passing to routes so handler and
+	// worker share the same hot-reloadable client. When no initial
+	// backend was built, skip the wrapper — the downstream handler
+	// and worker guards handle nil correctly.
+	var archivalStorage *objectstorage.Client
+	if configGetter != nil && initialBackend != nil {
+		archivalStorage = newRuntimeArchivalStorageClient(cfg, configGetter, initialBackend)
+	} else if initialBackend != nil {
+		archivalStorage = objectstorage.NewClient(initialBackend)
 	}
 
 	if err := registerArchiveRoutesIfAvailable(routes, cfg, archiveRepo, archivalStorage, configGetter, settingsResolver, production); err != nil {
@@ -318,8 +324,9 @@ func createArchivalStorageAvailable(cfg *Config) bool {
 	return cfg != nil && cfg.Archival.StorageBucket != "" && cfg.ObjectStorage.Endpoint != ""
 }
 
-// createArchivalStorage creates an S3-compatible object storage client for the archival bucket.
-func createArchivalStorage(ctx context.Context, cfg *Config) (sharedPorts.ObjectStorageClient, error) {
+// createArchivalStorage creates an S3-compatible object storage
+// backend for the archival bucket.
+func createArchivalStorage(ctx context.Context, cfg *Config) (objectstorage.Backend, error) {
 	if cfg.Archival.StorageBucket == "" || cfg.ObjectStorage.Endpoint == "" {
 		return nil, nil
 	}
@@ -342,21 +349,19 @@ func createArchivalStorage(ctx context.Context, cfg *Config) (sharedPorts.Object
 	return client, nil
 }
 
+// newRuntimeArchivalStorageClient wires the hot-reloadable archival
+// object-storage client. The resolver rebuilds the underlying S3
+// backend when the relevant configuration keys change; the client's
+// own atomic-pointer state captures the swap. The caller receives a
+// concrete *objectstorage.Client; downstream consumers accept the
+// narrower objectstorage.Backend interface and are satisfied by
+// *Client.
 func newRuntimeArchivalStorageClient(
 	initialCfg *Config,
 	configGetter func() *Config,
-	fallback sharedPorts.ObjectStorageClient,
-) sharedPorts.ObjectStorageClient {
-	var (
-		mu           sync.Mutex
-		activeClient sharedPorts.ObjectStorageClient
-		activeKey    string
-	)
-
-	activeClient = fallback
-	activeKey = archivalStorageCacheKey(initialCfg)
-
-	return newDynamicObjectStorageClient(func() sharedPorts.ObjectStorageClient {
+	fallback objectstorage.Backend,
+) *objectstorage.Client {
+	resolver := func(ctx context.Context) (objectstorage.Backend, string, error) {
 		cfg := initialCfg
 
 		if configGetter != nil {
@@ -365,25 +370,22 @@ func newRuntimeArchivalStorageClient(
 			}
 		}
 
-		cacheKey := archivalStorageCacheKey(cfg)
-
-		mu.Lock()
-		defer mu.Unlock()
-
-		if activeClient != nil && cacheKey == activeKey {
-			return activeClient
+		backend, err := createArchivalStorage(ctx, cfg)
+		if err != nil {
+			// Return the error plus an empty key so the Client keeps
+			// its last good backend (matches the previous dynamic
+			// wrapper's behaviour of swallowing rebuild errors).
+			return nil, "", err
 		}
 
-		client, err := createArchivalStorage(context.TODO(), cfg)
-		if err != nil || client == nil {
-			return activeClient
+		if backend == nil {
+			return nil, archivalStorageCacheKey(cfg), nil
 		}
 
-		activeClient = client
-		activeKey = cacheKey
+		return backend, archivalStorageCacheKey(cfg), nil
+	}
 
-		return activeClient
-	}, fallback)
+	return objectstorage.NewClientWithResolver(fallback, resolver)
 }
 
 func archivalStorageCacheKey(cfg *Config) string {

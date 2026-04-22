@@ -19,11 +19,6 @@ import (
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
-type nilAwarePoller struct{}
-
-func (*nilAwarePoller) PollUntilComplete(context.Context, uuid.UUID, func(context.Context, string) error, func(context.Context, string)) {
-}
-
 // --- Mock implementations for testing ---
 
 // mockFetcherClient is a configurable mock for sharedPorts.FetcherClient.
@@ -339,7 +334,7 @@ func TestNewUseCase_Success(t *testing.T) {
 	assert.NotNil(t, uc.logger)
 }
 
-func TestWithExtractionPoller_TypedNilNormalizedToNil(t *testing.T) {
+func TestWithExtractionPoller_NilStaysNil(t *testing.T) {
 	t.Parallel()
 
 	uc, err := NewUseCase(
@@ -351,8 +346,11 @@ func TestWithExtractionPoller_TypedNilNormalizedToNil(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	var poller *nilAwarePoller
-	uc.WithExtractionPoller(poller)
+	// Passing a nil *extractionpoller.Poller stores nil directly. Prior
+	// to T-015 the use case accepted an interface and did reflect-based
+	// typed-nil normalisation; concrete types make that normalisation
+	// unnecessary because a nil pointer is already nil.
+	uc.WithExtractionPoller(nil)
 
 	assert.Nil(t, uc.extractionPoller)
 }

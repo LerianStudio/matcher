@@ -18,7 +18,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	repomocks "github.com/LerianStudio/matcher/internal/reporting/domain/repositories/mocks"
-	portsmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
+	storageMocks "github.com/LerianStudio/matcher/internal/shared/objectstorage/mocks"
 )
 
 // --- processJob Tests ---
@@ -28,7 +28,7 @@ func TestExportWorker_ProcessJob_Success(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100, TempDir: t.TempDir()}
 	logger := &libLog.NopLogger{}
 
@@ -81,7 +81,7 @@ func TestExportWorker_ProcessJob_VarianceUsesJobTenantContext(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100, TempDir: t.TempDir()}
 	logger := &libLog.NopLogger{}
 	tenantID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
@@ -139,7 +139,7 @@ func TestExportWorker_ProcessJob_StreamExportError(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{
 		PageSize:          100,
 		TempDir:           t.TempDir(),
@@ -184,7 +184,7 @@ func TestExportWorker_ProcessJob_UploadError(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{
 		PageSize:          100,
 		TempDir:           t.TempDir(),
@@ -239,7 +239,7 @@ func TestExportWorker_ProcessJob_UpdateJobError(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100, TempDir: t.TempDir()}
 	logger := &libLog.NopLogger{}
 
@@ -289,7 +289,7 @@ func TestExportWorker_ProcessJob_UnsupportedReportType(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{
 		PageSize:          100,
 		TempDir:           t.TempDir(),
@@ -335,7 +335,7 @@ func TestExportWorker_StreamMatchedJSON_FetchError(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100}
 	logger := &libLog.NopLogger{}
 
@@ -367,7 +367,7 @@ func TestExportWorker_StreamMatchedXML_FetchError(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100}
 	logger := &libLog.NopLogger{}
 
@@ -399,7 +399,7 @@ func TestExportWorker_StreamUnmatchedJSON_FetchError(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100}
 	logger := &libLog.NopLogger{}
 
@@ -431,7 +431,7 @@ func TestExportWorker_StreamUnmatchedXML_FetchError(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100}
 	logger := &libLog.NopLogger{}
 
@@ -463,7 +463,7 @@ func TestExportWorker_StreamVarianceJSON_FetchError(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100}
 	logger := &libLog.NopLogger{}
 
@@ -495,7 +495,7 @@ func TestExportWorker_StreamVarianceXML_FetchError(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100}
 	logger := &libLog.NopLogger{}
 
@@ -529,7 +529,7 @@ func TestExportWorker_ProcessJob_NilLogger(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100, TempDir: t.TempDir()}
 
 	reportRepo := &mockReportRepoForWorker{

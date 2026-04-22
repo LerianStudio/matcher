@@ -27,7 +27,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/reporting/services/command"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
-	portsmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
+	storageMocks "github.com/LerianStudio/matcher/internal/shared/objectstorage/mocks"
 	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
@@ -58,11 +58,11 @@ func newExportJobRepoMock(t *testing.T) *repomocks.MockExportJobRepository {
 func newStorageClientMock(
 	t *testing.T,
 	cfg storageClientMockConfig,
-) *portsmocks.MockObjectStorageClient {
+) *storageMocks.MockBackend {
 	t.Helper()
 
 	ctrl := gomock.NewController(t)
-	mock := portsmocks.NewMockObjectStorageClient(ctrl)
+	mock := storageMocks.NewMockBackend(ctrl)
 
 	mock.EXPECT().
 		Upload(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
@@ -175,7 +175,7 @@ func TestNewExportJobHandlers(t *testing.T) {
 	t.Run("returns error with typed-nil storage", func(t *testing.T) {
 		t.Parallel()
 
-		var typedNilStorage *portsmocks.MockObjectStorageClient
+		var typedNilStorage *storageMocks.MockBackend
 
 		handlers, err := NewExportJobHandlers(uc, querySvc, typedNilStorage, ctxProvider, time.Hour, false)
 
@@ -1250,7 +1250,7 @@ func TestExportJobHandlers_DownloadExportJob(t *testing.T) {
 		repo.EXPECT().GetByID(gomock.Any(), jobID).Return(job, nil).Times(1)
 
 		ctrl := gomock.NewController(t)
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		var gotExpiry time.Duration
 		storage.EXPECT().GeneratePresignedURL(gomock.Any(), job.FileKey, gomock.Any()).DoAndReturn(
 			func(_ context.Context, _ string, expiry time.Duration) (string, error) {

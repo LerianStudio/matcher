@@ -18,12 +18,8 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
-	"github.com/LerianStudio/matcher/internal/discovery/ports"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
-
-// Compile-time interface compliance check.
-var _ ports.SchemaCache = (*SchemaCache)(nil)
 
 const (
 	// schemaKeyPrefix includes a version segment so that cache entries written

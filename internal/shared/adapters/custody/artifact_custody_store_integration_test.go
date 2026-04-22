@@ -46,6 +46,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	reportingStorage "github.com/LerianStudio/matcher/internal/reporting/adapters/storage"
+	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -201,11 +202,11 @@ func (h *custodyMinIOHarness) rawS3Client(ctx context.Context) *s3.Client {
 	})
 }
 
-// storageClient returns a production-shaped ObjectStorageClient wired
-// to the running MinIO. The custody store under test speaks only to
-// this interface, so exercising the real client here matches the
-// production wiring exactly.
-func (h *custodyMinIOHarness) storageClient(ctx context.Context, tb testing.TB) sharedPorts.ObjectStorageClient {
+// storageClient returns a production-shaped object storage backend
+// wired to the running MinIO. The custody store under test speaks only
+// to this narrow backend interface, so exercising the real client here
+// matches the production wiring exactly.
+func (h *custodyMinIOHarness) storageClient(ctx context.Context, tb testing.TB) objectstorage.Backend {
 	tb.Helper()
 
 	client, err := reportingStorage.NewS3Client(ctx, reportingStorage.S3Config{

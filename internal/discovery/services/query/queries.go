@@ -2,6 +2,7 @@
 package query
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -11,6 +12,17 @@ import (
 	"github.com/LerianStudio/matcher/internal/discovery/ports"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
+
+// SchemaCache is the narrow subset of the schemacache.Cache surface the
+// query use case depends on. Defining it here lets tests substitute a
+// stub without importing the concrete package.
+//
+// The concrete SchemaCache satisfies this interface by method
+// match; no explicit assertion is required.
+type SchemaCache interface {
+	GetSchema(ctx context.Context, connectionID string) (*sharedPorts.FetcherSchema, error)
+	SetSchema(ctx context.Context, connectionID string, schema *sharedPorts.FetcherSchema, ttl time.Duration) error
+}
 
 // Sentinel errors for query use case validation.
 var (
@@ -35,7 +47,7 @@ type UseCase struct {
 	schemaRepo       repositories.SchemaRepository
 	extractionRepo   repositories.ExtractionRepository
 	logger           libLog.Logger
-	schemaCache      ports.SchemaCache           // optional cache layer
+	schemaCache      SchemaCache                 // optional cache layer
 	cacheTTL         time.Duration               // TTL for cached schemas
 	heartbeatReader  ports.BridgeHeartbeatReader // optional bridge worker liveness source (C15)
 	heartbeatStaleAt time.Duration               // worker marked unhealthy when staleness > this
@@ -79,7 +91,7 @@ func NewUseCase(
 }
 
 // WithSchemaCache adds an optional schema cache to the query use case.
-func (uc *UseCase) WithSchemaCache(cache ports.SchemaCache, ttl time.Duration) {
+func (uc *UseCase) WithSchemaCache(cache SchemaCache, ttl time.Duration) {
 	uc.schemaCache = cache
 	uc.cacheTTL = ttl
 }

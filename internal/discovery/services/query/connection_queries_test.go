@@ -17,7 +17,6 @@ import (
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
-	"github.com/LerianStudio/matcher/internal/discovery/ports"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -26,7 +25,7 @@ type mockSchemaCache struct {
 	setSchemaFn func(ctx context.Context, connectionID string, schema *sharedPorts.FetcherSchema, ttl time.Duration) error
 }
 
-var _ ports.SchemaCache = (*mockSchemaCache)(nil)
+var _ SchemaCache = (*mockSchemaCache)(nil)
 
 func (m *mockSchemaCache) GetSchema(ctx context.Context, connectionID string) (*sharedPorts.FetcherSchema, error) {
 	if m.getSchemaFn != nil {

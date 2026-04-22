@@ -26,7 +26,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
-	sharedPortMocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
+	storageMocks "github.com/LerianStudio/matcher/internal/shared/objectstorage/mocks"
 	sharedTestutil "github.com/LerianStudio/matcher/internal/shared/testutil"
 
 	"go.uber.org/mock/gomock"
@@ -47,7 +47,7 @@ func buildTestArchive(t *testing.T, rows ...map[string]any) (io.ReadCloser, stri
 type testDeps struct {
 	ctrl         *gomock.Controller
 	archiveRepo  *mocks.MockArchiveMetadataRepository
-	storage      *sharedPortMocks.MockObjectStorageClient
+	storage      *storageMocks.MockBackend
 	db           *sql.DB
 	sqlMock      sqlmock.Sqlmock
 	miniRedis    *miniredis.Miniredis
@@ -113,7 +113,7 @@ func setupTestDeps(t *testing.T) *testDeps {
 	return &testDeps{
 		ctrl:         ctrl,
 		archiveRepo:  mocks.NewMockArchiveMetadataRepository(ctrl),
-		storage:      sharedPortMocks.NewMockObjectStorageClient(ctrl),
+		storage:      storageMocks.NewMockBackend(ctrl),
 		db:           db,
 		sqlMock:      mock,
 		miniRedis:    srv,
@@ -189,7 +189,7 @@ func TestNewArchivalWorker_TypedNilStorageClient(t *testing.T) {
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
-	var typedNilStorage *sharedPortMocks.MockObjectStorageClient
+	var typedNilStorage *storageMocks.MockBackend
 
 	w, err := NewArchivalWorker(deps.archiveRepo, deps.partitionMgr, typedNilStorage, deps.db, deps.provider, deps.cfg, deps.logger)
 
@@ -367,7 +367,7 @@ func TestArchivalWorker_UpdateRuntimeStorage_WhileStopped_SwapsClient(t *testing
 	)
 	require.NoError(t, err)
 
-	replacement := sharedPortMocks.NewMockObjectStorageClient(deps.ctrl)
+	replacement := storageMocks.NewMockBackend(deps.ctrl)
 
 	require.NoError(t, w.UpdateRuntimeStorage(replacement))
 	assert.Same(t, replacement, w.storage)
@@ -390,7 +390,7 @@ func TestArchivalWorker_UpdateRuntimeStorage_TypedNilRejected(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	var typedNilStorage *sharedPortMocks.MockObjectStorageClient
+	var typedNilStorage *storageMocks.MockBackend
 
 	err = w.UpdateRuntimeStorage(typedNilStorage)
 	require.ErrorIs(t, err, ErrNilStorageClient)

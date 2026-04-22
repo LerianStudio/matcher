@@ -20,6 +20,7 @@ import (
 	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
+	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -44,7 +45,7 @@ var (
 // global state.
 type ArchiveHandler struct {
 	archiveRepo           repositories.ArchiveMetadataRepository
-	storage               sharedPorts.ObjectStorageClient
+	storage               objectstorage.Backend
 	presignExpiry         time.Duration
 	presignExpiryResolver func(context.Context) time.Duration
 	productionMode        bool
@@ -62,7 +63,7 @@ type (
 // NewArchiveHandler creates a new archive HTTP handler.
 func NewArchiveHandler(
 	repo repositories.ArchiveMetadataRepository,
-	storage sharedPorts.ObjectStorageClient,
+	storage objectstorage.Backend,
 	presignExpiry time.Duration,
 	production bool,
 ) (*ArchiveHandler, error) {

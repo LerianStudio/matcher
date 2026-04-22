@@ -22,6 +22,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/reporting/services/query"
 	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -75,7 +76,7 @@ type ExportJobRuntimeConfig struct {
 type ExportJobHandlers struct {
 	exportJobUC           *command.ExportJobUseCase
 	querySvc              *query.ExportJobQueryService
-	storage               sharedPorts.ObjectStorageClient
+	storage               objectstorage.Backend
 	contextVerifier       libHTTP.TenantOwnershipVerifier
 	enabled               bool
 	presignExpiry         time.Duration
@@ -160,7 +161,7 @@ func (handler *ExportJobHandlers) handleContextVerificationError(
 func NewExportJobHandlers(
 	exportJobUC *command.ExportJobUseCase,
 	querySvc *query.ExportJobQueryService,
-	storage sharedPorts.ObjectStorageClient,
+	storage objectstorage.Backend,
 	ctxProvider contextProvider,
 	presignExpiry time.Duration,
 	production bool,

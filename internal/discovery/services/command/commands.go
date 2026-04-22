@@ -4,13 +4,13 @@ package command
 import (
 	"errors"
 	"fmt"
-	"reflect"
 	"time"
 
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
-	"github.com/LerianStudio/matcher/internal/discovery/ports"
+	"github.com/LerianStudio/matcher/internal/discovery/extractionpoller"
+	"github.com/LerianStudio/matcher/internal/discovery/schemacache"
 	"github.com/LerianStudio/matcher/internal/discovery/services/syncer"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -40,7 +40,7 @@ type UseCase struct {
 	schemaRepo           repositories.SchemaRepository
 	extractionRepo       repositories.ExtractionRepository
 	logger               libLog.Logger
-	extractionPoller     ports.ExtractionJobPoller // optional async poller
+	extractionPoller     *extractionpoller.Poller // optional async poller
 	syncer               *syncer.ConnectionSyncer
 	refreshLockProvider  sharedPorts.InfrastructureProvider
 	refreshLockTTL       time.Duration
@@ -91,9 +91,8 @@ func NewUseCase(
 }
 
 // WithExtractionPoller adds an optional extraction poller for async job monitoring.
-func (uc *UseCase) WithExtractionPoller(poller ports.ExtractionJobPoller) {
-	if isNilExtractionPoller(poller) {
-		uc.extractionPoller = nil
+func (uc *UseCase) WithExtractionPoller(poller *extractionpoller.Poller) {
+	if uc == nil {
 		return
 	}
 
@@ -102,7 +101,7 @@ func (uc *UseCase) WithExtractionPoller(poller ports.ExtractionJobPoller) {
 
 // WithSchemaCache wires an optional cache into the connection syncer so manual
 // discovery refreshes immediately replace stale cached schemas.
-func (uc *UseCase) WithSchemaCache(cache ports.SchemaCache, ttl time.Duration) {
+func (uc *UseCase) WithSchemaCache(cache *schemacache.Cache, ttl time.Duration) {
 	if uc == nil || uc.syncer == nil {
 		return
 	}
@@ -133,18 +132,4 @@ func (uc *UseCase) WithDiscoveryRefreshLockGetter(getter func() time.Duration) {
 	}
 
 	uc.refreshLockTTLGetter = getter
-}
-
-func isNilExtractionPoller(poller ports.ExtractionJobPoller) bool {
-	if poller == nil {
-		return true
-	}
-
-	value := reflect.ValueOf(poller)
-	switch value.Kind() {
-	case reflect.Pointer, reflect.Interface, reflect.Map, reflect.Slice, reflect.Func, reflect.Chan:
-		return value.IsNil()
-	default:
-		return false
-	}
 }
