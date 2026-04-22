@@ -14,6 +14,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	configCommand "github.com/LerianStudio/matcher/internal/configuration/services/command"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -49,7 +50,7 @@ func createDraftContext(
 
 	created, err := uc.CreateContext(ctx, h.Seed.TenantID, entities.CreateReconciliationContextInput{
 		Name:     name,
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 	})
 	require.NoError(t, err)

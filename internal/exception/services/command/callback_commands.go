@@ -22,6 +22,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -87,8 +88,8 @@ func NewCallbackUseCase(
 }
 
 type callbackParams struct {
-	idempotencyKey  value_objects.IdempotencyKey
-	dedupeKey       value_objects.IdempotencyKey
+	idempotencyKey  shared.IdempotencyKey
+	dedupeKey       shared.IdempotencyKey
 	externalSystem  string
 	externalIssueID string
 	status          value_objects.ExceptionStatus
@@ -98,7 +99,7 @@ type callbackParams struct {
 	updatedAt       *time.Time
 }
 
-func idempotencyKeyHash(key value_objects.IdempotencyKey) string {
+func idempotencyKeyHash(key shared.IdempotencyKey) string {
 	hash := sha256.Sum256([]byte(key.String()))
 
 	return hex.EncodeToString(hash[:])
@@ -226,7 +227,7 @@ func (uc *CallbackUseCase) handleExistingCallback(
 	params *callbackParams,
 	logger libLog.Logger,
 	span trace.Span,
-	cachedResult *value_objects.IdempotencyResult,
+	cachedResult *shared.IdempotencyResult,
 ) error {
 	if cachedResult == nil {
 		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "idempotency state missing", ErrCallbackRetryable)
@@ -234,12 +235,12 @@ func (uc *CallbackUseCase) handleExistingCallback(
 	}
 
 	switch cachedResult.Status {
-	case value_objects.IdempotencyStatusComplete:
+	case shared.IdempotencyStatusComplete:
 		return uc.handleDuplicateCallback(ctx, cmd, params, logger, span)
-	case value_objects.IdempotencyStatusPending:
+	case shared.IdempotencyStatusPending:
 		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "callback is still processing", ErrCallbackInProgress)
 		return ErrCallbackInProgress
-	case value_objects.IdempotencyStatusFailed:
+	case shared.IdempotencyStatusFailed:
 		reacquired, err := uc.idempotencyRepo.TryReacquireFromFailed(ctx, params.dedupeKey)
 		if err != nil {
 			libOpentelemetry.HandleSpanError(span, "failed to reacquire failed idempotency key", err)
@@ -253,7 +254,7 @@ func (uc *CallbackUseCase) handleExistingCallback(
 		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "callback is still processing", ErrCallbackInProgress)
 
 		return ErrCallbackInProgress
-	case value_objects.IdempotencyStatusUnknown:
+	case shared.IdempotencyStatusUnknown:
 		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "callback requires retry", ErrCallbackRetryable)
 		return ErrCallbackRetryable
 	default:
@@ -263,14 +264,14 @@ func (uc *CallbackUseCase) handleExistingCallback(
 }
 
 func scopeCallbackIdempotencyKey(
-	clientKey value_objects.IdempotencyKey,
+	clientKey shared.IdempotencyKey,
 	exceptionID uuid.UUID,
 	externalSystem string,
-) value_objects.IdempotencyKey {
+) shared.IdempotencyKey {
 	base := strings.ToUpper(strings.TrimSpace(externalSystem)) + ":" + exceptionID.String() + ":" + clientKey.String()
 	hash := sha256.Sum256([]byte(base))
 
-	return value_objects.IdempotencyKey("cb_" + hex.EncodeToString(hash[:]))
+	return shared.IdempotencyKey("cb_" + hex.EncodeToString(hash[:]))
 }
 
 func (uc *CallbackUseCase) applyCallback(
@@ -363,7 +364,7 @@ func applyCallbackStatusTransition(
 
 func (uc *CallbackUseCase) markIdempotencyFailed(
 	ctx context.Context,
-	key value_objects.IdempotencyKey,
+	key shared.IdempotencyKey,
 ) {
 	if err := uc.idempotencyRepo.MarkFailed(ctx, key); err != nil {
 		logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
@@ -395,15 +396,15 @@ func (uc *CallbackUseCase) validateDependencies() error {
 	return nil
 }
 
-func parseIdempotencyKey(key string) (value_objects.IdempotencyKey, error) {
-	parsedKey, err := value_objects.ParseIdempotencyKey(key)
+func parseIdempotencyKey(key string) (shared.IdempotencyKey, error) {
+	parsedKey, err := shared.ParseIdempotencyKey(key)
 	if err != nil {
-		if errors.Is(err, value_objects.ErrEmptyIdempotencyKey) {
-			return "", value_objects.ErrEmptyIdempotencyKey
+		if errors.Is(err, shared.ErrEmptyIdempotencyKey) {
+			return "", shared.ErrEmptyIdempotencyKey
 		}
 
-		if errors.Is(err, value_objects.ErrInvalidIdempotencyKey) {
-			return "", value_objects.ErrInvalidIdempotencyKey
+		if errors.Is(err, shared.ErrInvalidIdempotencyKey) {
+			return "", shared.ErrInvalidIdempotencyKey
 		}
 
 		return "", fmt.Errorf("parse callback idempotency key: %w", err)

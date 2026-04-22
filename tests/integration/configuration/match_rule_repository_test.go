@@ -11,7 +11,7 @@ import (
 
 	matchRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/match_rule"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -22,7 +22,7 @@ func TestMatchRuleRepository_CreateAndFindByID(t *testing.T) {
 
 		entity, err := entities.NewMatchRule(ctx, h.Seed.ContextID, entities.CreateMatchRuleInput{
 			Priority: 1,
-			Type:     value_objects.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config:   map[string]any{"matchCurrency": true},
 		})
 		require.NoError(t, err)
@@ -31,7 +31,7 @@ func TestMatchRuleRepository_CreateAndFindByID(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEqual(t, uuid.Nil, created.ID)
 		require.Equal(t, 1, created.Priority)
-		require.Equal(t, value_objects.RuleTypeExact, created.Type)
+		require.Equal(t, shared.RuleTypeExact, created.Type)
 
 		fetched, err := repo.FindByID(ctx, h.Seed.ContextID, created.ID)
 		require.NoError(t, err)
@@ -51,7 +51,7 @@ func TestMatchRuleRepository_FindByContextID(t *testing.T) {
 				h.Seed.ContextID,
 				entities.CreateMatchRuleInput{
 					Priority: i * 10,
-					Type:     value_objects.RuleTypeExact,
+					Type:     shared.RuleTypeExact,
 					Config:   map[string]any{"matchCurrency": true},
 				},
 			)
@@ -85,7 +85,7 @@ func TestMatchRuleRepository_FindByContextIDAndType(t *testing.T) {
 			h.Seed.ContextID,
 			entities.CreateMatchRuleInput{
 				Priority: 100,
-				Type:     value_objects.RuleTypeExact,
+				Type:     shared.RuleTypeExact,
 				Config:   map[string]any{"matchCurrency": true},
 			},
 		)
@@ -98,7 +98,7 @@ func TestMatchRuleRepository_FindByContextIDAndType(t *testing.T) {
 			h.Seed.ContextID,
 			entities.CreateMatchRuleInput{
 				Priority: 200,
-				Type:     value_objects.RuleTypeTolerance,
+				Type:     shared.RuleTypeTolerance,
 				Config:   map[string]any{"absTolerance": "1.00"},
 			},
 		)
@@ -109,7 +109,7 @@ func TestMatchRuleRepository_FindByContextIDAndType(t *testing.T) {
 		exactRules, _, err := repo.FindByContextIDAndType(
 			ctx,
 			h.Seed.ContextID,
-			value_objects.RuleTypeExact,
+			shared.RuleTypeExact,
 			"",
 			10,
 		)
@@ -117,7 +117,7 @@ func TestMatchRuleRepository_FindByContextIDAndType(t *testing.T) {
 		require.GreaterOrEqual(t, len(exactRules), 1)
 
 		for _, r := range exactRules {
-			require.Equal(t, value_objects.RuleTypeExact, r.Type)
+			require.Equal(t, shared.RuleTypeExact, r.Type)
 		}
 	})
 }
@@ -129,7 +129,7 @@ func TestMatchRuleRepository_FindByPriority(t *testing.T) {
 
 		entity, err := entities.NewMatchRule(ctx, h.Seed.ContextID, entities.CreateMatchRuleInput{
 			Priority: 999,
-			Type:     value_objects.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config:   map[string]any{"matchCurrency": true},
 		})
 		require.NoError(t, err)
@@ -149,7 +149,7 @@ func TestMatchRuleRepository_Update(t *testing.T) {
 
 		entity, err := entities.NewMatchRule(ctx, h.Seed.ContextID, entities.CreateMatchRuleInput{
 			Priority: 50,
-			Type:     value_objects.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config:   map[string]any{"matchCurrency": true},
 		})
 		require.NoError(t, err)
@@ -175,7 +175,7 @@ func TestMatchRuleRepository_Delete(t *testing.T) {
 
 		entity, err := entities.NewMatchRule(ctx, h.Seed.ContextID, entities.CreateMatchRuleInput{
 			Priority: 75,
-			Type:     value_objects.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config:   map[string]any{"matchCurrency": true},
 		})
 		require.NoError(t, err)
@@ -203,7 +203,7 @@ func TestMatchRuleRepository_ReorderPriorities(t *testing.T) {
 				h.Seed.ContextID,
 				entities.CreateMatchRuleInput{
 					Priority: i * 100,
-					Type:     value_objects.RuleTypeExact,
+					Type:     shared.RuleTypeExact,
 					Config:   map[string]any{"matchCurrency": true},
 				},
 			)

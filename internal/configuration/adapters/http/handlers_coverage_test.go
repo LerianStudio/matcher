@@ -28,6 +28,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
 	"github.com/LerianStudio/matcher/internal/configuration/services/query"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
@@ -980,7 +981,7 @@ func (f *handlerFixtureWithSchedule) seedContext(
 
 	input := entities.CreateReconciliationContextInput{
 		Name:     "Test Context",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "daily",
 	}
 

@@ -325,7 +325,7 @@ func TestContextProviderAdapter_FindByID_Success(t *testing.T) {
 		ID:               contextID,
 		TenantID:         tenantID,
 		Name:             "Test Context",
-		Type:             value_objects.ContextTypeOneToOne,
+		Type:             shared.ContextTypeOneToOne,
 		Interval:         "daily",
 		Status:           value_objects.ContextStatusActive,
 		FeeToleranceAbs:  decimal.RequireFromString("0.10"),

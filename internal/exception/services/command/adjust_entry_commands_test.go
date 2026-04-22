@@ -18,6 +18,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
 	portMocks "github.com/LerianStudio/matcher/internal/exception/ports/mocks"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 // fixedTestTime returns a deterministic timestamp for test reproducibility.
@@ -156,7 +157,7 @@ func TestAdjustEntry_NotesTrimmedInAuditEvent(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -201,7 +202,7 @@ func TestAdjustEntry_ActorTrimmedInAuditEvent(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -248,7 +249,7 @@ func TestAdjustEntry_AuditEventFieldCompleteness(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -314,7 +315,7 @@ func TestAdjustEntry_AdjustmentInputPassthrough(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -380,7 +381,7 @@ func TestAdjustEntry_DecimalPrecisionPreserved(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -422,7 +423,7 @@ func TestAdjustEntry_PendingResolutionRejected(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -463,7 +464,7 @@ func TestAdjustEntry_GatewayFailureRevertsStatus(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -520,7 +521,7 @@ func TestAdjustEntry_GatewayFailureRevertsAssignedStatus(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)

@@ -12,7 +12,7 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // GetMatchRule retrieves a match rule by ID.
@@ -51,7 +51,7 @@ func (uc *UseCase) ListMatchRules(
 	contextID uuid.UUID,
 	cursor string,
 	limit int,
-	ruleType *value_objects.RuleType,
+	ruleType *shared.RuleType,
 ) (entities.MatchRules, libHTTP.CursorPagination, error) {
 	if uc == nil || uc.matchRuleRepo == nil {
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("nil matchRuleRepo: %w", ErrNilMatchRuleRepository)

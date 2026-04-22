@@ -14,8 +14,8 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // CreateMatchRule creates a match rule.
@@ -131,10 +131,10 @@ func (handler *Handler) ListMatchRules(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination", err)
 	}
 
-	var ruleType *value_objects.RuleType
+	var ruleType *shared.RuleType
 
 	if typeParam := strings.TrimSpace(fiberCtx.Query("type")); typeParam != "" {
-		parsed, err := value_objects.ParseRuleType(strings.ToUpper(typeParam))
+		parsed, err := shared.ParseRuleType(strings.ToUpper(typeParam))
 		if err != nil {
 			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid rule type", err)
 		}

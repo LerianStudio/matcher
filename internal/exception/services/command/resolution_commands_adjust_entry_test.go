@@ -13,6 +13,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	"github.com/LerianStudio/matcher/internal/shared/testutil"
 )
 
@@ -22,7 +23,7 @@ func TestAdjustEntry_Success(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		testutil.MustDeterministicUUID("adjust-entry-success"),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -67,7 +68,7 @@ func TestAdjustEntry_NegativeAmountRejected(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		testutil.MustDeterministicUUID("adjust-entry-negative"),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -100,7 +101,7 @@ func TestAdjustEntry_ValidationErrors(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		exceptionID,
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -168,7 +169,7 @@ func TestAdjustEntry_ActorRequired(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		testutil.MustDeterministicUUID("adjust-entry-actor-required"),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -210,7 +211,7 @@ func TestAdjustEntry_ZeroAmountRejected(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		testutil.MustDeterministicUUID("adjust-entry-zero-amount"),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -239,7 +240,7 @@ func TestAdjustEntry_InvalidCurrency(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		testutil.MustDeterministicUUID("adjust-entry-invalid-currency"),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -287,7 +288,7 @@ func TestAdjustEntry_DependencyErrors(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		testutil.MustDeterministicUUID("adjust-entry-dependency-errors"),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -348,7 +349,7 @@ func TestAdjustEntry_AuditError(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		testutil.MustDeterministicUUID("adjust-entry-audit-error"),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -388,7 +389,7 @@ func TestAdjustEntry_UpdateError(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		testutil.MustDeterministicUUID("adjust-entry-update-error"),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -417,7 +418,7 @@ func TestAdjustEntry_CurrencyNormalization(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		testutil.MustDeterministicUUID("adjust-entry-currency-normalization"),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -474,7 +475,7 @@ func TestAdjustEntry_AllAdjustmentReasons(t *testing.T) {
 			exception, err := entities.NewException(
 				context.Background(),
 				testutil.MustDeterministicUUID("adjust-entry-reason-"+tc.name),
-				value_objects.ExceptionSeverityHigh,
+				sharedexception.ExceptionSeverityHigh,
 				nil,
 			)
 			require.NoError(t, err)
@@ -542,7 +543,7 @@ func TestAdjustEntry_AllCurrencies(t *testing.T) {
 			exception, err := entities.NewException(
 				context.Background(),
 				testutil.MustDeterministicUUID("adjust-entry-currency-"+tc.name),
-				value_objects.ExceptionSeverityHigh,
+				sharedexception.ExceptionSeverityHigh,
 				nil,
 			)
 			require.NoError(t, err)
@@ -607,7 +608,7 @@ func TestAdjustEntry_EffectiveAtBoundaries(t *testing.T) {
 			exception, err := entities.NewException(
 				context.Background(),
 				testutil.MustDeterministicUUID("adjust-entry-effective-"+tc.name),
-				value_objects.ExceptionSeverityHigh,
+				sharedexception.ExceptionSeverityHigh,
 				nil,
 			)
 			require.NoError(t, err)

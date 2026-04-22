@@ -9,7 +9,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
-	exceptionVO "github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	exceptionCommand "github.com/LerianStudio/matcher/internal/exception/services/command"
 	ingestionJobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
 	"github.com/LerianStudio/matcher/tests/integration"
@@ -27,7 +27,7 @@ func TestDispute_OpenAndClose_WonWithAuditTrail(t *testing.T) {
 			"DISPUTE-WON-"+uuid.New().String()[:8], decimal.NewFromFloat(500.00), "USD")
 
 		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-			exceptionVO.ExceptionSeverityMedium, "UNMATCHED: suspected bank error")
+			sharedexception.ExceptionSeverityMedium, "UNMATCHED: suspected bank error")
 
 		disputeUC, _ := wireDisputeUseCase(t, h)
 
@@ -73,7 +73,7 @@ func TestDispute_OpenAndClose_LostWithAuditTrail(t *testing.T) {
 			"DISPUTE-LOST-"+uuid.New().String()[:8], decimal.NewFromFloat(300.00), "GBP")
 
 		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-			exceptionVO.ExceptionSeverityLow, "UNMATCHED: no counterparty")
+			sharedexception.ExceptionSeverityLow, "UNMATCHED: no counterparty")
 
 		disputeUC, _ := wireDisputeUseCase(t, h)
 
@@ -115,7 +115,7 @@ func TestDispute_SubmitEvidence(t *testing.T) {
 			"EVIDENCE-"+uuid.New().String()[:8], decimal.NewFromFloat(750.00), "USD")
 
 		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-			exceptionVO.ExceptionSeverityMedium, "UNMATCHED")
+			sharedexception.ExceptionSeverityMedium, "UNMATCHED")
 
 		disputeUC, _ := wireDisputeUseCase(t, h)
 
@@ -156,7 +156,7 @@ func TestDispute_MultipleEvidenceSubmissions(t *testing.T) {
 			"MULTI-EV-"+uuid.New().String()[:8], decimal.NewFromFloat(200.00), "CHF")
 
 		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-			exceptionVO.ExceptionSeverityLow, "UNMATCHED")
+			sharedexception.ExceptionSeverityLow, "UNMATCHED")
 
 		disputeUC, _ := wireDisputeUseCase(t, h)
 
@@ -232,7 +232,7 @@ func TestDispute_FullLifecycleWithEvidence(t *testing.T) {
 			"LIFECYCLE-"+uuid.New().String()[:8], decimal.NewFromFloat(1500.00), "USD")
 
 		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-			exceptionVO.ExceptionSeverityMedium, "UNMATCHED: high value discrepancy")
+			sharedexception.ExceptionSeverityMedium, "UNMATCHED: high value discrepancy")
 
 		disputeUC, _ := wireDisputeUseCase(t, h)
 

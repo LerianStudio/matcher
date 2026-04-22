@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	matchRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/match_rule"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	matchGroupRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_group"
 	matchRunRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_run"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
@@ -33,7 +33,7 @@ func TestMatchGroupRepository_CreateBatchAndList(t *testing.T) {
 			h.Seed.ContextID,
 			configEntities.CreateMatchRuleInput{
 				Priority: 1,
-				Type:     configVO.RuleTypeExact,
+				Type:     shared.RuleTypeExact,
 				Config:   map[string]any{"matchCurrency": true},
 			},
 		)
@@ -109,7 +109,7 @@ func TestMatchGroupRepository_MultipleGroups(t *testing.T) {
 			h.Seed.ContextID,
 			configEntities.CreateMatchRuleInput{
 				Priority: 2,
-				Type:     configVO.RuleTypeTolerance,
+				Type:     shared.RuleTypeTolerance,
 				Config:   map[string]any{"absTolerance": "0.01"},
 			},
 		)

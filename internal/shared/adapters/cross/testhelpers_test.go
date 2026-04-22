@@ -10,6 +10,7 @@ import (
 	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 )
 
@@ -57,7 +58,7 @@ func (r *stubContextRepository) FindAll(
 	_ context.Context,
 	_ string,
 	_ int,
-	_ *configVO.ContextType,
+	_ *shared.ContextType,
 	_ *configVO.ContextStatus,
 ) ([]*configEntities.ReconciliationContext, libHTTP.CursorPagination, error) {
 	return nil, libHTTP.CursorPagination{}, nil

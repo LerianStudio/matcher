@@ -16,6 +16,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	configCommand "github.com/LerianStudio/matcher/internal/configuration/services/command"
 	configQuery "github.com/LerianStudio/matcher/internal/configuration/services/query"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
@@ -60,7 +61,7 @@ func createTestContext(
 
 	created, err := cmdUC.CreateContext(ctx, harness.Seed.TenantID, entities.CreateReconciliationContextInput{
 		Name:     name + " " + uuid.New().String()[:8],
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 	})
 	require.NoError(t, err)
@@ -81,13 +82,13 @@ func TestConfigServiceCRUD_ContextLifecycle(t *testing.T) {
 		contextName := "CRUD Context " + uuid.New().String()[:8]
 		created, err := cmdUC.CreateContext(ctx, h.Seed.TenantID, entities.CreateReconciliationContextInput{
 			Name:     contextName,
-			Type:     value_objects.ContextTypeOneToMany,
+			Type:     shared.ContextTypeOneToMany,
 			Interval: "0 */6 * * *",
 		})
 		require.NoError(t, err)
 		require.NotEqual(t, uuid.Nil, created.ID)
 		require.Equal(t, contextName, created.Name)
-		require.Equal(t, value_objects.ContextTypeOneToMany, created.Type)
+		require.Equal(t, shared.ContextTypeOneToMany, created.Type)
 		require.Equal(t, value_objects.ContextStatusDraft, created.Status)
 
 		// GET.
@@ -270,13 +271,13 @@ func TestConfigServiceCRUD_MatchRuleLifecycle(t *testing.T) {
 		// CREATE.
 		created, err := cmdUC.CreateMatchRule(ctx, parent.ID, entities.CreateMatchRuleInput{
 			Priority: 1,
-			Type:     value_objects.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config:   map[string]any{"matchAmount": true, "matchCurrency": true},
 		})
 		require.NoError(t, err)
 		require.NotEqual(t, uuid.Nil, created.ID)
 		require.Equal(t, 1, created.Priority)
-		require.Equal(t, value_objects.RuleTypeExact, created.Type)
+		require.Equal(t, shared.RuleTypeExact, created.Type)
 
 		// GET.
 		fetched, err := queryUC.GetMatchRule(ctx, parent.ID, created.ID)
@@ -329,7 +330,7 @@ func TestConfigServiceCRUD_CreateContextValidation(t *testing.T) {
 		// Empty name should fail validation.
 		_, err := cmdUC.CreateContext(ctx, h.Seed.TenantID, entities.CreateReconciliationContextInput{
 			Name:     "",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		})
 		require.Error(t, err, "creating a context with an empty name must fail")
@@ -402,21 +403,21 @@ func TestConfigServiceCRUD_RuleReorderPriorities(t *testing.T) {
 		// Create 3 rules with priorities 1, 2, 3.
 		rule1, err := cmdUC.CreateMatchRule(ctx, parent.ID, entities.CreateMatchRuleInput{
 			Priority: 1,
-			Type:     value_objects.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config:   map[string]any{"matchAmount": true},
 		})
 		require.NoError(t, err)
 
 		rule2, err := cmdUC.CreateMatchRule(ctx, parent.ID, entities.CreateMatchRuleInput{
 			Priority: 2,
-			Type:     value_objects.RuleTypeTolerance,
+			Type:     shared.RuleTypeTolerance,
 			Config:   map[string]any{"absTolerance": 0.01},
 		})
 		require.NoError(t, err)
 
 		rule3, err := cmdUC.CreateMatchRule(ctx, parent.ID, entities.CreateMatchRuleInput{
 			Priority: 3,
-			Type:     value_objects.RuleTypeDateLag,
+			Type:     shared.RuleTypeDateLag,
 			Config:   map[string]any{"minDays": 0, "maxDays": 5},
 		})
 		require.NoError(t, err)

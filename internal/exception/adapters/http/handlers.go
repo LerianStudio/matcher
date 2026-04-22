@@ -33,6 +33,7 @@ import (
 	crossAdapters "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 // Handlers provides HTTP handlers for exception operations.
@@ -1006,7 +1007,7 @@ func parseExceptionFilter(fiberCtx *fiber.Ctx) (repositories.ExceptionFilter, er
 	}
 
 	if severity := fiberCtx.Query("severity"); severity != "" {
-		parsed, err := value_objects.ParseExceptionSeverity(severity)
+		parsed, err := sharedexception.ParseExceptionSeverity(severity)
 		if err != nil {
 			return filter, fmt.Errorf("invalid severity: %w", err)
 		}

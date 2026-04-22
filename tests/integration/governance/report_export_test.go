@@ -17,11 +17,11 @@ import (
 	configFieldMapRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/field_map"
 	configMatchRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/match_rule"
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	reportingPostgres "github.com/LerianStudio/matcher/internal/reporting/adapters/postgres/report"
 	reportingEntities "github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	reportingQuery "github.com/LerianStudio/matcher/internal/reporting/services/query"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -65,7 +65,7 @@ func seedReportTestConfig(t *testing.T, h *integration.TestHarness) reportTestSe
 		h.Seed.ContextID,
 		configEntities.CreateMatchRuleInput{
 			Priority: 1,
-			Type:     configVO.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config:   map[string]any{"matchAmount": true},
 		},
 	)

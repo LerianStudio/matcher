@@ -31,6 +31,7 @@ import (
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	embeddedmigrations "github.com/LerianStudio/matcher/migrations"
@@ -688,7 +689,7 @@ func setupSharedSeedData(
 		tenantID,
 		configEntities.CreateReconciliationContextInput{
 			Name:     contextName,
-			Type:     configVO.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		},
 	)

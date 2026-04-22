@@ -13,6 +13,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 func TestContextPostgreSQLModelRoundTrip(t *testing.T) {
@@ -23,7 +24,7 @@ func TestContextPostgreSQLModelRoundTrip(t *testing.T) {
 		ID:        uuid.New(),
 		TenantID:  uuid.New(),
 		Name:      "Context",
-		Type:      value_objects.ContextTypeOneToOne,
+		Type:      shared.ContextTypeOneToOne,
 		Interval:  "daily",
 		Status:    value_objects.ContextStatusActive,
 		CreatedAt: now,
@@ -50,7 +51,7 @@ func TestContextPostgreSQLModelDefaults(t *testing.T) {
 		ID:       uuid.New(),
 		TenantID: uuid.New(),
 		Name:     "Context",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "daily",
 		Status:   value_objects.ContextStatusActive,
 	}
@@ -79,7 +80,7 @@ func TestNewContextPostgreSQLModel_NilTenantID(t *testing.T) {
 		ID:        uuid.New(),
 		TenantID:  uuid.Nil,
 		Name:      "Test",
-		Type:      value_objects.ContextTypeOneToOne,
+		Type:      shared.ContextTypeOneToOne,
 		Interval:  "daily",
 		Status:    value_objects.ContextStatusActive,
 		CreatedAt: now,
@@ -101,7 +102,7 @@ func TestNewContextPostgreSQLModel_GeneratesIDWhenNil(t *testing.T) {
 		ID:        uuid.Nil,
 		TenantID:  uuid.New(),
 		Name:      "Test",
-		Type:      value_objects.ContextTypeOneToOne,
+		Type:      shared.ContextTypeOneToOne,
 		Interval:  "daily",
 		Status:    value_objects.ContextStatusActive,
 		CreatedAt: now,
@@ -126,7 +127,7 @@ func TestNewContextPostgreSQLModel_WithFeeTolerances(t *testing.T) {
 		ID:              uuid.New(),
 		TenantID:        uuid.New(),
 		Name:            "Test",
-		Type:            value_objects.ContextTypeManyToMany,
+		Type:            shared.ContextTypeManyToMany,
 		Interval:        "monthly",
 		Status:          value_objects.ContextStatusActive,
 		FeeToleranceAbs: decimal.NewFromFloat(10.50),
@@ -300,7 +301,7 @@ func TestToEntity_ValidWithOptionalFields(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, entity)
 	assert.Equal(t, "Test Context", entity.Name)
-	assert.Equal(t, value_objects.ContextTypeOneToMany, entity.Type)
+	assert.Equal(t, shared.ContextTypeOneToMany, entity.Type)
 	assert.Equal(t, "weekly", entity.Interval)
 	assert.Equal(t, value_objects.ContextStatusPaused, entity.Status)
 	assert.True(t, entity.FeeToleranceAbs.Equal(decimal.NewFromFloat(25.50)))
@@ -387,7 +388,7 @@ func TestNewContextPostgreSQLModel_ZeroUpdatedAt(t *testing.T) {
 		ID:        uuid.New(),
 		TenantID:  uuid.New(),
 		Name:      "Test",
-		Type:      value_objects.ContextTypeOneToOne,
+		Type:      shared.ContextTypeOneToOne,
 		Interval:  "daily",
 		Status:    value_objects.ContextStatusActive,
 		CreatedAt: createdAt,
@@ -405,12 +406,12 @@ func TestNewContextPostgreSQLModel_AllTypes(t *testing.T) {
 	t.Parallel()
 
 	contextTypes := []struct {
-		ctxType     value_objects.ContextType
+		ctxType     shared.ContextType
 		expectedStr string
 	}{
-		{value_objects.ContextTypeOneToOne, "1:1"},
-		{value_objects.ContextTypeOneToMany, "1:N"},
-		{value_objects.ContextTypeManyToMany, "N:M"},
+		{shared.ContextTypeOneToOne, "1:1"},
+		{shared.ContextTypeOneToMany, "1:N"},
+		{shared.ContextTypeManyToMany, "N:M"},
 	}
 
 	for _, tt := range contextTypes {
@@ -458,7 +459,7 @@ func TestNewContextPostgreSQLModel_AllStatuses(t *testing.T) {
 				ID:        uuid.New(),
 				TenantID:  uuid.New(),
 				Name:      "Test",
-				Type:      value_objects.ContextTypeOneToOne,
+				Type:      shared.ContextTypeOneToOne,
 				Interval:  "daily",
 				Status:    tt.status,
 				CreatedAt: now,
@@ -511,7 +512,7 @@ func TestModelPreservesAllFields(t *testing.T) {
 		ID:              entityID,
 		TenantID:        tenantID,
 		Name:            "Full Field Test",
-		Type:            value_objects.ContextTypeManyToMany,
+		Type:            shared.ContextTypeManyToMany,
 		Interval:        "monthly",
 		Status:          value_objects.ContextStatusPaused,
 		FeeToleranceAbs: decimal.NewFromFloat(100.25),
@@ -529,7 +530,7 @@ func TestModelPreservesAllFields(t *testing.T) {
 	require.Equal(t, entityID, resultEntity.ID)
 	require.Equal(t, tenantID, resultEntity.TenantID)
 	require.Equal(t, "Full Field Test", resultEntity.Name)
-	require.Equal(t, value_objects.ContextTypeManyToMany, resultEntity.Type)
+	require.Equal(t, shared.ContextTypeManyToMany, resultEntity.Type)
 	require.Equal(t, "monthly", resultEntity.Interval)
 	require.Equal(t, value_objects.ContextStatusPaused, resultEntity.Status)
 	assert.True(t, resultEntity.FeeToleranceAbs.Equal(decimal.NewFromFloat(100.25)))

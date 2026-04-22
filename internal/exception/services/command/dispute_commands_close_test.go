@@ -12,7 +12,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/dispute"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
-	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 func TestCloseDispute_Win(t *testing.T) {
@@ -25,7 +25,7 @@ func TestCloseDispute_Win(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -74,7 +74,7 @@ func TestCloseDispute_Lose(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -122,7 +122,7 @@ func TestCloseDispute_ValidationErrors(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -194,7 +194,7 @@ func TestCloseDispute_ActorRequired(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -227,7 +227,7 @@ func TestCloseDispute_DisputeNotFound(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -266,7 +266,7 @@ func TestCloseDispute_InvalidStateTransition(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -302,7 +302,7 @@ func TestCloseDispute_UpdateError(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -338,7 +338,7 @@ func TestCloseDispute_AuditPublishError(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)

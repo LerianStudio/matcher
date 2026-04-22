@@ -12,7 +12,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/dispute"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
-	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 func TestOpenDispute_Success(t *testing.T) {
@@ -21,7 +21,7 @@ func TestOpenDispute_Success(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -68,7 +68,7 @@ func TestOpenDispute_ValidationErrors(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -165,7 +165,7 @@ func TestOpenDispute_ActorRequired(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -215,7 +215,7 @@ func TestOpenDispute_ExceptionNotFound(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -248,7 +248,7 @@ func TestOpenDispute_RepositoryCreateError(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -281,7 +281,7 @@ func TestOpenDispute_AuditPublishError(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -343,7 +343,7 @@ func TestOpenDispute_AllCategories(t *testing.T) {
 			exception, err := entities.NewException(
 				context.Background(),
 				uuid.New(),
-				value_objects.ExceptionSeverityHigh,
+				sharedexception.ExceptionSeverityHigh,
 				nil,
 			)
 			require.NoError(t, err)

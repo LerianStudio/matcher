@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 const (
@@ -150,17 +150,17 @@ func buildJiraDescription(ctx *DispatchContext) string {
 	return builder.String()
 }
 
-func mapSeverityToJiraPriority(severity value_objects.ExceptionSeverity) *JiraPriority {
+func mapSeverityToJiraPriority(severity sharedexception.ExceptionSeverity) *JiraPriority {
 	var priorityName string
 
 	switch severity {
-	case value_objects.ExceptionSeverityCritical:
+	case sharedexception.ExceptionSeverityCritical:
 		priorityName = "Highest"
-	case value_objects.ExceptionSeverityHigh:
+	case sharedexception.ExceptionSeverityHigh:
 		priorityName = "High"
-	case value_objects.ExceptionSeverityMedium:
+	case sharedexception.ExceptionSeverityMedium:
 		priorityName = "Medium"
-	case value_objects.ExceptionSeverityLow:
+	case sharedexception.ExceptionSeverityLow:
 		priorityName = "Low"
 	default:
 		priorityName = "Medium"

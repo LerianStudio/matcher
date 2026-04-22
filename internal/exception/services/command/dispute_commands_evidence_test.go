@@ -12,7 +12,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/dispute"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
-	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 func TestSubmitEvidence_Success(t *testing.T) {
@@ -25,7 +25,7 @@ func TestSubmitEvidence_Success(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -73,7 +73,7 @@ func TestSubmitEvidence_WithFileURL(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -122,7 +122,7 @@ func TestSubmitEvidence_ValidationErrors(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -182,7 +182,7 @@ func TestSubmitEvidence_ActorRequired(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -214,7 +214,7 @@ func TestSubmitEvidence_DisputeNotFound(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -252,7 +252,7 @@ func TestSubmitEvidence_WrongState(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -287,7 +287,7 @@ func TestSubmitEvidence_UpdateError(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -322,7 +322,7 @@ func TestSubmitEvidence_AuditPublishError(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)

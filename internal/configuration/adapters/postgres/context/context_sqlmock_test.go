@@ -24,6 +24,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
@@ -59,7 +60,7 @@ func TestRepository_Create_NilChecks(t *testing.T) {
 		ID:        uuid.New(),
 		TenantID:  uuid.New(),
 		Name:      "Test",
-		Type:      value_objects.ContextTypeOneToOne,
+		Type:      shared.ContextTypeOneToOne,
 		Interval:  "daily",
 		Status:    value_objects.ContextStatusActive,
 		CreatedAt: now,
@@ -110,7 +111,7 @@ func TestRepository_CreateWithTx_NilChecks(t *testing.T) {
 		ID:        uuid.New(),
 		TenantID:  uuid.New(),
 		Name:      "Test",
-		Type:      value_objects.ContextTypeOneToOne,
+		Type:      shared.ContextTypeOneToOne,
 		Interval:  "daily",
 		Status:    value_objects.ContextStatusActive,
 		CreatedAt: now,
@@ -258,7 +259,7 @@ func TestRepository_Update_NilChecks(t *testing.T) {
 		ID:        uuid.New(),
 		TenantID:  uuid.New(),
 		Name:      "Test",
-		Type:      value_objects.ContextTypeOneToOne,
+		Type:      shared.ContextTypeOneToOne,
 		Interval:  "daily",
 		Status:    value_objects.ContextStatusActive,
 		CreatedAt: now,
@@ -309,7 +310,7 @@ func TestRepository_UpdateWithTx_NilChecks(t *testing.T) {
 		ID:        uuid.New(),
 		TenantID:  uuid.New(),
 		Name:      "Test",
-		Type:      value_objects.ContextTypeOneToOne,
+		Type:      shared.ContextTypeOneToOne,
 		Interval:  "daily",
 		Status:    value_objects.ContextStatusActive,
 		CreatedAt: now,
@@ -530,7 +531,7 @@ func TestModelConversion_EdgeCases(t *testing.T) {
 			ID:              uuid.New(),
 			TenantID:        uuid.New(),
 			Name:            "Test",
-			Type:            value_objects.ContextTypeOneToOne,
+			Type:            shared.ContextTypeOneToOne,
 			Interval:        "daily",
 			Status:          value_objects.ContextStatusActive,
 			FeeToleranceAbs: decimal.Zero,
@@ -556,7 +557,7 @@ func TestModelConversion_EdgeCases(t *testing.T) {
 			ID:              uuid.New(),
 			TenantID:        uuid.New(),
 			Name:            "Test",
-			Type:            value_objects.ContextTypeOneToOne,
+			Type:            shared.ContextTypeOneToOne,
 			Interval:        "daily",
 			Status:          value_objects.ContextStatusActive,
 			FeeToleranceAbs: decimal.NewFromFloat(-10.5),
@@ -584,7 +585,7 @@ func TestModelConversion_EdgeCases(t *testing.T) {
 			ID:              uuid.New(),
 			TenantID:        uuid.New(),
 			Name:            "Test",
-			Type:            value_objects.ContextTypeManyToMany,
+			Type:            shared.ContextTypeManyToMany,
 			Interval:        "monthly",
 			Status:          value_objects.ContextStatusActive,
 			FeeToleranceAbs: largeAbs,
@@ -605,10 +606,10 @@ func TestModelConversion_EdgeCases(t *testing.T) {
 	t.Run("model with all context types", func(t *testing.T) {
 		t.Parallel()
 
-		contextTypes := []value_objects.ContextType{
-			value_objects.ContextTypeOneToOne,
-			value_objects.ContextTypeOneToMany,
-			value_objects.ContextTypeManyToMany,
+		contextTypes := []shared.ContextType{
+			shared.ContextTypeOneToOne,
+			shared.ContextTypeOneToMany,
+			shared.ContextTypeManyToMany,
 		}
 
 		for _, ctxType := range contextTypes {
@@ -647,7 +648,7 @@ func TestModelConversion_EdgeCases(t *testing.T) {
 				ID:        uuid.New(),
 				TenantID:  uuid.New(),
 				Name:      "Test " + status.String(),
-				Type:      value_objects.ContextTypeOneToOne,
+				Type:      shared.ContextTypeOneToOne,
 				Interval:  "daily",
 				Status:    status,
 				CreatedAt: now,
@@ -672,7 +673,7 @@ func TestModelConversion_EdgeCases(t *testing.T) {
 			ID:        uuid.New(),
 			TenantID:  uuid.New(),
 			Name:      "Test",
-			Type:      value_objects.ContextTypeOneToOne,
+			Type:      shared.ContextTypeOneToOne,
 			Interval:  "daily",
 			Status:    value_objects.ContextStatusActive,
 			CreatedAt: createdAt,
@@ -703,7 +704,7 @@ func TestModelConversion_IntervalVariations(t *testing.T) {
 				ID:        uuid.New(),
 				TenantID:  uuid.New(),
 				Name:      "Test",
-				Type:      value_objects.ContextTypeOneToOne,
+				Type:      shared.ContextTypeOneToOne,
 				Interval:  interval,
 				Status:    value_objects.ContextStatusActive,
 				CreatedAt: now,
@@ -742,7 +743,7 @@ func TestModelConversion_NameVariations(t *testing.T) {
 				ID:        uuid.New(),
 				TenantID:  uuid.New(),
 				Name:      name,
-				Type:      value_objects.ContextTypeOneToOne,
+				Type:      shared.ContextTypeOneToOne,
 				Interval:  "daily",
 				Status:    value_objects.ContextStatusActive,
 				CreatedAt: now,
@@ -778,7 +779,7 @@ func createValidContextEntity() *entities.ReconciliationContext {
 		ID:              uuid.New(),
 		TenantID:        uuid.New(),
 		Name:            "Test Context",
-		Type:            value_objects.ContextTypeOneToOne,
+		Type:            shared.ContextTypeOneToOne,
 		Interval:        "daily",
 		Status:          value_objects.ContextStatusActive,
 		FeeToleranceAbs: decimal.NewFromFloat(10.50),
@@ -824,7 +825,7 @@ func TestScanContext_ValidRow(t *testing.T) {
 	require.Equal(t, id, result.ID)
 	require.Equal(t, tenantID, result.TenantID)
 	require.Equal(t, "Test Context", result.Name)
-	require.Equal(t, value_objects.ContextTypeOneToOne, result.Type)
+	require.Equal(t, shared.ContextTypeOneToOne, result.Type)
 	require.Equal(t, "daily", result.Interval)
 	require.Equal(t, value_objects.ContextStatusActive, result.Status)
 	assert.True(t, result.FeeToleranceAbs.Equal(decimal.NewFromFloat(10.50)))
@@ -1270,12 +1271,12 @@ func TestExecuteCreate_AllContextTypes(t *testing.T) {
 	t.Parallel()
 
 	contextTypes := []struct {
-		ctxType     value_objects.ContextType
+		ctxType     shared.ContextType
 		description string
 	}{
-		{value_objects.ContextTypeOneToOne, "one_to_one"},
-		{value_objects.ContextTypeOneToMany, "one_to_many"},
-		{value_objects.ContextTypeManyToMany, "many_to_many"},
+		{shared.ContextTypeOneToOne, "one_to_one"},
+		{shared.ContextTypeOneToMany, "one_to_many"},
+		{shared.ContextTypeManyToMany, "many_to_many"},
 	}
 
 	for _, tt := range contextTypes {
@@ -1342,7 +1343,7 @@ func TestScanContext_ManyToManyType(t *testing.T) {
 	result, err := scanContext(sqlRows)
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Equal(t, value_objects.ContextTypeManyToMany, result.Type)
+	require.Equal(t, shared.ContextTypeManyToMany, result.Type)
 	require.Equal(t, "monthly", result.Interval)
 	assert.True(t, result.FeeToleranceAbs.Equal(decimal.NewFromFloat(100.00)))
 }
@@ -1769,7 +1770,7 @@ func TestRepository_FindAll_WithFiltersWithMock(t *testing.T) {
 	id := uuid.New()
 	tenantID := uuid.New()
 	now := time.Now().UTC()
-	ctxType := value_objects.ContextTypeOneToOne
+	ctxType := shared.ContextTypeOneToOne
 	status := value_objects.ContextStatusActive
 	cursor := uuid.New()
 
@@ -2070,7 +2071,7 @@ func TestRepository_FindAll_WithOnlyTypeFilterWithMock(t *testing.T) {
 	id := uuid.New()
 	tenantID := uuid.New()
 	now := time.Now().UTC()
-	ctxType := value_objects.ContextTypeOneToMany
+	ctxType := shared.ContextTypeOneToMany
 
 	rows := sqlmock.NewRows([]string{
 		"id", "tenant_id", "name", "type", "interval",
@@ -2089,7 +2090,7 @@ func TestRepository_FindAll_WithOnlyTypeFilterWithMock(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, result, 1)
-	require.Equal(t, value_objects.ContextTypeOneToMany, result[0].Type)
+	require.Equal(t, shared.ContextTypeOneToMany, result[0].Type)
 }
 
 func TestRepository_FindAll_WithOnlyStatusFilterWithMock(t *testing.T) {

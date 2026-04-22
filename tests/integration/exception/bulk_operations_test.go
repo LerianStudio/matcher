@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	exceptionVO "github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	exceptionCommand "github.com/LerianStudio/matcher/internal/exception/services/command"
 	ingestionJobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
 	"github.com/LerianStudio/matcher/tests/integration"
@@ -36,7 +37,7 @@ func TestBulkAssign_AssignsMultipleExceptions(t *testing.T) {
 			)
 
 			exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-				exceptionVO.ExceptionSeverityLow, "UNMATCHED: no counterparty")
+				sharedexception.ExceptionSeverityLow, "UNMATCHED: no counterparty")
 
 			exceptionIDs = append(exceptionIDs, exc.ID)
 		}
@@ -86,7 +87,7 @@ func TestBulkAssign_PartialInvalidIDs(t *testing.T) {
 			)
 
 			exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-				exceptionVO.ExceptionSeverityMedium, "UNMATCHED: partial test")
+				sharedexception.ExceptionSeverityMedium, "UNMATCHED: partial test")
 
 			validIDs = append(validIDs, exc.ID)
 		}
@@ -142,7 +143,7 @@ func TestBulkResolve_ResolvesAll(t *testing.T) {
 			)
 
 			exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-				exceptionVO.ExceptionSeverityHigh, "UNMATCHED: needs resolution")
+				sharedexception.ExceptionSeverityHigh, "UNMATCHED: needs resolution")
 
 			exceptionIDs = append(exceptionIDs, exc.ID)
 		}
@@ -198,7 +199,7 @@ func TestBulkResolve_SkipsAlreadyResolved(t *testing.T) {
 			)
 
 			exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-				exceptionVO.ExceptionSeverityMedium, "UNMATCHED: skip test")
+				sharedexception.ExceptionSeverityMedium, "UNMATCHED: skip test")
 
 			exceptionIDs = append(exceptionIDs, exc.ID)
 		}

@@ -16,6 +16,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
 	"github.com/LerianStudio/matcher/internal/exception/ports/mocks"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 var (
@@ -54,7 +55,7 @@ func TestExceptionFinder_FindByID(t *testing.T) {
 		expectedException := &entities.Exception{
 			ID:            expectedID,
 			TransactionID: uuid.New(),
-			Severity:      value_objects.ExceptionSeverityMedium,
+			Severity:      sharedexception.ExceptionSeverityMedium,
 			Status:        value_objects.ExceptionStatusOpen,
 			Reason:        &expectedReason,
 			CreatedAt:     now,
@@ -69,7 +70,7 @@ func TestExceptionFinder_FindByID(t *testing.T) {
 		require.NotNil(t, result)
 		require.Equal(t, expectedID, result.ID)
 		require.Equal(t, expectedException.TransactionID, result.TransactionID)
-		require.Equal(t, value_objects.ExceptionSeverityMedium, result.Severity)
+		require.Equal(t, sharedexception.ExceptionSeverityMedium, result.Severity)
 		require.Equal(t, value_objects.ExceptionStatusOpen, result.Status)
 	})
 
@@ -176,11 +177,11 @@ func testExceptionStatuses(t *testing.T) {
 func testExceptionSeverities(t *testing.T) {
 	t.Helper()
 
-	severities := []value_objects.ExceptionSeverity{
-		value_objects.ExceptionSeverityLow,
-		value_objects.ExceptionSeverityMedium,
-		value_objects.ExceptionSeverityHigh,
-		value_objects.ExceptionSeverityCritical,
+	severities := []sharedexception.ExceptionSeverity{
+		sharedexception.ExceptionSeverityLow,
+		sharedexception.ExceptionSeverityMedium,
+		sharedexception.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityCritical,
 	}
 
 	for _, severity := range severities {
@@ -214,7 +215,7 @@ func createFullyPopulatedException() *entities.Exception {
 	return &entities.Exception{
 		ID:               uuid.New(),
 		TransactionID:    uuid.New(),
-		Severity:         value_objects.ExceptionSeverityHigh,
+		Severity:         sharedexception.ExceptionSeverityHigh,
 		Status:           value_objects.ExceptionStatusResolved,
 		ExternalSystem:   &externalSystem,
 		ExternalIssueID:  &externalIssueID,

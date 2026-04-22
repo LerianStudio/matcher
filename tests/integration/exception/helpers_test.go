@@ -28,6 +28,7 @@ import (
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 
 	ingestionParsers "github.com/LerianStudio/matcher/internal/ingestion/adapters/parsers"
@@ -173,7 +174,7 @@ func seedTestConfig(t *testing.T, h *integration.TestHarness) seedConfig {
 		h.Seed.ContextID,
 		configEntities.CreateMatchRuleInput{
 			Priority: 1,
-			Type:     configVO.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config: map[string]any{
 				"matchAmount":     true,
 				"matchCurrency":   true,
@@ -424,7 +425,7 @@ func findExceptionByTransactionID(
 				return nil, err
 			}
 
-			parsedSeverity, err := exceptionVO.ParseExceptionSeverity(severity)
+			parsedSeverity, err := sharedexception.ParseExceptionSeverity(severity)
 			if err != nil {
 				return nil, err
 			}
@@ -492,7 +493,7 @@ func createExceptionForTransaction(
 	ctx context.Context,
 	conn *libPostgres.Client,
 	transactionID uuid.UUID,
-	severity exceptionVO.ExceptionSeverity,
+	severity sharedexception.ExceptionSeverity,
 	reason string,
 ) *exceptionEntities.Exception {
 	t.Helper()
@@ -548,7 +549,7 @@ func createExceptionForTransaction(
 			return nil, fmt.Errorf("parse transaction id: %w", err)
 		}
 
-		parsedSev, err := exceptionVO.ParseExceptionSeverity(sev)
+		parsedSev, err := sharedexception.ParseExceptionSeverity(sev)
 		if err != nil {
 			return nil, fmt.Errorf("parse severity: %w", err)
 		}

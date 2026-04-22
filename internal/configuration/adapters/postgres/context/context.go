@@ -10,6 +10,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
@@ -88,7 +89,7 @@ func (model *ContextPostgreSQLModel) ToEntity() (*entities.ReconciliationContext
 		return nil, fmt.Errorf("parsing TenantID: %w", err)
 	}
 
-	contextType, err := value_objects.ParseContextType(model.Type)
+	contextType, err := shared.ParseContextType(model.Type)
 	if err != nil {
 		return nil, fmt.Errorf("parsing Type '%s': %w", model.Type, err)
 	}

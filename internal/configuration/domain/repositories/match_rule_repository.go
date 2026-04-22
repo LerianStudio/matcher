@@ -8,7 +8,7 @@ import (
 	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 //go:generate mockgen -source=match_rule_repository.go -destination=mocks/match_rule_repository_mock.go -package=mocks
@@ -26,7 +26,7 @@ type MatchRuleRepository interface {
 	FindByContextIDAndType(
 		ctx context.Context,
 		contextID uuid.UUID,
-		ruleType value_objects.RuleType,
+		ruleType shared.RuleType,
 		cursor string,
 		limit int,
 	) (entities.MatchRules, libHTTP.CursorPagination, error)

@@ -17,6 +17,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
 	portMocks "github.com/LerianStudio/matcher/internal/exception/ports/mocks"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 func TestForceMatch_Success(t *testing.T) {
@@ -27,7 +28,7 @@ func TestForceMatch_Success(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -85,7 +86,7 @@ func TestForceMatch_ValidationErrors(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -131,7 +132,7 @@ func TestForceMatch_ActorRequired(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -171,7 +172,7 @@ func TestForceMatch_DependencyErrors(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -249,7 +250,7 @@ func TestForceMatch_AuditError(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -302,7 +303,7 @@ func TestForceMatch_AssignedExceptionResolvesFromPending(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -415,7 +416,7 @@ func TestForceMatch_AllOverrideReasons(t *testing.T) {
 			exception, err := entities.NewException(
 				context.Background(),
 				uuid.New(),
-				value_objects.ExceptionSeverityHigh,
+				sharedexception.ExceptionSeverityHigh,
 				nil,
 			)
 			require.NoError(t, err)
@@ -468,7 +469,7 @@ func TestForceMatch_PendingResolutionRejected(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -505,7 +506,7 @@ func TestForceMatch_GatewayFailureRevertsStatus(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -556,7 +557,7 @@ func TestForceMatch_GatewayFailureRevertsAssignedStatus(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -612,7 +613,7 @@ func TestForceMatch_ConcurrentOperations(t *testing.T) {
 			newException, innerErr := entities.NewException(
 				ctx,
 				uuid.New(),
-				value_objects.ExceptionSeverityHigh,
+				sharedexception.ExceptionSeverityHigh,
 				nil,
 			)
 			if innerErr != nil {

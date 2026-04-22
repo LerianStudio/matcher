@@ -16,6 +16,7 @@ import (
 	http "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	entities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	value_objects "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	uuid "github.com/google/uuid"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -89,7 +90,7 @@ func (mr *MockContextRepositoryMockRecorder) Delete(ctx, id any) *gomock.Call {
 }
 
 // FindAll mocks base method.
-func (m *MockContextRepository) FindAll(ctx context.Context, cursor string, limit int, contextType *value_objects.ContextType, status *value_objects.ContextStatus) ([]*entities.ReconciliationContext, http.CursorPagination, error) {
+func (m *MockContextRepository) FindAll(ctx context.Context, cursor string, limit int, contextType *shared.ContextType, status *value_objects.ContextStatus) ([]*entities.ReconciliationContext, http.CursorPagination, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindAll", ctx, cursor, limit, contextType, status)
 	ret0, _ := ret[0].([]*entities.ReconciliationContext)

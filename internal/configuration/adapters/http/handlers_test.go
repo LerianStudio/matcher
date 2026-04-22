@@ -31,6 +31,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
 	"github.com/LerianStudio/matcher/internal/configuration/services/query"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	"github.com/LerianStudio/matcher/internal/shared/testutil"
 	"github.com/LerianStudio/matcher/pkg/constant"
@@ -98,7 +99,7 @@ func (fixture *handlerFixture) seedContext(
 
 	input := entities.CreateReconciliationContextInput{
 		Name:     "Test Context",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "daily",
 	}
 	contextEntity, err := entities.NewReconciliationContext(context.Background(), tenantID, input)
@@ -201,7 +202,7 @@ func (fixture *handlerFixture) seedMatchRule(
 
 	input := entities.CreateMatchRuleInput{
 		Priority: priority,
-		Type:     value_objects.RuleTypeExact,
+		Type:     shared.RuleTypeExact,
 		Config:   map[string]any{"matchCurrency": true},
 	}
 	matchRule, err := entities.NewMatchRule(context.Background(), contextID, input)
@@ -640,7 +641,7 @@ func getContextHandlerTestCases(t *testing.T, tenantID uuid.UUID) []contextHandl
 			path:   "/v1/contexts",
 			payload: entities.CreateReconciliationContextInput{
 				Name:     "Context A",
-				Type:     value_objects.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "daily",
 			},
 			registerRoute: func(app *fiber.App, handler *Handler) {
@@ -910,7 +911,7 @@ func TestHandlers_ContextErrorPaths(t *testing.T) {
 
 		payload := mustJSON(t, entities.CreateReconciliationContextInput{
 			Name:     "Context A",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "daily",
 		})
 
@@ -1614,7 +1615,7 @@ func makeCreateMatchRuleTestCase(t *testing.T, tenantID uuid.UUID) matchRuleHand
 		path:   "/api/v1/contexts/:contextId/rules",
 		payload: entities.CreateMatchRuleInput{
 			Priority: 1,
-			Type:     value_objects.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config:   map[string]any{"matchCurrency": true},
 		},
 		registerRoute: func(app *fiber.App, handler *Handler) {
@@ -1978,7 +1979,7 @@ func TestHandlers_CreateMatchRuleConflict(t *testing.T) {
 
 	payload := entities.CreateMatchRuleInput{
 		Priority: 1,
-		Type:     value_objects.RuleTypeExact,
+		Type:     shared.RuleTypeExact,
 		Config:   map[string]any{"matchCurrency": true},
 	}
 
@@ -2064,7 +2065,7 @@ func (repo *contextRepository) FindAll(
 	_ context.Context,
 	cursor string,
 	_ int,
-	contextType *value_objects.ContextType,
+	contextType *shared.ContextType,
 	status *value_objects.ContextStatus,
 ) ([]*entities.ReconciliationContext, libHTTP.CursorPagination, error) {
 	if cursor != "" {
@@ -2359,7 +2360,7 @@ func (repo *matchRuleRepository) FindByContextID(
 func (repo *matchRuleRepository) FindByContextIDAndType(
 	_ context.Context,
 	contextID uuid.UUID,
-	ruleType value_objects.RuleType,
+	ruleType shared.RuleType,
 	cursor string,
 	_ int,
 ) (entities.MatchRules, libHTTP.CursorPagination, error) {

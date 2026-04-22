@@ -14,8 +14,8 @@ import (
 	contextRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/context"
 	configFeeRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/fee_rule"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	feeScheduleRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/fee_schedule"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
@@ -28,7 +28,7 @@ func createFeeRuleTestContext(t *testing.T, h *integration.TestHarness) uuid.UUI
 
 	entity, err := entities.NewReconciliationContext(ctx, h.Seed.TenantID, entities.CreateReconciliationContextInput{
 		Name:     "Fee Rule Context " + uuid.New().String()[:8],
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 	})
 	require.NoError(t, err)

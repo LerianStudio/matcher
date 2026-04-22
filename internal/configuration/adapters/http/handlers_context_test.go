@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
-	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 func TestHandlers_CloneContext(t *testing.T) {
@@ -153,7 +153,7 @@ func TestHandlers_ListContextsFilterByType(t *testing.T) {
 		t,
 		app,
 		http.MethodGet,
-		"/api/v1/contexts?type="+string(value_objects.ContextTypeOneToOne),
+		"/api/v1/contexts?type="+string(shared.ContextTypeOneToOne),
 		nil,
 	)
 	defer resp.Body.Close()

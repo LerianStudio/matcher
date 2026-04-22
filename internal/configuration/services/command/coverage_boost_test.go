@@ -21,6 +21,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	portMocks "github.com/LerianStudio/matcher/internal/configuration/ports/mocks"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
@@ -150,7 +151,7 @@ func TestCloneContext_ContextCreateError(t *testing.T) {
 			ID:       sourceCtxID,
 			TenantID: uuid.New(),
 			Name:     "Original",
-			Type:     value_objects.ContextType("1:1"),
+			Type:     shared.ContextType("1:1"),
 			Interval: "daily",
 			Status:   value_objects.ContextStatusActive,
 		}, nil)
@@ -197,7 +198,7 @@ func TestCloneContext_SourcesCloneError(t *testing.T) {
 			ID:       sourceCtxID,
 			TenantID: uuid.New(),
 			Name:     "Original",
-			Type:     value_objects.ContextType("1:1"),
+			Type:     shared.ContextType("1:1"),
 			Interval: "daily",
 			Status:   value_objects.ContextStatusActive,
 		}, nil)
@@ -246,7 +247,7 @@ func TestCloneContext_RulesCloneError(t *testing.T) {
 			ID:       sourceCtxID,
 			TenantID: uuid.New(),
 			Name:     "Original",
-			Type:     value_objects.ContextType("1:1"),
+			Type:     shared.ContextType("1:1"),
 			Interval: "daily",
 			Status:   value_objects.ContextStatusActive,
 		}, nil)
@@ -929,7 +930,7 @@ func TestCloneContext_WithAuditPublisher(t *testing.T) {
 			ID:       sourceCtxID,
 			TenantID: uuid.New(),
 			Name:     "Original",
-			Type:     value_objects.ContextType("1:1"),
+			Type:     shared.ContextType("1:1"),
 			Interval: "daily",
 			Status:   value_objects.ContextStatusActive,
 		}, nil)

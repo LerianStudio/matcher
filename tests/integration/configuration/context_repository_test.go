@@ -11,7 +11,7 @@ import (
 
 	contextRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/context"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -25,7 +25,7 @@ func TestContextRepository_CreateAndFindByID(t *testing.T) {
 			h.Seed.TenantID,
 			entities.CreateReconciliationContextInput{
 				Name:     "Test Context",
-				Type:     value_objects.ContextTypeOneToMany,
+				Type:     shared.ContextTypeOneToMany,
 				Interval: "0 */6 * * *",
 			},
 		)
@@ -54,7 +54,7 @@ func TestContextRepository_FindByName(t *testing.T) {
 			h.Seed.TenantID,
 			entities.CreateReconciliationContextInput{
 				Name:     "Unique Name Context",
-				Type:     value_objects.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "0 0 * * *",
 			},
 		)
@@ -85,7 +85,7 @@ func TestContextRepository_FindAll(t *testing.T) {
 				h.Seed.TenantID,
 				entities.CreateReconciliationContextInput{
 					Name:     "List Context " + string(rune('A'+i)),
-					Type:     value_objects.ContextTypeOneToOne,
+					Type:     shared.ContextTypeOneToOne,
 					Interval: "0 0 * * *",
 				},
 			)
@@ -114,7 +114,7 @@ func TestContextRepository_Update(t *testing.T) {
 			h.Seed.TenantID,
 			entities.CreateReconciliationContextInput{
 				Name:     "Original Name",
-				Type:     value_objects.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "0 0 * * *",
 			},
 		)
@@ -144,7 +144,7 @@ func TestContextRepository_Delete(t *testing.T) {
 			h.Seed.TenantID,
 			entities.CreateReconciliationContextInput{
 				Name:     "To Be Deleted",
-				Type:     value_objects.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "0 0 * * *",
 			},
 		)
@@ -174,7 +174,7 @@ func TestContextRepository_Count(t *testing.T) {
 			h.Seed.TenantID,
 			entities.CreateReconciliationContextInput{
 				Name:     "Count Test",
-				Type:     value_objects.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "0 0 * * *",
 			},
 		)

@@ -10,6 +10,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 // Routing service errors.
@@ -43,7 +44,7 @@ func (target RoutingTarget) IsValid() bool {
 
 // RoutingInput contains input values for routing evaluation.
 type RoutingInput struct {
-	Severity      value_objects.ExceptionSeverity
+	Severity      sharedexception.ExceptionSeverity
 	AmountAbsBase decimal.Decimal
 	AgeHours      int
 	SourceType    string
@@ -55,7 +56,7 @@ type RoutingRule struct {
 	Name             string
 	Priority         int
 	MatchAll         bool
-	Severities       []value_objects.ExceptionSeverity
+	Severities       []sharedexception.ExceptionSeverity
 	MinAmountAbsBase *decimal.Decimal
 	MinAgeHours      *int
 	SourceTypes      []string
@@ -63,7 +64,7 @@ type RoutingRule struct {
 	Target           RoutingTarget
 	Queue            string
 	Assignee         string
-	OverrideSeverity *value_objects.ExceptionSeverity
+	OverrideSeverity *sharedexception.ExceptionSeverity
 	OverrideReason   *value_objects.OverrideReason
 }
 
@@ -72,7 +73,7 @@ type RoutingDecision struct {
 	Target           RoutingTarget
 	Queue            string
 	Assignee         string
-	OverrideSeverity *value_objects.ExceptionSeverity
+	OverrideSeverity *sharedexception.ExceptionSeverity
 	OverrideReason   *value_objects.OverrideReason
 	RuleName         string
 	RuleIndex        int
@@ -240,8 +241,8 @@ func matchesRoutingRule(input RoutingInput, rule RoutingRule) bool {
 }
 
 func containsSeverity(
-	values []value_objects.ExceptionSeverity,
-	candidate value_objects.ExceptionSeverity,
+	values []sharedexception.ExceptionSeverity,
+	candidate sharedexception.ExceptionSeverity,
 ) bool {
 	return slices.Contains(values, candidate)
 }

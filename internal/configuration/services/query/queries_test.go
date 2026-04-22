@@ -17,6 +17,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // errDBError is a sentinel error for database errors in tests.
@@ -132,7 +133,7 @@ func TestContextQueries(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expected, result)
 
-	contextType := value_objects.ContextTypeOneToOne
+	contextType := shared.ContextTypeOneToOne
 	status := value_objects.ContextStatusActive
 	expectedList := []*entities.ReconciliationContext{expected}
 	contextRepo.EXPECT().
@@ -272,7 +273,7 @@ func TestMatchRuleQueries(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expected, result)
 
-	ruleType := value_objects.RuleTypeExact
+	ruleType := shared.RuleTypeExact
 	expectedList := entities.MatchRules{expected}
 	matchRuleRepo.EXPECT().
 		FindByContextIDAndType(gomock.Any(), contextID, ruleType, "", 10).

@@ -11,6 +11,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 const columns = "id, transaction_id, severity, status, external_system, external_issue_id, assigned_to, due_at, resolution_notes, resolution_type, resolution_reason, reason, version, created_at, updated_at"
@@ -60,7 +61,7 @@ func scanInto(rowScanner scanner) (*entities.Exception, error) {
 		return nil, fmt.Errorf("parse transaction id: %w", err)
 	}
 
-	parsedSeverity, err := value_objects.ParseExceptionSeverity(severity)
+	parsedSeverity, err := sharedexception.ParseExceptionSeverity(severity)
 	if err != nil {
 		return nil, fmt.Errorf("parse severity: %w", err)
 	}

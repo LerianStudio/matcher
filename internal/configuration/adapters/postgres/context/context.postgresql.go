@@ -22,6 +22,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -287,7 +288,7 @@ func (repo *Repository) FindAll(
 	ctx stdctx.Context,
 	cursor string,
 	limit int,
-	contextType *value_objects.ContextType,
+	contextType *shared.ContextType,
 	status *value_objects.ContextStatus,
 ) ([]*entities.ReconciliationContext, libHTTP.CursorPagination, error) {
 	if repo == nil || repo.provider == nil {
@@ -682,7 +683,7 @@ func decodeCursorParam(cursor string) (libHTTP.Cursor, error) {
 // buildContextQuery creates the base query for listing contexts with optional filters.
 func buildContextQuery(
 	tenantID string,
-	contextType *value_objects.ContextType,
+	contextType *shared.ContextType,
 	status *value_objects.ContextStatus,
 ) squirrel.SelectBuilder {
 	query := squirrel.Select(strings.Split(contextColumns, ", ")...).

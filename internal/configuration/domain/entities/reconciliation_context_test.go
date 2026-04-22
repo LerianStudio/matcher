@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
@@ -60,7 +61,7 @@ func TestNewReconciliationContext(t *testing.T) {
 
 		input := CreateReconciliationContextInput{
 			Name:     "Ledger vs Bank",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		}
 
@@ -70,7 +71,7 @@ func TestNewReconciliationContext(t *testing.T) {
 		assert.NotEqual(t, uuid.Nil, contextEntity.ID)
 		assert.Equal(t, tenantID, contextEntity.TenantID)
 		assert.Equal(t, "Ledger vs Bank", contextEntity.Name)
-		assert.Equal(t, value_objects.ContextTypeOneToOne, contextEntity.Type)
+		assert.Equal(t, shared.ContextTypeOneToOne, contextEntity.Type)
 		assert.Equal(t, value_objects.ContextStatusDraft, contextEntity.Status)
 		assert.True(t, contextEntity.IsDraft())
 		assert.False(t, contextEntity.IsActive())
@@ -83,13 +84,13 @@ func TestNewReconciliationContext(t *testing.T) {
 
 		input := CreateReconciliationContextInput{
 			Name:     "Inline Setup",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 			Sources: []CreateContextSourceInput{
 				{Name: "Bank", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft},
 			},
 			Rules: []CreateMatchRuleInput{
-				{Priority: 1, Type: value_objects.RuleTypeExact, Config: map[string]any{"matchAmount": true}},
+				{Priority: 1, Type: shared.RuleTypeExact, Config: map[string]any{"matchAmount": true}},
 			},
 		}
 
@@ -105,7 +106,7 @@ func TestNewReconciliationContext(t *testing.T) {
 
 		input := CreateReconciliationContextInput{
 			Name:     "Test",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "* * * * *",
 		}
 
@@ -121,7 +122,7 @@ func TestNewReconciliationContext(t *testing.T) {
 			tenantID,
 			CreateReconciliationContextInput{
 				Name:     "   ",
-				Type:     value_objects.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "* * * * *",
 			},
 			ErrContextNameRequired,
@@ -135,7 +136,7 @@ func TestNewReconciliationContext(t *testing.T) {
 			tenantID,
 			CreateReconciliationContextInput{
 				Name:     "",
-				Type:     value_objects.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "* * * * *",
 			},
 			ErrContextNameRequired,
@@ -148,7 +149,7 @@ func TestNewReconciliationContext(t *testing.T) {
 		maxName := strings.Repeat("a", 100)
 		input := CreateReconciliationContextInput{
 			Name:     maxName,
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "* * * * *",
 		}
 
@@ -167,7 +168,7 @@ func TestNewReconciliationContext(t *testing.T) {
 			tenantID,
 			CreateReconciliationContextInput{
 				Name:     longName,
-				Type:     value_objects.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "* * * * *",
 			},
 			ErrContextNameTooLong,
@@ -181,7 +182,7 @@ func TestNewReconciliationContext(t *testing.T) {
 			tenantID,
 			CreateReconciliationContextInput{
 				Name:     "Test",
-				Type:     value_objects.ContextType("INVALID"),
+				Type:     shared.ContextType("INVALID"),
 				Interval: "* * * * *",
 			},
 			ErrContextTypeInvalid,
@@ -195,7 +196,7 @@ func TestNewReconciliationContext(t *testing.T) {
 			tenantID,
 			CreateReconciliationContextInput{
 				Name:     "Test",
-				Type:     value_objects.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "",
 			},
 			ErrContextIntervalRequired,
@@ -209,7 +210,7 @@ func TestNewReconciliationContext(t *testing.T) {
 			tenantID,
 			CreateReconciliationContextInput{
 				Name:     "Test",
-				Type:     value_objects.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "   ",
 			},
 			ErrContextIntervalRequired,
@@ -222,7 +223,7 @@ func createTestContextEntity(t *testing.T, tenantID uuid.UUID) *ReconciliationCo
 
 	input := CreateReconciliationContextInput{
 		Name:     "Original",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 	}
 
@@ -265,13 +266,13 @@ func runSuccessfulUpdateTests(t *testing.T, tenantID uuid.UUID) {
 	t.Run("updates type", func(t *testing.T) {
 		t.Parallel()
 		contextEntity := createTestContextEntity(t, tenantID)
-		newType := value_objects.ContextTypeOneToMany
+		newType := shared.ContextTypeOneToMany
 		err := contextEntity.Update(
 			context.Background(),
 			UpdateReconciliationContextInput{Type: &newType},
 		)
 		require.NoError(t, err)
-		assert.Equal(t, value_objects.ContextTypeOneToMany, contextEntity.Type)
+		assert.Equal(t, shared.ContextTypeOneToMany, contextEntity.Type)
 	})
 
 	t.Run("updates status from draft to active", func(t *testing.T) {
@@ -383,7 +384,7 @@ func runValidationFailureTests(t *testing.T, tenantID uuid.UUID) {
 	t.Run("fails with invalid type", func(t *testing.T) {
 		t.Parallel()
 		contextEntity := createTestContextEntity(t, tenantID)
-		invalidType := value_objects.ContextType("INVALID")
+		invalidType := shared.ContextType("INVALID")
 		testContextUpdateError(
 			t,
 			contextEntity,
@@ -467,7 +468,7 @@ func TestNewReconciliationContext_InvalidFeeNormalization(t *testing.T) {
 
 	_, err := NewReconciliationContext(context.Background(), tenantID, CreateReconciliationContextInput{
 		Name:             "Test",
-		Type:             value_objects.ContextTypeOneToOne,
+		Type:             shared.ContextTypeOneToOne,
 		Interval:         "0 0 * * *",
 		FeeNormalization: &invalidMode,
 	})
@@ -484,7 +485,7 @@ func TestNewReconciliationContext_NegativeFeeTolerances(t *testing.T) {
 
 	_, err := NewReconciliationContext(context.Background(), tenantID, CreateReconciliationContextInput{
 		Name:            "Test",
-		Type:            value_objects.ContextTypeOneToOne,
+		Type:            shared.ContextTypeOneToOne,
 		Interval:        "0 0 * * *",
 		FeeToleranceAbs: &abs,
 	})
@@ -492,7 +493,7 @@ func TestNewReconciliationContext_NegativeFeeTolerances(t *testing.T) {
 
 	_, err = NewReconciliationContext(context.Background(), tenantID, CreateReconciliationContextInput{
 		Name:            "Test",
-		Type:            value_objects.ContextTypeOneToOne,
+		Type:            shared.ContextTypeOneToOne,
 		Interval:        "0 0 * * *",
 		FeeTolerancePct: &pct,
 	})
@@ -543,7 +544,7 @@ func TestReconciliationContext_FullLifecycle(t *testing.T) {
 	tenantID := uuid.New()
 	input := CreateReconciliationContextInput{
 		Name:     "Lifecycle Test",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 	}
 
@@ -583,7 +584,7 @@ func TestReconciliationContext_PauseActivate(t *testing.T) {
 	tenantID := uuid.New()
 	input := CreateReconciliationContextInput{
 		Name:     "Test",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 	}
 	contextEntity, err := NewReconciliationContext(context.Background(), tenantID, input)

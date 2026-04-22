@@ -13,6 +13,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 // --- Constructor tests ---
@@ -75,7 +76,7 @@ func TestAddComment_ResolvedExceptionReturnsError(t *testing.T) {
 	resolvedException := &entities.Exception{
 		ID:              exceptionID,
 		TransactionID:   uuid.New(),
-		Severity:        value_objects.ExceptionSeverityHigh,
+		Severity:        sharedexception.ExceptionSeverityHigh,
 		Status:          value_objects.ExceptionStatusResolved,
 		ResolutionNotes: &resolutionNotes,
 		CreatedAt:       now,
@@ -107,7 +108,7 @@ func TestAddComment_OpenExceptionSucceeds(t *testing.T) {
 	openException := &entities.Exception{
 		ID:            exceptionID,
 		TransactionID: uuid.New(),
-		Severity:      value_objects.ExceptionSeverityMedium,
+		Severity:      sharedexception.ExceptionSeverityMedium,
 		Status:        value_objects.ExceptionStatusOpen,
 		CreatedAt:     now,
 		UpdatedAt:     now,
@@ -141,7 +142,7 @@ func TestAddComment_AssignedExceptionSucceeds(t *testing.T) {
 	assignedException := &entities.Exception{
 		ID:            exceptionID,
 		TransactionID: uuid.New(),
-		Severity:      value_objects.ExceptionSeverityLow,
+		Severity:      sharedexception.ExceptionSeverityLow,
 		Status:        value_objects.ExceptionStatusAssigned,
 		AssignedTo:    &assignee,
 		CreatedAt:     now,

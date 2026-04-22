@@ -19,6 +19,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
@@ -100,7 +101,7 @@ func TestCloneContext_ContextOnly(t *testing.T) {
 		ID:              sourceCtxID,
 		TenantID:        uuid.New(),
 		Name:            "Original Context",
-		Type:            value_objects.ContextType("1:1"),
+		Type:            shared.ContextType("1:1"),
 		Interval:        "daily",
 		Status:          value_objects.ContextStatusActive,
 		FeeToleranceAbs: decimal.NewFromFloat(0.01),
@@ -166,7 +167,7 @@ func TestCloneContext_WithSourcesAndRules(t *testing.T) {
 		ID:       sourceCtxID,
 		TenantID: tenantID,
 		Name:     "Original",
-		Type:     value_objects.ContextType("1:1"),
+		Type:     shared.ContextType("1:1"),
 		Interval: "daily",
 		Status:   value_objects.ContextStatusActive,
 	}
@@ -280,7 +281,7 @@ func TestCloneContext_RollsBackWhenRuleCreationFails(t *testing.T) {
 		ID:       sourceCtxID,
 		TenantID: tenantID,
 		Name:     "Original",
-		Type:     value_objects.ContextType("1:1"),
+		Type:     shared.ContextType("1:1"),
 		Interval: "daily",
 		Status:   value_objects.ContextStatusActive,
 	}
@@ -356,7 +357,7 @@ func TestCloneContext_SourceCreationFailsPropagatesError(t *testing.T) {
 		ID:       sourceCtxID,
 		TenantID: tenantID,
 		Name:     "Original",
-		Type:     value_objects.ContextType("1:1"),
+		Type:     shared.ContextType("1:1"),
 		Interval: "daily",
 		Status:   value_objects.ContextStatusActive,
 	}

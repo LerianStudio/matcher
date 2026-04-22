@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 func TestRepository_NilConnection(t *testing.T) {
@@ -28,7 +28,7 @@ func TestRepository_NilConnection(t *testing.T) {
 	_, _, err = repo.FindByContextID(ctx, uuid.New(), "", 10)
 	require.ErrorIs(t, err, ErrRepoNotInitialized)
 
-	_, _, err = repo.FindByContextIDAndType(ctx, uuid.New(), value_objects.RuleTypeExact, "", 10)
+	_, _, err = repo.FindByContextIDAndType(ctx, uuid.New(), shared.RuleTypeExact, "", 10)
 	require.ErrorIs(t, err, ErrRepoNotInitialized)
 
 	_, err = repo.FindByPriority(ctx, uuid.New(), 1)

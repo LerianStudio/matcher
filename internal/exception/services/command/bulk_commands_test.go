@@ -12,6 +12,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
@@ -227,7 +228,7 @@ func TestBulkResolve_SkipsPendingResolutionException(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityMedium,
+		sharedexception.ExceptionSeverityMedium,
 		nil,
 	)
 	require.NoError(t, err)
@@ -290,7 +291,7 @@ func newOpenException(t *testing.T) *entities.Exception {
 	ex, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityMedium,
+		sharedexception.ExceptionSeverityMedium,
 		nil,
 	)
 	require.NoError(t, err)

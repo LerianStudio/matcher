@@ -15,7 +15,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories/mocks"
-	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 var errMatchRuleRepositoryFailure = errors.New("repository failure")
@@ -151,7 +151,7 @@ func TestListMatchRules_WithRuleTypeCallsFindByContextIDAndType(t *testing.T) {
 
 	ctx := context.Background()
 	contextID := uuid.New()
-	ruleType := value_objects.RuleTypeExact
+	ruleType := shared.RuleTypeExact
 	expected := entities.MatchRules{{ID: uuid.New()}}
 
 	matchRuleRepo.EXPECT().
@@ -206,7 +206,7 @@ func TestListMatchRules_WithTypeFilter_RepositoryError(t *testing.T) {
 
 	ctx := context.Background()
 	contextID := uuid.New()
-	ruleType := value_objects.RuleTypeTolerance
+	ruleType := shared.RuleTypeTolerance
 
 	matchRuleRepo.EXPECT().
 		FindByContextIDAndType(gomock.Any(), contextID, ruleType, "", 10).
@@ -263,7 +263,7 @@ func TestListMatchRules_WithCursorAndType(t *testing.T) {
 	ctx := context.Background()
 	contextID := uuid.New()
 	cursor := "cursor-value"
-	ruleType := value_objects.RuleTypeDateLag
+	ruleType := shared.RuleTypeDateLag
 	expected := entities.MatchRules{{ID: uuid.New()}}
 
 	matchRuleRepo.EXPECT().

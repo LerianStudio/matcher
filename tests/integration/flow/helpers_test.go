@@ -22,6 +22,7 @@ import (
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/tests/integration"
 	"github.com/LerianStudio/matcher/tests/integration/server"
@@ -661,7 +662,7 @@ func createMultiRuleFlowTestConfig(
 		seed.ContextID,
 		configEntities.CreateMatchRuleInput{
 			Priority: 1,
-			Type:     configVO.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config: map[string]any{
 				"matchAmount":     true,
 				"matchCurrency":   true,
@@ -687,7 +688,7 @@ func createMultiRuleFlowTestConfig(
 		seed.ContextID,
 		configEntities.CreateMatchRuleInput{
 			Priority: 2,
-			Type:     configVO.RuleTypeTolerance,
+			Type:     shared.RuleTypeTolerance,
 			Config: map[string]any{
 				"matchCurrency":    true,
 				"absTolerance":     "5.00", // Allow up to $5 difference
@@ -877,7 +878,7 @@ func SetupFlowTestConfigWithOptionsGeneric(
 
 	rule, err := configEntities.NewMatchRule(ctx, contextID, configEntities.CreateMatchRuleInput{
 		Priority: 1,
-		Type:     configVO.RuleTypeExact,
+		Type:     shared.RuleTypeExact,
 		Config: map[string]any{
 			"matchAmount":     true,
 			"matchCurrency":   true,

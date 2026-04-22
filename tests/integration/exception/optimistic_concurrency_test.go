@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	exceptionRepoAdapter "github.com/LerianStudio/matcher/internal/exception/adapters/postgres/exception"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	exceptionVO "github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	ingestionJobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
@@ -32,7 +33,7 @@ func TestOptimisticConcurrency_SuccessfulUpdate(t *testing.T) {
 		txRepo := ingestionTxRepo.NewRepository(provider)
 		job := createIngestionJob(t, ctx, jRepo, h.Seed.ContextID, h.Seed.SourceID, 1)
 		tx := createTransaction(t, ctx, txRepo, job.ID, h.Seed.SourceID, "OCC-SUCCESS-"+uuid.New().String()[:8], decimal.NewFromFloat(100), "USD")
-		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID, exceptionVO.ExceptionSeverityHigh, "test reason")
+		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID, sharedexception.ExceptionSeverityHigh, "test reason")
 
 		// Load through the repository so we get a fully-hydrated entity with version.
 		loaded, err := excRepo.FindByID(ctx, exc.ID)
@@ -40,18 +41,18 @@ func TestOptimisticConcurrency_SuccessfulUpdate(t *testing.T) {
 		require.Equal(t, int64(0), loaded.Version, "initial version must be 0")
 
 		// Mutate a field and update.
-		loaded.Severity = exceptionVO.ExceptionSeverityMedium
+		loaded.Severity = sharedexception.ExceptionSeverityMedium
 		updated, err := excRepo.Update(ctx, loaded)
 		require.NoError(t, err)
 
 		require.Equal(t, int64(1), updated.Version, "version must be incremented to 1 after update")
-		require.Equal(t, exceptionVO.ExceptionSeverityMedium, updated.Severity, "severity must be persisted")
+		require.Equal(t, sharedexception.ExceptionSeverityMedium, updated.Severity, "severity must be persisted")
 
 		// Re-read to confirm persistence.
 		reloaded, err := excRepo.FindByID(ctx, exc.ID)
 		require.NoError(t, err)
 		require.Equal(t, int64(1), reloaded.Version)
-		require.Equal(t, exceptionVO.ExceptionSeverityMedium, reloaded.Severity)
+		require.Equal(t, sharedexception.ExceptionSeverityMedium, reloaded.Severity)
 	})
 }
 
@@ -68,7 +69,7 @@ func TestOptimisticConcurrency_StaleVersionFails(t *testing.T) {
 		txRepo := ingestionTxRepo.NewRepository(provider)
 		job := createIngestionJob(t, ctx, jRepo, h.Seed.ContextID, h.Seed.SourceID, 1)
 		tx := createTransaction(t, ctx, txRepo, job.ID, h.Seed.SourceID, "OCC-STALE-"+uuid.New().String()[:8], decimal.NewFromFloat(200), "USD")
-		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID, exceptionVO.ExceptionSeverityHigh, "test reason")
+		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID, sharedexception.ExceptionSeverityHigh, "test reason")
 
 		loaded, err := excRepo.FindByID(ctx, exc.ID)
 		require.NoError(t, err)
@@ -77,12 +78,12 @@ func TestOptimisticConcurrency_StaleVersionFails(t *testing.T) {
 		staleCopy := *loaded
 
 		// Advance the row to version=1 via a successful update.
-		loaded.Severity = exceptionVO.ExceptionSeverityMedium
+		loaded.Severity = sharedexception.ExceptionSeverityMedium
 		_, err = excRepo.Update(ctx, loaded)
 		require.NoError(t, err)
 
 		// Attempt to update using the stale copy (still version=0).
-		staleCopy.Severity = exceptionVO.ExceptionSeverityLow
+		staleCopy.Severity = sharedexception.ExceptionSeverityLow
 		_, err = excRepo.Update(ctx, &staleCopy)
 		require.Error(t, err)
 		require.True(t,
@@ -107,7 +108,7 @@ func TestOptimisticConcurrency_ConcurrentUpdateRace(t *testing.T) {
 		txRepo := ingestionTxRepo.NewRepository(provider)
 		job := createIngestionJob(t, ctx, jRepo, h.Seed.ContextID, h.Seed.SourceID, 1)
 		tx := createTransaction(t, ctx, txRepo, job.ID, h.Seed.SourceID, "OCC-RACE-"+uuid.New().String()[:8], decimal.NewFromFloat(300), "USD")
-		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID, exceptionVO.ExceptionSeverityHigh, "test reason")
+		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID, sharedexception.ExceptionSeverityHigh, "test reason")
 
 		loaded, err := excRepo.FindByID(ctx, exc.ID)
 		require.NoError(t, err)
@@ -116,8 +117,8 @@ func TestOptimisticConcurrency_ConcurrentUpdateRace(t *testing.T) {
 		copy1 := *loaded
 		copy2 := *loaded
 
-		copy1.Severity = exceptionVO.ExceptionSeverityMedium
-		copy2.Severity = exceptionVO.ExceptionSeverityLow
+		copy1.Severity = sharedexception.ExceptionSeverityMedium
+		copy2.Severity = sharedexception.ExceptionSeverityLow
 
 		type result struct {
 			err error
@@ -180,16 +181,16 @@ func TestOptimisticConcurrency_SequentialUpdatesSucceed(t *testing.T) {
 		txRepo := ingestionTxRepo.NewRepository(provider)
 		job := createIngestionJob(t, ctx, jRepo, h.Seed.ContextID, h.Seed.SourceID, 1)
 		tx := createTransaction(t, ctx, txRepo, job.ID, h.Seed.SourceID, "OCC-SEQ-"+uuid.New().String()[:8], decimal.NewFromFloat(400), "USD")
-		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID, exceptionVO.ExceptionSeverityHigh, "test reason")
+		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID, sharedexception.ExceptionSeverityHigh, "test reason")
 
 		current, err := excRepo.FindByID(ctx, exc.ID)
 		require.NoError(t, err)
 		require.Equal(t, int64(0), current.Version)
 
-		severities := []exceptionVO.ExceptionSeverity{
-			exceptionVO.ExceptionSeverityMedium,
-			exceptionVO.ExceptionSeverityLow,
-			exceptionVO.ExceptionSeverityCritical,
+		severities := []sharedexception.ExceptionSeverity{
+			sharedexception.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityLow,
+			sharedexception.ExceptionSeverityCritical,
 		}
 
 		for i, sev := range severities {
@@ -206,7 +207,7 @@ func TestOptimisticConcurrency_SequentialUpdatesSucceed(t *testing.T) {
 		final, err := excRepo.FindByID(ctx, exc.ID)
 		require.NoError(t, err)
 		require.Equal(t, int64(3), final.Version)
-		require.Equal(t, exceptionVO.ExceptionSeverityCritical, final.Severity)
+		require.Equal(t, sharedexception.ExceptionSeverityCritical, final.Severity)
 	})
 }
 
@@ -224,7 +225,7 @@ func TestOptimisticConcurrency_UpdateNonExistentException(t *testing.T) {
 		phantom := &entities.Exception{
 			ID:            uuid.New(),
 			TransactionID: uuid.New(),
-			Severity:      exceptionVO.ExceptionSeverityLow,
+			Severity:      sharedexception.ExceptionSeverityLow,
 			Status:        exceptionVO.ExceptionStatusOpen,
 			Version:       0,
 		}

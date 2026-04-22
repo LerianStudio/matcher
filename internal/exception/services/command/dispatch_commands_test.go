@@ -20,6 +20,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
 	portsmocks "github.com/LerianStudio/matcher/internal/exception/ports/mocks"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -46,7 +47,7 @@ func newTestDispatchException() *entities.Exception {
 	return &entities.Exception{
 		ID:            uuid.New(),
 		TransactionID: uuid.New(),
-		Severity:      value_objects.ExceptionSeverityHigh,
+		Severity:      sharedexception.ExceptionSeverityHigh,
 		Status:        value_objects.ExceptionStatusOpen,
 		Reason:        &reason,
 		CreatedAt:     time.Now().UTC(),
@@ -654,7 +655,7 @@ func TestDispatch_ExceptionWithReason(t *testing.T) {
 	exception := &entities.Exception{
 		ID:            uuid.New(),
 		TransactionID: uuid.New(),
-		Severity:      value_objects.ExceptionSeverityCritical,
+		Severity:      sharedexception.ExceptionSeverityCritical,
 		Status:        value_objects.ExceptionStatusOpen,
 		Reason:        &reason,
 		CreatedAt:     time.Now().UTC(),
@@ -693,7 +694,7 @@ func TestDispatch_ExceptionWithoutReason(t *testing.T) {
 	exception := &entities.Exception{
 		ID:            uuid.New(),
 		TransactionID: uuid.New(),
-		Severity:      value_objects.ExceptionSeverityLow,
+		Severity:      sharedexception.ExceptionSeverityLow,
 		Status:        value_objects.ExceptionStatusOpen,
 		Reason:        nil,
 		CreatedAt:     time.Now().UTC(),
@@ -875,7 +876,7 @@ func TestDispatch_WithAssignedExceptionIncludesContext(t *testing.T) {
 	exception := &entities.Exception{
 		ID:            uuid.New(),
 		TransactionID: uuid.New(),
-		Severity:      value_objects.ExceptionSeverityHigh,
+		Severity:      sharedexception.ExceptionSeverityHigh,
 		Status:        value_objects.ExceptionStatusAssigned,
 		AssignedTo:    &assignee,
 		DueAt:         &dueAt,

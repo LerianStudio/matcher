@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
@@ -30,7 +30,7 @@ func TestMarkComplete_WithResponseData(t *testing.T) {
 	repo := newTestIdempotencyRepo(t, provider)
 
 	ctx := context.Background()
-	key, err := value_objects.ParseIdempotencyKey("callback-" + uuid.New().String())
+	key, err := shared.ParseIdempotencyKey("callback-" + uuid.New().String())
 	require.NoError(t, err)
 
 	_, err = repo.TryAcquire(ctx, key)
@@ -43,7 +43,7 @@ func TestMarkComplete_WithResponseData(t *testing.T) {
 
 	result, err := repo.GetCachedResult(ctx, key)
 	require.NoError(t, err)
-	assert.Equal(t, value_objects.IdempotencyStatusComplete, result.Status)
+	assert.Equal(t, shared.IdempotencyStatusComplete, result.Status)
 	assert.Equal(t, response, result.Response)
 	assert.Equal(t, 200, result.HTTPStatus)
 }
@@ -53,7 +53,7 @@ func TestMarkComplete_NilRepo(t *testing.T) {
 
 	var repo *IdempotencyRepository
 
-	key, err := value_objects.ParseIdempotencyKey("callback-" + uuid.New().String())
+	key, err := shared.ParseIdempotencyKey("callback-" + uuid.New().String())
 	require.NoError(t, err)
 
 	err = repo.MarkComplete(context.Background(), key, nil, 200)
@@ -65,7 +65,7 @@ func TestMarkComplete_NilProvider(t *testing.T) {
 
 	repo := &IdempotencyRepository{provider: nil}
 
-	key, err := value_objects.ParseIdempotencyKey("callback-" + uuid.New().String())
+	key, err := shared.ParseIdempotencyKey("callback-" + uuid.New().String())
 	require.NoError(t, err)
 
 	err = repo.MarkComplete(context.Background(), key, nil, 200)
@@ -79,7 +79,7 @@ func TestMarkFailed_NilRepo(t *testing.T) {
 
 	var repo *IdempotencyRepository
 
-	key, err := value_objects.ParseIdempotencyKey("callback-" + uuid.New().String())
+	key, err := shared.ParseIdempotencyKey("callback-" + uuid.New().String())
 	require.NoError(t, err)
 
 	err = repo.MarkFailed(context.Background(), key)
@@ -91,7 +91,7 @@ func TestMarkFailed_NilProvider(t *testing.T) {
 
 	repo := &IdempotencyRepository{provider: nil}
 
-	key, err := value_objects.ParseIdempotencyKey("callback-" + uuid.New().String())
+	key, err := shared.ParseIdempotencyKey("callback-" + uuid.New().String())
 	require.NoError(t, err)
 
 	err = repo.MarkFailed(context.Background(), key)
@@ -108,7 +108,7 @@ func TestMarkFailed_ThenGetCachedResult(t *testing.T) {
 	repo := newTestIdempotencyRepo(t, provider)
 
 	ctx := context.Background()
-	key, err := value_objects.ParseIdempotencyKey("callback-" + uuid.New().String())
+	key, err := shared.ParseIdempotencyKey("callback-" + uuid.New().String())
 	require.NoError(t, err)
 
 	_, err = repo.TryAcquire(ctx, key)
@@ -119,7 +119,7 @@ func TestMarkFailed_ThenGetCachedResult(t *testing.T) {
 
 	result, err := repo.GetCachedResult(ctx, key)
 	require.NoError(t, err)
-	assert.Equal(t, value_objects.IdempotencyStatusFailed, result.Status)
+	assert.Equal(t, shared.IdempotencyStatusFailed, result.Status)
 }
 
 // --- TryAcquire Tests ---
@@ -129,7 +129,7 @@ func TestTryAcquire_NilRepo(t *testing.T) {
 
 	var repo *IdempotencyRepository
 
-	key, err := value_objects.ParseIdempotencyKey("callback-" + uuid.New().String())
+	key, err := shared.ParseIdempotencyKey("callback-" + uuid.New().String())
 	require.NoError(t, err)
 
 	acquired, err := repo.TryAcquire(context.Background(), key)
@@ -143,7 +143,7 @@ func TestTryAcquire_NilRedisClient(t *testing.T) {
 	provider := &testutil.MockInfrastructureProvider{RedisConn: nil}
 	repo := newTestIdempotencyRepo(t, provider)
 
-	key, err := value_objects.ParseIdempotencyKey("callback-" + uuid.New().String())
+	key, err := shared.ParseIdempotencyKey("callback-" + uuid.New().String())
 	require.NoError(t, err)
 
 	acquired, err := repo.TryAcquire(context.Background(), key)
@@ -158,7 +158,7 @@ func TestTryAcquire_NilRedisClientInConn(t *testing.T) {
 	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
 	repo := newTestIdempotencyRepo(t, provider)
 
-	key, err := value_objects.ParseIdempotencyKey("callback-" + uuid.New().String())
+	key, err := shared.ParseIdempotencyKey("callback-" + uuid.New().String())
 	require.NoError(t, err)
 
 	acquired, err := repo.TryAcquire(context.Background(), key)
@@ -173,7 +173,7 @@ func TestGetCachedResult_NilRepo(t *testing.T) {
 
 	var repo *IdempotencyRepository
 
-	key, err := value_objects.ParseIdempotencyKey("callback-" + uuid.New().String())
+	key, err := shared.ParseIdempotencyKey("callback-" + uuid.New().String())
 	require.NoError(t, err)
 
 	result, err := repo.GetCachedResult(context.Background(), key)
@@ -190,12 +190,12 @@ func TestGetCachedResult_KeyNotFound(t *testing.T) {
 	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
 	repo := newTestIdempotencyRepo(t, provider)
 
-	key, err := value_objects.ParseIdempotencyKey("callback-" + uuid.New().String())
+	key, err := shared.ParseIdempotencyKey("callback-" + uuid.New().String())
 	require.NoError(t, err)
 
 	result, err := repo.GetCachedResult(context.Background(), key)
 	require.NoError(t, err)
-	assert.Equal(t, value_objects.IdempotencyStatusUnknown, result.Status)
+	assert.Equal(t, shared.IdempotencyStatusUnknown, result.Status)
 }
 
 func TestGetCachedResult_LegacyPendingMarker(t *testing.T) {
@@ -212,7 +212,7 @@ func TestGetCachedResult_LegacyPendingMarker(t *testing.T) {
 	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
 	repo := newTestIdempotencyRepo(t, provider)
 
-	key, err := value_objects.ParseIdempotencyKey("callback-" + uuid.New().String())
+	key, err := shared.ParseIdempotencyKey("callback-" + uuid.New().String())
 	require.NoError(t, err)
 
 	// Manually set legacy pending marker.
@@ -221,7 +221,7 @@ func TestGetCachedResult_LegacyPendingMarker(t *testing.T) {
 
 	result, err := repo.GetCachedResult(context.Background(), key)
 	require.NoError(t, err)
-	assert.Equal(t, value_objects.IdempotencyStatusPending, result.Status)
+	assert.Equal(t, shared.IdempotencyStatusPending, result.Status)
 }
 
 func TestGetCachedResult_InvalidJSON(t *testing.T) {
@@ -238,7 +238,7 @@ func TestGetCachedResult_InvalidJSON(t *testing.T) {
 	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
 	repo := newTestIdempotencyRepo(t, provider)
 
-	key, err := value_objects.ParseIdempotencyKey("callback-" + uuid.New().String())
+	key, err := shared.ParseIdempotencyKey("callback-" + uuid.New().String())
 	require.NoError(t, err)
 
 	// Set invalid JSON data.
@@ -264,7 +264,7 @@ func TestGetCachedResult_EmptyStatus(t *testing.T) {
 	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
 	repo := newTestIdempotencyRepo(t, provider)
 
-	key, err := value_objects.ParseIdempotencyKey("callback-" + uuid.New().String())
+	key, err := shared.ParseIdempotencyKey("callback-" + uuid.New().String())
 	require.NoError(t, err)
 
 	// Set entry with empty status.
@@ -287,7 +287,7 @@ func TestGetCachedResult_NilRedisClient(t *testing.T) {
 	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
 	repo := newTestIdempotencyRepo(t, provider)
 
-	key, err := value_objects.ParseIdempotencyKey("callback-" + uuid.New().String())
+	key, err := shared.ParseIdempotencyKey("callback-" + uuid.New().String())
 	require.NoError(t, err)
 
 	result, err := repo.GetCachedResult(context.Background(), key)
@@ -345,7 +345,7 @@ func TestMarkComplete_NilRedisClientInConn(t *testing.T) {
 	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
 	repo := newTestIdempotencyRepo(t, provider)
 
-	key, err := value_objects.ParseIdempotencyKey("callback-" + uuid.New().String())
+	key, err := shared.ParseIdempotencyKey("callback-" + uuid.New().String())
 	require.NoError(t, err)
 
 	err = repo.MarkComplete(context.Background(), key, nil, 200)
@@ -359,7 +359,7 @@ func TestMarkFailed_NilRedisClientInConn(t *testing.T) {
 	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
 	repo := newTestIdempotencyRepo(t, provider)
 
-	key, err := value_objects.ParseIdempotencyKey("callback-" + uuid.New().String())
+	key, err := shared.ParseIdempotencyKey("callback-" + uuid.New().String())
 	require.NoError(t, err)
 
 	err = repo.MarkFailed(context.Background(), key)

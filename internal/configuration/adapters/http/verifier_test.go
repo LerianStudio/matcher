@@ -18,6 +18,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/configuration/services/query"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 var errMockQuery = errors.New("mock query error")
@@ -47,7 +48,7 @@ func setupMockContext(
 			ID:       contextID,
 			TenantID: tenantID,
 			Name:     "test-context",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Status:   status,
 		}, nil)
 	}
@@ -260,7 +261,7 @@ func TestTenantOwnershipVerifier_PassesCorrectParameters(t *testing.T) {
 				ID:       expectedContextID,
 				TenantID: expectedTenantID,
 				Name:     "test-context",
-				Type:     value_objects.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Status:   value_objects.ContextStatusActive,
 			}, nil
 		})
@@ -339,7 +340,7 @@ func TestPausedContextCanBeReactivatedViaDomainStateMachine(t *testing.T) {
 		ID:       uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 		TenantID: uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 		Name:     "paused-context",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Status:   value_objects.ContextStatusPaused,
 	}
 

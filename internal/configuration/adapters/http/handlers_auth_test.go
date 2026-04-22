@@ -26,6 +26,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
 	"github.com/LerianStudio/matcher/internal/configuration/services/query"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // errNotImplemented is returned by noop repositories for unimplemented methods.
@@ -240,7 +241,7 @@ func (noopContextRepo) FindAll(
 	_ context.Context,
 	_ string,
 	_ int,
-	_ *value_objects.ContextType,
+	_ *shared.ContextType,
 	_ *value_objects.ContextStatus,
 ) ([]*entities.ReconciliationContext, libHTTP.CursorPagination, error) {
 	return nil, libHTTP.CursorPagination{}, errNotImplemented
@@ -361,7 +362,7 @@ func (noopMatchRuleRepo) FindByContextID(
 func (noopMatchRuleRepo) FindByContextIDAndType(
 	_ context.Context,
 	_ uuid.UUID,
-	_ value_objects.RuleType,
+	_ shared.RuleType,
 	_ string,
 	_ int,
 ) (entities.MatchRules, libHTTP.CursorPagination, error) {

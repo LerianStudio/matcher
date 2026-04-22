@@ -164,7 +164,7 @@ func seedE4T9Config(t *testing.T, h *integration.TestHarness) e4t9Seed {
 		h.Seed.ContextID,
 		configEntities.CreateMatchRuleInput{
 			Priority: 1,
-			Type:     configVO.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config: map[string]any{
 				"matchAmount":     true,
 				"matchCurrency":   true,

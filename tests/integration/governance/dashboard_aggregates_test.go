@@ -23,6 +23,7 @@ import (
 	reportingEntities "github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	reportingQuery "github.com/LerianStudio/matcher/internal/reporting/services/query"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
@@ -67,7 +68,7 @@ func seedDashboardTestConfig(t *testing.T, h *integration.TestHarness) dashboard
 		h.Seed.ContextID,
 		configEntities.CreateMatchRuleInput{
 			Priority: 1,
-			Type:     configVO.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config:   map[string]any{"matchAmount": true},
 		},
 	)
@@ -471,7 +472,7 @@ func TestIntegrationDashboardAggregates_SourceFiltering(t *testing.T) {
 			seed.TenantID,
 			configEntities.CreateReconciliationContextInput{
 				Name:     "Dashboard Other Context",
-				Type:     configVO.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "0 0 * * *",
 			},
 		)

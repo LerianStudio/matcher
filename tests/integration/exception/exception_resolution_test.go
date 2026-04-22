@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	exceptionEntities "github.com/LerianStudio/matcher/internal/exception/domain/entities"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	exceptionVO "github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	exceptionCommand "github.com/LerianStudio/matcher/internal/exception/services/command"
 	ingestionJobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
@@ -30,7 +31,7 @@ func TestForceMatch_ResolvesExceptionAndCreatesAuditLog(t *testing.T) {
 			"FORCE-MATCH-"+uuid.New().String()[:8], decimal.NewFromFloat(500.00), "USD")
 
 		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-			exceptionVO.ExceptionSeverityLow, "UNMATCHED: no counterparty found")
+			sharedexception.ExceptionSeverityLow, "UNMATCHED: no counterparty found")
 
 		uc, _ := wireExceptionUseCase(t, h, &noopResolutionExecutor{})
 
@@ -67,7 +68,7 @@ func TestForceMatch_RequiresOverrideReason(t *testing.T) {
 			"FORCE-REASON-"+uuid.New().String()[:8], decimal.NewFromFloat(100.00), "USD")
 
 		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-			exceptionVO.ExceptionSeverityLow, "UNMATCHED")
+			sharedexception.ExceptionSeverityLow, "UNMATCHED")
 
 		uc, _ := wireExceptionUseCase(t, h, &noopResolutionExecutor{})
 
@@ -94,7 +95,7 @@ func TestForceMatch_RequiresNotes(t *testing.T) {
 			"FORCE-NOTES-"+uuid.New().String()[:8], decimal.NewFromFloat(100.00), "USD")
 
 		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-			exceptionVO.ExceptionSeverityLow, "UNMATCHED")
+			sharedexception.ExceptionSeverityLow, "UNMATCHED")
 
 		uc, _ := wireExceptionUseCase(t, h, &noopResolutionExecutor{})
 
@@ -137,7 +138,7 @@ func TestAdjustEntry_ResolvesExceptionWithAuditTrail(t *testing.T) {
 			"ADJUST-ENTRY-"+uuid.New().String()[:8], decimal.NewFromFloat(250.00), "EUR")
 
 		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-			exceptionVO.ExceptionSeverityMedium, "UNMATCHED: amount discrepancy")
+			sharedexception.ExceptionSeverityMedium, "UNMATCHED: amount discrepancy")
 
 		uc, _ := wireExceptionUseCase(t, h, &noopResolutionExecutor{})
 
@@ -186,7 +187,7 @@ func TestAdjustEntry_ValidReasonCodes(t *testing.T) {
 					decimal.NewFromFloat(100.00), "USD")
 
 				exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-					exceptionVO.ExceptionSeverityLow, "UNMATCHED")
+					sharedexception.ExceptionSeverityLow, "UNMATCHED")
 
 				uc, _ := wireExceptionUseCase(t, h, &noopResolutionExecutor{})
 
@@ -219,7 +220,7 @@ func TestAdjustEntry_ZeroAmountRejected(t *testing.T) {
 			"ZERO-AMT-"+uuid.New().String()[:8], decimal.NewFromFloat(100.00), "USD")
 
 		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-			exceptionVO.ExceptionSeverityLow, "UNMATCHED")
+			sharedexception.ExceptionSeverityLow, "UNMATCHED")
 
 		uc, _ := wireExceptionUseCase(t, h, &noopResolutionExecutor{})
 
@@ -248,7 +249,7 @@ func TestAdjustEntry_ExecutorFailureRollsBack(t *testing.T) {
 			"FAIL-EXEC-"+uuid.New().String()[:8], decimal.NewFromFloat(100.00), "USD")
 
 		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-			exceptionVO.ExceptionSeverityLow, "UNMATCHED")
+			sharedexception.ExceptionSeverityLow, "UNMATCHED")
 
 		executorErr := errors.New("matching context unavailable")
 		uc, _ := wireExceptionUseCase(t, h, &failingResolutionExecutor{err: executorErr})

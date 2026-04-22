@@ -14,6 +14,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/services"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 func TestBuildJiraPayload_HappyPath(t *testing.T) {
@@ -28,7 +29,7 @@ func TestBuildJiraPayload_HappyPath(t *testing.T) {
 		Snapshot: ExceptionSnapshot{
 			ID:            exceptionID,
 			TransactionID: transactionID,
-			Severity:      value_objects.ExceptionSeverityCritical,
+			Severity:      sharedexception.ExceptionSeverityCritical,
 			Status:        value_objects.ExceptionStatusOpen,
 			Amount:        decimal.NewFromInt(50000),
 			Currency:      "USD",
@@ -91,7 +92,7 @@ func TestBuildJiraPayload_ValidationErrors(t *testing.T) {
 			ctx: &DispatchContext{
 				Snapshot: ExceptionSnapshot{
 					ID:       uuid.New(),
-					Severity: value_objects.ExceptionSeverityMedium,
+					Severity: sharedexception.ExceptionSeverityMedium,
 					Status:   value_objects.ExceptionStatusOpen,
 				},
 			},
@@ -103,7 +104,7 @@ func TestBuildJiraPayload_ValidationErrors(t *testing.T) {
 			ctx: &DispatchContext{
 				Snapshot: ExceptionSnapshot{
 					ID:       uuid.New(),
-					Severity: value_objects.ExceptionSeverityMedium,
+					Severity: sharedexception.ExceptionSeverityMedium,
 					Status:   value_objects.ExceptionStatusOpen,
 				},
 			},
@@ -115,7 +116,7 @@ func TestBuildJiraPayload_ValidationErrors(t *testing.T) {
 			ctx: &DispatchContext{
 				Snapshot: ExceptionSnapshot{
 					ID:       uuid.New(),
-					Severity: value_objects.ExceptionSeverityMedium,
+					Severity: sharedexception.ExceptionSeverityMedium,
 					Status:   value_objects.ExceptionStatusOpen,
 				},
 			},
@@ -127,7 +128,7 @@ func TestBuildJiraPayload_ValidationErrors(t *testing.T) {
 			ctx: &DispatchContext{
 				Snapshot: ExceptionSnapshot{
 					ID:       uuid.New(),
-					Severity: value_objects.ExceptionSeverityMedium,
+					Severity: sharedexception.ExceptionSeverityMedium,
 					Status:   value_objects.ExceptionStatusOpen,
 				},
 			},
@@ -155,7 +156,7 @@ func TestBuildJiraPayload_JSONMarshal(t *testing.T) {
 		Snapshot: ExceptionSnapshot{
 			ID:            uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 			TransactionID: uuid.MustParse("22222222-2222-2222-2222-222222222222"),
-			Severity:      value_objects.ExceptionSeverityHigh,
+			Severity:      sharedexception.ExceptionSeverityHigh,
 			Status:        value_objects.ExceptionStatusAssigned,
 			Amount:        decimal.NewFromInt(10000),
 			Currency:      "EUR",
@@ -215,14 +216,14 @@ func TestBuildJiraPayload_SeverityToPriorityMapping(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		severity         value_objects.ExceptionSeverity
+		severity         sharedexception.ExceptionSeverity
 		expectedPriority string
 	}{
-		{value_objects.ExceptionSeverityCritical, "Highest"},
-		{value_objects.ExceptionSeverityHigh, "High"},
-		{value_objects.ExceptionSeverityMedium, "Medium"},
-		{value_objects.ExceptionSeverityLow, "Low"},
-		{value_objects.ExceptionSeverity("UNKNOWN"), "Medium"},
+		{sharedexception.ExceptionSeverityCritical, "Highest"},
+		{sharedexception.ExceptionSeverityHigh, "High"},
+		{sharedexception.ExceptionSeverityMedium, "Medium"},
+		{sharedexception.ExceptionSeverityLow, "Low"},
+		{sharedexception.ExceptionSeverity("UNKNOWN"), "Medium"},
 	}
 
 	for _, tt := range tests {
@@ -258,7 +259,7 @@ func TestBuildJiraPayload_NoAssignee(t *testing.T) {
 	ctx := &DispatchContext{
 		Snapshot: ExceptionSnapshot{
 			ID:       uuid.New(),
-			Severity: value_objects.ExceptionSeverityMedium,
+			Severity: sharedexception.ExceptionSeverityMedium,
 			Status:   value_objects.ExceptionStatusOpen,
 			Reason:   "Test",
 		},
@@ -285,7 +286,7 @@ func TestBuildJiraPayload_UnknownSeverityFallback(t *testing.T) {
 	ctx := &DispatchContext{
 		Snapshot: ExceptionSnapshot{
 			ID:       uuid.New(),
-			Severity: value_objects.ExceptionSeverity("UNKNOWN"),
+			Severity: sharedexception.ExceptionSeverity("UNKNOWN"),
 			Status:   value_objects.ExceptionStatusOpen,
 			Reason:   "Test unknown severity",
 		},
@@ -316,7 +317,7 @@ func TestBuildJiraPayload_SummaryTruncation(t *testing.T) {
 	ctx := &DispatchContext{
 		Snapshot: ExceptionSnapshot{
 			ID:       uuid.New(),
-			Severity: value_objects.ExceptionSeverityLow,
+			Severity: sharedexception.ExceptionSeverityLow,
 			Status:   value_objects.ExceptionStatusOpen,
 			Reason:   longReason,
 		},

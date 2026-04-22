@@ -13,12 +13,12 @@ import (
 	exceptionAdapters "github.com/LerianStudio/matcher/internal/exception/adapters"
 	commentRepoAdapter "github.com/LerianStudio/matcher/internal/exception/adapters/postgres/comment"
 	exceptionRepoAdapter "github.com/LerianStudio/matcher/internal/exception/adapters/postgres/exception"
-	exceptionVO "github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	exceptionCommand "github.com/LerianStudio/matcher/internal/exception/services/command"
 	exceptionQuery "github.com/LerianStudio/matcher/internal/exception/services/query"
 	ingestionJobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
 	ingestionTxRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/transaction"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -59,7 +59,7 @@ func setupExceptionForComments(t *testing.T, h *integration.TestHarness) uuid.UU
 		"COMMENT-TX-"+uuid.New().String()[:8], decimal.NewFromFloat(100.00), "USD")
 
 	exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-		exceptionVO.ExceptionSeverityMedium, "test exception for comments")
+		sharedexception.ExceptionSeverityMedium, "test exception for comments")
 
 	return exc.ID
 }

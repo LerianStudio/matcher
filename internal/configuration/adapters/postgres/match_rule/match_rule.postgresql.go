@@ -18,8 +18,8 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -384,7 +384,7 @@ func (repo *Repository) FindByContextIDWithTx(
 func (repo *Repository) FindByContextIDAndType(
 	ctx stdctx.Context,
 	contextID uuid.UUID,
-	ruleType value_objects.RuleType,
+	ruleType shared.RuleType,
 	cursor string,
 	limit int,
 ) (entities.MatchRules, libHTTP.CursorPagination, error) {

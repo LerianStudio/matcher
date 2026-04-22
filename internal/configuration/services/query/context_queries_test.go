@@ -16,6 +16,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 var errContextRepositoryFailure = errors.New("repository failure")
@@ -131,7 +132,7 @@ func TestListContexts_Success(t *testing.T) {
 
 	ctx := context.Background()
 	tenantID := uuid.New()
-	contextType := value_objects.ContextTypeOneToOne
+	contextType := shared.ContextTypeOneToOne
 	status := value_objects.ContextStatusActive
 	expected := []*entities.ReconciliationContext{{ID: uuid.New(), TenantID: tenantID}}
 
@@ -274,7 +275,7 @@ func TestListContexts_WithAllFilters(t *testing.T) {
 
 	ctx := context.Background()
 	cursor := "cursor-value"
-	contextType := value_objects.ContextTypeManyToMany
+	contextType := shared.ContextTypeManyToMany
 	status := value_objects.ContextStatusPaused
 	expected := []*entities.ReconciliationContext{{ID: uuid.New(), TenantID: uuid.New()}}
 

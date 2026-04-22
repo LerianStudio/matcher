@@ -18,6 +18,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	configPorts "github.com/LerianStudio/matcher/internal/configuration/ports"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
@@ -110,7 +111,7 @@ func (m *mockCtxRepo) FindAll(
 	_ context.Context,
 	_ string,
 	_ int,
-	_ *value_objects.ContextType,
+	_ *shared.ContextType,
 	_ *value_objects.ContextStatus,
 ) ([]*entities.ReconciliationContext, libHTTP.CursorPagination, error) {
 	return nil, libHTTP.CursorPagination{}, nil
@@ -203,7 +204,7 @@ func (s *stubMatchRuleRepo) FindByContextID(_ context.Context, _ uuid.UUID, _ st
 	return nil, libHTTP.CursorPagination{}, nil
 }
 
-func (s *stubMatchRuleRepo) FindByContextIDAndType(_ context.Context, _ uuid.UUID, _ value_objects.RuleType, _ string, _ int) (entities.MatchRules, libHTTP.CursorPagination, error) {
+func (s *stubMatchRuleRepo) FindByContextIDAndType(_ context.Context, _ uuid.UUID, _ shared.RuleType, _ string, _ int) (entities.MatchRules, libHTTP.CursorPagination, error) {
 	return nil, libHTTP.CursorPagination{}, nil
 }
 
@@ -234,7 +235,7 @@ func newUseCaseWithScheduleRepo(scheduleRepo configPorts.ScheduleRepository) *Us
 				ID:       testutil.DeterministicUUID("test-context-id"),
 				TenantID: testutil.DeterministicUUID("test-tenant-id"),
 				Name:     "Test Context",
-				Type:     value_objects.ContextType("1:1"),
+				Type:     shared.ContextType("1:1"),
 				Interval: "daily",
 				Status:   value_objects.ContextStatusActive,
 			}, nil

@@ -15,6 +15,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
@@ -89,7 +90,7 @@ func (stub *contextRepoStubQ) FindByName(_ context.Context, _ string) (*entities
 	return nil, errors.New("not implemented")
 }
 
-func (stub *contextRepoStubQ) FindAll(_ context.Context, _ string, _ int, _ *value_objects.ContextType, _ *value_objects.ContextStatus) ([]*entities.ReconciliationContext, libHTTP.CursorPagination, error) {
+func (stub *contextRepoStubQ) FindAll(_ context.Context, _ string, _ int, _ *shared.ContextType, _ *value_objects.ContextStatus) ([]*entities.ReconciliationContext, libHTTP.CursorPagination, error) {
 	return nil, libHTTP.CursorPagination{}, errors.New("not implemented")
 }
 
@@ -171,7 +172,7 @@ func (stub *matchRuleRepoStubQ) FindByContextID(_ context.Context, _ uuid.UUID, 
 	return nil, libHTTP.CursorPagination{}, errors.New("not implemented")
 }
 
-func (stub *matchRuleRepoStubQ) FindByContextIDAndType(_ context.Context, _ uuid.UUID, _ value_objects.RuleType, _ string, _ int) (entities.MatchRules, libHTTP.CursorPagination, error) {
+func (stub *matchRuleRepoStubQ) FindByContextIDAndType(_ context.Context, _ uuid.UUID, _ shared.RuleType, _ string, _ int) (entities.MatchRules, libHTTP.CursorPagination, error) {
 	return nil, libHTTP.CursorPagination{}, errors.New("not implemented")
 }
 

@@ -15,6 +15,8 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 var errTestIdempotency = errors.New("test: idempotency failed")
@@ -28,13 +30,13 @@ type stubIdempotencyRepo struct {
 	markCompleteErr error
 	markFailedErr   error
 	markFailedCalls int
-	cachedResult    *value_objects.IdempotencyResult
+	cachedResult    *shared.IdempotencyResult
 	getCachedErr    error
 }
 
 func (repo *stubIdempotencyRepo) TryAcquire(
 	_ context.Context,
-	_ value_objects.IdempotencyKey,
+	_ shared.IdempotencyKey,
 ) (bool, error) {
 	if repo.tryAcquireErr != nil {
 		return false, repo.tryAcquireErr
@@ -45,7 +47,7 @@ func (repo *stubIdempotencyRepo) TryAcquire(
 
 func (repo *stubIdempotencyRepo) TryReacquireFromFailed(
 	_ context.Context,
-	_ value_objects.IdempotencyKey,
+	_ shared.IdempotencyKey,
 ) (bool, error) {
 	repo.reacquireCalls++
 	if repo.reacquireErr != nil {
@@ -57,7 +59,7 @@ func (repo *stubIdempotencyRepo) TryReacquireFromFailed(
 
 func (repo *stubIdempotencyRepo) MarkComplete(
 	_ context.Context,
-	_ value_objects.IdempotencyKey,
+	_ shared.IdempotencyKey,
 	_ []byte,
 	_ int,
 ) error {
@@ -66,7 +68,7 @@ func (repo *stubIdempotencyRepo) MarkComplete(
 
 func (repo *stubIdempotencyRepo) MarkFailed(
 	_ context.Context,
-	_ value_objects.IdempotencyKey,
+	_ shared.IdempotencyKey,
 ) error {
 	repo.markFailedCalls++
 	return repo.markFailedErr
@@ -74,8 +76,8 @@ func (repo *stubIdempotencyRepo) MarkFailed(
 
 func (repo *stubIdempotencyRepo) GetCachedResult(
 	_ context.Context,
-	_ value_objects.IdempotencyKey,
-) (*value_objects.IdempotencyResult, error) {
+	_ shared.IdempotencyKey,
+) (*shared.IdempotencyResult, error) {
 	if repo.getCachedErr != nil {
 		return nil, repo.getCachedErr
 	}
@@ -84,7 +86,7 @@ func (repo *stubIdempotencyRepo) GetCachedResult(
 		return repo.cachedResult, nil
 	}
 
-	return &value_objects.IdempotencyResult{Status: value_objects.IdempotencyStatusComplete}, nil
+	return &shared.IdempotencyResult{Status: shared.IdempotencyStatusComplete}, nil
 }
 
 func TestCallbackIdempotency_FirstCall_Processes(t *testing.T) {
@@ -93,7 +95,7 @@ func TestCallbackIdempotency_FirstCall_Processes(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -123,7 +125,7 @@ func TestCallbackIdempotency_FirstCall_Processes(t *testing.T) {
 	require.NotNil(t, audit.lastEvent)
 	require.Equal(t, "CALLBACK_PROCESSED", audit.lastEvent.Action)
 	require.Equal(t, "system", audit.lastEvent.Actor)
-	parsedKey, parseErr := value_objects.ParseIdempotencyKey("jira:MATCH-123:callback")
+	parsedKey, parseErr := shared.ParseIdempotencyKey("jira:MATCH-123:callback")
 	require.NoError(t, parseErr)
 	require.Equal(t, idempotencyKeyHash(parsedKey), audit.lastEvent.Metadata["idempotency_key_hash"])
 	require.Empty(t, audit.lastEvent.Metadata["idempotency_key"])
@@ -136,7 +138,7 @@ func TestProcessCallback_AssignedRequiresAssignee(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -166,7 +168,7 @@ func TestProcessCallback_PayloadFallback_Assigns(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -206,7 +208,7 @@ func TestProcessCallback_UpdateErrorMarksFailed(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -236,7 +238,7 @@ func TestCallbackIdempotency_DuplicateCall_Ignored(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -262,7 +264,7 @@ func TestCallbackIdempotency_DuplicateCall_Ignored(t *testing.T) {
 	require.NotNil(t, audit.lastEvent)
 	require.Equal(t, "CALLBACK_DUPLICATE_IGNORED", audit.lastEvent.Action)
 	require.Equal(t, "system", audit.lastEvent.Actor)
-	parsedKey, parseErr := value_objects.ParseIdempotencyKey("jira:MATCH-123:callback")
+	parsedKey, parseErr := shared.ParseIdempotencyKey("jira:MATCH-123:callback")
 	require.NoError(t, parseErr)
 	require.Equal(t, idempotencyKeyHash(parsedKey), audit.lastEvent.Metadata["idempotency_key_hash"])
 	require.Empty(t, audit.lastEvent.Metadata["idempotency_key"])
@@ -274,7 +276,7 @@ func TestCallbackIdempotency_InvalidKey_Rejected(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -294,8 +296,8 @@ func TestCallbackIdempotency_InvalidKey_Rejected(t *testing.T) {
 		ExternalIssueID: "PROJ-123",
 		Status:          "OPEN",
 	})
-	require.ErrorIs(t, err, value_objects.ErrEmptyIdempotencyKey)
-	require.Equal(t, value_objects.ErrEmptyIdempotencyKey.Error(), err.Error())
+	require.ErrorIs(t, err, shared.ErrEmptyIdempotencyKey)
+	require.Equal(t, shared.ErrEmptyIdempotencyKey.Error(), err.Error())
 
 	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
 		IdempotencyKey:  "invalid key!",
@@ -305,8 +307,8 @@ func TestCallbackIdempotency_InvalidKey_Rejected(t *testing.T) {
 		ExternalIssueID: "PROJ-123",
 		Status:          "OPEN",
 	})
-	require.ErrorIs(t, err, value_objects.ErrInvalidIdempotencyKey)
-	require.Equal(t, value_objects.ErrInvalidIdempotencyKey.Error(), err.Error())
+	require.ErrorIs(t, err, shared.ErrInvalidIdempotencyKey)
+	require.Equal(t, shared.ErrInvalidIdempotencyKey.Error(), err.Error())
 }
 
 func TestCallbackIdempotency_ExceptionIDRequired(t *testing.T) {
@@ -336,7 +338,7 @@ func TestCallbackIdempotency_TryAcquireError(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -364,8 +366,8 @@ func TestCallbackIdempotency_AlreadyProcessing_ReturnsInProgress(t *testing.T) {
 
 	idempotencyRepo := &stubIdempotencyRepo{
 		acquired: false,
-		cachedResult: &value_objects.IdempotencyResult{
-			Status: value_objects.IdempotencyStatusPending,
+		cachedResult: &shared.IdempotencyResult{
+			Status: shared.IdempotencyStatusPending,
 		},
 	}
 	exceptionRepo := &stubExceptionRepo{}
@@ -390,8 +392,8 @@ func TestCallbackIdempotency_PreviousFailure_ReturnsRetryable(t *testing.T) {
 
 	idempotencyRepo := &stubIdempotencyRepo{
 		acquired: false,
-		cachedResult: &value_objects.IdempotencyResult{
-			Status: value_objects.IdempotencyStatusFailed,
+		cachedResult: &shared.IdempotencyResult{
+			Status: shared.IdempotencyStatusFailed,
 		},
 	}
 	exceptionRepo := &stubExceptionRepo{}
@@ -418,7 +420,7 @@ func TestCallbackIdempotency_PreviousFailure_ReacquiresAndProcesses(t *testing.T
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -426,8 +428,8 @@ func TestCallbackIdempotency_PreviousFailure_ReacquiresAndProcesses(t *testing.T
 	idempotencyRepo := &stubIdempotencyRepo{
 		acquired:   false,
 		reacquired: true,
-		cachedResult: &value_objects.IdempotencyResult{
-			Status: value_objects.IdempotencyStatusFailed,
+		cachedResult: &shared.IdempotencyResult{
+			Status: shared.IdempotencyStatusFailed,
 		},
 	}
 	exceptionRepo := &stubExceptionRepo{exception: exception}
@@ -456,8 +458,8 @@ func TestCallbackIdempotency_PreviousFailure_ReacquireError(t *testing.T) {
 	idempotencyRepo := &stubIdempotencyRepo{
 		acquired:     false,
 		reacquireErr: errTestIdempotency,
-		cachedResult: &value_objects.IdempotencyResult{
-			Status: value_objects.IdempotencyStatusFailed,
+		cachedResult: &shared.IdempotencyResult{
+			Status: shared.IdempotencyStatusFailed,
 		},
 	}
 	exceptionRepo := &stubExceptionRepo{}
@@ -527,7 +529,7 @@ func TestCallbackIdempotency_MarkCompleteError(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -595,7 +597,7 @@ func TestProcessCallback_RateLimitKey_IsTenantScoped(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -644,7 +646,7 @@ func TestProcessCallback_AllCallbackTypes(t *testing.T) {
 			exception, err := entities.NewException(
 				context.Background(),
 				uuid.New(),
-				value_objects.ExceptionSeverityHigh,
+				sharedexception.ExceptionSeverityHigh,
 				nil,
 			)
 			require.NoError(t, err)
@@ -723,7 +725,7 @@ func TestProcessCallback_PayloadVariations(t *testing.T) {
 			exception, err := entities.NewException(
 				context.Background(),
 				uuid.New(),
-				value_objects.ExceptionSeverityHigh,
+				sharedexception.ExceptionSeverityHigh,
 				nil,
 			)
 			require.NoError(t, err)

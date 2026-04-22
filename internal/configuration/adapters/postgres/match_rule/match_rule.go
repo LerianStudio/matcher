@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // MatchRulePostgreSQLModel represents the database model for match rules.
@@ -80,7 +80,7 @@ func (model *MatchRulePostgreSQLModel) ToEntity() (*entities.MatchRule, error) {
 		return nil, fmt.Errorf("failed to parse context ID: %w", err)
 	}
 
-	ruleType, err := value_objects.ParseRuleType(model.Type)
+	ruleType, err := shared.ParseRuleType(model.Type)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse rule type: %w", err)
 	}

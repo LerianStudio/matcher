@@ -13,6 +13,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 // Test payload fallback edge cases.
@@ -82,7 +83,7 @@ func TestProcessCallback_PayloadFallback_ExternalSystem(t *testing.T) {
 			exception, err := entities.NewException(
 				ctx,
 				uuid.New(),
-				value_objects.ExceptionSeverityHigh,
+				sharedexception.ExceptionSeverityHigh,
 				nil,
 			)
 			require.NoError(t, err)
@@ -166,7 +167,7 @@ func TestProcessCallback_PayloadFallback_ExternalIssueID(t *testing.T) {
 			exception, err := entities.NewException(
 				ctx,
 				uuid.New(),
-				value_objects.ExceptionSeverityHigh,
+				sharedexception.ExceptionSeverityHigh,
 				nil,
 			)
 			require.NoError(t, err)
@@ -248,7 +249,7 @@ func TestProcessCallback_PayloadFallback_Status(t *testing.T) {
 			exception, err := entities.NewException(
 				ctx,
 				uuid.New(),
-				value_objects.ExceptionSeverityHigh,
+				sharedexception.ExceptionSeverityHigh,
 				nil,
 			)
 			require.NoError(t, err)
@@ -405,7 +406,7 @@ func TestProcessCallback_PayloadTime_Parsing(t *testing.T) {
 			exception, err := entities.NewException(
 				ctx,
 				uuid.New(),
-				value_objects.ExceptionSeverityHigh,
+				sharedexception.ExceptionSeverityHigh,
 				nil,
 			)
 			require.NoError(t, err)
@@ -445,7 +446,7 @@ func TestProcessCallback_DuplicateCallback_AuditError(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -477,7 +478,7 @@ func TestProcessCallback_AuditPublishError_MarksIdempotencyFailed(t *testing.T) 
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -509,7 +510,7 @@ func TestProcessCallback_SameStatus_NoTransition(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -542,7 +543,7 @@ func TestProcessCallback_UnsupportedStatusTransition(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -579,7 +580,7 @@ func TestProcessCallback_ResolutionNotes_WithPayload(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -614,7 +615,7 @@ func TestProcessCallback_ResolutionNotes_DefaultGenerated(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -647,7 +648,7 @@ func TestProcessCallback_AssignedStatus_WithAssignee(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -684,7 +685,7 @@ func TestProcessCallback_CallbackTypeEmptyUsesExternalSystem(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -717,7 +718,7 @@ func TestProcessCallback_PayloadStringWithStringer(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -752,7 +753,7 @@ func TestProcessCallback_AuditMetadataIncludes_DueAtAndUpdatedAt(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -814,7 +815,7 @@ func TestProcessCallback_MarkIdempotencyFailed_LogsError(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -849,7 +850,7 @@ func TestProcessCallback_OpenNotValidTargetFromPendingResolution(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)

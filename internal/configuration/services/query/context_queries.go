@@ -13,6 +13,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // GetContext retrieves a reconciliation context by ID.
@@ -46,7 +47,7 @@ func (uc *UseCase) ListContexts(
 	ctx context.Context,
 	cursor string,
 	limit int,
-	contextType *value_objects.ContextType,
+	contextType *shared.ContextType,
 	status *value_objects.ContextStatus,
 ) ([]*entities.ReconciliationContext, libHTTP.CursorPagination, error) {
 	if uc.contextRepo == nil {

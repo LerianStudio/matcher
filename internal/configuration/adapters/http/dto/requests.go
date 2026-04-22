@@ -82,7 +82,7 @@ type CreateContextSourceRequest struct {
 func (req *CreateContextRequest) ToDomainInput() (entities.CreateReconciliationContextInput, error) {
 	input := entities.CreateReconciliationContextInput{
 		Name:              req.Name,
-		Type:              value_objects.ContextType(req.Type),
+		Type:              shared.ContextType(req.Type),
 		Interval:          req.Interval,
 		FeeToleranceAbs:   req.FeeToleranceAbs,
 		FeeTolerancePct:   req.FeeTolerancePct,
@@ -189,7 +189,7 @@ func (req *UpdateContextRequest) ToDomainInput() (entities.UpdateReconciliationC
 	}
 
 	if req.Type != nil {
-		ct := value_objects.ContextType(*req.Type)
+		ct := shared.ContextType(*req.Type)
 		input.Type = &ct
 	}
 

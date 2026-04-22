@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
-	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 var errTestBeginTx = errors.New("test: begin transaction failed")
@@ -28,7 +28,7 @@ func TestAdjustEntry_BeginTxError(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -62,7 +62,7 @@ func TestAdjustEntry_CommitError(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -102,7 +102,7 @@ func TestForceMatch_BeginTxError(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -133,7 +133,7 @@ func TestForceMatch_CommitError(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -169,7 +169,7 @@ func TestForceMatch_UpdateError(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -199,7 +199,7 @@ func TestOpenDispute_BeginTxError(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -236,7 +236,7 @@ func TestOpenDispute_CommitError(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -281,7 +281,7 @@ func TestCloseDispute_BeginTxError(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -320,7 +320,7 @@ func TestCloseDispute_CommitError(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -365,7 +365,7 @@ func TestSubmitEvidence_BeginTxError(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -403,7 +403,7 @@ func TestSubmitEvidence_CommitError(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -489,7 +489,7 @@ func TestSubmitEvidence_FileURLVariations(t *testing.T) {
 			exception, err := entities.NewException(
 				ctx,
 				uuid.New(),
-				value_objects.ExceptionSeverityHigh,
+				sharedexception.ExceptionSeverityHigh,
 				nil,
 			)
 			require.NoError(t, err)

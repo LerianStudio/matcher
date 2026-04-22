@@ -56,7 +56,7 @@ func TestCrossDomainFlow_EndToEndReconciliation(t *testing.T) {
 			h.Seed.TenantID,
 			configEntities.CreateReconciliationContextInput{
 				Name:     "Full E2E Reconciliation Context",
-				Type:     configVO.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "0 0 * * *",
 			},
 		)
@@ -134,7 +134,7 @@ func TestCrossDomainFlow_EndToEndReconciliation(t *testing.T) {
 			createdContext.ID,
 			configEntities.CreateMatchRuleInput{
 				Priority: 1,
-				Type:     configVO.RuleTypeExact,
+				Type:     shared.RuleTypeExact,
 				Config:   map[string]any{"matchCurrency": true, "matchAmount": true},
 			},
 		)
@@ -147,7 +147,7 @@ func TestCrossDomainFlow_EndToEndReconciliation(t *testing.T) {
 			createdContext.ID,
 			configEntities.CreateMatchRuleInput{
 				Priority: 2,
-				Type:     configVO.RuleTypeTolerance,
+				Type:     shared.RuleTypeTolerance,
 				Config:   map[string]any{"absTolerance": "1.00"},
 			},
 		)
@@ -520,7 +520,7 @@ func TestCrossDomainFlow_MultiTenantIsolation(t *testing.T) {
 			h.Seed.TenantID,
 			configEntities.CreateReconciliationContextInput{
 				Name:     "Tenant 1 Context",
-				Type:     configVO.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "0 0 * * *",
 			},
 		)
@@ -533,7 +533,7 @@ func TestCrossDomainFlow_MultiTenantIsolation(t *testing.T) {
 			h.Seed.TenantID,
 			configEntities.CreateReconciliationContextInput{
 				Name:     "Tenant 2 Context",
-				Type:     configVO.ContextTypeOneToMany,
+				Type:     shared.ContextTypeOneToMany,
 				Interval: "0 */6 * * *",
 			},
 		)

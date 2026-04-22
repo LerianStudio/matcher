@@ -15,7 +15,7 @@ import (
 
 	http "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	entities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	value_objects "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	uuid "github.com/google/uuid"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -90,7 +90,7 @@ func (mr *MockMatchRuleRepositoryMockRecorder) FindByContextID(ctx, contextID, c
 }
 
 // FindByContextIDAndType mocks base method.
-func (m *MockMatchRuleRepository) FindByContextIDAndType(ctx context.Context, contextID uuid.UUID, ruleType value_objects.RuleType, cursor string, limit int) (entities.MatchRules, http.CursorPagination, error) {
+func (m *MockMatchRuleRepository) FindByContextIDAndType(ctx context.Context, contextID uuid.UUID, ruleType shared.RuleType, cursor string, limit int) (entities.MatchRules, http.CursorPagination, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindByContextIDAndType", ctx, contextID, ruleType, cursor, limit)
 	ret0, _ := ret[0].(entities.MatchRules)

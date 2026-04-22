@@ -15,7 +15,7 @@ import (
 	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
@@ -86,8 +86,8 @@ func TestCloneMatchRules_Success(t *testing.T) {
 	newCtxID := uuid.New()
 
 	rules := entities.MatchRules{
-		{ID: uuid.New(), ContextID: sourceCtxID, Priority: 1, Type: value_objects.RuleTypeExact, Config: map[string]any{"matchAmount": true}},
-		{ID: uuid.New(), ContextID: sourceCtxID, Priority: 2, Type: value_objects.RuleTypeTolerance, Config: map[string]any{"absTolerance": 0.01}},
+		{ID: uuid.New(), ContextID: sourceCtxID, Priority: 1, Type: shared.RuleTypeExact, Config: map[string]any{"matchAmount": true}},
+		{ID: uuid.New(), ContextID: sourceCtxID, Priority: 2, Type: shared.RuleTypeTolerance, Config: map[string]any{"absTolerance": 0.01}},
 	}
 
 	createdRules := make([]*entities.MatchRule, 0, 2)
@@ -185,8 +185,8 @@ func TestCloneMatchRules_CreateErrorPartialClone(t *testing.T) {
 	ruleRepo := &matchRuleRepoStub{
 		findByContextIDFn: func(_ context.Context, _ uuid.UUID, _ string, _ int) (entities.MatchRules, libHTTP.CursorPagination, error) {
 			return entities.MatchRules{
-				{ID: uuid.New(), ContextID: sourceCtxID, Priority: 1, Type: value_objects.RuleTypeExact, Config: map[string]any{}},
-				{ID: uuid.New(), ContextID: sourceCtxID, Priority: 2, Type: value_objects.RuleTypeTolerance, Config: map[string]any{}},
+				{ID: uuid.New(), ContextID: sourceCtxID, Priority: 1, Type: shared.RuleTypeExact, Config: map[string]any{}},
+				{ID: uuid.New(), ContextID: sourceCtxID, Priority: 2, Type: shared.RuleTypeTolerance, Config: map[string]any{}},
 			}, libHTTP.CursorPagination{}, nil
 		},
 		createFn: func(_ context.Context, _ *entities.MatchRule) (*entities.MatchRule, error) {
@@ -224,7 +224,7 @@ func TestCloneMatchRules_ClonesConfigDeepCopy(t *testing.T) {
 	ruleRepo := &matchRuleRepoStub{
 		findByContextIDFn: func(_ context.Context, _ uuid.UUID, _ string, _ int) (entities.MatchRules, libHTTP.CursorPagination, error) {
 			return entities.MatchRules{
-				{ID: uuid.New(), ContextID: uuid.New(), Priority: 1, Type: value_objects.RuleTypeExact, Config: originalConfig},
+				{ID: uuid.New(), ContextID: uuid.New(), Priority: 1, Type: shared.RuleTypeExact, Config: originalConfig},
 			}, libHTTP.CursorPagination{}, nil
 		},
 		createFn: func(_ context.Context, rule *entities.MatchRule) (*entities.MatchRule, error) {
@@ -271,7 +271,7 @@ func TestCloneMatchRulesWithTx_UsesTxCreator(t *testing.T) {
 		findByContextIDWithTxFn: func(_ context.Context, _ *sql.Tx, ctxID uuid.UUID, _ string, _ int) (entities.MatchRules, libHTTP.CursorPagination, error) {
 			assert.Equal(t, sourceCtxID, ctxID)
 			return entities.MatchRules{
-				{ID: uuid.New(), ContextID: sourceCtxID, Priority: 1, Type: value_objects.RuleTypeExact, Config: map[string]any{}},
+				{ID: uuid.New(), ContextID: sourceCtxID, Priority: 1, Type: shared.RuleTypeExact, Config: map[string]any{}},
 			}, libHTTP.CursorPagination{}, nil
 		},
 	}
@@ -299,7 +299,7 @@ func TestCloneMatchRulesWithTx_RepoDoesNotSupportTxCreate(t *testing.T) {
 	ruleRepo := &matchRuleRepoStub{
 		findByContextIDFn: func(_ context.Context, _ uuid.UUID, _ string, _ int) (entities.MatchRules, libHTTP.CursorPagination, error) {
 			return entities.MatchRules{
-				{ID: uuid.New(), ContextID: uuid.New(), Priority: 1, Type: value_objects.RuleTypeExact, Config: map[string]any{}},
+				{ID: uuid.New(), ContextID: uuid.New(), Priority: 1, Type: shared.RuleTypeExact, Config: map[string]any{}},
 			}, libHTTP.CursorPagination{}, nil
 		},
 	}

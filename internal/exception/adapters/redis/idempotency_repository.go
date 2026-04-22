@@ -16,7 +16,7 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
-	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -168,7 +168,7 @@ func NewIdempotencyRepositoryWithConfig(
 
 // storageKey returns the tenant-scoped Redis key for an idempotency key,
 // optionally HMAC-signed if a secret is configured.
-func (repo *IdempotencyRepository) storageKey(ctx context.Context, key value_objects.IdempotencyKey) string {
+func (repo *IdempotencyRepository) storageKey(ctx context.Context, key shared.IdempotencyKey) string {
 	tenantID := strings.TrimSpace(auth.GetTenantID(ctx))
 	signedKey := key.SignKey(repo.currentHMACSecret(ctx))
 
@@ -182,7 +182,7 @@ func (repo *IdempotencyRepository) storageKey(ctx context.Context, key value_obj
 // TryAcquire attempts to acquire an idempotency lock. Returns true if acquired (first time).
 func (repo *IdempotencyRepository) TryAcquire(
 	ctx context.Context,
-	key value_objects.IdempotencyKey,
+	key shared.IdempotencyKey,
 ) (bool, error) {
 	if repo == nil || repo.provider == nil {
 		return false, ErrRepoNotInitialized
@@ -235,7 +235,7 @@ func (repo *IdempotencyRepository) TryAcquire(
 // Returns true only when the key was in failed status and this caller reclaimed it.
 func (repo *IdempotencyRepository) TryReacquireFromFailed(
 	ctx context.Context,
-	key value_objects.IdempotencyKey,
+	key shared.IdempotencyKey,
 ) (bool, error) {
 	if repo == nil || repo.provider == nil {
 		return false, ErrRepoNotInitialized
@@ -295,7 +295,7 @@ return 1
 		reacquireFromFailedScript,
 		[]string{redisKey},
 		statusPending,
-		string(value_objects.IdempotencyStatusFailed),
+		string(shared.IdempotencyStatusFailed),
 		retryTTLSeconds,
 	).Int64()
 	if err != nil {
@@ -313,7 +313,7 @@ return 1
 // MarkComplete marks the callback as successfully processed with the response to cache.
 func (repo *IdempotencyRepository) MarkComplete(
 	ctx context.Context,
-	key value_objects.IdempotencyKey,
+	key shared.IdempotencyKey,
 	response []byte,
 	httpStatus int,
 ) error {
@@ -345,7 +345,7 @@ func (repo *IdempotencyRepository) MarkComplete(
 	}
 
 	entry := idempotencyCacheEntry{
-		Status:     string(value_objects.IdempotencyStatusComplete),
+		Status:     string(shared.IdempotencyStatusComplete),
 		Response:   response,
 		HTTPStatus: httpStatus,
 	}
@@ -373,7 +373,7 @@ func (repo *IdempotencyRepository) MarkComplete(
 // MarkFailed marks a callback as failed so it can be retried after the retry window.
 func (repo *IdempotencyRepository) MarkFailed(
 	ctx context.Context,
-	key value_objects.IdempotencyKey,
+	key shared.IdempotencyKey,
 ) error {
 	if repo == nil || repo.provider == nil {
 		return ErrRepoNotInitialized
@@ -403,7 +403,7 @@ func (repo *IdempotencyRepository) MarkFailed(
 	}
 
 	entry := idempotencyCacheEntry{
-		Status: string(value_objects.IdempotencyStatusFailed),
+		Status: string(shared.IdempotencyStatusFailed),
 	}
 
 	data, err := json.Marshal(entry)
@@ -430,8 +430,8 @@ func (repo *IdempotencyRepository) MarkFailed(
 // Returns IdempotencyStatusUnknown if the key does not exist.
 func (repo *IdempotencyRepository) GetCachedResult(
 	ctx context.Context,
-	key value_objects.IdempotencyKey,
-) (*value_objects.IdempotencyResult, error) {
+	key shared.IdempotencyKey,
+) (*shared.IdempotencyResult, error) {
 	if repo == nil || repo.provider == nil {
 		return nil, ErrRepoNotInitialized
 	}
@@ -464,8 +464,8 @@ func (repo *IdempotencyRepository) GetCachedResult(
 	data, err := rdb.Get(ctx, redisKey).Bytes()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return &value_objects.IdempotencyResult{
-				Status: value_objects.IdempotencyStatusUnknown,
+			return &shared.IdempotencyResult{
+				Status: shared.IdempotencyStatusUnknown,
 			}, nil
 		}
 
@@ -479,8 +479,8 @@ func (repo *IdempotencyRepository) GetCachedResult(
 
 	// Handle legacy "pending" marker (plain string, not JSON)
 	if string(data) == statusPending {
-		return &value_objects.IdempotencyResult{
-			Status: value_objects.IdempotencyStatusPending,
+		return &shared.IdempotencyResult{
+			Status: shared.IdempotencyStatusPending,
 		}, nil
 	}
 
@@ -494,8 +494,8 @@ func (repo *IdempotencyRepository) GetCachedResult(
 		return nil, ErrCacheEntryNoStatus
 	}
 
-	return &value_objects.IdempotencyResult{
-		Status:     value_objects.IdempotencyStatus(entry.Status),
+	return &shared.IdempotencyResult{
+		Status:     shared.IdempotencyStatus(entry.Status),
 		Response:   entry.Response,
 		HTTPStatus: entry.HTTPStatus,
 	}, nil

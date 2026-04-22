@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 // mockScannerImpl implements the scanner interface for direct scanInto testing.
@@ -273,7 +274,7 @@ func TestScanException_AllFieldsPopulated(t *testing.T) {
 	assert.Equal(t, transactionID, result.TransactionID)
 
 	// Enum fields.
-	assert.Equal(t, value_objects.ExceptionSeverityHigh, result.Severity)
+	assert.Equal(t, sharedexception.ExceptionSeverityHigh, result.Severity)
 	assert.Equal(t, value_objects.ExceptionStatusOpen, result.Status)
 
 	// Nullable string pointers.
@@ -332,7 +333,7 @@ func TestScanException_NullFieldsReturnNilPointers(t *testing.T) {
 
 	assert.Equal(t, exceptionID, result.ID)
 	assert.Equal(t, transactionID, result.TransactionID)
-	assert.Equal(t, value_objects.ExceptionSeverityLow, result.Severity)
+	assert.Equal(t, sharedexception.ExceptionSeverityLow, result.Severity)
 	assert.Equal(t, value_objects.ExceptionStatusOpen, result.Status)
 
 	// All nullable fields must be nil.
@@ -392,7 +393,7 @@ func TestScanRows_SingleRow(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, exceptionID, result.ID)
 	assert.Equal(t, transactionID, result.TransactionID)
-	assert.Equal(t, value_objects.ExceptionSeverityHigh, result.Severity)
+	assert.Equal(t, sharedexception.ExceptionSeverityHigh, result.Severity)
 	assert.Equal(t, value_objects.ExceptionStatusOpen, result.Status)
 
 	require.NoError(t, rows.Err())
@@ -430,7 +431,7 @@ func TestScanRows_MultipleRows(t *testing.T) {
 	assert.Equal(t, id1, r1.ID)
 	assert.Equal(t, tx1, r1.TransactionID)
 	assert.NotNil(t, r1.ExternalSystem)
-	assert.Equal(t, value_objects.ExceptionSeverityHigh, r1.Severity)
+	assert.Equal(t, sharedexception.ExceptionSeverityHigh, r1.Severity)
 
 	// Second row: nullable fields null.
 	require.True(t, rows.Next())
@@ -440,7 +441,7 @@ func TestScanRows_MultipleRows(t *testing.T) {
 	assert.Equal(t, id2, r2.ID)
 	assert.Equal(t, tx2, r2.TransactionID)
 	assert.Nil(t, r2.ExternalSystem)
-	assert.Equal(t, value_objects.ExceptionSeverityLow, r2.Severity)
+	assert.Equal(t, sharedexception.ExceptionSeverityLow, r2.Severity)
 
 	// No more rows.
 	assert.False(t, rows.Next())

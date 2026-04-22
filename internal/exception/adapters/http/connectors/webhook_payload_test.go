@@ -13,6 +13,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/services"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 func TestBuildWebhookPayload_HappyPath(t *testing.T) {
@@ -29,7 +30,7 @@ func TestBuildWebhookPayload_HappyPath(t *testing.T) {
 		Snapshot: ExceptionSnapshot{
 			ID:            exceptionID,
 			TransactionID: transactionID,
-			Severity:      value_objects.ExceptionSeverityHigh,
+			Severity:      sharedexception.ExceptionSeverityHigh,
 			Status:        value_objects.ExceptionStatusOpen,
 			Amount:        decimal.NewFromInt(25000),
 			Currency:      "USD",
@@ -98,7 +99,7 @@ func TestBuildWebhookPayload_ValidationErrors(t *testing.T) {
 			ctx: &DispatchContext{
 				Snapshot: ExceptionSnapshot{
 					ID:       uuid.New(),
-					Severity: value_objects.ExceptionSeverityMedium,
+					Severity: sharedexception.ExceptionSeverityMedium,
 					Status:   value_objects.ExceptionStatusOpen,
 				},
 			},
@@ -110,7 +111,7 @@ func TestBuildWebhookPayload_ValidationErrors(t *testing.T) {
 			ctx: &DispatchContext{
 				Snapshot: ExceptionSnapshot{
 					ID:       uuid.New(),
-					Severity: value_objects.ExceptionSeverityMedium,
+					Severity: sharedexception.ExceptionSeverityMedium,
 					Status:   value_objects.ExceptionStatusOpen,
 				},
 			},
@@ -142,7 +143,7 @@ func TestBuildWebhookPayload_JSONMarshal(t *testing.T) {
 		Snapshot: ExceptionSnapshot{
 			ID:            exceptionID,
 			TransactionID: transactionID,
-			Severity:      value_objects.ExceptionSeverityCritical,
+			Severity:      sharedexception.ExceptionSeverityCritical,
 			Status:        value_objects.ExceptionStatusAssigned,
 			Amount:        decimal.NewFromInt(100000),
 			Currency:      "EUR",
@@ -203,7 +204,7 @@ func TestBuildWebhookPayload_NoDueAt(t *testing.T) {
 	ctx := &DispatchContext{
 		Snapshot: ExceptionSnapshot{
 			ID:        uuid.New(),
-			Severity:  value_objects.ExceptionSeverityLow,
+			Severity:  sharedexception.ExceptionSeverityLow,
 			Status:    value_objects.ExceptionStatusOpen,
 			CreatedAt: time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
 			DueAt:     nil,
@@ -227,7 +228,7 @@ func TestBuildWebhookPayload_EmptyOptionalMetadata(t *testing.T) {
 	ctx := &DispatchContext{
 		Snapshot: ExceptionSnapshot{
 			ID:        uuid.New(),
-			Severity:  value_objects.ExceptionSeverityMedium,
+			Severity:  sharedexception.ExceptionSeverityMedium,
 			Status:    value_objects.ExceptionStatusOpen,
 			CreatedAt: time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
 		},

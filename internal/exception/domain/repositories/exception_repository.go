@@ -10,6 +10,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 // CursorFilter contains pagination and sorting parameters.
@@ -23,7 +24,7 @@ type CursorFilter struct {
 // ExceptionFilter defines optional filters for listing exceptions.
 type ExceptionFilter struct {
 	Status         *value_objects.ExceptionStatus
-	Severity       *value_objects.ExceptionSeverity
+	Severity       *sharedexception.ExceptionSeverity
 	AssignedTo     *string
 	ExternalSystem *string
 	DateFrom       *time.Time

@@ -43,7 +43,7 @@ func TestCreateContextRequest_ToDomainInput(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "Bank Reconciliation Q1", input.Name)
-		assert.Equal(t, value_objects.ContextType("1:1"), input.Type)
+		assert.Equal(t, shared.ContextType("1:1"), input.Type)
 		assert.Equal(t, "daily", input.Interval)
 		assert.Equal(t, &abs, input.FeeToleranceAbs)
 		assert.Equal(t, &pct, input.FeeTolerancePct)
@@ -64,7 +64,7 @@ func TestCreateContextRequest_ToDomainInput(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "Minimal", input.Name)
-		assert.Equal(t, value_objects.ContextType("N:M"), input.Type)
+		assert.Equal(t, shared.ContextType("N:M"), input.Type)
 		assert.Nil(t, input.FeeToleranceAbs)
 		assert.Nil(t, input.AutoMatchOnUpload)
 	})
@@ -367,7 +367,7 @@ func TestUpdateContextRequest_ToDomainInput(t *testing.T) {
 
 		assert.Equal(t, &name, input.Name)
 		assert.NotNil(t, input.Type)
-		assert.Equal(t, value_objects.ContextType("1:N"), *input.Type)
+		assert.Equal(t, shared.ContextType("1:N"), *input.Type)
 		assert.NotNil(t, input.Status)
 		assert.Equal(t, value_objects.ContextStatus("PAUSED"), *input.Status)
 	})

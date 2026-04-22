@@ -29,6 +29,7 @@ import (
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
@@ -450,7 +451,7 @@ func setupSeedData(t *testing.T, connection *libPostgres.Client) (SeedData, erro
 		tenantID,
 		configEntities.CreateReconciliationContextInput{
 			Name:     "Integration Test Context",
-			Type:     configVO.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		},
 	)
