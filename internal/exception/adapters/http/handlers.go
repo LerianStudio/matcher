@@ -53,7 +53,7 @@ type Handlers struct {
 	// commandUC.
 	commandUC         *command.ExceptionUseCase
 	queryUC           *query.UseCase
-	commentQueryUC    *query.CommentQueryUseCase
+	commentRepo       repositories.CommentRepository
 	exceptionVerifier libHTTP.ResourceOwnershipVerifier
 	disputeVerifier   libHTTP.ResourceOwnershipVerifier
 	productionMode    bool
@@ -63,7 +63,7 @@ type Handlers struct {
 func NewHandlers(
 	commandUC *command.ExceptionUseCase,
 	queryUC *query.UseCase,
-	commentQueryUC *query.CommentQueryUseCase,
+	commentRepo repositories.CommentRepository,
 	exceptionProvider exceptionProvider,
 	disputeProvider disputeProvider,
 	production bool,
@@ -76,8 +76,8 @@ func NewHandlers(
 		return nil, ErrNilQueryUseCase
 	}
 
-	if commentQueryUC == nil {
-		return nil, ErrNilCommentQueryUseCase
+	if commentRepo == nil {
+		return nil, ErrNilCommentRepository
 	}
 
 	if exceptionProvider == nil {
@@ -91,7 +91,7 @@ func NewHandlers(
 	return &Handlers{
 		commandUC:         commandUC,
 		queryUC:           queryUC,
-		commentQueryUC:    commentQueryUC,
+		commentRepo:       commentRepo,
 		exceptionVerifier: NewExceptionOwnershipVerifier(exceptionProvider),
 		disputeVerifier:   NewDisputeOwnershipVerifier(disputeProvider),
 		productionMode:    production,

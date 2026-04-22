@@ -16,7 +16,6 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
-	"github.com/LerianStudio/matcher/internal/exception/services/query"
 	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
 
@@ -119,7 +118,7 @@ func (handler *Handlers) ListComments(fiberCtx *fiber.Ctx) error {
 
 	libHTTP.SetExceptionSpanAttributes(span, tenantID, exceptionID)
 
-	comments, err := handler.commentQueryUC.ListComments(ctx, exceptionID)
+	comments, err := handler.commentRepo.FindByExceptionID(ctx, exceptionID)
 	if err != nil {
 		return handler.handleCommentError(ctx, fiberCtx, span, logger, err)
 	}
@@ -210,7 +209,6 @@ func (handler *Handlers) handleCommentError(
 	}
 
 	if errors.Is(err, command.ErrExceptionIDRequired) ||
-		errors.Is(err, query.ErrCommentExceptionIDRequired) ||
 		errors.Is(err, command.ErrActorRequired) ||
 		errors.Is(err, command.ErrCommentContentEmpty) ||
 		errors.Is(err, command.ErrCommentIDRequired) ||

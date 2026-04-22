@@ -79,7 +79,6 @@ import (
 	governancePostgres "github.com/LerianStudio/matcher/internal/governance/adapters/postgres"
 	actorMappingRepoAdapter "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/actor_mapping"
 	governanceCommand "github.com/LerianStudio/matcher/internal/governance/services/command"
-	governanceQuery "github.com/LerianStudio/matcher/internal/governance/services/query"
 	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
 	ingestionHTTP "github.com/LerianStudio/matcher/internal/ingestion/adapters/http"
 	ingestionParser "github.com/LerianStudio/matcher/internal/ingestion/adapters/parsers"
@@ -3007,9 +3006,9 @@ func initMatchingModule(
 	feeVarianceRepository := matchFeeVarianceRepo.NewRepository(provider)
 
 	useCase, err := matchingCommand.New(matchingCommand.UseCaseDeps{
-		ContextProvider:  configProvider.ContextProvider(),
-		SourceProvider:   configProvider.SourceProvider(),
-		RuleProvider:     configProvider.MatchRuleProvider(),
+		ContextProvider:  configProvider,
+		SourceProvider:   configProvider,
+		RuleProvider:     configProvider,
 		TxRepo:           transactionAdapter,
 		LockManager:      lockManager,
 		MatchRunRepo:     matchRunRepository,
@@ -3036,7 +3035,7 @@ func initMatchingModule(
 	matchingHandler, err := matchingHTTP.NewHandler(
 		useCase,
 		matchingQueryUseCase,
-		configProvider.ContextProvider(),
+		configProvider,
 		production,
 	)
 	if err != nil {
@@ -3218,12 +3217,7 @@ func initGovernanceModule(routes *Routes, repos *sharedRepositories, provider sh
 		return fmt.Errorf("create actor mapping command use case: %w", err)
 	}
 
-	actorMappingQueryUC, err := governanceQuery.NewActorMappingQueryUseCase(actorMappingRepo)
-	if err != nil {
-		return fmt.Errorf("create actor mapping query use case: %w", err)
-	}
-
-	actorMappingHandler, err := governanceHTTP.NewActorMappingHandler(actorMappingCommandUC, actorMappingQueryUC, production)
+	actorMappingHandler, err := governanceHTTP.NewActorMappingHandler(actorMappingCommandUC, actorMappingRepo, production)
 	if err != nil {
 		return fmt.Errorf("create actor mapping handler: %w", err)
 	}
@@ -3277,7 +3271,7 @@ func initExceptionModule(
 	exceptionHandlers, err := exceptionHTTP.NewHandlers(
 		useCases.command,
 		useCases.query,
-		useCases.commentQuery,
+		commentRepository,
 		exceptionRepository,
 		disputeRepository,
 		production,
@@ -3300,15 +3294,15 @@ type exceptionModuleDeps struct {
 	resolutionExecutor *exceptionResolution.Executor
 }
 
-// exceptionUseCases holds the merged command use case plus the two read-only
-// query use cases for the exception bounded context. The five previously
+// exceptionUseCases holds the merged command use case plus the read-only
+// query use case for the exception bounded context. The five previously
 // separate write-side use cases (resolution, disputes, dispatch, comments,
 // callbacks) are now fused into a single ExceptionUseCase with optional
-// dependencies wired via UseCaseOption.
+// dependencies wired via UseCaseOption. Comment reads are served directly
+// from the comment repository at the handler layer.
 type exceptionUseCases struct {
-	command      *exceptionCommand.ExceptionUseCase
-	query        *exceptionQuery.UseCase
-	commentQuery *exceptionQuery.CommentQueryUseCase
+	command *exceptionCommand.ExceptionUseCase
+	query   *exceptionQuery.UseCase
 }
 
 // initExceptionDependencies creates the cross-cutting adapters for the exception module:
@@ -3404,15 +3398,9 @@ func initExceptionUseCases(
 		return nil, fmt.Errorf("create exception use case: %w", err)
 	}
 
-	commentQueryUseCase, err := exceptionQuery.NewCommentQueryUseCase(commentRepository)
-	if err != nil {
-		return nil, fmt.Errorf("create comment query use case: %w", err)
-	}
-
 	return &exceptionUseCases{
-		command:      commandUseCase,
-		query:        queryUseCase,
-		commentQuery: commentQueryUseCase,
+		command: commandUseCase,
+		query:   queryUseCase,
 	}, nil
 }
 

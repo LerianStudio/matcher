@@ -292,6 +292,25 @@ func (repo *stubDisputeRepo) UpdateWithTx(_ context.Context, _ exceptionReposito
 	return d, nil
 }
 
+// stubCommentRepo implements the repositories.CommentRepository interface for testing.
+type stubCommentRepo struct{}
+
+func (repo *stubCommentRepo) Create(_ context.Context, c *entities.ExceptionComment) (*entities.ExceptionComment, error) {
+	return c, nil
+}
+
+func (repo *stubCommentRepo) FindByID(_ context.Context, _ uuid.UUID) (*entities.ExceptionComment, error) {
+	return nil, nil
+}
+
+func (repo *stubCommentRepo) FindByExceptionID(_ context.Context, _ uuid.UUID) ([]*entities.ExceptionComment, error) {
+	return nil, nil
+}
+
+func (repo *stubCommentRepo) DeleteByExceptionAndID(_ context.Context, _, _ uuid.UUID) error {
+	return nil
+}
+
 // stubExceptionProvider implements the exceptionProvider interface for testing.
 type stubExceptionProvider struct {
 	exists bool
@@ -329,7 +348,7 @@ func newExceptionHandlers(t *testing.T, exceptionRepo *stubExceptionRepo) *Handl
 	exceptionProvider := &stubExceptionProvider{exists: true}
 	disputeProvider := &stubDisputeProvider{exists: true}
 
-	handlers, err := NewHandlers(&command.ExceptionUseCase{}, queryUC, &query.CommentQueryUseCase{}, exceptionProvider, disputeProvider, false)
+	handlers, err := NewHandlers(&command.ExceptionUseCase{}, queryUC, &stubCommentRepo{}, exceptionProvider, disputeProvider, false)
 	require.NoError(t, err)
 
 	return handlers
@@ -341,7 +360,7 @@ func TestNewHandlers_NilExceptionUseCase(t *testing.T) {
 	exceptionProvider := &stubExceptionProvider{exists: true}
 	disputeProvider := &stubDisputeProvider{exists: true}
 
-	handlers, err := NewHandlers(nil, &query.UseCase{}, &query.CommentQueryUseCase{}, exceptionProvider, disputeProvider, false)
+	handlers, err := NewHandlers(nil, &query.UseCase{}, &stubCommentRepo{}, exceptionProvider, disputeProvider, false)
 
 	assert.Nil(t, handlers)
 	require.Error(t, err)
@@ -363,7 +382,7 @@ func TestNewHandlers_NilQueryUseCase(t *testing.T) {
 	exceptionProvider := &stubExceptionProvider{exists: true}
 	disputeProvider := &stubDisputeProvider{exists: true}
 
-	handlers, err := NewHandlers(&command.ExceptionUseCase{}, nil, &query.CommentQueryUseCase{}, exceptionProvider, disputeProvider, false)
+	handlers, err := NewHandlers(&command.ExceptionUseCase{}, nil, &stubCommentRepo{}, exceptionProvider, disputeProvider, false)
 
 	assert.Nil(t, handlers)
 	require.Error(t, err)
@@ -379,7 +398,7 @@ func TestNewHandlers_NilDispatchUseCase(t *testing.T) {
 	t.Skip("merged into single ExceptionUseCase; no separate dispatch UC argument")
 }
 
-func TestNewHandlers_NilCommentQueryUseCase(t *testing.T) {
+func TestNewHandlers_NilCommentRepository(t *testing.T) {
 	t.Parallel()
 
 	exceptionProvider := &stubExceptionProvider{exists: true}
@@ -389,7 +408,7 @@ func TestNewHandlers_NilCommentQueryUseCase(t *testing.T) {
 
 	assert.Nil(t, handlers)
 	require.Error(t, err)
-	require.ErrorIs(t, err, ErrNilCommentQueryUseCase)
+	require.ErrorIs(t, err, ErrNilCommentRepository)
 }
 
 func TestNewHandlers_NilExceptionProvider(t *testing.T) {
@@ -397,7 +416,7 @@ func TestNewHandlers_NilExceptionProvider(t *testing.T) {
 
 	disputeProvider := &stubDisputeProvider{exists: true}
 
-	handlers, err := NewHandlers(&command.ExceptionUseCase{}, &query.UseCase{}, &query.CommentQueryUseCase{}, nil, disputeProvider, false)
+	handlers, err := NewHandlers(&command.ExceptionUseCase{}, &query.UseCase{}, &stubCommentRepo{}, nil, disputeProvider, false)
 
 	assert.Nil(t, handlers)
 	require.Error(t, err)
@@ -409,7 +428,7 @@ func TestNewHandlers_NilDisputeProvider(t *testing.T) {
 
 	exceptionProvider := &stubExceptionProvider{exists: true}
 
-	handlers, err := NewHandlers(&command.ExceptionUseCase{}, &query.UseCase{}, &query.CommentQueryUseCase{}, exceptionProvider, nil, false)
+	handlers, err := NewHandlers(&command.ExceptionUseCase{}, &query.UseCase{}, &stubCommentRepo{}, exceptionProvider, nil, false)
 
 	assert.Nil(t, handlers)
 	require.Error(t, err)
@@ -422,7 +441,7 @@ func TestNewHandlers_Success(t *testing.T) {
 	exceptionProvider := &stubExceptionProvider{exists: true}
 	disputeProvider := &stubDisputeProvider{exists: true}
 
-	handlers, err := NewHandlers(&command.ExceptionUseCase{}, &query.UseCase{}, &query.CommentQueryUseCase{}, exceptionProvider, disputeProvider, false)
+	handlers, err := NewHandlers(&command.ExceptionUseCase{}, &query.UseCase{}, &stubCommentRepo{}, exceptionProvider, disputeProvider, false)
 
 	require.NoError(t, err)
 	assert.NotNil(t, handlers)
@@ -645,16 +664,16 @@ func TestHandlersStruct_Fields(t *testing.T) {
 
 	commandUC := &command.ExceptionUseCase{}
 	queryUC := &query.UseCase{}
-	commentQueryUC := &query.CommentQueryUseCase{}
+	commentRepo := &stubCommentRepo{}
 	exceptionProvider := &stubExceptionProvider{exists: true}
 	disputeProvider := &stubDisputeProvider{exists: true}
 
-	handlers, err := NewHandlers(commandUC, queryUC, commentQueryUC, exceptionProvider, disputeProvider, false)
+	handlers, err := NewHandlers(commandUC, queryUC, commentRepo, exceptionProvider, disputeProvider, false)
 
 	require.NoError(t, err)
 	assert.Equal(t, commandUC, handlers.commandUC)
 	assert.Equal(t, queryUC, handlers.queryUC)
-	assert.Equal(t, commentQueryUC, handlers.commentQueryUC)
+	assert.Equal(t, exceptionRepositories.CommentRepository(commentRepo), handlers.commentRepo)
 }
 
 // TestValidationOrder verifies NewHandlers validates its dependencies in
@@ -671,7 +690,7 @@ func TestValidationOrder(t *testing.T) {
 		name              string
 		commandUC         *command.ExceptionUseCase
 		queryUC           *query.UseCase
-		commentQueryUC    *query.CommentQueryUseCase
+		commentRepo       exceptionRepositories.CommentRepository
 		exceptionProvider *stubExceptionProvider
 		disputeProvider   *stubDisputeProvider
 		expectedErr       error
@@ -680,7 +699,7 @@ func TestValidationOrder(t *testing.T) {
 			name:              "command use case checked first",
 			commandUC:         nil,
 			queryUC:           nil,
-			commentQueryUC:    nil,
+			commentRepo:       nil,
 			exceptionProvider: defaultExceptionProvider,
 			disputeProvider:   defaultDisputeProvider,
 			expectedErr:       ErrNilExceptionUseCase,
@@ -689,19 +708,19 @@ func TestValidationOrder(t *testing.T) {
 			name:              "query use case checked second",
 			commandUC:         &command.ExceptionUseCase{},
 			queryUC:           nil,
-			commentQueryUC:    nil,
+			commentRepo:       nil,
 			exceptionProvider: defaultExceptionProvider,
 			disputeProvider:   defaultDisputeProvider,
 			expectedErr:       ErrNilQueryUseCase,
 		},
 		{
-			name:              "comment query use case checked third",
+			name:              "comment repository checked third",
 			commandUC:         &command.ExceptionUseCase{},
 			queryUC:           &query.UseCase{},
-			commentQueryUC:    nil,
+			commentRepo:       nil,
 			exceptionProvider: defaultExceptionProvider,
 			disputeProvider:   defaultDisputeProvider,
-			expectedErr:       ErrNilCommentQueryUseCase,
+			expectedErr:       ErrNilCommentRepository,
 		},
 	}
 
@@ -709,7 +728,7 @@ func TestValidationOrder(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := NewHandlers(tt.commandUC, tt.queryUC, tt.commentQueryUC, tt.exceptionProvider, tt.disputeProvider, false)
+			_, err := NewHandlers(tt.commandUC, tt.queryUC, tt.commentRepo, tt.exceptionProvider, tt.disputeProvider, false)
 
 			require.Error(t, err)
 			require.ErrorIs(t, err, tt.expectedErr)
@@ -1960,7 +1979,7 @@ func TestValidationOrder_ProviderChecks(t *testing.T) {
 
 		disputeProvider := &stubDisputeProvider{exists: true}
 
-		_, err := NewHandlers(&command.ExceptionUseCase{}, &query.UseCase{}, &query.CommentQueryUseCase{}, nilExceptionProvider, disputeProvider, false)
+		_, err := NewHandlers(&command.ExceptionUseCase{}, &query.UseCase{}, &stubCommentRepo{}, nilExceptionProvider, disputeProvider, false)
 
 		require.Error(t, err)
 		require.ErrorIs(t, err, ErrNilExceptionProvider)
@@ -1973,7 +1992,7 @@ func TestValidationOrder_ProviderChecks(t *testing.T) {
 
 		var nilDisputeProvider disputeProvider = nil
 
-		_, err := NewHandlers(&command.ExceptionUseCase{}, &query.UseCase{}, &query.CommentQueryUseCase{}, exceptionProvider, nilDisputeProvider, false)
+		_, err := NewHandlers(&command.ExceptionUseCase{}, &query.UseCase{}, &stubCommentRepo{}, exceptionProvider, nilDisputeProvider, false)
 
 		require.Error(t, err)
 		require.ErrorIs(t, err, ErrNilDisputeProvider)

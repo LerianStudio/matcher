@@ -22,7 +22,11 @@ import (
 )
 
 // MatchingConfigurationProvider consolidates configuration-backed lookups used by
-// the matching context. One provider instance satisfies multiple matching ports.
+// the matching context. A single provider instance satisfies three matching
+// ports directly (ContextProvider, SourceProvider, MatchRuleProvider). The
+// fourth port (FeeRuleProvider) is exposed via FeeRuleProvider() because its
+// FindByContextID method name collides with SourceProvider.FindByContextID on a
+// single receiver.
 type MatchingConfigurationProvider struct {
 	contextRepo   configRepositories.ContextRepository
 	sourceRepo    configRepositories.SourceRepository
@@ -30,22 +34,10 @@ type MatchingConfigurationProvider struct {
 	feeRuleRepo   configRepositories.FeeRuleRepository
 }
 
-// MatchRuleProviderAdapter exposes match-rule lookups for the matching context.
-type MatchRuleProviderAdapter struct {
-	provider *MatchingConfigurationProvider
-}
-
-// ContextProviderAdapter exposes reconciliation-context lookups for matching.
-type ContextProviderAdapter struct {
-	provider *MatchingConfigurationProvider
-}
-
-// SourceProviderAdapter exposes reconciliation-source lookups for matching.
-type SourceProviderAdapter struct {
-	provider *MatchingConfigurationProvider
-}
-
-// FeeRuleProviderAdapter exposes fee-rule lookups for matching.
+// FeeRuleProviderAdapter exposes fee-rule lookups for matching. This type
+// exists solely because FeeRuleProvider.FindByContextID and
+// SourceProvider.FindByContextID share a method name, so a single receiver
+// cannot satisfy both ports. It is a thin view over MatchingConfigurationProvider.
 type FeeRuleProviderAdapter struct {
 	provider *MatchingConfigurationProvider
 }
@@ -67,10 +59,11 @@ var (
 	ErrSourcePaginationCursorDidNotAdvance = errors.New("source pagination cursor did not advance")
 )
 
+// Compile-time interface satisfaction checks.
 var (
-	_ matchingPorts.MatchRuleProvider = (*MatchRuleProviderAdapter)(nil)
-	_ matchingPorts.ContextProvider   = (*ContextProviderAdapter)(nil)
-	_ matchingPorts.SourceProvider    = (*SourceProviderAdapter)(nil)
+	_ matchingPorts.MatchRuleProvider = (*MatchingConfigurationProvider)(nil)
+	_ matchingPorts.ContextProvider   = (*MatchingConfigurationProvider)(nil)
+	_ matchingPorts.SourceProvider    = (*MatchingConfigurationProvider)(nil)
 	_ matchingPorts.FeeRuleProvider   = (*FeeRuleProviderAdapter)(nil)
 )
 
@@ -95,34 +88,10 @@ func NewMatchingConfigurationProvider(
 	return provider, nil
 }
 
-// ContextProvider returns a typed context-provider wrapper over the consolidated provider.
-func (provider *MatchingConfigurationProvider) ContextProvider() *ContextProviderAdapter {
-	if provider == nil {
-		return nil
-	}
-
-	return &ContextProviderAdapter{provider: provider}
-}
-
-// MatchRuleProvider returns a typed match-rule wrapper over the consolidated provider.
-func (provider *MatchingConfigurationProvider) MatchRuleProvider() *MatchRuleProviderAdapter {
-	if provider == nil {
-		return nil
-	}
-
-	return &MatchRuleProviderAdapter{provider: provider}
-}
-
-// SourceProvider returns a typed source-provider wrapper over the consolidated provider.
-func (provider *MatchingConfigurationProvider) SourceProvider() *SourceProviderAdapter {
-	if provider == nil {
-		return nil
-	}
-
-	return &SourceProviderAdapter{provider: provider}
-}
-
-// FeeRuleProvider returns a typed fee-rule wrapper over the consolidated provider.
+// FeeRuleProvider returns a thin view that satisfies matchingPorts.FeeRuleProvider.
+// This accessor exists because FeeRuleProvider.FindByContextID collides with
+// SourceProvider.FindByContextID on the same receiver (same name, different
+// return type); Go requires the view type to disambiguate.
 func (provider *MatchingConfigurationProvider) FeeRuleProvider() *FeeRuleProviderAdapter {
 	if provider == nil {
 		return nil
@@ -132,7 +101,8 @@ func (provider *MatchingConfigurationProvider) FeeRuleProvider() *FeeRuleProvide
 }
 
 // ListByContextID retrieves match rules and converts them to shared types.
-func (provider *MatchingConfigurationProvider) listMatchRulesByContextID(
+// Satisfies matchingPorts.MatchRuleProvider.
+func (provider *MatchingConfigurationProvider) ListByContextID(
 	ctx context.Context,
 	contextID uuid.UUID,
 ) (shared.MatchRules, error) {
@@ -161,24 +131,18 @@ func (provider *MatchingConfigurationProvider) listMatchRulesByContextID(
 	return result, nil
 }
 
-// ListByContextID retrieves match rules and converts them to shared types.
-func (adapter *MatchRuleProviderAdapter) ListByContextID(
-	ctx context.Context,
-	contextID uuid.UUID,
-) (shared.MatchRules, error) {
-	if adapter == nil || adapter.provider == nil {
-		return nil, ErrMatchRuleRepositoryRequired
-	}
-
-	return adapter.provider.listMatchRulesByContextID(ctx, contextID)
-}
-
 // FindByID retrieves a reconciliation context and converts it to matching type.
+// Satisfies matchingPorts.ContextProvider.
+//
 // Returns (nil, nil) if the context is not found, allowing the caller to differentiate
 // between "not found" and "error occurred".
-func (provider *MatchingConfigurationProvider) findContextByID(
+//
+// tenantID is accepted for port-contract symmetry but is unused here because tenant
+// isolation is handled via PostgreSQL schema search_path at the repository layer.
+func (provider *MatchingConfigurationProvider) FindByID(
 	ctx context.Context,
-	_ /* tenantID — not needed here; tenant isolation is handled via PostgreSQL schema search_path at the repository layer */, contextID uuid.UUID,
+	_ uuid.UUID,
+	contextID uuid.UUID,
 ) (*matchingPorts.ReconciliationContextInfo, error) {
 	if provider == nil || provider.contextRepo == nil {
 		return nil, ErrContextRepositoryRequired
@@ -207,19 +171,9 @@ func (provider *MatchingConfigurationProvider) findContextByID(
 	}, nil
 }
 
-// FindByID retrieves a reconciliation context and converts it to matching type.
-func (adapter *ContextProviderAdapter) FindByID(
-	ctx context.Context,
-	tenantID, contextID uuid.UUID,
-) (*matchingPorts.ReconciliationContextInfo, error) {
-	if adapter == nil || adapter.provider == nil {
-		return nil, ErrContextRepositoryRequired
-	}
-
-	return adapter.provider.findContextByID(ctx, tenantID, contextID)
-}
-
-func (provider *MatchingConfigurationProvider) findSourcesByContextID(
+// FindByContextID retrieves sources for a context and converts them to matching types.
+// Satisfies matchingPorts.SourceProvider.
+func (provider *MatchingConfigurationProvider) FindByContextID(
 	ctx context.Context,
 	contextID uuid.UUID,
 ) ([]*matchingPorts.SourceInfo, error) {
@@ -253,18 +207,7 @@ func (provider *MatchingConfigurationProvider) findSourcesByContextID(
 }
 
 // FindByContextID retrieves fee rules for a context via the configuration repository.
-func (adapter *SourceProviderAdapter) FindByContextID(
-	ctx context.Context,
-	contextID uuid.UUID,
-) ([]*matchingPorts.SourceInfo, error) {
-	if adapter == nil || adapter.provider == nil {
-		return nil, ErrSourceRepositoryRequired
-	}
-
-	return adapter.provider.findSourcesByContextID(ctx, contextID)
-}
-
-// FindByContextID retrieves fee rules for a context via the configuration repository.
+// Satisfies matchingPorts.FeeRuleProvider.
 func (adapter *FeeRuleProviderAdapter) FindByContextID(
 	ctx context.Context,
 	contextID uuid.UUID,

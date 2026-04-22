@@ -148,7 +148,7 @@ func newHandlersWithQueryOptions(
 	exceptionProvider := &stubExceptionProvider{exists: true}
 	disputeProvider := &stubDisputeProvider{exists: true}
 
-	handlers, err := NewHandlers(&command.ExceptionUseCase{}, queryUC, &query.CommentQueryUseCase{}, exceptionProvider, disputeProvider, false)
+	handlers, err := NewHandlers(&command.ExceptionUseCase{}, queryUC, &stubCommentRepo{}, exceptionProvider, disputeProvider, false)
 	require.NoError(t, err)
 
 	return handlers

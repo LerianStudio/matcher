@@ -316,7 +316,7 @@ func newCallbackTestHandlers(t *testing.T) *Handlers {
 	exceptionProvider := &stubExceptionProvider{exists: true}
 	disputeProvider := &stubDisputeProvider{exists: true}
 
-	handlers, err := NewHandlers(&command.ExceptionUseCase{}, &query.UseCase{}, &query.CommentQueryUseCase{}, exceptionProvider, disputeProvider, false)
+	handlers, err := NewHandlers(&command.ExceptionUseCase{}, &query.UseCase{}, &stubCommentRepo{}, exceptionProvider, disputeProvider, false)
 	require.NoError(t, err)
 
 	return handlers
