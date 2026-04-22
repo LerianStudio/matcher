@@ -80,6 +80,45 @@ type IngestFromTrustedStreamOutput struct {
 	TransactionCount int
 }
 
+// Compile-time check: UseCase directly satisfies sharedPorts.FetcherBridge
+// Intake via IngestTrustedContent (T-004 K-06f). The former cross-adapter
+// wrapper was kept as a thin span-adding facade; discovery consumers that
+// need the span still go through FetcherBridgeIntakeAdapter, but the bridge
+// fixture tests and any non-span caller can now point directly at the
+// UseCase without a wrapper layer.
+var _ sharedPorts.FetcherBridgeIntake = (*UseCase)(nil)
+
+// IngestTrustedContent implements sharedPorts.FetcherBridgeIntake by
+// delegating to IngestFromTrustedStream and projecting the ingestion-local
+// output struct onto the shared-kernel TrustedContentOutcome. The two types
+// are shape-identical; this is a zero-cost projection that exists so a
+// caller holding a *UseCase can hand it to any dependency that takes a
+// sharedPorts.FetcherBridgeIntake.
+func (uc *UseCase) IngestTrustedContent(
+	ctx context.Context,
+	input sharedPorts.TrustedContentInput,
+) (sharedPorts.TrustedContentOutcome, error) {
+	if uc == nil {
+		return sharedPorts.TrustedContentOutcome{}, ErrNilUseCase
+	}
+
+	output, err := uc.IngestFromTrustedStream(ctx, input)
+	if err != nil {
+		// Surface the same sentinel surface as the direct call path so
+		// callers can errors.Is on validation + pipeline sentinels.
+		return sharedPorts.TrustedContentOutcome{}, err
+	}
+
+	if output == nil {
+		return sharedPorts.TrustedContentOutcome{}, nil
+	}
+
+	return sharedPorts.TrustedContentOutcome{
+		IngestionJobID:   output.IngestionJobID,
+		TransactionCount: output.TransactionCount,
+	}, nil
+}
+
 // IngestFromTrustedStream accepts content produced by a trusted internal
 // bridge (Fetcher) and runs it through the same ingestion pipeline as the
 // upload-backed IngestFile path: load source + field map, create and start

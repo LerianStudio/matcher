@@ -2645,9 +2645,8 @@ func createSchedulerWorker(
 
 	configScheduleRepository := configScheduleRepo.NewRepository(provider)
 
-	matchTrigger, err := crossAdapters.NewMatchTriggerAdapter(matchingUseCase)
-	if err != nil {
-		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("scheduler worker not started: match trigger adapter unavailable: %v", err))
+	if matchingUseCase == nil {
+		logger.Log(ctx, libLog.LevelWarn, "scheduler worker not started: matching use case unavailable")
 
 		return nil
 	}
@@ -2661,9 +2660,12 @@ func createSchedulerWorker(
 		Interval: schedulerInterval(cfg),
 	}
 
+	// T-004 (K-06a): matchingUseCase satisfies sharedPorts.MatchTrigger
+	// directly — no adapter layer. The ceremony wrapper was removed when
+	// TriggerMatchForContext moved onto the UseCase itself.
 	sw, err := configWorker.NewSchedulerWorker(
 		configScheduleRepository,
-		matchTrigger,
+		matchingUseCase,
 		lockManager,
 		workerCfg,
 		logger,
@@ -2909,15 +2911,13 @@ func initIngestionModule(
 		return nil, fmt.Errorf("create auto-match context provider adapter: %w", err)
 	}
 
-	var matchTriggerAdapter *crossAdapters.MatchTriggerAdapter
-
+	// T-004 (K-06a): matchingUseCase satisfies sharedPorts.MatchTrigger
+	// directly (TriggerMatchForContext lives on the UseCase). No adapter.
+	// A typed-nil interface is also valid: ingestion's nil-check uses
+	// sharedPorts.IsNilValue which handles both interface-nil and typed-nil.
+	var matchTrigger sharedPorts.MatchTrigger
 	if matchingUseCase != nil {
-		var triggerErr error
-
-		matchTriggerAdapter, triggerErr = crossAdapters.NewMatchTriggerAdapter(matchingUseCase)
-		if triggerErr != nil {
-			return nil, fmt.Errorf("create match trigger adapter: %w", triggerErr)
-		}
+		matchTrigger = matchingUseCase
 	}
 
 	ingestionCommandUseCase, err := ingestionCommand.NewUseCase(ingestionCommand.UseCaseDeps{
@@ -2941,7 +2941,7 @@ func initIngestionModule(
 		Parsers:         ingestionRegistry,
 		FieldMapRepo:    fieldMapAdapter,
 		SourceRepo:      sourceAdapter,
-		MatchTrigger:    matchTriggerAdapter,
+		MatchTrigger:    matchTrigger,
 		ContextProvider: autoMatchContextProvider,
 	})
 	if err != nil {

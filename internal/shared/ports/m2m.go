@@ -15,7 +15,8 @@ type M2MCredentials struct {
 // in a secret vault. In single-tenant mode, the provider is nil and callers
 // skip credential injection entirely.
 //
-//go:generate mockgen -source=m2m.go -destination=mocks/m2m_mock.go -package=mocks
+// T-004: go:generate directive removed with the unused mocks/m2m_mock.go.
+// Consumers (discovery/adapters/fetcher) use inline mockM2MProvider stubs.
 type M2MProvider interface {
 	// GetCredentials returns the M2M credentials for the given tenant.
 	// Implementations SHOULD use multi-level caching (L1 in-memory, L2 Redis)

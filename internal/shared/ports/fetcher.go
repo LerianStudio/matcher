@@ -13,7 +13,8 @@ var (
 	ErrFetcherResourceNotFound = errors.New("fetcher resource not found")
 )
 
-//go:generate mockgen -source=fetcher.go -destination=mocks/fetcher_mock.go -package=mocks
+// T-004: go:generate directive removed with the unused mocks/fetcher_mock.go.
+// FetcherClient tests use the HTTP round-tripper pattern, not gomock stubs.
 
 // FetcherConnection represents a database connection managed by Fetcher.
 type FetcherConnection struct {

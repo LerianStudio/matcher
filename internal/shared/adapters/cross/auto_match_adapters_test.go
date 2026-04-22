@@ -7,14 +7,12 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
-	matchingCommand "github.com/LerianStudio/matcher/internal/matching/services/command"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
@@ -163,60 +161,5 @@ func TestAutoMatchContextProviderAdapter_IsAutoMatchEnabled(t *testing.T) {
 
 		assert.True(t, enabled)
 		require.NoError(t, err)
-	})
-}
-
-func TestNewMatchTriggerAdapter(t *testing.T) {
-	t.Parallel()
-
-	t.Run("returns error when use case is nil", func(t *testing.T) {
-		t.Parallel()
-
-		adapter, err := NewMatchTriggerAdapter(nil)
-
-		assert.Nil(t, adapter)
-		require.ErrorIs(t, err, ErrNilMatchingUseCase)
-	})
-
-	t.Run("returns adapter when use case is provided", func(t *testing.T) {
-		t.Parallel()
-
-		uc := &matchingCommand.UseCase{}
-
-		adapter, err := NewMatchTriggerAdapter(uc)
-
-		require.NoError(t, err)
-		require.NotNil(t, adapter)
-		assert.Equal(t, uc, adapter.matchingUseCase)
-	})
-}
-
-func TestMatchTriggerAdapter_TriggerMatchForContext(t *testing.T) {
-	t.Parallel()
-
-	t.Run("launches asynchronous match without blocking", func(t *testing.T) {
-		t.Parallel()
-
-		// Create adapter with a zero-value UseCase. RunMatch will return
-		// an error immediately (nil dependency validation), which the
-		// goroutine handles gracefully by logging a warning.
-		uc := &matchingCommand.UseCase{}
-
-		adapter, err := NewMatchTriggerAdapter(uc)
-		require.NoError(t, err)
-
-		// TriggerMatchForContext spawns a goroutine and returns immediately.
-		// It must not panic or block the caller.
-		adapter.TriggerMatchForContext(
-			context.Background(),
-			testutil.DeterministicUUID("trigger-tenant"),
-			testutil.DeterministicUUID("trigger-context"),
-		)
-
-		// Allow the goroutine enough time to execute and complete.
-		// time.Sleep is acceptable here: TriggerMatchForContext is fire-and-forget
-		// by design, so there is no synchronization channel to wait on. We only
-		// verify that the goroutine does not panic.
-		time.Sleep(100 * time.Millisecond)
 	})
 }

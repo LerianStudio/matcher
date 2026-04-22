@@ -6,7 +6,9 @@ import (
 	"github.com/google/uuid"
 )
 
-//go:generate mockgen -source=match_trigger.go -destination=mocks/match_trigger_mock.go -package=mocks
+// T-004: go:generate directive removed with the unused mocks/match_trigger_mock.go.
+// No caller references a MockMatchTrigger — tests use inline stubs and the
+// matching UseCase satisfies this port directly.
 
 // MatchTrigger defines the interface for triggering a match run.
 // This is a shared port interface that allows cross-context communication
