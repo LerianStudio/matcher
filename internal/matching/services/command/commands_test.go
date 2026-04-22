@@ -471,7 +471,7 @@ func (m *mockFeeScheduleRepo) GetByIDs(
 	return nil, nil
 }
 
-var _ matchingRepositories.FeeScheduleRepository = (*mockFeeScheduleRepo)(nil)
+var _ sharedPorts.FeeScheduleRepository = (*mockFeeScheduleRepo)(nil)
 
 type mockFeeRuleProvider struct{}
 

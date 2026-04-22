@@ -50,11 +50,11 @@ func seedDashboardConfig(t *testing.T, harness *integration.TestHarness) dashboa
 		"description": "description",
 	}
 
-	fm, err := configEntities.NewFieldMap(
+	fm, err := shared.NewFieldMap(
 		ctx,
 		harness.Seed.ContextID,
 		harness.Seed.SourceID,
-		configEntities.CreateFieldMapInput{Mapping: mapping},
+		shared.CreateFieldMapInput{Mapping: mapping},
 	)
 	require.NoError(t, err)
 

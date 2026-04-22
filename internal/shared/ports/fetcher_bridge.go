@@ -49,9 +49,10 @@ var (
 )
 
 // TrustedContentInput carries all the information the bridge hands to the
-// ingestion boundary. It intentionally mirrors the ingestion UseCase's
-// IngestFromTrustedStreamInput but lives in the shared kernel so discovery
-// can depend on it without importing ingestion directly (AC-T1).
+// ingestion boundary. Lives in the shared kernel so discovery can depend on
+// it without importing ingestion directly (AC-T1). Since T-007 K-16 this is
+// the single canonical input for the trusted-stream intake path — the
+// ingestion UseCase consumes this type directly.
 type TrustedContentInput struct {
 	ContextID      uuid.UUID
 	SourceID       uuid.UUID

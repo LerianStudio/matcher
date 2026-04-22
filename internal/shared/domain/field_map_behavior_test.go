@@ -1,15 +1,17 @@
 //go:build unit
 
-package entities
+package shared_test
 
 import (
 	"context"
 	"testing"
 
-	"github.com/LerianStudio/matcher/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	"github.com/LerianStudio/matcher/internal/testutil"
 )
 
 func TestNewFieldMap(t *testing.T) {
@@ -22,8 +24,8 @@ func TestNewFieldMap(t *testing.T) {
 	t.Run("creates valid field map", func(t *testing.T) {
 		t.Parallel()
 
-		input := CreateFieldMapInput{Mapping: map[string]any{"amount": "txn_amount"}}
-		fieldMap, err := NewFieldMap(ctx, contextID, sourceID, input)
+		input := shared.CreateFieldMapInput{Mapping: map[string]any{"amount": "txn_amount"}}
+		fieldMap, err := shared.NewFieldMap(ctx, contextID, sourceID, input)
 		require.NoError(t, err)
 		assert.NotEqual(t, uuid.Nil, fieldMap.ID)
 		assert.Equal(t, contextID, fieldMap.ContextID)
@@ -34,24 +36,24 @@ func TestNewFieldMap(t *testing.T) {
 	t.Run("fails with nil context", func(t *testing.T) {
 		t.Parallel()
 
-		input := CreateFieldMapInput{Mapping: map[string]any{"amount": "txn_amount"}}
-		_, err := NewFieldMap(ctx, uuid.Nil, sourceID, input)
+		input := shared.CreateFieldMapInput{Mapping: map[string]any{"amount": "txn_amount"}}
+		_, err := shared.NewFieldMap(ctx, uuid.Nil, sourceID, input)
 		require.Error(t, err)
 	})
 
 	t.Run("fails with nil source", func(t *testing.T) {
 		t.Parallel()
 
-		input := CreateFieldMapInput{Mapping: map[string]any{"amount": "txn_amount"}}
-		_, err := NewFieldMap(ctx, contextID, uuid.Nil, input)
+		input := shared.CreateFieldMapInput{Mapping: map[string]any{"amount": "txn_amount"}}
+		_, err := shared.NewFieldMap(ctx, contextID, uuid.Nil, input)
 		require.Error(t, err)
 	})
 
 	t.Run("fails with empty mapping", func(t *testing.T) {
 		t.Parallel()
 
-		input := CreateFieldMapInput{Mapping: map[string]any{}}
-		_, err := NewFieldMap(ctx, contextID, sourceID, input)
+		input := shared.CreateFieldMapInput{Mapping: map[string]any{}}
+		_, err := shared.NewFieldMap(ctx, contextID, sourceID, input)
 		require.Error(t, err)
 	})
 }
@@ -62,11 +64,11 @@ func TestFieldMap_Update(t *testing.T) {
 	ctx := context.Background()
 	contextID := testutil.MustDeterministicUUID(t, "3")
 	sourceID := testutil.MustDeterministicUUID(t, "4")
-	createFieldMap := func(t *testing.T) *FieldMap {
+	createFieldMap := func(t *testing.T) *shared.FieldMap {
 		t.Helper()
 
-		input := CreateFieldMapInput{Mapping: map[string]any{"amount": "txn_amount"}}
-		fieldMap, err := NewFieldMap(ctx, contextID, sourceID, input)
+		input := shared.CreateFieldMapInput{Mapping: map[string]any{"amount": "txn_amount"}}
+		fieldMap, err := shared.NewFieldMap(ctx, contextID, sourceID, input)
 		require.NoError(t, err)
 
 		return fieldMap
@@ -76,7 +78,7 @@ func TestFieldMap_Update(t *testing.T) {
 		t.Parallel()
 
 		fieldMap := createFieldMap(t)
-		update := UpdateFieldMapInput{Mapping: map[string]any{"currency": "txn_currency"}}
+		update := shared.UpdateFieldMapInput{Mapping: map[string]any{"currency": "txn_currency"}}
 		err := fieldMap.Update(ctx, update)
 		require.NoError(t, err)
 		assert.Equal(t, 2, fieldMap.Version)
@@ -100,12 +102,12 @@ func TestFieldMap_Update(t *testing.T) {
 		originalCreatedAt := fieldMap.CreatedAt
 		originalUpdatedAt := fieldMap.UpdatedAt
 
-		update := UpdateFieldMapInput{Mapping: map[string]any{}}
+		update := shared.UpdateFieldMapInput{Mapping: map[string]any{}}
 		err := fieldMap.Update(ctx, update)
 
 		// Verify error is returned
 		require.Error(t, err)
-		assert.Equal(t, ErrFieldMapMappingRequired, err)
+		assert.Equal(t, shared.ErrFieldMapMappingRequired, err)
 
 		// Verify entity was not mutated
 		assert.Equal(t, originalID, fieldMap.ID, "ID should not be mutated on error")
@@ -123,18 +125,18 @@ func TestFieldMap_Update_NilReceiver(t *testing.T) {
 
 	ctx := context.Background()
 
-	var nilFieldMap *FieldMap
+	var nilFieldMap *shared.FieldMap
 
-	update := UpdateFieldMapInput{Mapping: map[string]any{"amount": "txn_amount"}}
+	update := shared.UpdateFieldMapInput{Mapping: map[string]any{"amount": "txn_amount"}}
 	err := nilFieldMap.Update(ctx, update)
 	require.Error(t, err)
-	assert.Equal(t, ErrFieldMapNil, err)
+	assert.Equal(t, shared.ErrFieldMapNil, err)
 }
 
 func TestFieldMap_MappingJSON_NilReceiver(t *testing.T) {
 	t.Parallel()
 
-	var nilFieldMap *FieldMap
+	var nilFieldMap *shared.FieldMap
 
 	data, err := nilFieldMap.MappingJSON()
 	require.NoError(t, err)
@@ -147,8 +149,8 @@ func TestFieldMap_Update_NilMapping(t *testing.T) {
 	ctx := context.Background()
 	contextID := testutil.MustDeterministicUUID(t, "5")
 	sourceID := testutil.MustDeterministicUUID(t, "6")
-	input := CreateFieldMapInput{Mapping: map[string]any{"amount": "txn_amount"}}
-	fieldMap, err := NewFieldMap(ctx, contextID, sourceID, input)
+	input := shared.CreateFieldMapInput{Mapping: map[string]any{"amount": "txn_amount"}}
+	fieldMap, err := shared.NewFieldMap(ctx, contextID, sourceID, input)
 	require.NoError(t, err)
 
 	// Capture original state before attempting update
@@ -163,12 +165,12 @@ func TestFieldMap_Update_NilMapping(t *testing.T) {
 	originalCreatedAt := fieldMap.CreatedAt
 	originalUpdatedAt := fieldMap.UpdatedAt
 
-	update := UpdateFieldMapInput{Mapping: nil}
+	update := shared.UpdateFieldMapInput{Mapping: nil}
 	err = fieldMap.Update(ctx, update)
 
 	// Verify error is returned
 	require.Error(t, err)
-	assert.Equal(t, ErrFieldMapMappingRequired, err)
+	assert.Equal(t, shared.ErrFieldMapMappingRequired, err)
 
 	// Verify entity was not mutated
 	assert.Equal(t, originalID, fieldMap.ID, "ID should not be mutated on error")
@@ -187,10 +189,10 @@ func TestNewFieldMap_EmptyStringValue(t *testing.T) {
 	contextID := testutil.MustDeterministicUUID(t, "7")
 	sourceID := testutil.MustDeterministicUUID(t, "8")
 
-	input := CreateFieldMapInput{Mapping: map[string]any{"amount": ""}}
-	_, err := NewFieldMap(ctx, contextID, sourceID, input)
+	input := shared.CreateFieldMapInput{Mapping: map[string]any{"amount": ""}}
+	_, err := shared.NewFieldMap(ctx, contextID, sourceID, input)
 	require.Error(t, err)
-	require.ErrorIs(t, err, ErrFieldMapMappingValueEmpty)
+	require.ErrorIs(t, err, shared.ErrFieldMapMappingValueEmpty)
 	assert.Contains(t, err.Error(), "amount")
 }
 
@@ -201,13 +203,13 @@ func TestNewFieldMap_NonStringValuesAllowed(t *testing.T) {
 	contextID := testutil.MustDeterministicUUID(t, "9")
 	sourceID := testutil.MustDeterministicUUID(t, "10")
 
-	input := CreateFieldMapInput{Mapping: map[string]any{
+	input := shared.CreateFieldMapInput{Mapping: map[string]any{
 		"amount":   "txn_amount",
 		"active":   true,
 		"priority": 42,
 		"nested":   map[string]any{"key": "value"},
 	}}
-	fieldMap, err := NewFieldMap(ctx, contextID, sourceID, input)
+	fieldMap, err := shared.NewFieldMap(ctx, contextID, sourceID, input)
 	require.NoError(t, err)
 	assert.NotNil(t, fieldMap)
 }
@@ -218,16 +220,16 @@ func TestFieldMap_Update_EmptyStringValue(t *testing.T) {
 	ctx := context.Background()
 	contextID := testutil.MustDeterministicUUID(t, "11")
 	sourceID := testutil.MustDeterministicUUID(t, "12")
-	input := CreateFieldMapInput{Mapping: map[string]any{"amount": "txn_amount"}}
-	fieldMap, err := NewFieldMap(ctx, contextID, sourceID, input)
+	input := shared.CreateFieldMapInput{Mapping: map[string]any{"amount": "txn_amount"}}
+	fieldMap, err := shared.NewFieldMap(ctx, contextID, sourceID, input)
 	require.NoError(t, err)
 
 	originalVersion := fieldMap.Version
 
-	update := UpdateFieldMapInput{Mapping: map[string]any{"currency": ""}}
+	update := shared.UpdateFieldMapInput{Mapping: map[string]any{"currency": ""}}
 	err = fieldMap.Update(ctx, update)
 	require.Error(t, err)
-	require.ErrorIs(t, err, ErrFieldMapMappingValueEmpty)
+	require.ErrorIs(t, err, shared.ErrFieldMapMappingValueEmpty)
 	assert.Contains(t, err.Error(), "currency")
 	assert.Equal(t, originalVersion, fieldMap.Version, "Version should not change on error")
 }

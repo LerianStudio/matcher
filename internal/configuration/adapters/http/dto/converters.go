@@ -125,7 +125,7 @@ func SourcesToResponseWithFieldMaps(
 
 // FieldMapToResponse converts a domain entity to a response DTO.
 // Returns an empty struct for nil input to ensure consistent JSON structure.
-func FieldMapToResponse(fm *entities.FieldMap) FieldMapResponse {
+func FieldMapToResponse(fm *shared.FieldMap) FieldMapResponse {
 	if fm == nil {
 		return FieldMapResponse{Mapping: map[string]any{}}
 	}
@@ -149,7 +149,7 @@ func FieldMapToResponse(fm *entities.FieldMap) FieldMapResponse {
 
 // FieldMapsToResponse converts a slice of entities to response DTOs.
 // Always returns an initialized slice (never nil) for consistent JSON serialization.
-func FieldMapsToResponse(fieldMaps []*entities.FieldMap) []FieldMapResponse {
+func FieldMapsToResponse(fieldMaps []*shared.FieldMap) []FieldMapResponse {
 	result := make([]FieldMapResponse, 0, len(fieldMaps))
 
 	for _, fm := range fieldMaps {

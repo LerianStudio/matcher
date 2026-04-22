@@ -139,21 +139,21 @@ func seedE4T9Config(t *testing.T, h *integration.TestHarness) e4t9Seed {
 		"description": "description",
 	}
 
-	ledgerFM, err := configEntities.NewFieldMap(
+	ledgerFM, err := shared.NewFieldMap(
 		ctx,
 		h.Seed.ContextID,
 		ledgerSourceID,
-		configEntities.CreateFieldMapInput{Mapping: mapping},
+		shared.CreateFieldMapInput{Mapping: mapping},
 	)
 	require.NoError(t, err)
 	_, err = fmRepo.Create(ctx, ledgerFM)
 	require.NoError(t, err)
 
-	bankFM, err := configEntities.NewFieldMap(
+	bankFM, err := shared.NewFieldMap(
 		ctx,
 		h.Seed.ContextID,
 		createdBankSrc.ID,
-		configEntities.CreateFieldMapInput{Mapping: mapping},
+		shared.CreateFieldMapInput{Mapping: mapping},
 	)
 	require.NoError(t, err)
 	_, err = fmRepo.Create(ctx, bankFM)

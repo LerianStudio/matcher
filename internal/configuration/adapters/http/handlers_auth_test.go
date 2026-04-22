@@ -308,23 +308,23 @@ func (noopSourceRepo) Delete(_ context.Context, _, _ uuid.UUID) error {
 
 func (noopFieldMapRepo) Create(
 	_ context.Context,
-	_ *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	_ *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	return nil, errNotImplemented
 }
 
-func (noopFieldMapRepo) FindByID(_ context.Context, _ uuid.UUID) (*entities.FieldMap, error) {
+func (noopFieldMapRepo) FindByID(_ context.Context, _ uuid.UUID) (*shared.FieldMap, error) {
 	return nil, errNotImplemented
 }
 
-func (noopFieldMapRepo) FindBySourceID(_ context.Context, _ uuid.UUID) (*entities.FieldMap, error) {
+func (noopFieldMapRepo) FindBySourceID(_ context.Context, _ uuid.UUID) (*shared.FieldMap, error) {
 	return nil, errNotImplemented
 }
 
 func (noopFieldMapRepo) Update(
 	_ context.Context,
-	_ *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	_ *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	return nil, errNotImplemented
 }
 

@@ -21,8 +21,8 @@ import (
 	configSourceRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/source"
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
-	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/tests/integration"
 	"github.com/LerianStudio/matcher/tests/integration/server"
@@ -635,21 +635,21 @@ func createMultiRuleFlowTestConfig(
 		"description": "description",
 	}
 
-	ledgerFM, err := configEntities.NewFieldMap(
+	ledgerFM, err := shared.NewFieldMap(
 		ctx,
 		seed.ContextID,
 		seed.SourceID,
-		configEntities.CreateFieldMapInput{Mapping: mapping},
+		shared.CreateFieldMapInput{Mapping: mapping},
 	)
 	require.NoError(t, err)
 	_, err = fmRepo.Create(ctx, ledgerFM)
 	require.NoError(t, err)
 
-	bankFM, err := configEntities.NewFieldMap(
+	bankFM, err := shared.NewFieldMap(
 		ctx,
 		seed.ContextID,
 		createdBankSrc.ID,
-		configEntities.CreateFieldMapInput{Mapping: mapping},
+		shared.CreateFieldMapInput{Mapping: mapping},
 	)
 	require.NoError(t, err)
 	_, err = fmRepo.Create(ctx, bankFM)
@@ -851,21 +851,21 @@ func SetupFlowTestConfigWithOptionsGeneric(
 		"description": "description",
 	}
 
-	ledgerFM, err := configEntities.NewFieldMap(
+	ledgerFM, err := shared.NewFieldMap(
 		ctx,
 		contextID,
 		ledgerSourceID,
-		configEntities.CreateFieldMapInput{Mapping: mapping},
+		shared.CreateFieldMapInput{Mapping: mapping},
 	)
 	require.NoError(t, err)
 	_, err = fmRepo.Create(ctx, ledgerFM)
 	require.NoError(t, err)
 
-	bankFM, err := configEntities.NewFieldMap(
+	bankFM, err := shared.NewFieldMap(
 		ctx,
 		contextID,
 		createdBankSrc.ID,
-		configEntities.CreateFieldMapInput{Mapping: mapping},
+		shared.CreateFieldMapInput{Mapping: mapping},
 	)
 	require.NoError(t, err)
 	_, err = fmRepo.Create(ctx, bankFM)

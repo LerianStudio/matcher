@@ -193,21 +193,21 @@ func seedAutoMatchConfig(
 		"description": "description",
 	}
 
-	ledgerFM, err := configEntities.NewFieldMap(
+	ledgerFM, err := shared.NewFieldMap(
 		ctx,
 		createdCtx.ID,
 		createdLedger.ID,
-		configEntities.CreateFieldMapInput{Mapping: mapping},
+		shared.CreateFieldMapInput{Mapping: mapping},
 	)
 	require.NoError(t, err)
 	_, err = fmRepo.Create(ctx, ledgerFM)
 	require.NoError(t, err)
 
-	bankFM, err := configEntities.NewFieldMap(
+	bankFM, err := shared.NewFieldMap(
 		ctx,
 		createdCtx.ID,
 		createdBank.ID,
-		configEntities.CreateFieldMapInput{Mapping: mapping},
+		shared.CreateFieldMapInput{Mapping: mapping},
 	)
 	require.NoError(t, err)
 	_, err = fmRepo.Create(ctx, bankFM)

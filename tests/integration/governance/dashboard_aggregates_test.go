@@ -53,11 +53,11 @@ func seedDashboardTestConfig(t *testing.T, h *integration.TestHarness) dashboard
 		"description": "description",
 	}
 
-	fm, err := configEntities.NewFieldMap(
+	fm, err := shared.NewFieldMap(
 		ctx,
 		h.Seed.ContextID,
 		h.Seed.SourceID,
-		configEntities.CreateFieldMapInput{Mapping: mapping},
+		shared.CreateFieldMapInput{Mapping: mapping},
 	)
 	require.NoError(t, err)
 	_, err = fmRepo.Create(ctx, fm)

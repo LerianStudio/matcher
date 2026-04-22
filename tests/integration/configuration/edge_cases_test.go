@@ -88,11 +88,11 @@ func TestFieldMapRepository_ForeignKeyConstraint(t *testing.T) {
 
 		nonExistentSourceID := uuid.New()
 
-		entity, err := entities.NewFieldMap(
+		entity, err := shared.NewFieldMap(
 			ctx,
 			h.Seed.ContextID,
 			nonExistentSourceID,
-			entities.CreateFieldMapInput{
+			shared.CreateFieldMapInput{
 				Mapping: map[string]any{"amount": "amt"},
 			},
 		)
@@ -191,11 +191,11 @@ func TestSourceRepository_DeleteWithFieldMaps_CascadeDeletesChildren(t *testing.
 		createdSource, err := srcRepo.Create(ctx, sourceEntity)
 		require.NoError(t, err)
 
-		fieldMapEntity, err := entities.NewFieldMap(
+		fieldMapEntity, err := shared.NewFieldMap(
 			ctx,
 			h.Seed.ContextID,
 			createdSource.ID,
-			entities.CreateFieldMapInput{
+			shared.CreateFieldMapInput{
 				Mapping: map[string]any{"amount": "amt"},
 			},
 		)
@@ -365,11 +365,11 @@ func TestFieldMapRepository_ComplexMapping(t *testing.T) {
 			"metadata":     map[string]any{"field1": "value1", "field2": "value2"},
 		}
 
-		entity, err := entities.NewFieldMap(
+		entity, err := shared.NewFieldMap(
 			ctx,
 			h.Seed.ContextID,
 			createdSource.ID,
-			entities.CreateFieldMapInput{
+			shared.CreateFieldMapInput{
 				Mapping: complexMapping,
 			},
 		)

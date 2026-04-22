@@ -364,7 +364,7 @@ func TestCloneContextNonTransactional_WithSources(t *testing.T) {
 	}
 
 	fmRepo := &fieldMapRepoStub{
-		findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*entities.FieldMap, error) {
+		findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*shared.FieldMap, error) {
 			return nil, sql.ErrNoRows
 		},
 	}

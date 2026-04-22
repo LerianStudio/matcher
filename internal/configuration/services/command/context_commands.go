@@ -16,6 +16,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/ports"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // TODO(telemetry): configuration/adapters/http/handlers.go — logSpanError uses HandleSpanError for
@@ -301,11 +302,11 @@ func createInlineSources(
 			continue
 		}
 
-		fmEntity, fmErr := entities.NewFieldMap(
+		fmEntity, fmErr := shared.NewFieldMap(
 			ctx,
 			contextID,
 			createdSrc.ID,
-			entities.CreateFieldMapInput{Mapping: srcInput.Mapping},
+			shared.CreateFieldMapInput{Mapping: srcInput.Mapping},
 		)
 		if fmErr != nil {
 			return fmt.Errorf("invalid field map input: %w", fmErr)

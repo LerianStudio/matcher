@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
@@ -113,8 +115,8 @@ func TestIngestFromTrustedStream_RedPhaseCornerstone(t *testing.T) {
 	contextID := uuid.New()
 	sourceID := uuid.New()
 
-	newValidInput := func() IngestFromTrustedStreamInput {
-		return IngestFromTrustedStreamInput{
+	newValidInput := func() sharedPorts.TrustedContentInput {
+		return sharedPorts.TrustedContentInput{
 			ContextID: contextID,
 			SourceID:  sourceID,
 			Format:    "json",

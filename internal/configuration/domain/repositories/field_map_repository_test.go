@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 func TestFieldMapRepositoryInterfaceCompiles(t *testing.T) {
@@ -20,15 +20,15 @@ func TestFieldMapRepositoryInterfaceCompiles(t *testing.T) {
 }
 
 type mockFieldMapRepository struct {
-	fieldMaps map[uuid.UUID]*entities.FieldMap
+	fieldMaps map[uuid.UUID]*shared.FieldMap
 }
 
 func (m *mockFieldMapRepository) Create(
 	_ context.Context,
-	entity *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	entity *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	if m.fieldMaps == nil {
-		m.fieldMaps = make(map[uuid.UUID]*entities.FieldMap)
+		m.fieldMaps = make(map[uuid.UUID]*shared.FieldMap)
 	}
 
 	m.fieldMaps[entity.ID] = entity
@@ -39,7 +39,7 @@ func (m *mockFieldMapRepository) Create(
 func (m *mockFieldMapRepository) FindByID(
 	_ context.Context,
 	id uuid.UUID,
-) (*entities.FieldMap, error) {
+) (*shared.FieldMap, error) {
 	if fm, ok := m.fieldMaps[id]; ok {
 		return fm, nil
 	}
@@ -50,7 +50,7 @@ func (m *mockFieldMapRepository) FindByID(
 func (m *mockFieldMapRepository) FindBySourceID(
 	_ context.Context,
 	sourceID uuid.UUID,
-) (*entities.FieldMap, error) {
+) (*shared.FieldMap, error) {
 	for _, fm := range m.fieldMaps {
 		if fm.SourceID == sourceID {
 			return fm, nil
@@ -62,10 +62,10 @@ func (m *mockFieldMapRepository) FindBySourceID(
 
 func (m *mockFieldMapRepository) Update(
 	_ context.Context,
-	entity *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	entity *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	if m.fieldMaps == nil {
-		m.fieldMaps = make(map[uuid.UUID]*entities.FieldMap)
+		m.fieldMaps = make(map[uuid.UUID]*shared.FieldMap)
 	}
 
 	m.fieldMaps[entity.ID] = entity
@@ -105,7 +105,7 @@ func TestMockFieldMapRepositoryOperations(t *testing.T) {
 
 		repo := &mockFieldMapRepository{}
 		fieldMapID := uuid.New()
-		fieldMap := &entities.FieldMap{
+		fieldMap := &shared.FieldMap{
 			ID:      fieldMapID,
 			Mapping: map[string]any{"amount": "txn_amount"},
 		}
@@ -121,7 +121,7 @@ func TestMockFieldMapRepositoryOperations(t *testing.T) {
 
 		repo := &mockFieldMapRepository{}
 		fieldMapID := uuid.New()
-		fieldMap := &entities.FieldMap{ID: fieldMapID}
+		fieldMap := &shared.FieldMap{ID: fieldMapID}
 
 		_, err := repo.Create(context.Background(), fieldMap)
 
@@ -139,7 +139,7 @@ func TestMockFieldMapRepositoryOperations(t *testing.T) {
 		repo := &mockFieldMapRepository{}
 		fieldMapID := uuid.New()
 		sourceID := uuid.New()
-		fieldMap := &entities.FieldMap{ID: fieldMapID, SourceID: sourceID}
+		fieldMap := &shared.FieldMap{ID: fieldMapID, SourceID: sourceID}
 
 		_, err := repo.Create(context.Background(), fieldMap)
 
@@ -156,7 +156,7 @@ func TestMockFieldMapRepositoryOperations(t *testing.T) {
 
 		repo := &mockFieldMapRepository{}
 		fieldMapID := uuid.New()
-		fieldMap := &entities.FieldMap{ID: fieldMapID}
+		fieldMap := &shared.FieldMap{ID: fieldMapID}
 
 		_, err := repo.Create(context.Background(), fieldMap)
 

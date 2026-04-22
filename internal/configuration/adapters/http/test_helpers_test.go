@@ -14,6 +14,7 @@ import (
 	configPorts "github.com/LerianStudio/matcher/internal/configuration/ports"
 	"github.com/LerianStudio/matcher/internal/configuration/services/query"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // scheduleRepository is an in-memory stub for schedule persistence in tests.
@@ -200,7 +201,7 @@ func (repo *feeScheduleRepository) GetByIDs(
 // Compile-time interface checks.
 var (
 	_ configPorts.ScheduleRepository    = (*scheduleRepository)(nil)
-	_ configPorts.FeeScheduleRepository = (*feeScheduleRepository)(nil)
+	_ sharedPorts.FeeScheduleRepository = (*feeScheduleRepository)(nil)
 	_ repositories.FeeRuleRepository    = (*feeRuleRepository)(nil)
 )
 

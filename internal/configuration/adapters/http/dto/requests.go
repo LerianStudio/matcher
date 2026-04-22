@@ -283,8 +283,8 @@ type CreateFieldMapRequest struct {
 }
 
 // ToDomainInput converts the API request to a domain input struct.
-func (r *CreateFieldMapRequest) ToDomainInput() entities.CreateFieldMapInput {
-	return entities.CreateFieldMapInput{
+func (r *CreateFieldMapRequest) ToDomainInput() shared.CreateFieldMapInput {
+	return shared.CreateFieldMapInput{
 		Mapping: r.Mapping,
 	}
 }
@@ -296,8 +296,8 @@ type UpdateFieldMapRequest struct {
 }
 
 // ToDomainInput converts the API request to a domain input struct.
-func (r *UpdateFieldMapRequest) ToDomainInput() entities.UpdateFieldMapInput {
-	return entities.UpdateFieldMapInput{
+func (r *UpdateFieldMapRequest) ToDomainInput() shared.UpdateFieldMapInput {
+	return shared.UpdateFieldMapInput{
 		Mapping: r.Mapping,
 	}
 }

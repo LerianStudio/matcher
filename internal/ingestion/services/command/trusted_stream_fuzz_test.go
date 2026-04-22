@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+
 	"github.com/google/uuid"
 
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
@@ -115,7 +117,7 @@ func FuzzTrustedStreamFormat(f *testing.F) {
 			format = format[:maxFuzzFormatBytes]
 		}
 
-		input := IngestFromTrustedStreamInput{
+		input := sharedPorts.TrustedContentInput{
 			ContextID: contextID,
 			SourceID:  sourceID,
 			Format:    format,

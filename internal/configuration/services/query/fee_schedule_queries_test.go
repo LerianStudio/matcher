@@ -134,19 +134,19 @@ func (stub *sourceRepoStubQ) Delete(_ context.Context, _, _ uuid.UUID) error {
 
 type fieldMapRepoStubQ struct{}
 
-func (stub *fieldMapRepoStubQ) Create(_ context.Context, _ *entities.FieldMap) (*entities.FieldMap, error) {
+func (stub *fieldMapRepoStubQ) Create(_ context.Context, _ *shared.FieldMap) (*shared.FieldMap, error) {
 	return nil, errors.New("not implemented")
 }
 
-func (stub *fieldMapRepoStubQ) FindByID(_ context.Context, _ uuid.UUID) (*entities.FieldMap, error) {
+func (stub *fieldMapRepoStubQ) FindByID(_ context.Context, _ uuid.UUID) (*shared.FieldMap, error) {
 	return nil, errors.New("not implemented")
 }
 
-func (stub *fieldMapRepoStubQ) FindBySourceID(_ context.Context, _ uuid.UUID) (*entities.FieldMap, error) {
+func (stub *fieldMapRepoStubQ) FindBySourceID(_ context.Context, _ uuid.UUID) (*shared.FieldMap, error) {
 	return nil, errors.New("not implemented")
 }
 
-func (stub *fieldMapRepoStubQ) Update(_ context.Context, _ *entities.FieldMap) (*entities.FieldMap, error) {
+func (stub *fieldMapRepoStubQ) Update(_ context.Context, _ *shared.FieldMap) (*shared.FieldMap, error) {
 	return nil, errors.New("not implemented")
 }
 

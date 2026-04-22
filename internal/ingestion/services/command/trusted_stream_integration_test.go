@@ -23,6 +23,7 @@ import (
 	ingestionVO "github.com/LerianStudio/matcher/internal/ingestion/domain/value_objects"
 	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -77,7 +78,7 @@ func TestIntegration_UseCase_IngestFromTrustedStream(t *testing.T) {
 
 		output, err := useCase.IngestFromTrustedStream(
 			context.Background(),
-			ingestionCommand.IngestFromTrustedStreamInput{
+			sharedPorts.TrustedContentInput{
 				ContextID: contextID,
 				SourceID:  sourceID,
 				Format:    "csv",

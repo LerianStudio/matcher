@@ -18,6 +18,7 @@ import (
 	repoMocks "github.com/LerianStudio/matcher/internal/configuration/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	portMocks "github.com/LerianStudio/matcher/internal/configuration/ports/mocks"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
@@ -585,7 +586,7 @@ func TestDeleteSource_BlockedByFieldMap(t *testing.T) {
 	contextID := uuid.New()
 	sourceID := uuid.New()
 
-	existingFieldMap := &entities.FieldMap{ID: uuid.New()}
+	existingFieldMap := &shared.FieldMap{ID: uuid.New()}
 	mockFmRepo.EXPECT().
 		FindBySourceID(gomock.Any(), sourceID).
 		Return(existingFieldMap, nil)

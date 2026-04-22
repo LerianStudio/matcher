@@ -90,7 +90,7 @@ func setupSourceContextWithChildren(t *testing.T, h *integration.TestHarness, uc
 	// --- field map ---
 	fmRepo := fieldMapRepo.NewRepository(provider)
 
-	fm, err := entities.NewFieldMap(ctx, created.ID, createdSrc.ID, entities.CreateFieldMapInput{
+	fm, err := shared.NewFieldMap(ctx, created.ID, createdSrc.ID, shared.CreateFieldMapInput{
 		Mapping: map[string]any{
 			"external_id": "id",
 			"amount":      "amount",
@@ -349,14 +349,14 @@ func TestCloneContext_SourceSidePreservation(t *testing.T) {
 		// Also add a field map so clone actually carries sources.
 		fmRepo := fieldMapRepo.NewRepository(provider)
 
-		fmLeft, err := entities.NewFieldMap(ctx, created.ID, createdLeft.ID, entities.CreateFieldMapInput{
+		fmLeft, err := shared.NewFieldMap(ctx, created.ID, createdLeft.ID, shared.CreateFieldMapInput{
 			Mapping: map[string]any{"amount": "amount"},
 		})
 		require.NoError(t, err)
 		_, err = fmRepo.Create(ctx, fmLeft)
 		require.NoError(t, err)
 
-		fmRight, err := entities.NewFieldMap(ctx, created.ID, createdRight.ID, entities.CreateFieldMapInput{
+		fmRight, err := shared.NewFieldMap(ctx, created.ID, createdRight.ID, shared.CreateFieldMapInput{
 			Mapping: map[string]any{"amount": "amt"},
 		})
 		require.NoError(t, err)

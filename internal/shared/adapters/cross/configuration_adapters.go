@@ -66,19 +66,7 @@ func (adapter *FieldMapRepositoryAdapter) FindBySourceID(
 		return nil, nil
 	}
 
-	return toSharedFieldMap(fm), nil
-}
-
-func toSharedFieldMap(fm *configEntities.FieldMap) *shared.FieldMap {
-	return &shared.FieldMap{
-		ID:        fm.ID,
-		ContextID: fm.ContextID,
-		SourceID:  fm.SourceID,
-		Mapping:   fm.Mapping,
-		Version:   fm.Version,
-		CreatedAt: fm.CreatedAt,
-		UpdatedAt: fm.UpdatedAt,
-	}
+	return fm, nil
 }
 
 // SourceRepositoryAdapter wraps a configuration SourceRepository

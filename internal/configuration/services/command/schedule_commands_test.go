@@ -163,15 +163,15 @@ type stubFieldMapRepo struct{}
 
 var _ repositories.FieldMapRepository = (*stubFieldMapRepo)(nil)
 
-func (s *stubFieldMapRepo) Create(_ context.Context, e *entities.FieldMap) (*entities.FieldMap, error) {
+func (s *stubFieldMapRepo) Create(_ context.Context, e *shared.FieldMap) (*shared.FieldMap, error) {
 	return e, nil
 }
 
-func (s *stubFieldMapRepo) FindByID(_ context.Context, _ uuid.UUID) (*entities.FieldMap, error) {
+func (s *stubFieldMapRepo) FindByID(_ context.Context, _ uuid.UUID) (*shared.FieldMap, error) {
 	return nil, sql.ErrNoRows
 }
 
-func (s *stubFieldMapRepo) FindBySourceID(_ context.Context, _ uuid.UUID) (*entities.FieldMap, error) {
+func (s *stubFieldMapRepo) FindBySourceID(_ context.Context, _ uuid.UUID) (*shared.FieldMap, error) {
 	return nil, sql.ErrNoRows
 }
 
@@ -179,7 +179,7 @@ func (s *stubFieldMapRepo) ExistsBySourceIDs(_ context.Context, _ []uuid.UUID) (
 	return nil, nil
 }
 
-func (s *stubFieldMapRepo) Update(_ context.Context, e *entities.FieldMap) (*entities.FieldMap, error) {
+func (s *stubFieldMapRepo) Update(_ context.Context, e *shared.FieldMap) (*shared.FieldMap, error) {
 	return e, nil
 }
 

@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories/mocks"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 var errFieldMapRepositoryFailure = errors.New("repository failure")
@@ -78,7 +78,7 @@ func TestGetFieldMap_Success(t *testing.T) {
 
 	ctx := context.Background()
 	fieldMapID := uuid.New()
-	expected := &entities.FieldMap{ID: fieldMapID}
+	expected := &shared.FieldMap{ID: fieldMapID}
 
 	fieldMapRepo.EXPECT().FindByID(gomock.Any(), fieldMapID).Return(expected, nil)
 
@@ -148,7 +148,7 @@ func TestGetFieldMapBySource_Success(t *testing.T) {
 
 	ctx := context.Background()
 	sourceID := uuid.New()
-	expected := &entities.FieldMap{ID: uuid.New()}
+	expected := &shared.FieldMap{ID: uuid.New()}
 
 	fieldMapRepo.EXPECT().FindBySourceID(gomock.Any(), sourceID).Return(expected, nil)
 

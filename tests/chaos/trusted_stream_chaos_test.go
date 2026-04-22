@@ -71,7 +71,7 @@ func TestIntegration_Chaos_TrustedStream_PostgresResetPeer(t *testing.T) {
 
 	baselineOut, err := useCase.IngestFromTrustedStream(
 		context.Background(),
-		ingestionCommand.IngestFromTrustedStreamInput{
+		sharedPorts.TrustedContentInput{
 			ContextID:      h.Seed.ContextID,
 			SourceID:       h.Seed.SourceID,
 			Format:         "csv",
@@ -99,7 +99,7 @@ func TestIntegration_Chaos_TrustedStream_PostgresResetPeer(t *testing.T) {
 
 	chaosOut, chaosErr := useCase.IngestFromTrustedStream(
 		chaosCtx,
-		ingestionCommand.IngestFromTrustedStreamInput{
+		sharedPorts.TrustedContentInput{
 			ContextID:      h.Seed.ContextID,
 			SourceID:       h.Seed.SourceID,
 			Format:         "csv",
@@ -136,7 +136,7 @@ func TestIntegration_Chaos_TrustedStream_PostgresResetPeer(t *testing.T) {
 
 		out, rErr := useCase.IngestFromTrustedStream(
 			recoveryCtx,
-			ingestionCommand.IngestFromTrustedStreamInput{
+			sharedPorts.TrustedContentInput{
 				ContextID:      h.Seed.ContextID,
 				SourceID:       h.Seed.SourceID,
 				Format:         "csv",

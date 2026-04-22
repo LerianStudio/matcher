@@ -16,6 +16,7 @@ import (
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // errTestDatabase is a sentinel error used for testing failure scenarios.
@@ -62,7 +63,7 @@ func TestFieldMapRepositoryAdapter_FindBySourceID_Success(t *testing.T) {
 	sourceID := uuid.New()
 	now := time.Now().UTC()
 
-	configFieldMap := &configEntities.FieldMap{
+	configFieldMap := &shared.FieldMap{
 		ID:        uuid.New(),
 		ContextID: uuid.New(),
 		SourceID:  sourceID,

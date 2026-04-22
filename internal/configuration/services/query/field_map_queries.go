@@ -12,14 +12,14 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
-	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // GetFieldMap retrieves a field map by ID.
 func (uc *UseCase) GetFieldMap(
 	ctx context.Context,
 	fieldMapID uuid.UUID,
-) (*entities.FieldMap, error) {
+) (*shared.FieldMap, error) {
 	if uc == nil || uc.fieldMapRepo == nil {
 		return nil, ErrNilFieldMapRepository
 	}
@@ -50,7 +50,7 @@ func (uc *UseCase) GetFieldMap(
 func (uc *UseCase) GetFieldMapBySource(
 	ctx context.Context,
 	sourceID uuid.UUID,
-) (*entities.FieldMap, error) {
+) (*shared.FieldMap, error) {
 	if uc == nil || uc.fieldMapRepo == nil {
 		return nil, ErrNilFieldMapRepository
 	}

@@ -134,14 +134,14 @@ func (fixture *handlerFixture) seedSource(
 func (fixture *handlerFixture) seedFieldMap(
 	t *testing.T,
 	contextID, sourceID uuid.UUID,
-) *entities.FieldMap {
+) *shared.FieldMap {
 	t.Helper()
 
 	ctx := context.Background()
-	input := entities.CreateFieldMapInput{
+	input := shared.CreateFieldMapInput{
 		Mapping: map[string]any{"field": "value"},
 	}
-	fieldMap, err := entities.NewFieldMap(ctx, contextID, sourceID, input)
+	fieldMap, err := shared.NewFieldMap(ctx, contextID, sourceID, input)
 	require.NoError(t, err)
 
 	stored, err := fixture.fieldMapRepo.Create(ctx, fieldMap)
@@ -1376,7 +1376,7 @@ func TestHandlers_FieldMapHandlersTracing(t *testing.T) {
 			name:   "create field map",
 			method: http.MethodPost,
 			path:   "/api/v1/contexts/:contextId/sources/:sourceId/field-maps",
-			payload: entities.CreateFieldMapInput{
+			payload: shared.CreateFieldMapInput{
 				Mapping: map[string]any{"field": "value"},
 			},
 			registerRoute: func(app *fiber.App, handler *Handler) {
@@ -1394,7 +1394,7 @@ func TestHandlers_FieldMapHandlersTracing(t *testing.T) {
 			assertResponse: func(t *testing.T, response *http.Response) {
 				t.Helper()
 
-				var payload entities.FieldMap
+				var payload shared.FieldMap
 				require.NoError(t, json.NewDecoder(response.Body).Decode(&payload))
 				require.Equal(t, "value", payload.Mapping["field"])
 			},
@@ -1421,7 +1421,7 @@ func TestHandlers_FieldMapHandlersTracing(t *testing.T) {
 			assertResponse: func(t *testing.T, response *http.Response) {
 				t.Helper()
 
-				var payload entities.FieldMap
+				var payload shared.FieldMap
 				require.NoError(t, json.NewDecoder(response.Body).Decode(&payload))
 				require.Equal(t, "value", payload.Mapping["field"])
 			},
@@ -1432,7 +1432,7 @@ func TestHandlers_FieldMapHandlersTracing(t *testing.T) {
 			name:   "update field map",
 			method: http.MethodPatch,
 			path:   "/api/v1/field-maps/:fieldMapId",
-			payload: entities.UpdateFieldMapInput{
+			payload: shared.UpdateFieldMapInput{
 				Mapping: map[string]any{"field": "updated"},
 			},
 			registerRoute: func(app *fiber.App, handler *Handler) {
@@ -1448,7 +1448,7 @@ func TestHandlers_FieldMapHandlersTracing(t *testing.T) {
 			assertResponse: func(t *testing.T, response *http.Response) {
 				t.Helper()
 
-				var payload entities.FieldMap
+				var payload shared.FieldMap
 				require.NoError(t, json.NewDecoder(response.Body).Decode(&payload))
 				require.Equal(t, "updated", payload.Mapping["field"])
 			},
@@ -1588,7 +1588,7 @@ func TestHandlers_FieldMapErrorPaths(t *testing.T) {
 
 		payload := mustJSON(
 			t,
-			entities.UpdateFieldMapInput{Mapping: map[string]any{"field": "updated"}},
+			shared.UpdateFieldMapInput{Mapping: map[string]any{"field": "updated"}},
 		)
 
 		resp := performRequest(
@@ -2221,21 +2221,21 @@ func (repo *sourceRepository) Delete(_ context.Context, contextID, identifier uu
 }
 
 type fieldMapRepository struct {
-	items    map[uuid.UUID]*entities.FieldMap
+	items    map[uuid.UUID]*shared.FieldMap
 	bySource map[uuid.UUID]uuid.UUID
 }
 
 func newFieldMapRepository() *fieldMapRepository {
 	return &fieldMapRepository{
-		items:    make(map[uuid.UUID]*entities.FieldMap),
+		items:    make(map[uuid.UUID]*shared.FieldMap),
 		bySource: make(map[uuid.UUID]uuid.UUID),
 	}
 }
 
 func (repo *fieldMapRepository) Create(
 	_ context.Context,
-	entity *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	entity *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	repo.items[entity.ID] = entity
 	repo.bySource[entity.SourceID] = entity.ID
 
@@ -2245,7 +2245,7 @@ func (repo *fieldMapRepository) Create(
 func (repo *fieldMapRepository) FindByID(
 	_ context.Context,
 	identifier uuid.UUID,
-) (*entities.FieldMap, error) {
+) (*shared.FieldMap, error) {
 	fieldMapEntity, ok := repo.items[identifier]
 	if !ok {
 		return nil, sql.ErrNoRows
@@ -2257,7 +2257,7 @@ func (repo *fieldMapRepository) FindByID(
 func (repo *fieldMapRepository) FindBySourceID(
 	_ context.Context,
 	sourceID uuid.UUID,
-) (*entities.FieldMap, error) {
+) (*shared.FieldMap, error) {
 	fieldMapID, ok := repo.bySource[sourceID]
 	if !ok {
 		return nil, sql.ErrNoRows
@@ -2268,8 +2268,8 @@ func (repo *fieldMapRepository) FindBySourceID(
 
 func (repo *fieldMapRepository) Update(
 	_ context.Context,
-	entity *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	entity *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	if _, ok := repo.items[entity.ID]; !ok {
 		return nil, sql.ErrNoRows
 	}

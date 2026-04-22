@@ -218,7 +218,7 @@ func TestConfigServiceCRUD_FieldMapLifecycle(t *testing.T) {
 		require.NoError(t, err)
 
 		// CREATE.
-		created, err := cmdUC.CreateFieldMap(ctx, parent.ID, source.ID, entities.CreateFieldMapInput{
+		created, err := cmdUC.CreateFieldMap(ctx, parent.ID, source.ID, shared.CreateFieldMapInput{
 			Mapping: map[string]any{
 				"amount":   "tx_amount",
 				"currency": "tx_currency",
@@ -236,7 +236,7 @@ func TestConfigServiceCRUD_FieldMapLifecycle(t *testing.T) {
 		require.Equal(t, "tx_amount", fetched.Mapping["amount"])
 
 		// UPDATE mapping.
-		updated, err := cmdUC.UpdateFieldMap(ctx, created.ID, entities.UpdateFieldMapInput{
+		updated, err := cmdUC.UpdateFieldMap(ctx, created.ID, shared.UpdateFieldMapInput{
 			Mapping: map[string]any{
 				"amount":    "transaction_amount",
 				"currency":  "transaction_currency",

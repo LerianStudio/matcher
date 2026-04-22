@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // FieldMapPostgreSQLModel represents the database model for field maps.
@@ -24,7 +24,7 @@ type FieldMapPostgreSQLModel struct {
 
 // NewFieldMapPostgreSQLModel creates a new PostgreSQL model from a field map entity.
 // The entity must have a valid ID set by the NewFieldMap constructor.
-func NewFieldMapPostgreSQLModel(entity *entities.FieldMap) (*FieldMapPostgreSQLModel, error) {
+func NewFieldMapPostgreSQLModel(entity *shared.FieldMap) (*FieldMapPostgreSQLModel, error) {
 	if entity == nil {
 		return nil, ErrFieldMapEntityRequired
 	}
@@ -60,7 +60,7 @@ func NewFieldMapPostgreSQLModel(entity *entities.FieldMap) (*FieldMapPostgreSQLM
 }
 
 // ToEntity converts the PostgreSQL model to a domain entity.
-func (model *FieldMapPostgreSQLModel) ToEntity() (*entities.FieldMap, error) {
+func (model *FieldMapPostgreSQLModel) ToEntity() (*shared.FieldMap, error) {
 	if model == nil {
 		return nil, ErrFieldMapModelRequired
 	}
@@ -91,7 +91,7 @@ func (model *FieldMapPostgreSQLModel) ToEntity() (*entities.FieldMap, error) {
 		mapping = make(map[string]any)
 	}
 
-	return &entities.FieldMap{
+	return &shared.FieldMap{
 		ID:        id,
 		ContextID: contextID,
 		SourceID:  sourceID,

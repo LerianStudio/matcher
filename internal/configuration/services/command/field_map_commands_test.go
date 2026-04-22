@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	repoMocks "github.com/LerianStudio/matcher/internal/configuration/domain/repositories/mocks"
 	portMocks "github.com/LerianStudio/matcher/internal/configuration/ports/mocks"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // errFieldMapNotFound is a sentinel error for field map not found in tests.
@@ -27,14 +27,14 @@ func TestUpdateFieldMap_CommandValidation(t *testing.T) {
 	contextID := uuid.New()
 	sourceID := uuid.New()
 
-	createFieldMap := func(t *testing.T) *entities.FieldMap {
+	createFieldMap := func(t *testing.T) *shared.FieldMap {
 		t.Helper()
 
-		fieldMap, err := entities.NewFieldMap(
+		fieldMap, err := shared.NewFieldMap(
 			ctx,
 			contextID,
 			sourceID,
-			entities.CreateFieldMapInput{
+			shared.CreateFieldMapInput{
 				Mapping: map[string]any{"amount": "txn_amount"},
 			},
 		)
@@ -53,12 +53,12 @@ func TestUpdateFieldMap_CommandValidation(t *testing.T) {
 		{
 			name:    "empty mapping",
 			mapping: map[string]any{},
-			wantErr: entities.ErrFieldMapMappingRequired,
+			wantErr: shared.ErrFieldMapMappingRequired,
 		},
 		{
 			name:    "nil mapping",
 			mapping: nil,
-			wantErr: entities.ErrFieldMapMappingRequired,
+			wantErr: shared.ErrFieldMapMappingRequired,
 		},
 		{
 			name:       "valid mapping",
@@ -79,14 +79,14 @@ func TestUpdateFieldMap_CommandValidation(t *testing.T) {
 
 			fieldMap := createFieldMap(t)
 			repo := &fieldMapRepoStub{
-				findByIDFn: func(ctx context.Context, identifier uuid.UUID) (*entities.FieldMap, error) {
+				findByIDFn: func(ctx context.Context, identifier uuid.UUID) (*shared.FieldMap, error) {
 					if tt.findByErr != nil {
 						return nil, tt.findByErr
 					}
 
 					return fieldMap, nil
 				},
-				updateFn: func(ctx context.Context, entity *entities.FieldMap) (*entities.FieldMap, error) {
+				updateFn: func(ctx context.Context, entity *shared.FieldMap) (*shared.FieldMap, error) {
 					return entity, nil
 				},
 			}
@@ -101,7 +101,7 @@ func TestUpdateFieldMap_CommandValidation(t *testing.T) {
 			updated, err := useCase.UpdateFieldMap(
 				context.Background(),
 				fieldMap.ID,
-				entities.UpdateFieldMapInput{Mapping: tt.mapping},
+				shared.UpdateFieldMapInput{Mapping: tt.mapping},
 			)
 			if tt.wantErr != nil {
 				require.Error(t, err)
@@ -128,7 +128,7 @@ func TestCreateFieldMap_NilUseCase(t *testing.T) {
 		context.Background(),
 		uuid.New(),
 		uuid.New(),
-		entities.CreateFieldMapInput{},
+		shared.CreateFieldMapInput{},
 	)
 	require.ErrorIs(t, err, ErrNilFieldMapRepository)
 }
@@ -147,7 +147,7 @@ func TestCreateFieldMap_NilFieldMapRepo(t *testing.T) {
 		context.Background(),
 		uuid.New(),
 		uuid.New(),
-		entities.CreateFieldMapInput{},
+		shared.CreateFieldMapInput{},
 	)
 	require.ErrorIs(t, err, ErrNilFieldMapRepository)
 }
@@ -170,11 +170,11 @@ func TestCreateFieldMap_InvalidInput_NilContextID(t *testing.T) {
 		context.Background(),
 		uuid.Nil,
 		uuid.New(),
-		entities.CreateFieldMapInput{
+		shared.CreateFieldMapInput{
 			Mapping: map[string]any{"amount": "txn_amount"},
 		},
 	)
-	require.ErrorIs(t, err, entities.ErrFieldMapContextRequired)
+	require.ErrorIs(t, err, shared.ErrFieldMapContextRequired)
 }
 
 func TestCreateFieldMap_InvalidInput_NilSourceID(t *testing.T) {
@@ -195,11 +195,11 @@ func TestCreateFieldMap_InvalidInput_NilSourceID(t *testing.T) {
 		context.Background(),
 		uuid.New(),
 		uuid.Nil,
-		entities.CreateFieldMapInput{
+		shared.CreateFieldMapInput{
 			Mapping: map[string]any{"amount": "txn_amount"},
 		},
 	)
-	require.ErrorIs(t, err, entities.ErrFieldMapSourceRequired)
+	require.ErrorIs(t, err, shared.ErrFieldMapSourceRequired)
 }
 
 func TestCreateFieldMap_InvalidInput_EmptyMapping(t *testing.T) {
@@ -220,7 +220,7 @@ func TestCreateFieldMap_InvalidInput_EmptyMapping(t *testing.T) {
 		context.Background(),
 		uuid.New(),
 		uuid.New(),
-		entities.CreateFieldMapInput{
+		shared.CreateFieldMapInput{
 			Mapping: map[string]any{},
 		},
 	)
@@ -254,7 +254,7 @@ func TestCreateFieldMap_RepositoryError(t *testing.T) {
 		context.Background(),
 		contextID,
 		sourceID,
-		entities.CreateFieldMapInput{
+		shared.CreateFieldMapInput{
 			Mapping: map[string]any{"amount": "txn_amount"},
 		},
 	)
@@ -275,13 +275,13 @@ func TestCreateFieldMap_Success(t *testing.T) {
 
 	contextID := uuid.New()
 	sourceID := uuid.New()
-	input := entities.CreateFieldMapInput{
+	input := shared.CreateFieldMapInput{
 		Mapping: map[string]any{"amount": "txn_amount"},
 	}
 
 	mockFmRepo.EXPECT().
 		Create(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(ctx context.Context, entity *entities.FieldMap) (*entities.FieldMap, error) {
+		DoAndReturn(func(ctx context.Context, entity *shared.FieldMap) (*shared.FieldMap, error) {
 			return entity, nil
 		})
 
@@ -309,13 +309,13 @@ func TestCreateFieldMap_WithAuditPublisher(t *testing.T) {
 
 	contextID := uuid.New()
 	sourceID := uuid.New()
-	input := entities.CreateFieldMapInput{
+	input := shared.CreateFieldMapInput{
 		Mapping: map[string]any{"amount": "txn_amount"},
 	}
 
 	mockFmRepo.EXPECT().
 		Create(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(ctx context.Context, entity *entities.FieldMap) (*entities.FieldMap, error) {
+		DoAndReturn(func(ctx context.Context, entity *shared.FieldMap) (*shared.FieldMap, error) {
 			return entity, nil
 		})
 
@@ -343,7 +343,7 @@ func TestUpdateFieldMap_NilUseCase(t *testing.T) {
 
 	var uc *UseCase
 
-	_, err := uc.UpdateFieldMap(context.Background(), uuid.New(), entities.UpdateFieldMapInput{})
+	_, err := uc.UpdateFieldMap(context.Background(), uuid.New(), shared.UpdateFieldMapInput{})
 	require.ErrorIs(t, err, ErrNilFieldMapRepository)
 }
 
@@ -357,7 +357,7 @@ func TestUpdateFieldMap_NilFieldMapRepo(t *testing.T) {
 		matchRuleRepo: &matchRuleRepoStub{},
 	}
 
-	_, err := uc.UpdateFieldMap(context.Background(), uuid.New(), entities.UpdateFieldMapInput{})
+	_, err := uc.UpdateFieldMap(context.Background(), uuid.New(), shared.UpdateFieldMapInput{})
 	require.ErrorIs(t, err, ErrNilFieldMapRepository)
 }
 
@@ -374,11 +374,11 @@ func TestUpdateFieldMap_RepositoryUpdateError(t *testing.T) {
 
 	contextID := uuid.New()
 	sourceID := uuid.New()
-	existing, err := entities.NewFieldMap(
+	existing, err := shared.NewFieldMap(
 		context.Background(),
 		contextID,
 		sourceID,
-		entities.CreateFieldMapInput{
+		shared.CreateFieldMapInput{
 			Mapping: map[string]any{"amount": "txn_amount"},
 		},
 	)
@@ -397,7 +397,7 @@ func TestUpdateFieldMap_RepositoryUpdateError(t *testing.T) {
 	uc, err := NewUseCase(mockCtxRepo, mockSrcRepo, mockFmRepo, mockMrRepo)
 	require.NoError(t, err)
 
-	_, err = uc.UpdateFieldMap(context.Background(), existing.ID, entities.UpdateFieldMapInput{
+	_, err = uc.UpdateFieldMap(context.Background(), existing.ID, shared.UpdateFieldMapInput{
 		Mapping: map[string]any{"amount": "new_amount"},
 	})
 	require.Error(t, err)
@@ -418,11 +418,11 @@ func TestUpdateFieldMap_WithAuditPublisher(t *testing.T) {
 
 	contextID := uuid.New()
 	sourceID := uuid.New()
-	existing, err := entities.NewFieldMap(
+	existing, err := shared.NewFieldMap(
 		context.Background(),
 		contextID,
 		sourceID,
-		entities.CreateFieldMapInput{
+		shared.CreateFieldMapInput{
 			Mapping: map[string]any{"amount": "txn_amount"},
 		},
 	)
@@ -434,7 +434,7 @@ func TestUpdateFieldMap_WithAuditPublisher(t *testing.T) {
 
 	mockFmRepo.EXPECT().
 		Update(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(ctx context.Context, entity *entities.FieldMap) (*entities.FieldMap, error) {
+		DoAndReturn(func(ctx context.Context, entity *shared.FieldMap) (*shared.FieldMap, error) {
 			return entity, nil
 		})
 
@@ -454,7 +454,7 @@ func TestUpdateFieldMap_WithAuditPublisher(t *testing.T) {
 	result, err := uc.UpdateFieldMap(
 		context.Background(),
 		existing.ID,
-		entities.UpdateFieldMapInput{
+		shared.UpdateFieldMapInput{
 			Mapping: map[string]any{"amount": "new_amount"},
 		},
 	)

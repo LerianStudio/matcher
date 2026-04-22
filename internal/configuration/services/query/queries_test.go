@@ -234,7 +234,7 @@ func TestFieldMapQueries(t *testing.T) {
 	fieldMapID := uuid.New()
 	sourceID := uuid.New()
 
-	expected := &entities.FieldMap{ID: fieldMapID}
+	expected := &shared.FieldMap{ID: fieldMapID}
 	fieldMapRepo.EXPECT().FindByID(gomock.Any(), fieldMapID).Return(expected, nil)
 
 	result, err := uc.GetFieldMap(ctx, fieldMapID)

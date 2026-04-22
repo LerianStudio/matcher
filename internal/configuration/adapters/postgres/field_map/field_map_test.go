@@ -10,14 +10,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 func TestFieldMapPostgreSQLModelRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC()
-	entity := &entities.FieldMap{
+	entity := &shared.FieldMap{
 		ID:        uuid.New(),
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
@@ -41,7 +41,7 @@ func TestFieldMapPostgreSQLModelRoundTrip(t *testing.T) {
 func TestFieldMapPostgreSQLModelDefaults(t *testing.T) {
 	t.Parallel()
 
-	entity := &entities.FieldMap{
+	entity := &shared.FieldMap{
 		ID:        uuid.New(),
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
@@ -69,7 +69,7 @@ func TestNewFieldMapPostgreSQLModel_NilEntityID(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC()
-	entity := &entities.FieldMap{
+	entity := &shared.FieldMap{
 		ID:        uuid.Nil,
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
@@ -90,7 +90,7 @@ func TestNewFieldMapPostgreSQLModel_EmptyMapping(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC()
-	entity := &entities.FieldMap{
+	entity := &shared.FieldMap{
 		ID:        uuid.New(),
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
@@ -111,7 +111,7 @@ func TestNewFieldMapPostgreSQLModel_ComplexMapping(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC()
-	entity := &entities.FieldMap{
+	entity := &shared.FieldMap{
 		ID:        uuid.New(),
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
@@ -309,7 +309,7 @@ func TestNewFieldMapPostgreSQLModel_ZeroUpdatedAt(t *testing.T) {
 	t.Parallel()
 
 	createdAt := time.Now().UTC()
-	entity := &entities.FieldMap{
+	entity := &shared.FieldMap{
 		ID:        uuid.New(),
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
@@ -330,7 +330,7 @@ func TestNewFieldMapPostgreSQLModel_NilMapping(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC()
-	entity := &entities.FieldMap{
+	entity := &shared.FieldMap{
 		ID:        uuid.New(),
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
@@ -377,7 +377,7 @@ func TestModelPreservesAllFields(t *testing.T) {
 	contextID := uuid.New()
 	sourceID := uuid.New()
 
-	entity := &entities.FieldMap{
+	entity := &shared.FieldMap{
 		ID:        entityID,
 		ContextID: contextID,
 		SourceID:  sourceID,
@@ -439,7 +439,7 @@ func TestToEntity_LargeMappingPayload(t *testing.T) {
 		largeMapping[key] = "value_" + key
 	}
 
-	entity := &entities.FieldMap{
+	entity := &shared.FieldMap{
 		ID:        uuid.New(),
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),

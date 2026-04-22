@@ -6,6 +6,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories"
 	configPorts "github.com/LerianStudio/matcher/internal/configuration/ports"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // Sentinel errors for use case validation.
@@ -22,7 +23,7 @@ type UseCase struct {
 	sourceRepo      repositories.SourceRepository
 	fieldMapRepo    repositories.FieldMapRepository
 	matchRuleRepo   repositories.MatchRuleRepository
-	feeScheduleRepo configPorts.FeeScheduleRepository
+	feeScheduleRepo sharedPorts.FeeScheduleRepository
 	feeRuleRepo     repositories.FeeRuleRepository
 	scheduleRepo    configPorts.ScheduleRepository
 }
@@ -31,7 +32,7 @@ type UseCase struct {
 type QueryUseCaseOption func(*UseCase)
 
 // WithFeeScheduleRepository sets the fee schedule repository for the query use case.
-func WithFeeScheduleRepository(repo configPorts.FeeScheduleRepository) QueryUseCaseOption {
+func WithFeeScheduleRepository(repo sharedPorts.FeeScheduleRepository) QueryUseCaseOption {
 	return func(uc *UseCase) {
 		if repo != nil {
 			uc.feeScheduleRepo = repo

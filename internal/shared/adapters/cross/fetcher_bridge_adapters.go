@@ -26,11 +26,12 @@ var (
 	_ sharedPorts.ExtractionLifecycleLinkWriter = (*ExtractionLifecycleLinkWriterAdapter)(nil)
 )
 
-// FetcherBridgeIntakeAdapter translates the shared-kernel TrustedContentInput
-// into the ingestion UseCase's IngestFromTrustedStreamInput, calls the
-// underlying ingestion pipeline, and translates the outcome back into the
-// shared TrustedContentOutcome. It exists so the discovery context can ingest
+// FetcherBridgeIntakeAdapter hands the shared-kernel TrustedContentInput to
+// the ingestion UseCase and translates the outcome back into the shared
+// TrustedContentOutcome. It exists so the discovery context can ingest
 // Fetcher content without importing ingestion directly (preserving AC-T1).
+// Since T-007 K-16 collapsed the duplicate input types, the intake path is a
+// direct passthrough — the shared input IS the ingestion input.
 type FetcherBridgeIntakeAdapter struct {
 	uc *ingestionCommand.UseCase
 }
@@ -66,13 +67,7 @@ func (adapter *FetcherBridgeIntakeAdapter) IngestTrustedContent(
 		return sharedPorts.TrustedContentOutcome{}, err
 	}
 
-	output, err := adapter.uc.IngestFromTrustedStream(ctx, ingestionCommand.IngestFromTrustedStreamInput{
-		ContextID:      input.ContextID,
-		SourceID:       input.SourceID,
-		Format:         input.Format,
-		Content:        input.Content,
-		SourceMetadata: input.SourceMetadata,
-	})
+	output, err := adapter.uc.IngestFromTrustedStream(ctx, input)
 	if err != nil {
 		wrappedErr := fmt.Errorf("fetcher bridge intake: %w", err)
 		libOpentelemetry.HandleSpanError(span, "ingestion from trusted stream failed", wrappedErr)

@@ -977,12 +977,10 @@ linters:
         - "func encoding/json.Unmarshal(data []byte, v any) error"
         # Domain entity factory and method errors - these are domain validation errors that should bubble up as-is
         - "func github.com/LerianStudio/matcher/internal/configuration/domain/entities.NewReconciliationContext(tenantID github.com/google/uuid.UUID, input github.com/LerianStudio/matcher/internal/configuration/domain/entities.CreateReconciliationContextInput) (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.ReconciliationContext, error)"
-        - "func github.com/LerianStudio/matcher/internal/configuration/domain/entities.NewFieldMap(contextID github.com/google/uuid.UUID, sourceID github.com/google/uuid.UUID, input github.com/LerianStudio/matcher/internal/configuration/domain/entities.CreateFieldMapInput) (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.FieldMap, error)"
         - "func github.com/LerianStudio/matcher/internal/configuration/domain/entities.NewMatchRule(contextID github.com/google/uuid.UUID, input github.com/LerianStudio/matcher/internal/configuration/domain/entities.CreateMatchRuleInput) (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.MatchRule, error)"
         - "func github.com/LerianStudio/matcher/internal/configuration/domain/entities.NewReconciliationSource(contextID github.com/google/uuid.UUID, input github.com/LerianStudio/matcher/internal/configuration/domain/entities.CreateReconciliationSourceInput) (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.ReconciliationSource, error)"
         # Domain entity Update methods - domain validation errors bubble up
         - "func (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.ReconciliationContext).Update(input github.com/LerianStudio/matcher/internal/configuration/domain/entities.UpdateReconciliationContextInput) error"
-        - "func (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.FieldMap).Update(input github.com/LerianStudio/matcher/internal/configuration/domain/entities.UpdateFieldMapInput) error"
         - "func (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.MatchRule).Update(input github.com/LerianStudio/matcher/internal/configuration/domain/entities.UpdateMatchRuleInput) error"
         - "func (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.ReconciliationSource).Update(input github.com/LerianStudio/matcher/internal/configuration/domain/entities.UpdateReconciliationSourceInput) error"
       # Package globs to ignore - internal packages where errors are already context-rich
@@ -990,6 +988,7 @@ linters:
         - github.com/LerianStudio/matcher/internal/configuration/domain/*
         - github.com/LerianStudio/matcher/internal/ingestion/domain/*
         - github.com/LerianStudio/matcher/internal/matching/domain/*
+        - github.com/LerianStudio/matcher/internal/shared/domain
         - github.com/LerianStudio/matcher/internal/*/domain/repositories
       # Interface regex patterns for repository methods - their errors should bubble up as-is
       ignore-interface-regexps:

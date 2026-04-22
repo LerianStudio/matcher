@@ -203,7 +203,7 @@ func TestCloneContext_WithSourcesAndRules(t *testing.T) {
 
 	// Field map for source 1.
 	mockFMRepo.EXPECT().FindBySourceID(gomock.Any(), sourceID1).
-		Return(&entities.FieldMap{
+		Return(&shared.FieldMap{
 			ID:        uuid.New(),
 			ContextID: sourceCtxID,
 			SourceID:  sourceID1,

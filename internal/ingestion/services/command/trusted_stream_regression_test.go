@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -74,7 +76,7 @@ func TestIngestFromTrustedStream_UnsupportedFormat_ReturnsSentinel(t *testing.T)
 	uc, err := NewUseCase(deps)
 	require.NoError(t, err)
 
-	output, err := uc.IngestFromTrustedStream(context.Background(), IngestFromTrustedStreamInput{
+	output, err := uc.IngestFromTrustedStream(context.Background(), sharedPorts.TrustedContentInput{
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
 		Format:    "unsupported-format",
@@ -94,7 +96,7 @@ func TestIngestFromTrustedStream_MissingContext_ReturnsSentinel(t *testing.T) {
 	uc, err := NewUseCase(deps)
 	require.NoError(t, err)
 
-	output, err := uc.IngestFromTrustedStream(context.Background(), IngestFromTrustedStreamInput{
+	output, err := uc.IngestFromTrustedStream(context.Background(), sharedPorts.TrustedContentInput{
 		ContextID: uuid.Nil,
 		SourceID:  uuid.New(),
 		Format:    "csv",
@@ -114,7 +116,7 @@ func TestIngestFromTrustedStream_EmptyFormat_ReturnsSentinel(t *testing.T) {
 	uc, err := NewUseCase(deps)
 	require.NoError(t, err)
 
-	output, err := uc.IngestFromTrustedStream(context.Background(), IngestFromTrustedStreamInput{
+	output, err := uc.IngestFromTrustedStream(context.Background(), sharedPorts.TrustedContentInput{
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
 		Format:    "   ",
@@ -131,7 +133,7 @@ func TestIngestFromTrustedStream_NilUseCase_ReturnsSentinel(t *testing.T) {
 
 	var uc *UseCase
 
-	output, err := uc.IngestFromTrustedStream(context.Background(), IngestFromTrustedStreamInput{})
+	output, err := uc.IngestFromTrustedStream(context.Background(), sharedPorts.TrustedContentInput{})
 	require.Nil(t, output)
 	require.ErrorIs(t, err, ErrNilUseCase)
 }
@@ -157,7 +159,7 @@ func TestIngestFromTrustedStream_PrepareFailure_WrapsError(t *testing.T) {
 	uc, err := NewUseCase(deps)
 	require.NoError(t, err)
 
-	output, err := uc.IngestFromTrustedStream(ctx, IngestFromTrustedStreamInput{
+	output, err := uc.IngestFromTrustedStream(ctx, sharedPorts.TrustedContentInput{
 		ContextID: contextID,
 		SourceID:  sourceID,
 		Format:    "json",
@@ -205,7 +207,7 @@ func TestIngestFromTrustedStream_ProcessFailure_ReturnsPipelineError(t *testing.
 	uc, err := NewUseCase(deps)
 	require.NoError(t, err)
 
-	output, err := uc.IngestFromTrustedStream(ctx, IngestFromTrustedStreamInput{
+	output, err := uc.IngestFromTrustedStream(ctx, sharedPorts.TrustedContentInput{
 		ContextID: contextID,
 		SourceID:  sourceID,
 		Format:    "json",
@@ -248,7 +250,7 @@ func TestIngestFromTrustedStream_CompleteFailure_WrapsError(t *testing.T) {
 	uc, err := NewUseCase(deps)
 	require.NoError(t, err)
 
-	output, err := uc.IngestFromTrustedStream(ctx, IngestFromTrustedStreamInput{
+	output, err := uc.IngestFromTrustedStream(ctx, sharedPorts.TrustedContentInput{
 		ContextID: contextID,
 		SourceID:  sourceID,
 		Format:    "json",

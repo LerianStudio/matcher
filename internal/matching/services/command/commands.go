@@ -60,7 +60,7 @@ type UseCase struct {
 	adjustmentRepo       matchingRepositories.AdjustmentRepository
 	infraProvider        sharedPorts.InfrastructureProvider
 	auditLogRepo         sharedPorts.AuditLogRepository
-	feeScheduleRepo      matchingRepositories.FeeScheduleRepository
+	feeScheduleRepo      sharedPorts.FeeScheduleRepository
 	feeRuleProvider      ports.FeeRuleProvider
 	executeRules         func(context.Context, ExecuteRulesInput) ([]matching.MatchProposal, error)
 	executeRulesDetailed func(context.Context, ExecuteRulesInput) (*ExecuteRulesResult, error)
@@ -84,7 +84,7 @@ type UseCaseDeps struct {
 	AdjustmentRepo   matchingRepositories.AdjustmentRepository
 	InfraProvider    sharedPorts.InfrastructureProvider
 	AuditLogRepo     sharedPorts.AuditLogRepository
-	FeeScheduleRepo  matchingRepositories.FeeScheduleRepository
+	FeeScheduleRepo  sharedPorts.FeeScheduleRepository
 	FeeRuleProvider  ports.FeeRuleProvider
 }
 

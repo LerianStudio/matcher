@@ -197,17 +197,17 @@ func (stub *sourceRepoStub) Delete(ctx context.Context, contextID, identifier uu
 }
 
 type fieldMapRepoStub struct {
-	createFn         func(context.Context, *entities.FieldMap) (*entities.FieldMap, error)
-	findByIDFn       func(context.Context, uuid.UUID) (*entities.FieldMap, error)
-	findBySourceIDFn func(context.Context, uuid.UUID) (*entities.FieldMap, error)
-	updateFn         func(context.Context, *entities.FieldMap) (*entities.FieldMap, error)
+	createFn         func(context.Context, *shared.FieldMap) (*shared.FieldMap, error)
+	findByIDFn       func(context.Context, uuid.UUID) (*shared.FieldMap, error)
+	findBySourceIDFn func(context.Context, uuid.UUID) (*shared.FieldMap, error)
+	updateFn         func(context.Context, *shared.FieldMap) (*shared.FieldMap, error)
 	deleteFn         func(context.Context, uuid.UUID) error
 }
 
 func (stub *fieldMapRepoStub) Create(
 	ctx context.Context,
-	entity *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	entity *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	if stub.createFn != nil {
 		return stub.createFn(ctx, entity)
 	}
@@ -218,7 +218,7 @@ func (stub *fieldMapRepoStub) Create(
 func (stub *fieldMapRepoStub) FindByID(
 	ctx context.Context,
 	identifier uuid.UUID,
-) (*entities.FieldMap, error) {
+) (*shared.FieldMap, error) {
 	if stub.findByIDFn != nil {
 		return stub.findByIDFn(ctx, identifier)
 	}
@@ -229,7 +229,7 @@ func (stub *fieldMapRepoStub) FindByID(
 func (stub *fieldMapRepoStub) FindBySourceID(
 	ctx context.Context,
 	sourceID uuid.UUID,
-) (*entities.FieldMap, error) {
+) (*shared.FieldMap, error) {
 	if stub.findBySourceIDFn != nil {
 		return stub.findBySourceIDFn(ctx, sourceID)
 	}
@@ -239,8 +239,8 @@ func (stub *fieldMapRepoStub) FindBySourceID(
 
 func (stub *fieldMapRepoStub) Update(
 	ctx context.Context,
-	entity *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	entity *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	if stub.updateFn != nil {
 		return stub.updateFn(ctx, entity)
 	}
@@ -455,14 +455,14 @@ func (stub *sourceRepoTxStub) CreateWithTx(
 
 type fieldMapRepoTxStub struct {
 	*fieldMapRepoStub
-	createWithTxFn func(context.Context, *sql.Tx, *entities.FieldMap) (*entities.FieldMap, error)
+	createWithTxFn func(context.Context, *sql.Tx, *shared.FieldMap) (*shared.FieldMap, error)
 }
 
 func (stub *fieldMapRepoTxStub) CreateWithTx(
 	ctx context.Context,
 	tx *sql.Tx,
-	entity *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	entity *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	if stub.createWithTxFn != nil {
 		return stub.createWithTxFn(ctx, tx, entity)
 	}
@@ -709,7 +709,7 @@ func TestCreateContext_TransactionalInlineCreate_Success(t *testing.T) {
 
 	fmRepo := &fieldMapRepoTxStub{
 		fieldMapRepoStub: &fieldMapRepoStub{},
-		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.FieldMap) (*entities.FieldMap, error) {
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *shared.FieldMap) (*shared.FieldMap, error) {
 			fieldMapCreateWithTxCalls++
 			return entity, nil
 		},
@@ -795,7 +795,7 @@ func TestCreateContext_TransactionalInlineCreate_EmptyMappingSkipsFieldMap(t *te
 
 	fmRepo := &fieldMapRepoTxStub{
 		fieldMapRepoStub: &fieldMapRepoStub{},
-		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.FieldMap) (*entities.FieldMap, error) {
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *shared.FieldMap) (*shared.FieldMap, error) {
 			fieldMapCreateWithTxCalls++
 			return entity, nil
 		},
@@ -955,7 +955,7 @@ func TestCreateContext_TransactionalInlineCreate_FieldMapCreateError(t *testing.
 
 	fmRepo := &fieldMapRepoTxStub{
 		fieldMapRepoStub: &fieldMapRepoStub{},
-		createWithTxFn: func(_ context.Context, _ *sql.Tx, _ *entities.FieldMap) (*entities.FieldMap, error) {
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, _ *shared.FieldMap) (*shared.FieldMap, error) {
 			return nil, errCreateFailed
 		},
 	}
@@ -1123,7 +1123,7 @@ func TestCreateContext_TransactionalInlineCreate_MixedMappings(t *testing.T) {
 
 	fmRepo := &fieldMapRepoTxStub{
 		fieldMapRepoStub: &fieldMapRepoStub{},
-		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.FieldMap) (*entities.FieldMap, error) {
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *shared.FieldMap) (*shared.FieldMap, error) {
 			fieldMapCreateWithTxCalls++
 			return entity, nil
 		},
@@ -2514,7 +2514,7 @@ func TestCreateContext_TransactionalInlineCreate_AllSourcesWithMappings(t *testi
 
 	fmRepo := &fieldMapRepoTxStub{
 		fieldMapRepoStub: &fieldMapRepoStub{},
-		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.FieldMap) (*entities.FieldMap, error) {
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *shared.FieldMap) (*shared.FieldMap, error) {
 			fieldMapCreateWithTxCalls++
 			return entity, nil
 		},
@@ -2621,7 +2621,7 @@ func TestCreateContext_TransactionalInlineCreate_NilMappingSkipsFieldMap(t *test
 
 	fmRepo := &fieldMapRepoTxStub{
 		fieldMapRepoStub: &fieldMapRepoStub{},
-		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.FieldMap) (*entities.FieldMap, error) {
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *shared.FieldMap) (*shared.FieldMap, error) {
 			fieldMapCreateWithTxCalls++
 			return entity, nil
 		},

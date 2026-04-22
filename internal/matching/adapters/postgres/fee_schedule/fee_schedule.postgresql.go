@@ -642,4 +642,4 @@ func queryItemsForSchedules(ctx context.Context, tx *sql.Tx, scheduleIDs []strin
 	return grouped, nil
 }
 
-var _ matchingRepos.FeeScheduleRepository = (*Repository)(nil)
+var _ ports.FeeScheduleRepository = (*Repository)(nil)

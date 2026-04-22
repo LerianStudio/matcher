@@ -453,7 +453,7 @@ func TestUpdateFieldMap_NotFound(t *testing.T) {
 
 	app.Patch("/v1/field-maps/:fieldMapId", fixture.handler.UpdateFieldMap)
 
-	payload := mustJSON(t, entities.UpdateFieldMapInput{
+	payload := mustJSON(t, shared.UpdateFieldMapInput{
 		Mapping: map[string]any{"field": "updated"},
 	})
 
@@ -502,7 +502,7 @@ func TestUpdateFieldMap_UnauthorizedTenant(t *testing.T) {
 
 	app.Patch("/v1/field-maps/:fieldMapId", fixture.handler.UpdateFieldMap)
 
-	payload := mustJSON(t, entities.UpdateFieldMapInput{
+	payload := mustJSON(t, shared.UpdateFieldMapInput{
 		Mapping: map[string]any{"field": "updated"},
 	})
 
@@ -531,7 +531,7 @@ func TestUpdateFieldMap_OwnershipDenied(t *testing.T) {
 
 	app.Patch("/v1/field-maps/:fieldMapId", fixture.handler.UpdateFieldMap)
 
-	payload := mustJSON(t, entities.UpdateFieldMapInput{
+	payload := mustJSON(t, shared.UpdateFieldMapInput{
 		Mapping: map[string]any{"field": "updated"},
 	})
 
@@ -732,11 +732,11 @@ func TestIsClientSafeError_Comprehensive(t *testing.T) {
 		entities.ErrSourceNameTooLong,
 		entities.ErrSourceTypeInvalid,
 		entities.ErrSourceContextRequired,
-		entities.ErrFieldMapNil,
-		entities.ErrFieldMapContextRequired,
-		entities.ErrFieldMapSourceRequired,
-		entities.ErrFieldMapMappingRequired,
-		entities.ErrFieldMapMappingValueEmpty,
+		shared.ErrFieldMapNil,
+		shared.ErrFieldMapContextRequired,
+		shared.ErrFieldMapSourceRequired,
+		shared.ErrFieldMapMappingRequired,
+		shared.ErrFieldMapMappingValueEmpty,
 		entities.ErrMatchRuleNil,
 		entities.ErrRuleContextRequired,
 		entities.ErrRulePriorityInvalid,
@@ -1998,7 +1998,7 @@ func TestCreateFieldMap_InvalidSourceUUID(t *testing.T) {
 
 	app.Post("/v1/contexts/:contextId/sources/:sourceId/field-maps", fixture.handler.CreateFieldMap)
 
-	payload := entities.CreateFieldMapInput{
+	payload := shared.CreateFieldMapInput{
 		Mapping: map[string]any{"field": "value"},
 	}
 

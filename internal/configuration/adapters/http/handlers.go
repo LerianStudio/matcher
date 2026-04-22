@@ -18,6 +18,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
 	"github.com/LerianStudio/matcher/internal/configuration/services/query"
 	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // Configuration handler errors.
@@ -235,11 +236,11 @@ func isClientSafeError(err error) bool {
 		entities.ErrSourceContextRequired,
 		entities.ErrSourceSideRequired,
 		entities.ErrSourceSideInvalid,
-		entities.ErrFieldMapNil,
-		entities.ErrFieldMapContextRequired,
-		entities.ErrFieldMapSourceRequired,
-		entities.ErrFieldMapMappingRequired,
-		entities.ErrFieldMapMappingValueEmpty,
+		shared.ErrFieldMapNil,
+		shared.ErrFieldMapContextRequired,
+		shared.ErrFieldMapSourceRequired,
+		shared.ErrFieldMapMappingRequired,
+		shared.ErrFieldMapMappingValueEmpty,
 		entities.ErrMatchRuleNil,
 		entities.ErrRuleContextRequired,
 		entities.ErrRulePriorityInvalid,

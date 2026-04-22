@@ -37,7 +37,7 @@ type UseCase struct {
 	fieldMapRepo    repositories.FieldMapRepository
 	matchRuleRepo   repositories.MatchRuleRepository
 	auditPublisher  configPorts.AuditPublisher
-	feeScheduleRepo configPorts.FeeScheduleRepository
+	feeScheduleRepo sharedPorts.FeeScheduleRepository
 	feeRuleRepo     repositories.FeeRuleRepository
 	scheduleRepo    configPorts.ScheduleRepository
 	infraProvider   sharedPorts.InfrastructureProvider
@@ -94,7 +94,7 @@ func WithAuditPublisher(publisher configPorts.AuditPublisher) UseCaseOption {
 }
 
 // WithFeeScheduleRepository sets the fee schedule repository for the use case.
-func WithFeeScheduleRepository(repo configPorts.FeeScheduleRepository) UseCaseOption {
+func WithFeeScheduleRepository(repo sharedPorts.FeeScheduleRepository) UseCaseOption {
 	return func(uc *UseCase) {
 		if repo != nil {
 			uc.feeScheduleRepo = repo

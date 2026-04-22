@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/google/uuid"
@@ -18,6 +17,7 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // malformedExtractionIDLogCap is the maximum number of bytes of a malformed
@@ -68,22 +68,6 @@ var (
 	)
 )
 
-// IngestFromTrustedStreamInput contains the data required to ingest content
-// produced by a trusted internal bridge (e.g. Fetcher) rather than by a
-// multipart HTTP upload. SourceMetadata is an open map forwarded from the
-// bridge; today only the "filename" key is read (to override the synthetic
-// IngestionJob filename — see resolveTrustedStreamFileName). Other keys are
-// accepted but ignored pending provenance persistence in a future task (so
-// bridges can already plumb e.g. extraction id through without a breaking
-// change when the full provenance schema lands).
-type IngestFromTrustedStreamInput struct {
-	ContextID      uuid.UUID
-	SourceID       uuid.UUID
-	Format         string
-	Content        io.Reader
-	SourceMetadata map[string]string
-}
-
 // IngestFromTrustedStreamOutput is the durable outcome of a trusted-stream
 // intake call. IngestionJobID identifies the persisted IngestionJob so the
 // originating extraction lifecycle can be linked to downstream intake.
@@ -105,7 +89,7 @@ type IngestFromTrustedStreamOutput struct {
 // behavior rather than inventing a separate pipeline).
 func (uc *UseCase) IngestFromTrustedStream(
 	ctx context.Context,
-	input IngestFromTrustedStreamInput,
+	input sharedPorts.TrustedContentInput,
 ) (*IngestFromTrustedStreamOutput, error) {
 	if uc == nil {
 		return nil, ErrNilUseCase
@@ -217,7 +201,7 @@ func (uc *UseCase) findExistingTrustedStreamJob(
 
 // validateTrustedStreamInput enforces the domain invariants of a trusted
 // intake call before any infrastructure work happens.
-func validateTrustedStreamInput(uc *UseCase, input IngestFromTrustedStreamInput) error {
+func validateTrustedStreamInput(uc *UseCase, input sharedPorts.TrustedContentInput) error {
 	if input.Content == nil {
 		return ErrIngestFromTrustedStreamContentRequired
 	}

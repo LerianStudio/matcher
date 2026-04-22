@@ -10,15 +10,15 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
-	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // CreateFieldMap creates a new field map for a source.
 func (uc *UseCase) CreateFieldMap(
 	ctx context.Context,
 	contextID, sourceID uuid.UUID,
-	input entities.CreateFieldMapInput,
-) (*entities.FieldMap, error) {
+	input shared.CreateFieldMapInput,
+) (*shared.FieldMap, error) {
 	if uc == nil || uc.fieldMapRepo == nil {
 		return nil, ErrNilFieldMapRepository
 	}
@@ -28,7 +28,7 @@ func (uc *UseCase) CreateFieldMap(
 	ctx, span := tracer.Start(ctx, "command.create_field_map")
 	defer span.End()
 
-	entity, err := entities.NewFieldMap(ctx, contextID, sourceID, input)
+	entity, err := shared.NewFieldMap(ctx, contextID, sourceID, input)
 	if err != nil {
 		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid field map input", err)
 		return nil, err
@@ -59,8 +59,8 @@ func (uc *UseCase) CreateFieldMap(
 func (uc *UseCase) UpdateFieldMap(
 	ctx context.Context,
 	fieldMapID uuid.UUID,
-	input entities.UpdateFieldMapInput,
-) (*entities.FieldMap, error) {
+	input shared.UpdateFieldMapInput,
+) (*shared.FieldMap, error) {
 	if uc == nil || uc.fieldMapRepo == nil {
 		return nil, ErrNilFieldMapRepository
 	}
