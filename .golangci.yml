@@ -981,11 +981,13 @@ linters:
         # Domain entity factory and method errors - these are domain validation errors that should bubble up as-is
         - "func github.com/LerianStudio/matcher/internal/configuration/domain/entities.NewReconciliationContext(tenantID github.com/google/uuid.UUID, input github.com/LerianStudio/matcher/internal/configuration/domain/entities.CreateReconciliationContextInput) (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.ReconciliationContext, error)"
         - "func github.com/LerianStudio/matcher/internal/configuration/domain/entities.NewMatchRule(contextID github.com/google/uuid.UUID, input github.com/LerianStudio/matcher/internal/configuration/domain/entities.CreateMatchRuleInput) (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.MatchRule, error)"
-        - "func github.com/LerianStudio/matcher/internal/configuration/domain/entities.NewReconciliationSource(contextID github.com/google/uuid.UUID, input github.com/LerianStudio/matcher/internal/configuration/domain/entities.CreateReconciliationSourceInput) (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.ReconciliationSource, error)"
+        # NewReconciliationSource migrated to internal/shared/domain (T-007-followup).
+        # Covered by the internal/shared/domain entry in ignore-package-globs below.
         # Domain entity Update methods - domain validation errors bubble up
         - "func (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.ReconciliationContext).Update(input github.com/LerianStudio/matcher/internal/configuration/domain/entities.UpdateReconciliationContextInput) error"
         - "func (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.MatchRule).Update(input github.com/LerianStudio/matcher/internal/configuration/domain/entities.UpdateMatchRuleInput) error"
-        - "func (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.ReconciliationSource).Update(input github.com/LerianStudio/matcher/internal/configuration/domain/entities.UpdateReconciliationSourceInput) error"
+        # ReconciliationSource.Update migrated to internal/shared/domain (T-007-followup).
+        # Covered by the internal/shared/domain entry in ignore-package-globs below.
       # Package globs to ignore - internal packages where errors are already context-rich
       ignore-package-globs:
         - github.com/LerianStudio/matcher/internal/configuration/domain/*

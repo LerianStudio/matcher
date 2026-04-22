@@ -201,7 +201,7 @@ func TestSourceRepositoryAdapter_FindByID_Success(t *testing.T) {
 	assert.Equal(t, configSource.ID, result.ID)
 	assert.Equal(t, configSource.ContextID, result.ContextID)
 	assert.Equal(t, configSource.Name, result.Name)
-	assert.Equal(t, string(configSource.Type), result.Type)
+	assert.Equal(t, configSource.Type, result.Type)
 	assert.Equal(t, configSource.Config, result.Config)
 	assert.Equal(t, configSource.CreatedAt, result.CreatedAt)
 	assert.Equal(t, configSource.UpdatedAt, result.UpdatedAt)

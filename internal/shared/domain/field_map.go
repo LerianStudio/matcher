@@ -13,7 +13,6 @@ import (
 	"github.com/LerianStudio/lib-commons/v5/commons/assert"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
-	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 // Field map sentinel errors.
@@ -134,25 +133,4 @@ func (fm *FieldMap) MappingJSON() ([]byte, error) {
 	}
 
 	return json.Marshal(fm.Mapping)
-}
-
-// ReconciliationSource represents a data source for reconciliation.
-// This is a shared kernel type used by both Configuration and Ingestion contexts.
-//
-// NOTE: This type intentionally uses `Type string` rather than the configuration
-// package's `value_objects.SourceType` to avoid pulling configuration's enum
-// package into the shared kernel. The configuration/domain/entities package
-// holds the full typed entity with `Type value_objects.SourceType`, and the
-// cross-adapter translates at the boundary (see internal/shared/adapters/cross/
-// configuration_adapters.go). See docs/handoffs/simplify/T-007.md for the
-// divergence rationale.
-type ReconciliationSource struct {
-	ID        uuid.UUID
-	ContextID uuid.UUID
-	Name      string
-	Type      string
-	Side      sharedfee.MatchingSide
-	Config    map[string]any
-	CreatedAt time.Time
-	UpdatedAt time.Time
 }
