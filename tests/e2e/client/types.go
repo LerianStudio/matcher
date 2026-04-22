@@ -679,7 +679,7 @@ type ExportCountResponse struct {
 
 // BulkAssignRequest is the payload for bulk assigning exceptions.
 type BulkAssignRequest struct {
-	ExceptionIDs []string `json:"exception_ids"`
+	ExceptionIDs []string `json:"exceptionIds"`
 	Assignee     string   `json:"assignee"`
 }
 
@@ -692,8 +692,8 @@ type BulkResolveRequest struct {
 
 // BulkDispatchRequest is the payload for bulk dispatching exceptions.
 type BulkDispatchRequest struct {
-	ExceptionIDs []string `json:"exception_ids"`
-	TargetSystem string   `json:"target_system"`
+	ExceptionIDs []string `json:"exceptionIds"`
+	TargetSystem string   `json:"targetSystem"`
 	Queue        string   `json:"queue,omitempty"`
 }
 
@@ -816,7 +816,7 @@ type ActorMappingResponse struct {
 
 // UpsertActorMappingRequest is the payload for creating/updating an actor mapping.
 type UpsertActorMappingRequest struct {
-	DisplayName *string `json:"display_name"`
+	DisplayName *string `json:"displayName"`
 	Email       *string `json:"email"`
 }
 

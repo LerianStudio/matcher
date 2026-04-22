@@ -11620,7 +11620,7 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "assignee",
-                "exception_ids"
+                "exceptionIds"
             ],
             "properties": {
                 "assignee": {
@@ -11629,7 +11629,7 @@ const docTemplate = `{
                     "maxLength": 255,
                     "example": "user@example.com"
                 },
-                "exception_ids": {
+                "exceptionIds": {
                     "description": "Exception IDs to assign",
                     "type": "array",
                     "maxItems": 100,
@@ -11644,11 +11644,11 @@ const docTemplate = `{
             "description": "Bulk dispatch request payload",
             "type": "object",
             "required": [
-                "exception_ids",
-                "target_system"
+                "exceptionIds",
+                "targetSystem"
             ],
             "properties": {
-                "exception_ids": {
+                "exceptionIds": {
                     "description": "Exception IDs to dispatch",
                     "type": "array",
                     "maxItems": 100,
@@ -11663,7 +11663,7 @@ const docTemplate = `{
                     "maxLength": 255,
                     "example": "RECON-TEAM"
                 },
-                "target_system": {
+                "targetSystem": {
                     "description": "Target system to dispatch to",
                     "type": "string",
                     "maxLength": 255,
@@ -12484,7 +12484,7 @@ const docTemplate = `{
             "description": "Request body for upserting an actor mapping",
             "type": "object",
             "properties": {
-                "display_name": {
+                "displayName": {
                     "description": "Human-readable display name for the actor",
                     "type": "string",
                     "example": "John Doe"

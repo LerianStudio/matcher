@@ -1223,7 +1223,7 @@ definitions:
         example: user@example.com
         maxLength: 255
         type: string
-      exception_ids:
+      exceptionIds:
         description: Exception IDs to assign
         items:
           type: string
@@ -1232,12 +1232,12 @@ definitions:
         type: array
     required:
     - assignee
-    - exception_ids
+    - exceptionIds
     type: object
   github_com_LerianStudio_matcher_internal_exception_adapters_http_dto.BulkDispatchRequest:
     description: Bulk dispatch request payload
     properties:
-      exception_ids:
+      exceptionIds:
         description: Exception IDs to dispatch
         items:
           type: string
@@ -1249,14 +1249,14 @@ definitions:
         example: RECON-TEAM
         maxLength: 255
         type: string
-      target_system:
+      targetSystem:
         description: Target system to dispatch to
         example: JIRA
         maxLength: 255
         type: string
     required:
-    - exception_ids
-    - target_system
+    - exceptionIds
+    - targetSystem
     type: object
   github_com_LerianStudio_matcher_internal_exception_adapters_http_dto.BulkFailure:
     description: Single failure in bulk operation
@@ -1893,7 +1893,7 @@ definitions:
   github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.UpsertActorMappingRequest:
     description: Request body for upserting an actor mapping
     properties:
-      display_name:
+      displayName:
         description: Human-readable display name for the actor
         example: John Doe
         type: string

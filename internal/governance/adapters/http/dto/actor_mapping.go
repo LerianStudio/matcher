@@ -7,11 +7,11 @@ import (
 )
 
 // UpsertActorMappingRequest represents the request body for creating/updating an actor mapping.
-// At least one of display_name or email must be provided.
+// At least one of displayName or email must be provided.
 // @Description Request body for upserting an actor mapping
 type UpsertActorMappingRequest struct {
 	// Human-readable display name for the actor
-	DisplayName *string `json:"display_name" example:"John Doe"`
+	DisplayName *string `json:"displayName" example:"John Doe"`
 	// Email address of the actor
 	Email *string `json:"email" validate:"omitempty,email" example:"john.doe@example.com"`
 }

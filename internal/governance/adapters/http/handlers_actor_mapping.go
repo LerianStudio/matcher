@@ -27,7 +27,7 @@ var (
 	ErrActorMappingCommandUCRequired = errors.New("actor mapping command use case is required")
 	ErrActorMappingRepoRequired      = errors.New("actor mapping repository is required")
 	ErrMissingActorID                = errors.New("actor id path parameter is required")
-	ErrAtLeastOneFieldRequired       = errors.New("at least one of display_name or email must be provided")
+	ErrAtLeastOneFieldRequired       = errors.New("at least one of displayName or email must be provided")
 	ErrNilActorMappingResponse       = errors.New("nil mapping after successful upsert")
 )
 

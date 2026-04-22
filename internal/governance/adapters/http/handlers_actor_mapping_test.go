@@ -435,7 +435,7 @@ func TestActorMappingSentinelErrors(t *testing.T) {
 		{"ErrActorMappingRepoRequired", ErrActorMappingRepoRequired, "actor mapping repository is required"},
 		{"ErrMissingActorID", ErrMissingActorID, "actor id path parameter is required"},
 		{"ErrActorMappingHandlerRequired", ErrActorMappingHandlerRequired, "actor mapping handler is required"},
-		{"ErrAtLeastOneFieldRequired", ErrAtLeastOneFieldRequired, "at least one of display_name or email must be provided"},
+		{"ErrAtLeastOneFieldRequired", ErrAtLeastOneFieldRequired, "at least one of displayName or email must be provided"},
 	}
 
 	for _, tt := range tests {
