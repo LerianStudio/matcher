@@ -5,11 +5,13 @@ package http
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -27,6 +29,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/services/query"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 // errNotImplemented is returned by noop repositories for unimplemented methods.
@@ -93,7 +96,18 @@ func TestConfigRoutes_AuthEnforced(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(commandUseCase, queryUseCase, ctxRepo, srcRepo, mrRepo, false)
+	handler, err := NewHandler(
+		commandUseCase,
+		queryUseCase,
+		ctxRepo,
+		srcRepo,
+		mrRepo,
+		&noopFieldMapRepo{},
+		&noopFeeRuleRepo{},
+		&noopFeeScheduleRepo{},
+		&noopScheduleRepo{},
+		false,
+	)
 	require.NoError(t, err)
 	err = RegisterRoutes(protected, handler)
 	require.NoError(t, err)
@@ -393,5 +407,91 @@ func (noopMatchRuleRepo) Delete(_ context.Context, _, _ uuid.UUID) error {
 }
 
 func (noopMatchRuleRepo) ReorderPriorities(_ context.Context, _ uuid.UUID, _ []uuid.UUID) error {
+	return errNotImplemented
+}
+
+type noopFeeRuleRepo struct{}
+
+func (noopFeeRuleRepo) Create(_ context.Context, _ *fee.FeeRule) error {
+	return errNotImplemented
+}
+
+func (noopFeeRuleRepo) CreateWithTx(_ context.Context, _ *sql.Tx, _ *fee.FeeRule) error {
+	return errNotImplemented
+}
+
+func (noopFeeRuleRepo) FindByID(_ context.Context, _ uuid.UUID) (*fee.FeeRule, error) {
+	return nil, errNotImplemented
+}
+
+func (noopFeeRuleRepo) FindByContextID(_ context.Context, _ uuid.UUID) ([]*fee.FeeRule, error) {
+	return nil, errNotImplemented
+}
+
+func (noopFeeRuleRepo) Update(_ context.Context, _ *fee.FeeRule) error {
+	return errNotImplemented
+}
+
+func (noopFeeRuleRepo) UpdateWithTx(_ context.Context, _ *sql.Tx, _ *fee.FeeRule) error {
+	return errNotImplemented
+}
+
+func (noopFeeRuleRepo) Delete(_ context.Context, _, _ uuid.UUID) error {
+	return errNotImplemented
+}
+
+func (noopFeeRuleRepo) DeleteWithTx(_ context.Context, _ *sql.Tx, _, _ uuid.UUID) error {
+	return errNotImplemented
+}
+
+type noopFeeScheduleRepo struct{}
+
+func (noopFeeScheduleRepo) Create(_ context.Context, s *fee.FeeSchedule) (*fee.FeeSchedule, error) {
+	return s, errNotImplemented
+}
+
+func (noopFeeScheduleRepo) GetByID(_ context.Context, _ uuid.UUID) (*fee.FeeSchedule, error) {
+	return nil, errNotImplemented
+}
+
+func (noopFeeScheduleRepo) GetByIDs(_ context.Context, _ []uuid.UUID) (map[uuid.UUID]*fee.FeeSchedule, error) {
+	return nil, errNotImplemented
+}
+
+func (noopFeeScheduleRepo) Update(_ context.Context, s *fee.FeeSchedule) (*fee.FeeSchedule, error) {
+	return s, errNotImplemented
+}
+
+func (noopFeeScheduleRepo) Delete(_ context.Context, _ uuid.UUID) error {
+	return errNotImplemented
+}
+
+func (noopFeeScheduleRepo) List(_ context.Context, _ int) ([]*fee.FeeSchedule, error) {
+	return nil, errNotImplemented
+}
+
+type noopScheduleRepo struct{}
+
+func (noopScheduleRepo) Create(_ context.Context, s *entities.ReconciliationSchedule) (*entities.ReconciliationSchedule, error) {
+	return s, errNotImplemented
+}
+
+func (noopScheduleRepo) FindByID(_ context.Context, _ uuid.UUID) (*entities.ReconciliationSchedule, error) {
+	return nil, errNotImplemented
+}
+
+func (noopScheduleRepo) FindByContextID(_ context.Context, _ uuid.UUID) ([]*entities.ReconciliationSchedule, error) {
+	return nil, errNotImplemented
+}
+
+func (noopScheduleRepo) FindDueSchedules(_ context.Context, _ time.Time) ([]*entities.ReconciliationSchedule, error) {
+	return nil, errNotImplemented
+}
+
+func (noopScheduleRepo) Update(_ context.Context, s *entities.ReconciliationSchedule) (*entities.ReconciliationSchedule, error) {
+	return s, errNotImplemented
+}
+
+func (noopScheduleRepo) Delete(_ context.Context, _ uuid.UUID) error {
 	return errNotImplemented
 }

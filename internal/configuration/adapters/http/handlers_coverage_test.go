@@ -638,11 +638,14 @@ func TestNewHandler_NilCommandUseCase(t *testing.T) {
 	sourceRepo := newSourceRepository()
 	fieldMapRepo := newFieldMapRepository()
 	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
+	feeScheduleRepo := newFeeScheduleRepository()
+	scheduleRepo := newScheduleRepository()
 
 	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
 	require.NoError(t, err)
 
-	_, err = NewHandler(nil, queryUseCase, contextRepo, sourceRepo, matchRuleRepo, false)
+	_, err = NewHandler(nil, queryUseCase, contextRepo, sourceRepo, matchRuleRepo, fieldMapRepo, feeRuleRepo, feeScheduleRepo, scheduleRepo, false)
 	require.ErrorIs(t, err, ErrNilCommandUseCase)
 }
 
@@ -653,11 +656,14 @@ func TestNewHandler_NilQueryUseCase(t *testing.T) {
 	sourceRepo := newSourceRepository()
 	fieldMapRepo := newFieldMapRepository()
 	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
+	feeScheduleRepo := newFeeScheduleRepository()
+	scheduleRepo := newScheduleRepository()
 
 	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
 	require.NoError(t, err)
 
-	_, err = NewHandler(commandUseCase, nil, contextRepo, sourceRepo, matchRuleRepo, false)
+	_, err = NewHandler(commandUseCase, nil, contextRepo, sourceRepo, matchRuleRepo, fieldMapRepo, feeRuleRepo, feeScheduleRepo, scheduleRepo, false)
 	require.ErrorIs(t, err, ErrNilQueryUseCase)
 }
 
@@ -668,6 +674,9 @@ func TestNewHandler_NilContextRepo(t *testing.T) {
 	sourceRepo := newSourceRepository()
 	fieldMapRepo := newFieldMapRepository()
 	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
+	feeScheduleRepo := newFeeScheduleRepository()
+	scheduleRepo := newScheduleRepository()
 
 	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
 	require.NoError(t, err)
@@ -675,7 +684,7 @@ func TestNewHandler_NilContextRepo(t *testing.T) {
 	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
 	require.NoError(t, err)
 
-	_, err = NewHandler(commandUseCase, queryUseCase, nil, sourceRepo, matchRuleRepo, false)
+	_, err = NewHandler(commandUseCase, queryUseCase, nil, sourceRepo, matchRuleRepo, fieldMapRepo, feeRuleRepo, feeScheduleRepo, scheduleRepo, false)
 	require.ErrorIs(t, err, ErrNilContextRepository)
 }
 
@@ -686,6 +695,9 @@ func TestNewHandler_NilSourceRepo(t *testing.T) {
 	sourceRepo := newSourceRepository()
 	fieldMapRepo := newFieldMapRepository()
 	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
+	feeScheduleRepo := newFeeScheduleRepository()
+	scheduleRepo := newScheduleRepository()
 
 	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
 	require.NoError(t, err)
@@ -693,7 +705,7 @@ func TestNewHandler_NilSourceRepo(t *testing.T) {
 	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
 	require.NoError(t, err)
 
-	_, err = NewHandler(commandUseCase, queryUseCase, contextRepo, nil, matchRuleRepo, false)
+	_, err = NewHandler(commandUseCase, queryUseCase, contextRepo, nil, matchRuleRepo, fieldMapRepo, feeRuleRepo, feeScheduleRepo, scheduleRepo, false)
 	require.ErrorIs(t, err, ErrNilSourceRepository)
 }
 
@@ -704,6 +716,9 @@ func TestNewHandler_NilMatchRuleRepo(t *testing.T) {
 	sourceRepo := newSourceRepository()
 	fieldMapRepo := newFieldMapRepository()
 	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
+	feeScheduleRepo := newFeeScheduleRepository()
+	scheduleRepo := newScheduleRepository()
 
 	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
 	require.NoError(t, err)
@@ -711,8 +726,89 @@ func TestNewHandler_NilMatchRuleRepo(t *testing.T) {
 	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
 	require.NoError(t, err)
 
-	_, err = NewHandler(commandUseCase, queryUseCase, contextRepo, sourceRepo, nil, false)
+	_, err = NewHandler(commandUseCase, queryUseCase, contextRepo, sourceRepo, nil, fieldMapRepo, feeRuleRepo, feeScheduleRepo, scheduleRepo, false)
 	require.ErrorIs(t, err, ErrNilMatchRuleRepository)
+}
+
+func TestNewHandler_NilFieldMapRepo(t *testing.T) {
+	t.Parallel()
+
+	contextRepo := newContextRepository()
+	sourceRepo := newSourceRepository()
+	fieldMapRepo := newFieldMapRepository()
+	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
+	feeScheduleRepo := newFeeScheduleRepository()
+	scheduleRepo := newScheduleRepository()
+
+	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	_, err = NewHandler(commandUseCase, queryUseCase, contextRepo, sourceRepo, matchRuleRepo, nil, feeRuleRepo, feeScheduleRepo, scheduleRepo, false)
+	require.ErrorIs(t, err, ErrNilFieldMapRepository)
+}
+
+func TestNewHandler_NilFeeRuleRepo(t *testing.T) {
+	t.Parallel()
+
+	contextRepo := newContextRepository()
+	sourceRepo := newSourceRepository()
+	fieldMapRepo := newFieldMapRepository()
+	matchRuleRepo := newMatchRuleRepository()
+	feeScheduleRepo := newFeeScheduleRepository()
+	scheduleRepo := newScheduleRepository()
+
+	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	_, err = NewHandler(commandUseCase, queryUseCase, contextRepo, sourceRepo, matchRuleRepo, fieldMapRepo, nil, feeScheduleRepo, scheduleRepo, false)
+	require.ErrorIs(t, err, ErrNilFeeRuleRepository)
+}
+
+func TestNewHandler_NilFeeScheduleRepo(t *testing.T) {
+	t.Parallel()
+
+	contextRepo := newContextRepository()
+	sourceRepo := newSourceRepository()
+	fieldMapRepo := newFieldMapRepository()
+	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
+	scheduleRepo := newScheduleRepository()
+
+	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	_, err = NewHandler(commandUseCase, queryUseCase, contextRepo, sourceRepo, matchRuleRepo, fieldMapRepo, feeRuleRepo, nil, scheduleRepo, false)
+	require.ErrorIs(t, err, ErrNilFeeScheduleRepository)
+}
+
+func TestNewHandler_NilScheduleRepo(t *testing.T) {
+	t.Parallel()
+
+	contextRepo := newContextRepository()
+	sourceRepo := newSourceRepository()
+	fieldMapRepo := newFieldMapRepository()
+	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
+	feeScheduleRepo := newFeeScheduleRepository()
+
+	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	_, err = NewHandler(commandUseCase, queryUseCase, contextRepo, sourceRepo, matchRuleRepo, fieldMapRepo, feeRuleRepo, feeScheduleRepo, nil, false)
+	require.ErrorIs(t, err, ErrNilScheduleRepository)
 }
 
 // ─── safeClientMessage tests ──────────────────────────────────
@@ -991,6 +1087,8 @@ func newScheduleFixture(t *testing.T) *handlerFixtureWithSchedule {
 	sourceRepo := newSourceRepository()
 	fieldMapRepo := newFieldMapRepository()
 	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
+	feeScheduleRepo := newFeeScheduleRepository()
 	scheduleRepo := newScheduleRepository()
 
 	commandUseCase, err := command.NewUseCase(
@@ -1005,7 +1103,18 @@ func newScheduleFixture(t *testing.T) *handlerFixtureWithSchedule {
 	)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(commandUseCase, queryUseCase, contextRepo, sourceRepo, matchRuleRepo, false)
+	handler, err := NewHandler(
+		commandUseCase,
+		queryUseCase,
+		contextRepo,
+		sourceRepo,
+		matchRuleRepo,
+		fieldMapRepo,
+		feeRuleRepo,
+		feeScheduleRepo,
+		scheduleRepo,
+		false,
+	)
 	require.NoError(t, err)
 
 	return &handlerFixtureWithSchedule{
@@ -2162,7 +2271,9 @@ func newFeeScheduleHandlerFixture(t *testing.T) *feeScheduleHandlerFixture {
 	sourceRepo := newSourceRepository()
 	fieldMapRepo := newFieldMapRepository()
 	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
 	feeRepo := newFeeScheduleRepository()
+	scheduleRepo := newScheduleRepository()
 
 	commandUseCase, err := command.NewUseCase(
 		contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo,
@@ -2172,11 +2283,21 @@ func newFeeScheduleHandlerFixture(t *testing.T) *feeScheduleHandlerFixture {
 
 	queryUseCase, err := query.NewUseCase(
 		contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo,
-		query.WithFeeScheduleRepository(feeRepo),
 	)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(commandUseCase, queryUseCase, contextRepo, sourceRepo, matchRuleRepo, false)
+	handler, err := NewHandler(
+		commandUseCase,
+		queryUseCase,
+		contextRepo,
+		sourceRepo,
+		matchRuleRepo,
+		fieldMapRepo,
+		feeRuleRepo,
+		feeRepo,
+		scheduleRepo,
+		false,
+	)
 	require.NoError(t, err)
 
 	return &feeScheduleHandlerFixture{

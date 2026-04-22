@@ -22,6 +22,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
+	reporting "github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 	repomocks "github.com/LerianStudio/matcher/internal/reporting/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/reporting/services/command"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query"
@@ -230,18 +231,24 @@ func setupDashboardHandlers(
 	uc, ucErr := query.NewDashboardUseCase(repo, nil)
 	require.NoError(t, ucErr)
 
-	var exportUC *query.UseCase
+	var (
+		exportUC     *query.UseCase
+		handlerRepo  reporting.ReportRepository
+		err          error
+	)
 
-	var err error
 	if reportRepo != nil {
 		exportUC, err = query.NewUseCase(reportRepo)
+		handlerRepo = reportRepo
 	} else {
-		exportUC, err = query.NewUseCase(&mockReportRepository{})
+		defaultRepo := &mockReportRepository{}
+		exportUC, err = query.NewUseCase(defaultRepo)
+		handlerRepo = defaultRepo
 	}
 
 	require.NoError(t, err)
 
-	handlers, err := NewHandlers(uc, provider, exportUC, false)
+	handlers, err := NewHandlers(uc, provider, exportUC, handlerRepo, false)
 	require.NoError(t, err)
 
 	return handlers
@@ -682,7 +689,7 @@ func setupCountHandlers(
 	exportUC, err := query.NewUseCase(reportRepo)
 	require.NoError(t, err)
 
-	handlers, err := NewHandlers(uc, provider, exportUC, false)
+	handlers, err := NewHandlers(uc, provider, exportUC, reportRepo, false)
 	require.NoError(t, err)
 
 	return handlers
@@ -1924,7 +1931,7 @@ func TestMapJobToResponse_WithErrorField(t *testing.T) {
 	querySvc, err := query.NewExportJobQueryService(repo)
 	require.NoError(t, err)
 
-	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
+	handlers, err := NewExportJobHandlers(uc, querySvc, repo, storage, ctxProvider, time.Hour, false)
 	require.NoError(t, err)
 
 	startedAt := time.Now().UTC().Add(-time.Hour)
@@ -1971,7 +1978,7 @@ func TestMapJobToResponse_DownloadableWithFutureExpiry(t *testing.T) {
 	querySvc, err := query.NewExportJobQueryService(repo)
 	require.NoError(t, err)
 
-	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
+	handlers, err := NewExportJobHandlers(uc, querySvc, repo, storage, ctxProvider, time.Hour, false)
 	require.NoError(t, err)
 
 	job := &entities.ExportJob{
@@ -2009,7 +2016,7 @@ func TestMapJobToResponse_NilJobReturnsEmptyResponse(t *testing.T) {
 	querySvc, err := query.NewExportJobQueryService(repo)
 	require.NoError(t, err)
 
-	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
+	handlers, err := NewExportJobHandlers(uc, querySvc, repo, storage, ctxProvider, time.Hour, false)
 	require.NoError(t, err)
 
 	response := handlers.mapJobToResponse(context.Background(), nil)
@@ -2057,7 +2064,7 @@ func setupListByContextHandlers(
 	querySvc, err := query.NewExportJobQueryService(repo)
 	require.NoError(t, err)
 
-	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
+	handlers, err := NewExportJobHandlers(uc, querySvc, repo, storage, ctxProvider, time.Hour, false)
 	require.NoError(t, err)
 
 	return handlers

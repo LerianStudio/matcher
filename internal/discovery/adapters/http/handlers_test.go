@@ -306,7 +306,7 @@ func newHandlerFixture(t *testing.T) *handlerFixture {
 	queryUC, err := discoveryQuery.NewUseCase(fetcherMock, connRepo, schemaRepo, extractionRepo, nil)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(cmdUC, queryUC, false)
+	handler, err := NewHandler(cmdUC, queryUC, connRepo, false)
 	require.NoError(t, err)
 
 	return &handlerFixture{
@@ -464,7 +464,7 @@ func (f *handlerFixture) seedSchema(t *testing.T, connID uuid.UUID) {
 func TestNewHandler_NilCommand(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewHandler(nil, &discoveryQuery.UseCase{}, false)
+	_, err := NewHandler(nil, &discoveryQuery.UseCase{}, newMockConnectionRepo(), false)
 
 	require.ErrorIs(t, err, ErrNilCommandUseCase)
 }
@@ -480,9 +480,28 @@ func TestNewHandler_NilQuery(t *testing.T) {
 	cmdUC, err := discoveryCommand.NewUseCase(fetcherMock, connRepo, schemaRepo, extractionRepo, nil)
 	require.NoError(t, err)
 
-	_, err = NewHandler(cmdUC, nil, false)
+	_, err = NewHandler(cmdUC, nil, connRepo, false)
 
 	require.ErrorIs(t, err, ErrNilQueryUseCase)
+}
+
+func TestNewHandler_NilConnectionRepo(t *testing.T) {
+	t.Parallel()
+
+	fetcherMock := &mockFetcherClient{healthy: true}
+	connRepo := newMockConnectionRepo()
+	schemaRepo := newMockSchemaRepo()
+	extractionRepo := &mockExtractionRepo{}
+
+	cmdUC, err := discoveryCommand.NewUseCase(fetcherMock, connRepo, schemaRepo, extractionRepo, nil)
+	require.NoError(t, err)
+
+	queryUC, err := discoveryQuery.NewUseCase(fetcherMock, connRepo, schemaRepo, extractionRepo, nil)
+	require.NoError(t, err)
+
+	_, err = NewHandler(cmdUC, queryUC, nil, false)
+
+	require.ErrorIs(t, err, ErrNilConnectionRepository)
 }
 
 func TestGetDiscoveryStatus_Success(t *testing.T) {

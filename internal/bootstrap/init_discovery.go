@@ -229,7 +229,7 @@ func initDiscoveryModule(
 		return nil, fmt.Errorf("create discovery query use case: %w", err)
 	}
 
-	handler, err := discoveryHTTP.NewHandler(cmdUseCase, queryUseCase, IsProductionEnvironment(cfg.App.EnvName))
+	handler, err := discoveryHTTP.NewHandler(cmdUseCase, queryUseCase, connRepo, IsProductionEnvironment(cfg.App.EnvName))
 	if err != nil {
 		return nil, fmt.Errorf("create discovery handler: %w", err)
 	}

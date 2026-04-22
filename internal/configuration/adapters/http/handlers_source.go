@@ -159,7 +159,7 @@ func (handler *Handler) ListSources(fiberCtx *fiber.Ctx) error {
 		sourceIDs[i] = src.ID
 	}
 
-	fieldMapsExist, err := handler.query.CheckFieldMapsExistence(ctx, sourceIDs)
+	fieldMapsExist, err := handler.fieldMapRepo.ExistsBySourceIDs(ctx, sourceIDs)
 	if err != nil {
 		handler.logSpanError(ctx, span, logger, "failed to check field maps existence", err)
 		return writeServiceError(fiberCtx, err)

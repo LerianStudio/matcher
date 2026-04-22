@@ -130,7 +130,7 @@ func (handler *Handler) ListFeeRules(fiberCtx *fiber.Ctx) error {
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
-	result, err := handler.query.ListFeeRules(ctx, contextID)
+	result, err := handler.feeRuleRepo.FindByContextID(ctx, contextID)
 	if err != nil {
 		handler.logSpanError(ctx, span, logger, "failed to list fee rules", err)
 		return writeServiceError(fiberCtx, err)
@@ -180,7 +180,7 @@ func (handler *Handler) GetFeeRule(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid fee rule id", err)
 	}
 
-	result, err := handler.query.GetFeeRule(ctx, feeRuleID)
+	result, err := handler.feeRuleRepo.FindByID(ctx, feeRuleID)
 	if err != nil {
 		handler.logSpanError(ctx, span, logger, "failed to get fee rule", err)
 
@@ -245,7 +245,7 @@ func (handler *Handler) UpdateFeeRule(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid fee rule id", err)
 	}
 
-	existing, err := handler.query.GetFeeRule(ctx, feeRuleID)
+	existing, err := handler.feeRuleRepo.FindByID(ctx, feeRuleID)
 	if err != nil {
 		handler.logSpanError(ctx, span, logger, "failed to get fee rule", err)
 
@@ -333,7 +333,7 @@ func (handler *Handler) DeleteFeeRule(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid fee rule id", err)
 	}
 
-	existing, err := handler.query.GetFeeRule(ctx, feeRuleID)
+	existing, err := handler.feeRuleRepo.FindByID(ctx, feeRuleID)
 	if err != nil {
 		handler.logSpanError(ctx, span, logger, "failed to get fee rule", err)
 

@@ -108,44 +108,6 @@ func TestNewUseCase_NilMatchRuleRepository(t *testing.T) {
 	require.ErrorIs(t, err, ErrNilMatchRuleRepository)
 }
 
-func TestContextQueries(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	contextRepo := mocks.NewMockContextRepository(ctrl)
-	sourceRepo := mocks.NewMockSourceRepository(ctrl)
-	fieldMapRepo := mocks.NewMockFieldMapRepository(ctrl)
-	matchRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
-
-	uc, err := NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	tenantID := uuid.New()
-	contextID := uuid.New()
-
-	expected := &entities.ReconciliationContext{ID: contextID, TenantID: tenantID}
-
-	contextType := shared.ContextTypeOneToOne
-	status := value_objects.ContextStatusActive
-	expectedList := []*entities.ReconciliationContext{expected}
-	contextRepo.EXPECT().
-		FindAll(gomock.Any(), "", 10, &contextType, &status).
-		Return(expectedList, libHTTP.CursorPagination{}, nil)
-
-	list, _, err := uc.ListContexts(ctx, "", 10, &contextType, &status)
-	require.NoError(t, err)
-	require.Equal(t, expectedList, list)
-
-	contextRepo.EXPECT().Count(gomock.Any()).Return(int64(2), nil)
-
-	count, err := uc.CountContexts(ctx)
-	require.NoError(t, err)
-	require.Equal(t, int64(2), count)
-}
-
 func TestSourceQueries(t *testing.T) {
 	t.Parallel()
 

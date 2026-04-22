@@ -47,6 +47,10 @@ var (
 	ErrNilQueryUseCase = errors.New("query use case is required")
 	// ErrNilContextProvider indicates context provider is nil.
 	ErrNilContextProvider = errors.New("context provider is required")
+	// ErrNilJobRepository indicates job repository is nil.
+	ErrNilJobRepository = errors.New("job repository is required")
+	// ErrNilTransactionRepository indicates transaction repository is nil.
+	ErrNilTransactionRepository = errors.New("transaction repository is required")
 	// ErrFormatRequired indicates format parameter is missing.
 	ErrFormatRequired = errors.New("format is required")
 	// ErrInvalidFormat indicates format parameter is invalid.
@@ -96,9 +100,16 @@ type contextProvider = sharedPorts.ContextAccessProvider
 //
 // productionMode governs SafeError behavior (per-handler bool — see
 // matching/http for the same pattern and rationale).
+//
+// The jobRepo and transactionRepo fields back the list/search handlers
+// directly. The corresponding query UseCase methods (ListJobsByContext,
+// ListTransactionsByJobContext, SearchTransactions) were span-only
+// wrappers around the repos.
 type Handlers struct {
 	commandUC       *command.UseCase
 	queryUC         *query.UseCase
+	jobRepo         ingestionRepositories.JobRepository
+	transactionRepo ingestionRepositories.TransactionRepository
 	contextProvider contextProvider
 	contextVerifier libHTTP.TenantOwnershipVerifier
 	productionMode  bool
@@ -108,6 +119,8 @@ type Handlers struct {
 func NewHandlers(
 	commandUC *command.UseCase,
 	queryUC *query.UseCase,
+	jobRepo ingestionRepositories.JobRepository,
+	transactionRepo ingestionRepositories.TransactionRepository,
 	ctxProvider contextProvider,
 	production bool,
 ) (*Handlers, error) {
@@ -119,6 +132,14 @@ func NewHandlers(
 		return nil, ErrNilQueryUseCase
 	}
 
+	if jobRepo == nil {
+		return nil, ErrNilJobRepository
+	}
+
+	if transactionRepo == nil {
+		return nil, ErrNilTransactionRepository
+	}
+
 	if ctxProvider == nil {
 		return nil, ErrNilContextProvider
 	}
@@ -128,6 +149,8 @@ func NewHandlers(
 	return &Handlers{
 		commandUC:       commandUC,
 		queryUC:         queryUC,
+		jobRepo:         jobRepo,
+		transactionRepo: transactionRepo,
 		contextProvider: ctxProvider,
 		contextVerifier: verifier,
 		productionMode:  production,
@@ -527,7 +550,7 @@ func (handler *Handlers) ListJobsByContext(fiberCtx *fiber.Ctx) error {
 		)
 	}
 
-	jobs, pagination, err := handler.queryUC.ListJobsByContext(
+	jobs, pagination, err := handler.jobRepo.FindByContextID(
 		ctx,
 		contextID,
 		ingestionRepositories.CursorFilter{
@@ -645,7 +668,7 @@ func (handler *Handlers) ListTransactionsByJob(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	transactions, pagination, err := handler.queryUC.ListTransactionsByJobContext(
+	transactions, pagination, err := handler.transactionRepo.FindByJobAndContextID(
 		ctx,
 		job.ID,
 		contextID,
@@ -807,7 +830,7 @@ func (handler *Handlers) SearchTransactions(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid search parameters", err)
 	}
 
-	transactions, total, err := handler.queryUC.SearchTransactions(ctx, contextID, searchParams)
+	transactions, total, err := handler.transactionRepo.SearchTransactions(ctx, contextID, searchParams)
 	if err != nil {
 		handler.logSpanError(ctx, span, logger, "failed to search transactions", err)
 

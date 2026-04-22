@@ -118,36 +118,6 @@ func (uc *UseCase) GetJobByContext(
 	return job, nil
 }
 
-// ListJobsByContext retrieves jobs for a context with pagination.
-func (uc *UseCase) ListJobsByContext(
-	ctx context.Context,
-	contextID uuid.UUID,
-	filter ingestionRepositories.CursorFilter,
-) ([]*entities.IngestionJob, libHTTP.CursorPagination, error) {
-	if uc == nil {
-		return nil, libHTTP.CursorPagination{}, ErrNilUseCase
-	}
-
-	//nolint:dogsled // only tracer needed for span management
-	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "query.ingestion.list_jobs_by_context")
-	defer span.End()
-
-	_ = libOpentelemetry.SetSpanAttributesFromValue(span, "query", struct {
-		ContextID string `json:"contextId"`
-	}{ContextID: contextID.String()}, nil)
-
-	jobs, pagination, err := uc.jobRepo.FindByContextID(ctx, contextID, filter)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to find jobs by context", err)
-
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf("finding jobs by context: %w", err)
-	}
-
-	return jobs, pagination, nil
-}
-
 // GetTransaction retrieves a transaction by ID without context-scoping.
 // TODO(audit): discuss and wire if needed — standalone orphan with no context-scoped variant.
 // Currently only exercised by unit tests; no HTTP route exposes this method.
@@ -210,44 +180,6 @@ func (uc *UseCase) ListTransactionsByJob(
 		libOpentelemetry.HandleSpanError(span, "failed to find transactions by job", err)
 
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("finding transactions by job: %w", err)
-	}
-
-	return txs, pagination, nil
-}
-
-// ListTransactionsByJobContext retrieves transactions for a job within a context.
-func (uc *UseCase) ListTransactionsByJobContext(
-	ctx context.Context,
-	jobID, contextID uuid.UUID,
-	filter ingestionRepositories.CursorFilter,
-) ([]*shared.Transaction, libHTTP.CursorPagination, error) {
-	if uc == nil {
-		return nil, libHTTP.CursorPagination{}, ErrNilUseCase
-	}
-
-	//nolint:dogsled // only tracer needed for span management
-	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "query.ingestion.list_transactions_by_job_context")
-	defer span.End()
-
-	_ = libOpentelemetry.SetSpanAttributesFromValue(span, "query", struct {
-		JobID     string `json:"jobId"`
-		ContextID string `json:"contextId"`
-	}{JobID: jobID.String(), ContextID: contextID.String()}, nil)
-
-	txs, pagination, err := uc.transactionRepo.FindByJobAndContextID(ctx, jobID, contextID, filter)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(
-			span,
-			"failed to find transactions by job and context",
-			err,
-		)
-
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf(
-			"finding transactions by job and context: %w",
-			err,
-		)
 	}
 
 	return txs, pagination, nil

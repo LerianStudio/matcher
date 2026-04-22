@@ -747,6 +747,30 @@ func newQueryUseCase(
 	return uc
 }
 
+// newTestHandler constructs a Handler for tests, injecting the stub run/group
+// repos both into the query UseCase (for ListMatchRunGroups enrichment) and
+// directly into the Handler (for GetMatchRun / ListMatchRuns which call the
+// repos directly post-T-009b).
+func newTestHandler(
+	t *testing.T,
+	uc *command.UseCase,
+	runRepo *stubMatchRunRepo,
+	groupRepo *stubMatchGroupRepo,
+	ctxProvider contextProvider,
+	production bool,
+) (*Handler, error) {
+	t.Helper()
+
+	return NewHandler(
+		uc,
+		newQueryUseCase(t, runRepo, groupRepo),
+		runRepo,
+		groupRepo,
+		ctxProvider,
+		production,
+	)
+}
+
 func newFiberTestApp(ctx context.Context) *fiber.App {
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error {

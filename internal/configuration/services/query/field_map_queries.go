@@ -78,32 +78,3 @@ func (uc *UseCase) GetFieldMapBySource(
 
 	return result, nil
 }
-
-// CheckFieldMapsExistence checks which source IDs have field maps.
-func (uc *UseCase) CheckFieldMapsExistence(
-	ctx context.Context,
-	sourceIDs []uuid.UUID,
-) (map[uuid.UUID]bool, error) {
-	if uc == nil || uc.fieldMapRepo == nil {
-		return nil, ErrNilFieldMapRepository
-	}
-
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "query.check_field_maps_existence")
-	defer span.End()
-
-	result, err := uc.fieldMapRepo.ExistsBySourceIDs(ctx, sourceIDs)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to check field maps existence", err)
-
-		logger.With(
-			libLog.Any("source_ids.count", len(sourceIDs)),
-			libLog.Err(err),
-		).Log(ctx, libLog.LevelError, "failed to check field maps existence")
-
-		return nil, fmt.Errorf("checking field maps existence: %w", err)
-	}
-
-	return result, nil
-}

@@ -14,6 +14,7 @@ import (
 	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/discovery/adapters/http/dto"
+	discoveryRepos "github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	discoveryCommand "github.com/LerianStudio/matcher/internal/discovery/services/command"
 	discoveryQuery "github.com/LerianStudio/matcher/internal/discovery/services/query"
 	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
@@ -25,6 +26,8 @@ var (
 	ErrNilCommandUseCase = errors.New("command use case is required")
 	// ErrNilQueryUseCase is returned when the query use case is nil.
 	ErrNilQueryUseCase = errors.New("query use case is required")
+	// ErrNilConnectionRepository is returned when the connection repository is nil.
+	ErrNilConnectionRepository = errors.New("connection repository is required")
 )
 
 // Handler handles discovery HTTP requests.
@@ -38,14 +41,19 @@ var (
 type Handler struct {
 	command        *discoveryCommand.UseCase
 	query          *discoveryQuery.UseCase
+	connRepo       discoveryRepos.ConnectionRepository
 	staleness      stalenessProvider
 	productionMode bool
 }
 
 // NewHandler creates a new discovery HTTP handler.
+//
+// connRepo backs the ListConnections handler directly — the corresponding
+// query UseCase method was a span-only wrapper around connRepo.FindAll.
 func NewHandler(
 	command *discoveryCommand.UseCase,
 	query *discoveryQuery.UseCase,
+	connRepo discoveryRepos.ConnectionRepository,
 	production bool,
 ) (*Handler, error) {
 	if command == nil {
@@ -56,9 +64,14 @@ func NewHandler(
 		return nil, ErrNilQueryUseCase
 	}
 
+	if connRepo == nil {
+		return nil, ErrNilConnectionRepository
+	}
+
 	return &Handler{
 		command:        command,
 		query:          query,
+		connRepo:       connRepo,
 		productionMode: production,
 	}, nil
 }
@@ -138,7 +151,7 @@ func (handler *Handler) ListConnections(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "discovery.http.list_connections")
 	defer span.End()
 
-	conns, err := handler.query.ListConnections(ctx)
+	conns, err := handler.connRepo.FindAll(ctx)
 	if err != nil {
 		handler.logSpanError(ctx, span, logger, "list connections", err)
 

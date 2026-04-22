@@ -104,6 +104,8 @@ func initIngestionModule(
 	ingestionHandler, err := ingestionHTTP.NewHandlers(
 		ingestionCommandUseCase,
 		ingestionQueryUseCase,
+		repos.ingestionJob,
+		repos.ingestionTx,
 		contextAdapter,
 		production,
 	)

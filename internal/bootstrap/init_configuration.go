@@ -51,8 +51,6 @@ func initConfigurationModule(
 		repos.configSource,
 		repos.configFieldMap,
 		repos.configMatchRule,
-		configQuery.WithFeeScheduleRepository(repos.feeSchedule),
-		configQuery.WithFeeRuleRepository(repos.configFeeRule),
 		configQuery.WithScheduleRepository(scheduleRepository),
 	)
 	if err != nil {
@@ -65,6 +63,10 @@ func initConfigurationModule(
 		repos.configContext,
 		repos.configSource,
 		repos.configMatchRule,
+		repos.configFieldMap,
+		repos.configFeeRule,
+		repos.feeSchedule,
+		scheduleRepository,
 		production,
 	)
 	if err != nil {

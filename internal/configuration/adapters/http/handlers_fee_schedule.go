@@ -123,7 +123,7 @@ func (handler *Handler) ListFeeSchedules(fiberCtx *fiber.Ctx) error {
 
 	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
-	result, err := handler.query.ListFeeSchedules(ctx, limit)
+	result, err := handler.feeScheduleRepo.List(ctx, limit)
 	if err != nil {
 		handler.logSpanError(ctx, span, logger, "failed to list fee schedules", err)
 		return writeServiceError(fiberCtx, err)
@@ -173,7 +173,7 @@ func (handler *Handler) GetFeeSchedule(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid schedule id", err)
 	}
 
-	result, err := handler.query.GetFeeSchedule(ctx, scheduleID)
+	result, err := handler.feeScheduleRepo.GetByID(ctx, scheduleID)
 	if err != nil {
 		handler.logSpanError(ctx, span, logger, "failed to get fee schedule", err)
 
@@ -367,7 +367,7 @@ func (handler *Handler) SimulateFeeSchedule(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid gross amount", err)
 	}
 
-	schedule, err := handler.query.GetFeeSchedule(ctx, scheduleID)
+	schedule, err := handler.feeScheduleRepo.GetByID(ctx, scheduleID)
 	if err != nil {
 		handler.logSpanError(ctx, span, logger, "failed to get fee schedule for simulation", err)
 

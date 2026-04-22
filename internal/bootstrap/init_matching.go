@@ -82,6 +82,8 @@ func initMatchingModule(
 	matchingHandler, err := matchingHTTP.NewHandler(
 		useCase,
 		matchingQueryUseCase,
+		matchRunRepository,
+		matchGroupRepository,
 		configProvider,
 		production,
 	)

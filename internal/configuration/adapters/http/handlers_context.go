@@ -138,7 +138,7 @@ func (handler *Handler) ListContexts(fiberCtx *fiber.Ctx) error {
 		status = &parsed
 	}
 
-	result, pagination, err := handler.query.ListContexts(ctx, cursor, limit, contextType, status)
+	result, pagination, err := handler.contextRepo.FindAll(ctx, cursor, limit, contextType, status)
 	if err != nil {
 		if errors.Is(err, libHTTP.ErrInvalidCursor) {
 			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination", err)

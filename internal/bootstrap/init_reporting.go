@@ -59,6 +59,7 @@ func initReportingModule(
 		dashboardUseCase,
 		contextAdapter,
 		exportUseCase,
+		reportRepository,
 		production,
 	)
 	if err != nil {
@@ -110,6 +111,7 @@ func initExportWorkers(
 	exportJobHandler, err := reportingHTTP.NewExportJobHandlers(
 		exportJobUseCase,
 		exportJobQuerySvc,
+		exportJobRepository,
 		storage,
 		contextAdapter,
 		configuredExportPresignExpiry(context.Background(), cfg),

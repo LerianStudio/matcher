@@ -9,7 +9,6 @@ import (
 
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
@@ -55,72 +54,6 @@ func NewUseCase(repo repositories.ReportRepository) (*UseCase, error) {
 // SupportsStreaming returns true if the repository supports streaming exports.
 func (uc *UseCase) SupportsStreaming() bool {
 	return uc.streamingRepo != nil
-}
-
-// GetMatchedReport retrieves matched transactions based on filter criteria.
-func (uc *UseCase) GetMatchedReport(
-	ctx context.Context,
-	filter entities.ReportFilter,
-) ([]*entities.MatchedItem, libHTTP.CursorPagination, error) {
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "reporting.query.get_matched_report")
-	defer span.End()
-
-	result, pagination, err := uc.repo.ListMatched(ctx, filter)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get matched report", err)
-
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get matched report: %v", err))
-
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf("listing matched items: %w", err)
-	}
-
-	return result, pagination, nil
-}
-
-// GetUnmatchedReport retrieves unmatched transactions based on filter criteria.
-func (uc *UseCase) GetUnmatchedReport(
-	ctx context.Context,
-	filter entities.ReportFilter,
-) ([]*entities.UnmatchedItem, libHTTP.CursorPagination, error) {
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "reporting.query.get_unmatched_report")
-	defer span.End()
-
-	result, pagination, err := uc.repo.ListUnmatched(ctx, filter)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get unmatched report", err)
-
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get unmatched report: %v", err))
-
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf("listing unmatched items: %w", err)
-	}
-
-	return result, pagination, nil
-}
-
-// GetSummaryReport retrieves aggregated summary statistics.
-func (uc *UseCase) GetSummaryReport(
-	ctx context.Context,
-	filter entities.ReportFilter,
-) (*entities.SummaryReport, error) {
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "reporting.query.get_summary_report")
-	defer span.End()
-
-	result, err := uc.repo.GetSummary(ctx, filter)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get summary report", err)
-
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get summary report: %v", err))
-
-		return nil, fmt.Errorf("getting summary report: %w", err)
-	}
-
-	return result, nil
 }
 
 // Export functions fetch records with a maximum limit to prevent OOM errors.
@@ -436,28 +369,6 @@ func (uc *UseCase) ExportSummaryPDF(
 	return data, nil
 }
 
-// GetVarianceReport retrieves variance data aggregated by source, currency, and fee schedule.
-func (uc *UseCase) GetVarianceReport(
-	ctx context.Context,
-	filter entities.VarianceReportFilter,
-) ([]*entities.VarianceReportRow, libHTTP.CursorPagination, error) {
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "reporting.query.get_variance_report")
-	defer span.End()
-
-	result, pagination, err := uc.repo.GetVarianceReport(ctx, filter)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get variance report", err)
-
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get variance report: %v", err))
-
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf("getting variance report: %w", err)
-	}
-
-	return result, pagination, nil
-}
-
 // ExportVarianceCSV generates a CSV file from variance report data.
 func (uc *UseCase) ExportVarianceCSV(
 	ctx context.Context,
@@ -683,94 +594,6 @@ func (uc *UseCase) StreamUnmatchedCSV(
 	}
 
 	return nil
-}
-
-// CountMatched returns the total count of matched records.
-func (uc *UseCase) CountMatched(
-	ctx context.Context,
-	filter entities.ReportFilter,
-) (int64, error) {
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "reporting.query.count_matched")
-	defer span.End()
-
-	count, err := uc.repo.CountMatched(ctx, filter)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to count matched", err)
-
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to count matched: %v", err))
-
-		return 0, fmt.Errorf("counting matched: %w", err)
-	}
-
-	return count, nil
-}
-
-// CountUnmatched returns the total count of unmatched records.
-func (uc *UseCase) CountUnmatched(
-	ctx context.Context,
-	filter entities.ReportFilter,
-) (int64, error) {
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "reporting.query.count_unmatched")
-	defer span.End()
-
-	count, err := uc.repo.CountUnmatched(ctx, filter)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to count unmatched", err)
-
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to count unmatched: %v", err))
-
-		return 0, fmt.Errorf("counting unmatched: %w", err)
-	}
-
-	return count, nil
-}
-
-// CountTransactions returns the total count of all transactions.
-func (uc *UseCase) CountTransactions(
-	ctx context.Context,
-	filter entities.ReportFilter,
-) (int64, error) {
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "reporting.query.count_transactions")
-	defer span.End()
-
-	count, err := uc.repo.CountTransactions(ctx, filter)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to count transactions", err)
-
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to count transactions: %v", err))
-
-		return 0, fmt.Errorf("counting transactions: %w", err)
-	}
-
-	return count, nil
-}
-
-// CountExceptions returns the total count of exceptions.
-func (uc *UseCase) CountExceptions(
-	ctx context.Context,
-	filter entities.ReportFilter,
-) (int64, error) {
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "reporting.query.count_exceptions")
-	defer span.End()
-
-	count, err := uc.repo.CountExceptions(ctx, filter)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to count exceptions", err)
-
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to count exceptions: %v", err))
-
-		return 0, fmt.Errorf("counting exceptions: %w", err)
-	}
-
-	return count, nil
 }
 
 // StreamVarianceCSV streams variance rows as CSV to the provided writer.

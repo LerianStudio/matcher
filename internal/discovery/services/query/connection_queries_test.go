@@ -156,59 +156,6 @@ func TestGetDiscoveryStatus_IgnoresNilConnectionEntries(t *testing.T) {
 	assert.Equal(t, now, status.LastSyncAt)
 }
 
-func TestListConnections_Success(t *testing.T) {
-	t.Parallel()
-
-	expected := []*entities.FetcherConnection{
-		{
-			ID:            uuid.New(),
-			FetcherConnID: "conn-1",
-			ConfigName:    "pg-primary",
-			Status:        vo.ConnectionStatusAvailable,
-		},
-		{
-			ID:            uuid.New(),
-			FetcherConnID: "conn-2",
-			ConfigName:    "mysql-read",
-			Status:        vo.ConnectionStatusUnreachable,
-		},
-	}
-
-	uc, err := NewUseCase(
-		&mockFetcherClient{healthy: true},
-		&mockConnectionRepo{findAllConns: expected},
-		&mockSchemaRepo{},
-		&mockExtractionRepo{},
-		&libLog.NopLogger{},
-	)
-	require.NoError(t, err)
-
-	conns, err := uc.ListConnections(context.Background())
-
-	require.NoError(t, err)
-	assert.Len(t, conns, 2)
-	assert.Equal(t, expected, conns)
-}
-
-func TestListConnections_Error(t *testing.T) {
-	t.Parallel()
-
-	uc, err := NewUseCase(
-		&mockFetcherClient{healthy: true},
-		&mockConnectionRepo{findAllErr: errors.New("connection error")},
-		&mockSchemaRepo{},
-		&mockExtractionRepo{},
-		&libLog.NopLogger{},
-	)
-	require.NoError(t, err)
-
-	conns, err := uc.ListConnections(context.Background())
-
-	assert.Nil(t, conns)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "list connections")
-}
-
 func TestGetConnection_Success(t *testing.T) {
 	t.Parallel()
 

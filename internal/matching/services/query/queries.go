@@ -56,59 +56,6 @@ func NewUseCase(
 	}, nil
 }
 
-// GetMatchRun retrieves a match run by ID within a context.
-func (uc *UseCase) GetMatchRun(
-	ctx context.Context,
-	contextID, runID uuid.UUID,
-) (*matchingEntities.MatchRun, error) {
-	if uc.matchRunRepo == nil {
-		return nil, ErrNilMatchRunRepository
-	}
-
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "query.matching.get_match_run")
-	defer span.End()
-
-	result, err := uc.matchRunRepo.FindByID(ctx, contextID, runID)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get match run", err)
-
-		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to get match run")
-
-		return nil, fmt.Errorf("finding match run: %w", err)
-	}
-
-	return result, nil
-}
-
-// ListMatchRuns retrieves match runs for a context with cursor pagination.
-func (uc *UseCase) ListMatchRuns(
-	ctx context.Context,
-	contextID uuid.UUID,
-	filter matchingRepos.CursorFilter,
-) ([]*matchingEntities.MatchRun, libHTTP.CursorPagination, error) {
-	if uc.matchRunRepo == nil {
-		return nil, libHTTP.CursorPagination{}, ErrNilMatchRunRepository
-	}
-
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "query.matching.list_match_runs")
-	defer span.End()
-
-	result, pagination, err := uc.matchRunRepo.ListByContextID(ctx, contextID, filter)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to list match runs", err)
-
-		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list match runs")
-
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf("listing match runs: %w", err)
-	}
-
-	return result, pagination, nil
-}
-
 // ListMatchRunGroups retrieves match groups for a run within a context.
 // Items for each group are batch-loaded in a single query to avoid N+1.
 func (uc *UseCase) ListMatchRunGroups(
@@ -169,30 +116,4 @@ func (uc *UseCase) enrichGroupsWithItems(
 			g.Items = items
 		}
 	}
-}
-
-// FindMatchGroupByID retrieves a match group by ID within a context.
-func (uc *UseCase) FindMatchGroupByID(
-	ctx context.Context,
-	contextID, groupID uuid.UUID,
-) (*matchingEntities.MatchGroup, error) {
-	if uc.matchGroupRepo == nil {
-		return nil, ErrNilMatchGroupRepository
-	}
-
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "query.matching.find_match_group_by_id")
-	defer span.End()
-
-	result, err := uc.matchGroupRepo.FindByID(ctx, contextID, groupID)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to find match group", err)
-
-		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to find match group")
-
-		return nil, fmt.Errorf("finding match group: %w", err)
-	}
-
-	return result, nil
 }

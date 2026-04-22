@@ -45,6 +45,7 @@ type handlerFixture struct {
 	matchRuleRepo   *matchRuleRepository
 	feeRuleRepo     *feeRuleRepository
 	feeScheduleRepo *feeScheduleRepository
+	scheduleRepo    *scheduleRepository
 }
 
 func newHandlerFixture(t *testing.T) *handlerFixture {
@@ -56,6 +57,7 @@ func newHandlerFixture(t *testing.T) *handlerFixture {
 	matchRuleRepo := newMatchRuleRepository()
 	feeRuleRepo := newFeeRuleRepository()
 	feeScheduleRepo := newFeeScheduleRepository()
+	scheduleRepo := newScheduleRepository()
 
 	commandUseCase, err := command.NewUseCase(
 		contextRepo,
@@ -72,12 +74,22 @@ func newHandlerFixture(t *testing.T) *handlerFixture {
 		sourceRepo,
 		fieldMapRepo,
 		matchRuleRepo,
-		query.WithFeeRuleRepository(feeRuleRepo),
-		query.WithFeeScheduleRepository(feeScheduleRepo),
+		query.WithScheduleRepository(scheduleRepo),
 	)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(commandUseCase, queryUseCase, contextRepo, sourceRepo, matchRuleRepo, false)
+	handler, err := NewHandler(
+		commandUseCase,
+		queryUseCase,
+		contextRepo,
+		sourceRepo,
+		matchRuleRepo,
+		fieldMapRepo,
+		feeRuleRepo,
+		feeScheduleRepo,
+		scheduleRepo,
+		false,
+	)
 	require.NoError(t, err)
 
 	return &handlerFixture{
@@ -88,6 +100,7 @@ func newHandlerFixture(t *testing.T) *handlerFixture {
 		matchRuleRepo:   matchRuleRepo,
 		feeRuleRepo:     feeRuleRepo,
 		feeScheduleRepo: feeScheduleRepo,
+		scheduleRepo:    scheduleRepo,
 	}
 }
 

@@ -87,7 +87,7 @@ func TestConfigServiceCRUD_ContextLifecycle(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
-		cmdUC, queryUC, repos := buildUseCases(t, h)
+		cmdUC, _, repos := buildUseCases(t, h)
 		ctx := h.Ctx()
 
 		// CREATE.
@@ -118,7 +118,7 @@ func TestConfigServiceCRUD_ContextLifecycle(t *testing.T) {
 		require.Equal(t, updatedName, updated.Name)
 
 		// LIST — verify present.
-		contexts, _, err := queryUC.ListContexts(ctx, "", 50, nil, nil)
+		contexts, _, err := repos.ctx.FindAll(ctx, "", 50, nil, nil)
 		require.NoError(t, err)
 
 		var found bool
@@ -458,7 +458,7 @@ func TestConfigServiceCRUD_ListContextsPagination(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
-		cmdUC, queryUC, _ := buildUseCases(t, h)
+		cmdUC, _, repos := buildUseCases(t, h)
 		ctx := h.Ctx()
 
 		// Create 5 contexts (the seed data already has 1, but we create 5 fresh ones
@@ -471,14 +471,14 @@ func TestConfigServiceCRUD_ListContextsPagination(t *testing.T) {
 		}
 
 		// Request with limit=2 to exercise pagination.
-		page1, pagination, err := queryUC.ListContexts(ctx, "", 2, nil, nil)
+		page1, pagination, err := repos.ctx.FindAll(ctx, "", 2, nil, nil)
 		require.NoError(t, err)
 		require.Len(t, page1, 2, "first page must return exactly the requested limit")
 
 		// Use the cursor from the first page to get the second page.
 		require.NotEmpty(t, pagination.Next, "pagination cursor must be set when more results exist")
 
-		page2, _, err := queryUC.ListContexts(ctx, pagination.Next, 2, nil, nil)
+		page2, _, err := repos.ctx.FindAll(ctx, pagination.Next, 2, nil, nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, page2, "second page must not be empty")
 

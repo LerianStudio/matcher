@@ -16,8 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
-
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories/mocks"
 )
@@ -43,132 +41,6 @@ func TestNewUseCase_Success(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.NotNil(t, uc)
-}
-
-func TestGetMatchedReport_ReturnsItemsFromRepo(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRepo := mocks.NewMockReportRepository(ctrl)
-	ctx := context.Background()
-	filter := entities.ReportFilter{
-		ContextID: uuid.New(),
-		DateFrom:  time.Now().UTC().Add(-24 * time.Hour),
-		DateTo:    time.Now().UTC(),
-		Limit:     10,
-	}
-
-	expectedItems := []*entities.MatchedItem{
-		{
-			TransactionID: uuid.New(),
-			MatchGroupID:  uuid.New(),
-			SourceID:      uuid.New(),
-			Amount:        decimal.NewFromInt(100),
-			Currency:      "USD",
-			Date:          time.Now().UTC(),
-		},
-		{
-			TransactionID: uuid.New(),
-			MatchGroupID:  uuid.New(),
-			SourceID:      uuid.New(),
-			Amount:        decimal.NewFromInt(200),
-			Currency:      "USD",
-			Date:          time.Now().UTC(),
-		},
-	}
-
-	mockRepo.EXPECT().
-		ListMatched(gomock.Any(), filter).
-		Return(expectedItems, libHTTP.CursorPagination{}, nil)
-
-	uc, err := NewUseCase(mockRepo)
-	require.NoError(t, err)
-	result, pagination, err := uc.GetMatchedReport(ctx, filter)
-
-	require.NoError(t, err)
-	assert.Len(t, result, 2)
-	assert.Equal(t, expectedItems, result)
-	assert.Equal(t, libHTTP.CursorPagination{}, pagination)
-}
-
-func TestGetUnmatchedReport_ReturnsItemsFromRepo(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRepo := mocks.NewMockReportRepository(ctrl)
-	ctx := context.Background()
-	filter := entities.ReportFilter{
-		ContextID: uuid.New(),
-		DateFrom:  time.Now().UTC().Add(-24 * time.Hour),
-		DateTo:    time.Now().UTC(),
-		Limit:     10,
-	}
-
-	expectedItems := []*entities.UnmatchedItem{
-		{
-			TransactionID: uuid.New(),
-			SourceID:      uuid.New(),
-			Amount:        decimal.NewFromInt(50),
-			Currency:      "USD",
-			Status:        "UNMATCHED",
-			Date:          time.Now().UTC(),
-		},
-	}
-
-	mockRepo.EXPECT().
-		ListUnmatched(gomock.Any(), filter).
-		Return(expectedItems, libHTTP.CursorPagination{}, nil)
-
-	uc, err := NewUseCase(mockRepo)
-	require.NoError(t, err)
-	result, pagination, err := uc.GetUnmatchedReport(ctx, filter)
-
-	require.NoError(t, err)
-	assert.Len(t, result, 1)
-	assert.Equal(t, expectedItems, result)
-	assert.Equal(t, libHTTP.CursorPagination{}, pagination)
-}
-
-func TestGetSummaryReport_ReturnsSummaryFromRepo(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRepo := mocks.NewMockReportRepository(ctrl)
-	ctx := context.Background()
-	filter := entities.ReportFilter{
-		ContextID: uuid.New(),
-		DateFrom:  time.Now().UTC().Add(-24 * time.Hour),
-		DateTo:    time.Now().UTC(),
-		Limit:     10,
-	}
-
-	expectedSummary := &entities.SummaryReport{
-		MatchedCount:    5,
-		UnmatchedCount:  3,
-		MatchedAmount:   decimal.NewFromInt(1000),
-		UnmatchedAmount: decimal.NewFromInt(300),
-		TotalAmount:     decimal.NewFromInt(1300),
-	}
-
-	mockRepo.EXPECT().
-		GetSummary(gomock.Any(), filter).
-		Return(expectedSummary, nil)
-
-	uc, err := NewUseCase(mockRepo)
-	require.NoError(t, err)
-	result, err := uc.GetSummaryReport(ctx, filter)
-
-	require.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Equal(t, expectedSummary.MatchedCount, result.MatchedCount)
-	assert.Equal(t, expectedSummary.UnmatchedCount, result.UnmatchedCount)
-	assert.True(t, expectedSummary.TotalAmount.Equal(result.TotalAmount))
 }
 
 func TestExportMatchedCSV_CallsBuilderWithRepoData(t *testing.T) {
@@ -437,52 +309,6 @@ func TestExportSummaryPDF_CallsBuilderWithRepoData(t *testing.T) {
 	assert.True(t, strings.HasPrefix(string(data), "%PDF-"))
 }
 
-func TestGetVarianceReport_ReturnsRowsFromRepo(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRepo := mocks.NewMockReportRepository(ctrl)
-	ctx := context.Background()
-	filter := entities.VarianceReportFilter{
-		ContextID: uuid.New(),
-		DateFrom:  time.Now().UTC().Add(-24 * time.Hour),
-		DateTo:    time.Now().UTC(),
-		Limit:     10,
-	}
-
-	variancePct := decimal.NewFromFloat(10)
-	rows := []*entities.VarianceReportRow{
-		{
-			SourceID:        uuid.New(),
-			Currency:        "USD",
-			FeeScheduleName: "PERCENTAGE",
-			TotalExpected:   decimal.NewFromInt(100),
-			TotalActual:     decimal.NewFromInt(110),
-			NetVariance:     decimal.NewFromInt(10),
-			VariancePct:     &variancePct,
-		},
-	}
-
-	expectedPagination := libHTTP.CursorPagination{
-		Next: "next-cursor",
-		Prev: "",
-	}
-
-	mockRepo.EXPECT().
-		GetVarianceReport(gomock.Any(), filter).
-		Return(rows, expectedPagination, nil)
-
-	uc, err := NewUseCase(mockRepo)
-	require.NoError(t, err)
-	result, pagination, err := uc.GetVarianceReport(ctx, filter)
-
-	require.NoError(t, err)
-	assert.Equal(t, rows, result)
-	assert.Equal(t, expectedPagination, pagination)
-}
-
 func TestExportVarianceCSV_CallsBuilderWithRepoData(t *testing.T) {
 	t.Parallel()
 
@@ -594,81 +420,6 @@ func readCSVRows(t *testing.T, data []byte) [][]string {
 // Error tests for repository failures
 
 var errTestRepoError = errors.New("repository error")
-
-func TestGetMatchedReport_ReturnsErrorOnRepoFailure(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRepo := mocks.NewMockReportRepository(ctrl)
-	ctx := context.Background()
-	filter := entities.ReportFilter{
-		ContextID: uuid.New(),
-	}
-
-	mockRepo.EXPECT().
-		ListMatched(gomock.Any(), filter).
-		Return(nil, libHTTP.CursorPagination{}, errTestRepoError)
-
-	uc, err := NewUseCase(mockRepo)
-	require.NoError(t, err)
-	result, _, err := uc.GetMatchedReport(ctx, filter)
-
-	require.Error(t, err)
-	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "listing matched items")
-}
-
-func TestGetUnmatchedReport_ReturnsErrorOnRepoFailure(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRepo := mocks.NewMockReportRepository(ctrl)
-	ctx := context.Background()
-	filter := entities.ReportFilter{
-		ContextID: uuid.New(),
-	}
-
-	mockRepo.EXPECT().
-		ListUnmatched(gomock.Any(), filter).
-		Return(nil, libHTTP.CursorPagination{}, errTestRepoError)
-
-	uc, err := NewUseCase(mockRepo)
-	require.NoError(t, err)
-	result, _, err := uc.GetUnmatchedReport(ctx, filter)
-
-	require.Error(t, err)
-	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "listing unmatched items")
-}
-
-func TestGetSummaryReport_ReturnsErrorOnRepoFailure(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRepo := mocks.NewMockReportRepository(ctrl)
-	ctx := context.Background()
-	filter := entities.ReportFilter{
-		ContextID: uuid.New(),
-	}
-
-	mockRepo.EXPECT().
-		GetSummary(gomock.Any(), filter).
-		Return(nil, errTestRepoError)
-
-	uc, err := NewUseCase(mockRepo)
-	require.NoError(t, err)
-	result, err := uc.GetSummaryReport(ctx, filter)
-
-	require.Error(t, err)
-	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "getting summary report")
-}
 
 func TestExportMatchedCSV_ReturnsErrorOnRepoFailure(t *testing.T) {
 	t.Parallel()
@@ -820,31 +571,6 @@ func TestExportSummaryPDF_ReturnsErrorOnRepoFailure(t *testing.T) {
 	assert.Contains(t, err.Error(), "getting summary for PDF export")
 }
 
-func TestGetVarianceReport_ReturnsErrorOnRepoFailure(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRepo := mocks.NewMockReportRepository(ctrl)
-	ctx := context.Background()
-	filter := entities.VarianceReportFilter{
-		ContextID: uuid.New(),
-	}
-
-	mockRepo.EXPECT().
-		GetVarianceReport(gomock.Any(), filter).
-		Return(nil, libHTTP.CursorPagination{}, errTestRepoError)
-
-	uc, err := NewUseCase(mockRepo)
-	require.NoError(t, err)
-	result, _, err := uc.GetVarianceReport(ctx, filter)
-
-	require.Error(t, err)
-	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "getting variance report")
-}
-
 func TestExportVarianceCSV_ReturnsErrorOnRepoFailure(t *testing.T) {
 	t.Parallel()
 
@@ -897,54 +623,6 @@ func TestExportVariancePDF_ReturnsErrorOnRepoFailure(t *testing.T) {
 
 // Empty results tests
 
-func TestGetMatchedReport_EmptyResults(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRepo := mocks.NewMockReportRepository(ctrl)
-	ctx := context.Background()
-	filter := entities.ReportFilter{
-		ContextID: uuid.New(),
-	}
-
-	mockRepo.EXPECT().
-		ListMatched(gomock.Any(), filter).
-		Return([]*entities.MatchedItem{}, libHTTP.CursorPagination{}, nil)
-
-	uc, err := NewUseCase(mockRepo)
-	require.NoError(t, err)
-	result, _, err := uc.GetMatchedReport(ctx, filter)
-
-	require.NoError(t, err)
-	assert.Empty(t, result)
-}
-
-func TestGetUnmatchedReport_EmptyResults(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRepo := mocks.NewMockReportRepository(ctrl)
-	ctx := context.Background()
-	filter := entities.ReportFilter{
-		ContextID: uuid.New(),
-	}
-
-	mockRepo.EXPECT().
-		ListUnmatched(gomock.Any(), filter).
-		Return([]*entities.UnmatchedItem{}, libHTTP.CursorPagination{}, nil)
-
-	uc, err := NewUseCase(mockRepo)
-	require.NoError(t, err)
-	result, _, err := uc.GetUnmatchedReport(ctx, filter)
-
-	require.NoError(t, err)
-	assert.Empty(t, result)
-}
-
 func TestExportMatchedCSV_EmptyResults(t *testing.T) {
 	t.Parallel()
 
@@ -995,30 +673,6 @@ func TestExportUnmatchedCSV_EmptyResults(t *testing.T) {
 	assert.NotEmpty(t, data)
 	rows := readCSVRows(t, data)
 	assert.Len(t, rows, 1)
-}
-
-func TestGetVarianceReport_EmptyResults(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRepo := mocks.NewMockReportRepository(ctrl)
-	ctx := context.Background()
-	filter := entities.VarianceReportFilter{
-		ContextID: uuid.New(),
-	}
-
-	mockRepo.EXPECT().
-		GetVarianceReport(gomock.Any(), filter).
-		Return([]*entities.VarianceReportRow{}, libHTTP.CursorPagination{}, nil)
-
-	uc, err := NewUseCase(mockRepo)
-	require.NoError(t, err)
-	result, _, err := uc.GetVarianceReport(ctx, filter)
-
-	require.NoError(t, err)
-	assert.Empty(t, result)
 }
 
 // Streaming tests
@@ -1098,99 +752,6 @@ func TestStreamVarianceCSV_ReturnsError_WhenStreamingNotSupported(t *testing.T) 
 	err = uc.StreamVarianceCSV(ctx, filter, &buf)
 
 	require.ErrorIs(t, err, ErrStreamingNotSupported)
-}
-
-// Pagination tests
-
-func TestGetMatchedReport_WithPagination(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRepo := mocks.NewMockReportRepository(ctrl)
-	ctx := context.Background()
-	filter := entities.ReportFilter{
-		ContextID: uuid.New(),
-		Limit:     10,
-		Cursor:    "next-cursor",
-	}
-
-	expectedPagination := libHTTP.CursorPagination{
-		Next: "cursor-for-next-page",
-		Prev: "cursor-for-prev-page",
-	}
-
-	mockRepo.EXPECT().
-		ListMatched(gomock.Any(), filter).
-		Return([]*entities.MatchedItem{}, expectedPagination, nil)
-
-	uc, err := NewUseCase(mockRepo)
-	require.NoError(t, err)
-	_, pagination, err := uc.GetMatchedReport(ctx, filter)
-
-	require.NoError(t, err)
-	assert.Equal(t, expectedPagination, pagination)
-}
-
-func TestGetUnmatchedReport_WithPagination(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRepo := mocks.NewMockReportRepository(ctrl)
-	ctx := context.Background()
-	filter := entities.ReportFilter{
-		ContextID: uuid.New(),
-		Limit:     20,
-	}
-
-	expectedPagination := libHTTP.CursorPagination{
-		Next: "next-cursor",
-	}
-
-	mockRepo.EXPECT().
-		ListUnmatched(gomock.Any(), filter).
-		Return([]*entities.UnmatchedItem{}, expectedPagination, nil)
-
-	uc, err := NewUseCase(mockRepo)
-	require.NoError(t, err)
-	_, pagination, err := uc.GetUnmatchedReport(ctx, filter)
-
-	require.NoError(t, err)
-	assert.Equal(t, expectedPagination, pagination)
-}
-
-// Filter validation tests
-
-func TestGetMatchedReport_WithDateFilters(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRepo := mocks.NewMockReportRepository(ctrl)
-	ctx := context.Background()
-
-	dateFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	dateTo := time.Date(2026, 1, 31, 23, 59, 59, 0, time.UTC)
-
-	filter := entities.ReportFilter{
-		ContextID: uuid.New(),
-		DateFrom:  dateFrom,
-		DateTo:    dateTo,
-	}
-
-	mockRepo.EXPECT().
-		ListMatched(gomock.Any(), filter).
-		Return([]*entities.MatchedItem{}, libHTTP.CursorPagination{}, nil)
-
-	uc, err := NewUseCase(mockRepo)
-	require.NoError(t, err)
-	_, _, err = uc.GetMatchedReport(ctx, filter)
-
-	require.NoError(t, err)
 }
 
 func TestExportSummaryCSV_Success(t *testing.T) {

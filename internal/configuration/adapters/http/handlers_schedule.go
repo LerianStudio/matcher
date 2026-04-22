@@ -123,7 +123,7 @@ func (handler *Handler) ListSchedules(fiberCtx *fiber.Ctx) error {
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
-	result, err := handler.query.ListSchedules(ctx, contextID)
+	result, err := handler.scheduleRepo.FindByContextID(ctx, contextID)
 	if err != nil {
 		handler.logSpanError(ctx, span, logger, "failed to list schedules", err)
 		return writeServiceError(fiberCtx, err)

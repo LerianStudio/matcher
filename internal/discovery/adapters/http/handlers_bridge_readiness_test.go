@@ -93,7 +93,7 @@ func newReadinessTestApp(t *testing.T, repo *readinessHandlerStub, threshold tim
 	)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(cmdUC, queryUC, false)
+	handler, err := NewHandler(cmdUC, queryUC, fixture.connRepo, false)
 	require.NoError(t, err)
 
 	handler.WithStalenessProvider(func() time.Duration { return threshold })
