@@ -11,10 +11,10 @@ package mocks
 
 import (
 	context "context"
-	sql "database/sql"
 	reflect "reflect"
 
 	http "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	repositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	uuid "github.com/google/uuid"
 	gomock "go.uber.org/mock/gomock"
@@ -60,7 +60,7 @@ func (mr *MockAuditLogRepositoryMockRecorder) Create(ctx, auditLog any) *gomock.
 }
 
 // CreateWithTx mocks base method.
-func (m *MockAuditLogRepository) CreateWithTx(ctx context.Context, tx *sql.Tx, auditLog *shared.AuditLog) (*shared.AuditLog, error) {
+func (m *MockAuditLogRepository) CreateWithTx(ctx context.Context, tx repositories.Tx, auditLog *shared.AuditLog) (*shared.AuditLog, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateWithTx", ctx, tx, auditLog)
 	ret0, _ := ret[0].(*shared.AuditLog)
