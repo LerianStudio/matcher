@@ -290,6 +290,17 @@ linters:
         # Shared interfaces belong in internal/shared/ports/.
         # Inter-context communication uses ports/interfaces only.
         # All rules use list-mode: original (deny violations are errors).
+        #
+        # Mechanism note — implicitly-permit-by-omission:
+        # list-mode: original treats `deny:` as a prefix-matched deny-list.
+        # Splitting a broad deny (e.g. `.../configuration`) into narrower
+        # sub-package denies (e.g. `.../configuration/adapters`,
+        # `.../configuration/services`, `.../configuration/ports`) permits the
+        # omitted paths (`.../configuration/domain`) by construction. Every
+        # carve-out below relies on this mechanism. A sibling-package leak is
+        # possible if an omitted prefix covers more than intended — explicit
+        # sub-package denies for unintended siblings are required alongside the
+        # carve-out comment.
         # ===========================================
         cross-context-configuration:
           list-mode: original
@@ -320,9 +331,27 @@ linters:
           files:
             - "**/internal/ingestion/**/*.go"
           deny:
-            # Block ALL imports from Configuration context
-            - pkg: "github.com/LerianStudio/matcher/internal/configuration"
-              desc: "Cross-context violation: Ingestion cannot import Configuration. Use shared kernel (internal/shared/domain/) or port interfaces."
+            # ──────────────────────────────────────────────────────────────
+            # CARVE-OUT #1: ingestion → configuration/domain/{entities,value_objects} ALLOWED.
+            # Read-only access to configuration domain data types. Splits the
+            # broad `.../configuration` deny into explicit sub-package denies
+            # so the intended subset of `configuration/domain` is implicitly
+            # permitted (see mechanism note above). Repo-interface package
+            # (`domain/repositories`) is explicitly denied — cross-context
+            # port coupling is not part of the intent.
+            # Consumed by: T-004 (K-06b type-alias shim deletion, where
+            # ingestion sites currently read a type aliased from configuration
+            # through a shim that T-004 deletes — post-delete the import
+            # lands directly on configuration/domain).
+            # ──────────────────────────────────────────────────────────────
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration/adapters"
+              desc: "Cross-context violation: Ingestion cannot import Configuration adapters. Use shared kernel (internal/shared/domain/) or port interfaces."
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration/services"
+              desc: "Cross-context violation: Ingestion cannot import Configuration services. Use shared kernel (internal/shared/domain/) or port interfaces."
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration/ports"
+              desc: "Cross-context violation: Ingestion cannot import Configuration ports. Use shared kernel (internal/shared/domain/) or shared/ports/."
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration/domain/repositories"
+              desc: "Cross-context violation: Ingestion cannot import Configuration repo interfaces. Domain data types (entities, value_objects) only — repo-interface coupling is a port-layer concern."
             # Block ALL imports from Matching context
             - pkg: "github.com/LerianStudio/matcher/internal/matching"
               desc: "Cross-context violation: Ingestion cannot import Matching. Use shared kernel (internal/shared/domain/) or port interfaces."
@@ -343,12 +372,57 @@ linters:
             # Block ALL imports from Configuration context
             - pkg: "github.com/LerianStudio/matcher/internal/configuration"
               desc: "Cross-context violation: Matching cannot import Configuration. Move shared types to internal/shared/domain/ or use port interfaces."
-            # Block ALL imports from Ingestion context
-            - pkg: "github.com/LerianStudio/matcher/internal/ingestion"
-              desc: "Cross-context violation: Matching cannot import Ingestion. Move Transaction entity to internal/shared/domain/ as shared kernel."
-            # Block Governance, Exception, Reporting, Outbox contexts:
-            - pkg: "github.com/LerianStudio/matcher/internal/governance"
-              desc: "Cross-context violation: Matching cannot import Governance. Use shared/ports or shared kernel."
+            # ──────────────────────────────────────────────────────────────
+            # CARVE-OUT #2: matching → ingestion/domain/{entities,value_objects} ALLOWED.
+            # Transaction reads. After T-005 collapses matching's
+            # TransactionRepository port, matching's concrete repositories
+            # need direct access to ingestion transaction data types.
+            # T-005's UseCase consumes the concrete `*Repository` struct from
+            # ingestion/adapters/postgres (which is blocked elsewhere by
+            # service-no-adapters) not `ingestion/domain/repositories` —
+            # repo-interface cross-context coupling stays denied here.
+            # Consumed by: T-005 (K-07f TransactionRepository port collapse).
+            # ──────────────────────────────────────────────────────────────
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion/adapters"
+              desc: "Cross-context violation: Matching cannot import Ingestion adapters. Use shared kernel (internal/shared/domain/) or port interfaces."
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion/services"
+              desc: "Cross-context violation: Matching cannot import Ingestion services. Use shared kernel (internal/shared/domain/) or port interfaces."
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion/ports"
+              desc: "Cross-context violation: Matching cannot import Ingestion ports. Use shared kernel (internal/shared/domain/) or shared/ports/."
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
+              desc: "Cross-context violation: Matching cannot import Ingestion repo interfaces. Domain data types (entities, value_objects) only — repo-interface coupling is a port-layer concern."
+            # ──────────────────────────────────────────────────────────────
+            # CARVE-OUT #4 (matching half): matching → governance/adapters/postgres/audit_log ALLOWED.
+            # Grants access to the governance audit log repository package
+            # so T-016 can collapse the AuditLogRepository port. Depguard
+            # can only enforce package-path granularity — the concrete type
+            # at this path exposes read methods (GetByID, ListByEntity, List)
+            # alongside append. This carve-out does not widen the read
+            # surface beyond what `sharedPorts.AuditLogRepository` already
+            # allowed today; it replaces the port with direct concrete-type
+            # access. Reviewers of changes to the governance audit repo
+            # MUST consider cross-context read implications from matching.
+            # Sibling sub-packages (actor_mapping/, archive_metadata/) are
+            # explicitly denied below to prevent prefix-match leaks.
+            # Service-layer callers in `matching/services/**` route through
+            # this carve-out because service-no-adapters is split in parallel
+            # to leave `governance/adapters/postgres/audit_log` permitted.
+            # Consumed by: T-016 (R-09 AuditLogRepository port collapse).
+            # ──────────────────────────────────────────────────────────────
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/adapters/http"
+              desc: "Cross-context violation: Matching cannot import Governance HTTP adapters. Use shared/ports or shared kernel."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/adapters/audit"
+              desc: "Cross-context violation: Matching cannot import Governance audit adapter. Use shared/ports or shared kernel."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/actor_mapping"
+              desc: "Cross-context violation: Matching cannot import governance's actor_mapping adapter. Audit log is the only carved-out governance path."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/archive_metadata"
+              desc: "Cross-context violation: Matching cannot import governance's archive_metadata adapter. Audit log is the only carved-out governance path."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/domain"
+              desc: "Cross-context violation: Matching cannot import Governance domain. Use shared/ports or shared kernel."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/ports"
+              desc: "Cross-context violation: Matching cannot import Governance ports. Close the hole before governance/ports/ is populated."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/services"
+              desc: "Cross-context violation: Matching cannot import Governance services. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/exception"
               desc: "Cross-context violation: Matching cannot import Exception. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/reporting"
@@ -369,9 +443,38 @@ linters:
               desc: "Cross-context violation: Exception cannot import Ingestion directly."
             - pkg: "github.com/LerianStudio/matcher/internal/matching"
               desc: "Cross-context violation: Exception cannot import Matching directly."
-            # Block Governance, Reporting, Outbox contexts:
-            - pkg: "github.com/LerianStudio/matcher/internal/governance"
-              desc: "Cross-context violation: Exception cannot import Governance. Use shared/ports or shared kernel."
+            # ──────────────────────────────────────────────────────────────
+            # CARVE-OUT #4 (exception half): exception → governance/adapters/postgres/audit_log ALLOWED.
+            # Same rationale as carve-out #4 in `cross-context-matching`.
+            # Depguard can only enforce package-path granularity — the
+            # concrete type at this path exposes read methods (GetByID,
+            # ListByEntity, List); exception/services/query/queries.go
+            # already uses ListByEntity today via `sharedPorts.AuditLogRepository`.
+            # This carve-out does not widen the read surface beyond what
+            # that port already allowed; it replaces the port with direct
+            # concrete-type access. Reviewers of governance audit repo
+            # changes MUST consider cross-context read implications from
+            # exception. Sibling sub-packages (actor_mapping/,
+            # archive_metadata/) are explicitly denied below to prevent
+            # prefix-match leaks. Service-layer callers in
+            # `exception/services/**` route through this carve-out because
+            # service-no-adapters is split in parallel.
+            # Consumed by: T-016 (R-09 AuditLogRepository port collapse).
+            # ──────────────────────────────────────────────────────────────
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/adapters/http"
+              desc: "Cross-context violation: Exception cannot import Governance HTTP adapters. Use shared/ports or shared kernel."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/adapters/audit"
+              desc: "Cross-context violation: Exception cannot import Governance audit adapter. Use shared/ports or shared kernel."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/actor_mapping"
+              desc: "Cross-context violation: Exception cannot import governance's actor_mapping adapter. Audit log is the only carved-out governance path."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/archive_metadata"
+              desc: "Cross-context violation: Exception cannot import governance's archive_metadata adapter. Audit log is the only carved-out governance path."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/domain"
+              desc: "Cross-context violation: Exception cannot import Governance domain. Use shared/ports or shared kernel."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/ports"
+              desc: "Cross-context violation: Exception cannot import Governance ports. Close the hole before governance/ports/ is populated."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/services"
+              desc: "Cross-context violation: Exception cannot import Governance services. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/reporting"
               desc: "Cross-context violation: Exception cannot import Reporting. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/discovery"
@@ -428,8 +531,26 @@ linters:
           deny:
             - pkg: "github.com/LerianStudio/matcher/internal/configuration"
               desc: "Cross-context violation: Discovery cannot import Configuration. Use shared/ports or shared kernel."
-            - pkg: "github.com/LerianStudio/matcher/internal/ingestion"
-              desc: "Cross-context violation: Discovery cannot import Ingestion. Use shared/ports or shared kernel."
+            # ──────────────────────────────────────────────────────────────
+            # CARVE-OUT #3: discovery → ingestion/services/command ALLOWED.
+            # Fetcher bridge intake path. Resolves D-01 from the simplify
+            # backlog: the fetcher bridge IS a cross-context pipeline and the
+            # intermediate port layer added no translation value. Discovery
+            # calls ingestion's IngestFromTrustedStream use case directly.
+            # Split the broad `.../ingestion` deny into explicit sub-package
+            # denies so `ingestion/services/command` is implicitly permitted
+            # while `ingestion/services/query` stays blocked (no read path
+            # is needed from discovery).
+            # Consumed by: R-03 + R-04 (Wave 3 fetcher bridge collapse).
+            # ──────────────────────────────────────────────────────────────
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion/adapters"
+              desc: "Cross-context violation: Discovery cannot import Ingestion adapters. Use shared/ports or shared kernel."
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion/domain"
+              desc: "Cross-context violation: Discovery cannot import Ingestion domain. Use shared/ports or shared kernel."
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion/ports"
+              desc: "Cross-context violation: Discovery cannot import Ingestion ports. Use shared/ports or shared kernel."
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion/services/query"
+              desc: "Cross-context violation: Discovery cannot import Ingestion queries. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/matching"
               desc: "Cross-context violation: Discovery cannot import Matching. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/exception"
@@ -461,8 +582,31 @@ linters:
               desc: "Service layer cannot import adapters. Depend on port interfaces declared in ports/."
             - pkg: "github.com/LerianStudio/matcher/internal/exception/adapters"
               desc: "Service layer cannot import adapters. Depend on port interfaces declared in ports/."
-            - pkg: "github.com/LerianStudio/matcher/internal/governance/adapters"
-              desc: "Service layer cannot import adapters. Depend on port interfaces declared in ports/."
+            # ──────────────────────────────────────────────────────────────
+            # CARVE-OUT (companion to cross-context carve-out #4):
+            # Service layer in matching + exception + governance needs to
+            # import `governance/adapters/postgres[/audit_log]` directly
+            # after T-016 deletes the AuditLogRepository port. This is
+            # expressed here via sub-package splitting of the broad
+            # `governance/adapters` deny — `governance/adapters/postgres`
+            # (root) and `governance/adapters/postgres/audit_log` are
+            # implicitly permitted at this rule. Per-context narrowing
+            # for configuration/ingestion/reporting/discovery services
+            # comes from their own `cross-context-*` rules, which deny
+            # all of `.../governance`. Matching/exception cross-context
+            # rules in turn permit ONLY audit_log by denying siblings
+            # actor_mapping/archive_metadata. Governance's own services
+            # are legitimately allowed (same-context).
+            # Consumed by: T-016 (R-09 AuditLogRepository port collapse).
+            # ──────────────────────────────────────────────────────────────
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/adapters/http"
+              desc: "Service layer cannot import governance HTTP adapters. Depend on port interfaces declared in ports/."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/adapters/audit"
+              desc: "Service layer cannot import governance audit consumer adapter. Depend on port interfaces declared in ports/."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/actor_mapping"
+              desc: "Service layer cannot import governance's actor_mapping adapter. Audit log is the only carved-out governance adapter path for services."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/archive_metadata"
+              desc: "Service layer cannot import governance's archive_metadata adapter. Audit log is the only carved-out governance adapter path for services."
             - pkg: "github.com/LerianStudio/matcher/internal/reporting/adapters"
               desc: "Service layer cannot import adapters. Depend on port interfaces declared in ports/."
             - pkg: "github.com/LerianStudio/matcher/internal/discovery/adapters"
@@ -708,6 +852,7 @@ linters:
         entity-purity:
           list-mode: original
           files:
+            - "**/domain/entities/*.go"
             - "**/domain/entities/**/*.go"
           deny:
             - pkg: "github.com/LerianStudio/matcher/internal/configuration/domain/repositories"
@@ -721,6 +866,21 @@ linters:
             - pkg: "github.com/LerianStudio/matcher/internal/ingestion/adapters"
               desc: "Domain purity violation: Entities cannot import adapters."
             - pkg: "github.com/LerianStudio/matcher/internal/matching/adapters"
+              desc: "Domain purity violation: Entities cannot import adapters."
+            # Additional adapter paths — entities are storage-agnostic regardless
+            # of which context owns them. Closes the gap exposed by carve-out #4
+            # where matching entities could transitively reach governance adapters.
+            - pkg: "github.com/LerianStudio/matcher/internal/governance/adapters"
+              desc: "Domain purity violation: Entities cannot import adapters."
+            - pkg: "github.com/LerianStudio/matcher/internal/exception/adapters"
+              desc: "Domain purity violation: Entities cannot import adapters."
+            - pkg: "github.com/LerianStudio/matcher/internal/reporting/adapters"
+              desc: "Domain purity violation: Entities cannot import adapters."
+            - pkg: "github.com/LerianStudio/matcher/internal/discovery/adapters"
+              desc: "Domain purity violation: Entities cannot import adapters."
+            - pkg: "github.com/LerianStudio/matcher/internal/outbox/adapters"
+              desc: "Domain purity violation: Entities cannot import adapters."
+            - pkg: "github.com/LerianStudio/matcher/internal/auth/adapters"
               desc: "Domain purity violation: Entities cannot import adapters."
             - pkg: "database/sql"
               desc: "Domain purity violation: Entities cannot import database/sql."
