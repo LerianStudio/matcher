@@ -39,7 +39,7 @@ func TestAdjustEntry_Success(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewUseCase(repo, exec, audit, actor, infra)
+	uc, err := NewExceptionUseCase(repo, actor, audit, infra, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	result, err := uc.AdjustEntry(ctx, AdjustEntryCommand{
@@ -77,7 +77,7 @@ func TestAdjustEntry_NegativeAmountRejected(t *testing.T) {
 	exec := &stubResolutionExecutor{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst-1"), &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -154,7 +154,7 @@ func TestAdjustEntry_ValidationErrors(t *testing.T) {
 			exec := &stubResolutionExecutor{}
 			audit := &stubAuditPublisher{}
 
-			uc, ucErr := NewUseCase(repo, exec, audit, actorExtractor("analyst-1"), &stubInfraProvider{})
+			uc, ucErr := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 			require.NoError(t, ucErr)
 
 			_, adjustErr := uc.AdjustEntry(context.Background(), tc.input)
@@ -179,7 +179,7 @@ func TestAdjustEntry_ActorRequired(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	emptyActor := actorExtractor("")
 
-	uc, err := NewUseCase(repo, exec, audit, emptyActor, &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(repo, emptyActor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	_, err = uc.AdjustEntry(context.Background(), AdjustEntryCommand{
@@ -192,7 +192,7 @@ func TestAdjustEntry_ActorRequired(t *testing.T) {
 	require.ErrorIs(t, err, ErrActorRequired)
 
 	whitespaceActor := actorExtractor("  ")
-	uc2, err := NewUseCase(repo, exec, audit, whitespaceActor, &stubInfraProvider{})
+	uc2, err := NewExceptionUseCase(repo, whitespaceActor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	_, err = uc2.AdjustEntry(context.Background(), AdjustEntryCommand{
@@ -220,7 +220,7 @@ func TestAdjustEntry_ZeroAmountRejected(t *testing.T) {
 	exec := &stubResolutionExecutor{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst-1"), &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -249,7 +249,7 @@ func TestAdjustEntry_InvalidCurrency(t *testing.T) {
 	exec := &stubResolutionExecutor{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst-1"), &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -297,7 +297,7 @@ func TestAdjustEntry_DependencyErrors(t *testing.T) {
 	exec := &stubResolutionExecutor{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst-1"), &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -364,7 +364,7 @@ func TestAdjustEntry_AuditError(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst-1"), infra)
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, infra, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	// Audit errors propagate atomically — if audit publish fails within the
@@ -398,7 +398,7 @@ func TestAdjustEntry_UpdateError(t *testing.T) {
 	exec := &stubResolutionExecutor{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst-1"), &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -433,7 +433,7 @@ func TestAdjustEntry_CurrencyNormalization(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst-1"), infra)
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, infra, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	result, err := uc.AdjustEntry(ctx, AdjustEntryCommand{
@@ -484,13 +484,7 @@ func TestAdjustEntry_AllAdjustmentReasons(t *testing.T) {
 			exec := &stubResolutionExecutor{}
 			audit := &stubAuditPublisher{called: make(chan struct{})}
 
-			uc, err := NewUseCase(
-				repo,
-				exec,
-				audit,
-				actorExtractor("analyst-1"),
-				&stubInfraProvider{},
-			)
+			uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 			require.NoError(t, err)
 
 			ctx := context.Background()
@@ -552,13 +546,7 @@ func TestAdjustEntry_AllCurrencies(t *testing.T) {
 			exec := &stubResolutionExecutor{}
 			audit := &stubAuditPublisher{called: make(chan struct{})}
 
-			uc, err := NewUseCase(
-				repo,
-				exec,
-				audit,
-				actorExtractor("analyst-1"),
-				&stubInfraProvider{},
-			)
+			uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 			require.NoError(t, err)
 
 			ctx := context.Background()
@@ -617,13 +605,7 @@ func TestAdjustEntry_EffectiveAtBoundaries(t *testing.T) {
 			exec := &stubResolutionExecutor{}
 			audit := &stubAuditPublisher{called: make(chan struct{})}
 
-			uc, err := NewUseCase(
-				repo,
-				exec,
-				audit,
-				actorExtractor("analyst-1"),
-				&stubInfraProvider{},
-			)
+			uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 			require.NoError(t, err)
 
 			ctx := context.Background()

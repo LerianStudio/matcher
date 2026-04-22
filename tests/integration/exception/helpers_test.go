@@ -27,8 +27,8 @@ import (
 	configSourceRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/source"
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
-	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 
 	ingestionParsers "github.com/LerianStudio/matcher/internal/ingestion/adapters/parsers"
@@ -149,21 +149,21 @@ func seedTestConfig(t *testing.T, h *integration.TestHarness) seedConfig {
 		"description": "description",
 	}
 
-	ledgerFM, err := configEntities.NewFieldMap(
+	ledgerFM, err := shared.NewFieldMap(
 		ctx,
 		h.Seed.ContextID,
 		ledgerSourceID,
-		configEntities.CreateFieldMapInput{Mapping: mapping},
+		shared.CreateFieldMapInput{Mapping: mapping},
 	)
 	require.NoError(t, err)
 	_, err = fmRepo.Create(ctx, ledgerFM)
 	require.NoError(t, err)
 
-	bankFM, err := configEntities.NewFieldMap(
+	bankFM, err := shared.NewFieldMap(
 		ctx,
 		h.Seed.ContextID,
 		createdBankSrc.ID,
-		configEntities.CreateFieldMapInput{Mapping: mapping},
+		shared.CreateFieldMapInput{Mapping: mapping},
 	)
 	require.NoError(t, err)
 	_, err = fmRepo.Create(ctx, bankFM)
@@ -579,13 +579,15 @@ func createExceptionForTransaction(
 	return loaded
 }
 
-// wireExceptionUseCase creates a real exception UseCase with real repos and the given
-// ResolutionExecutor (can be a stub for tests).
+// wireExceptionUseCase creates the merged exception UseCase wired with the
+// given ResolutionExecutor. Resolution operations (ForceMatch, AdjustEntry,
+// BulkAssign, BulkResolve) are the only ones exercised here; the other
+// optional dependencies are intentionally left unwired.
 func wireExceptionUseCase(
 	t *testing.T,
 	h *integration.TestHarness,
 	executor exceptionPorts.ResolutionExecutor,
-) (*exceptionCommand.UseCase, ports.InfrastructureProvider) {
+) (*exceptionCommand.ExceptionUseCase, ports.InfrastructureProvider) {
 	t.Helper()
 
 	redisConn := mustRedisConn(t, h.RedisAddr)
@@ -599,23 +601,25 @@ func wireExceptionUseCase(
 
 	actorExtractor := exceptionAdapters.NewAuthActorExtractor()
 
-	uc, err := exceptionCommand.NewUseCase(
+	uc, err := exceptionCommand.NewExceptionUseCase(
 		exceptionRepo,
-		executor,
-		auditPub,
 		actorExtractor,
+		auditPub,
 		provider,
+		exceptionCommand.WithResolutionExecutor(executor),
 	)
 	require.NoError(t, err)
 
 	return uc, provider
 }
 
-// wireDisputeUseCase creates a real DisputeUseCase with real repos.
+// wireDisputeUseCase creates the merged exception UseCase wired with the
+// dispute repository. Dispute operations (OpenDispute, CloseDispute,
+// SubmitEvidence) are the only ones exercised here.
 func wireDisputeUseCase(
 	t *testing.T,
 	h *integration.TestHarness,
-) (*exceptionCommand.DisputeUseCase, ports.InfrastructureProvider) {
+) (*exceptionCommand.ExceptionUseCase, ports.InfrastructureProvider) {
 	t.Helper()
 
 	redisConn := mustRedisConn(t, h.RedisAddr)
@@ -630,12 +634,12 @@ func wireDisputeUseCase(
 
 	actorExtractor := exceptionAdapters.NewAuthActorExtractor()
 
-	uc, err := exceptionCommand.NewDisputeUseCase(
-		disputeRepo,
+	uc, err := exceptionCommand.NewExceptionUseCase(
 		exceptionRepo,
-		auditPub,
 		actorExtractor,
+		auditPub,
 		provider,
+		exceptionCommand.WithDisputeRepository(disputeRepo),
 	)
 	require.NoError(t, err)
 

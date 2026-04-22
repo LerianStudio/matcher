@@ -278,26 +278,7 @@ func TestProcessCallback_InvalidUpdatedAtFormat(t *testing.T) {
 
 func TestNewHandlers_NilCallbackUseCase(t *testing.T) {
 	t.Parallel()
-
-	exceptionProvider := &stubExceptionProvider{exists: true}
-	disputeProvider := &stubDisputeProvider{exists: true}
-
-	handlers, err := NewHandlers(
-		&command.UseCase{},
-		&command.DisputeUseCase{},
-		&query.UseCase{},
-		&command.DispatchUseCase{},
-		&command.CommentUseCase{},
-		&query.CommentQueryUseCase{},
-		nil,
-		exceptionProvider,
-		disputeProvider,
-		false,
-	)
-
-	assert.Nil(t, handlers)
-	require.Error(t, err)
-	require.ErrorIs(t, err, ErrNilCallbackUseCase)
+	t.Skip("merged into single ExceptionUseCase; no separate callback UC argument")
 }
 
 // executeCallbackErrorHandler runs handleCallbackError through a fiber test app.
@@ -335,18 +316,7 @@ func newCallbackTestHandlers(t *testing.T) *Handlers {
 	exceptionProvider := &stubExceptionProvider{exists: true}
 	disputeProvider := &stubDisputeProvider{exists: true}
 
-	handlers, err := NewHandlers(
-		&command.UseCase{},
-		&command.DisputeUseCase{},
-		&query.UseCase{},
-		&command.DispatchUseCase{},
-		&command.CommentUseCase{},
-		&query.CommentQueryUseCase{},
-		&command.CallbackUseCase{},
-		exceptionProvider,
-		disputeProvider,
-		false,
-	)
+	handlers, err := NewHandlers(&command.ExceptionUseCase{}, &query.UseCase{}, &query.CommentQueryUseCase{}, exceptionProvider, disputeProvider, false)
 	require.NoError(t, err)
 
 	return handlers

@@ -39,13 +39,7 @@ func TestSubmitEvidence_Success(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewDisputeUseCase(
-		disputeRepo,
-		exceptionRepo,
-		audit,
-		actorExtractor("analyst-1"),
-		infra,
-	)
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
 	require.NoError(t, err)
 
 	result, err := uc.SubmitEvidence(ctx, SubmitEvidenceCommand{
@@ -87,13 +81,7 @@ func TestSubmitEvidence_WithFileURL(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewDisputeUseCase(
-		disputeRepo,
-		exceptionRepo,
-		audit,
-		actorExtractor("analyst-1"),
-		infra,
-	)
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
 	require.NoError(t, err)
 
 	fileURL := "https://example.com/evidence.pdf"
@@ -131,13 +119,7 @@ func TestSubmitEvidence_ValidationErrors(t *testing.T) {
 	disputeRepo := &stubDisputeRepo{dispute: existingDispute}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewDisputeUseCase(
-		disputeRepo,
-		exceptionRepo,
-		audit,
-		actorExtractor("analyst-1"),
-		&stubInfraProvider{},
-	)
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
 	require.NoError(t, err)
 
 	testCases := []struct {
@@ -192,13 +174,7 @@ func TestSubmitEvidence_ActorRequired(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	emptyActor := actorExtractor("")
 
-	uc, err := NewDisputeUseCase(
-		disputeRepo,
-		exceptionRepo,
-		audit,
-		emptyActor,
-		&stubInfraProvider{},
-	)
+	uc, err := NewExceptionUseCase(exceptionRepo, emptyActor, audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
 	require.NoError(t, err)
 
 	_, err = uc.SubmitEvidence(context.Background(), SubmitEvidenceCommand{
@@ -223,13 +199,7 @@ func TestSubmitEvidence_DisputeNotFound(t *testing.T) {
 	disputeRepo := &stubDisputeRepo{findErr: errTestDisputeFind}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewDisputeUseCase(
-		disputeRepo,
-		exceptionRepo,
-		audit,
-		actorExtractor("analyst-1"),
-		&stubInfraProvider{},
-	)
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -261,13 +231,7 @@ func TestSubmitEvidence_WrongState(t *testing.T) {
 	disputeRepo := &stubDisputeRepo{dispute: existingDispute}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewDisputeUseCase(
-		disputeRepo,
-		exceptionRepo,
-		audit,
-		actorExtractor("analyst-1"),
-		&stubInfraProvider{},
-	)
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
 	require.NoError(t, err)
 
 	_, err = uc.SubmitEvidence(ctx, SubmitEvidenceCommand{
@@ -296,13 +260,7 @@ func TestSubmitEvidence_UpdateError(t *testing.T) {
 	disputeRepo := &stubDisputeRepo{dispute: existingDispute, updateErr: errTestDisputeUpdate}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewDisputeUseCase(
-		disputeRepo,
-		exceptionRepo,
-		audit,
-		actorExtractor("analyst-1"),
-		&stubInfraProvider{},
-	)
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
 	require.NoError(t, err)
 
 	_, err = uc.SubmitEvidence(ctx, SubmitEvidenceCommand{
@@ -331,13 +289,7 @@ func TestSubmitEvidence_AuditPublishError(t *testing.T) {
 	disputeRepo := &stubDisputeRepo{dispute: existingDispute}
 	audit := &stubAuditPublisher{err: errTestAudit}
 
-	uc, err := NewDisputeUseCase(
-		disputeRepo,
-		exceptionRepo,
-		audit,
-		actorExtractor("analyst-1"),
-		&stubInfraProvider{},
-	)
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
 	require.NoError(t, err)
 
 	_, err = uc.SubmitEvidence(ctx, SubmitEvidenceCommand{

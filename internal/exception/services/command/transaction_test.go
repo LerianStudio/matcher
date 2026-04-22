@@ -38,7 +38,7 @@ func TestAdjustEntry_BeginTxError(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	infra := &stubInfraProvider{txErr: errTestBeginTx}
 
-	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst-1"), infra)
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, infra, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	_, err = uc.AdjustEntry(ctx, AdjustEntryCommand{
@@ -77,7 +77,7 @@ func TestAdjustEntry_CommitError(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst-1"), infra)
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, infra, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	_, err = uc.AdjustEntry(ctx, AdjustEntryCommand{
@@ -112,7 +112,7 @@ func TestForceMatch_BeginTxError(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	infra := &stubInfraProvider{txErr: errTestBeginTx}
 
-	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst-1"), infra)
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, infra, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	_, err = uc.ForceMatch(ctx, ForceMatchCommand{
@@ -148,7 +148,7 @@ func TestForceMatch_CommitError(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst-1"), infra)
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, infra, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	_, err = uc.ForceMatch(ctx, ForceMatchCommand{
@@ -178,7 +178,7 @@ func TestForceMatch_UpdateError(t *testing.T) {
 	exec := &stubResolutionExecutor{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst-1"), &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	_, err = uc.ForceMatch(ctx, ForceMatchCommand{
@@ -209,13 +209,7 @@ func TestOpenDispute_BeginTxError(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	infra := &stubInfraProvider{txErr: errTestBeginTx}
 
-	uc, err := NewDisputeUseCase(
-		disputeRepo,
-		exceptionRepo,
-		audit,
-		actorExtractor("analyst-1"),
-		infra,
-	)
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
 	require.NoError(t, err)
 
 	_, err = uc.OpenDispute(ctx, OpenDisputeCommand{
@@ -251,13 +245,7 @@ func TestOpenDispute_CommitError(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewDisputeUseCase(
-		disputeRepo,
-		exceptionRepo,
-		audit,
-		actorExtractor("analyst-1"),
-		infra,
-	)
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
 	require.NoError(t, err)
 
 	_, err = uc.OpenDispute(ctx, OpenDisputeCommand{
@@ -291,13 +279,7 @@ func TestCloseDispute_BeginTxError(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	infra := &stubInfraProvider{txErr: errTestBeginTx}
 
-	uc, err := NewDisputeUseCase(
-		disputeRepo,
-		exceptionRepo,
-		audit,
-		actorExtractor("analyst-1"),
-		infra,
-	)
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
 	require.NoError(t, err)
 
 	_, err = uc.CloseDispute(ctx, CloseDisputeCommand{
@@ -335,13 +317,7 @@ func TestCloseDispute_CommitError(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewDisputeUseCase(
-		disputeRepo,
-		exceptionRepo,
-		audit,
-		actorExtractor("analyst-1"),
-		infra,
-	)
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
 	require.NoError(t, err)
 
 	_, err = uc.CloseDispute(ctx, CloseDisputeCommand{
@@ -375,13 +351,7 @@ func TestSubmitEvidence_BeginTxError(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	infra := &stubInfraProvider{txErr: errTestBeginTx}
 
-	uc, err := NewDisputeUseCase(
-		disputeRepo,
-		exceptionRepo,
-		audit,
-		actorExtractor("analyst-1"),
-		infra,
-	)
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
 	require.NoError(t, err)
 
 	_, err = uc.SubmitEvidence(ctx, SubmitEvidenceCommand{
@@ -418,13 +388,7 @@ func TestSubmitEvidence_CommitError(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewDisputeUseCase(
-		disputeRepo,
-		exceptionRepo,
-		audit,
-		actorExtractor("analyst-1"),
-		infra,
-	)
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
 	require.NoError(t, err)
 
 	_, err = uc.SubmitEvidence(ctx, SubmitEvidenceCommand{
@@ -504,13 +468,7 @@ func TestSubmitEvidence_FileURLVariations(t *testing.T) {
 
 			infra := &stubInfraProvider{tx: tx}
 
-			uc, err := NewDisputeUseCase(
-				disputeRepo,
-				exceptionRepo,
-				audit,
-				actorExtractor("analyst-1"),
-				infra,
-			)
+			uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
 			require.NoError(t, err)
 
 			result, err := uc.SubmitEvidence(ctx, SubmitEvidenceCommand{

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	exceptionAdapters "github.com/LerianStudio/matcher/internal/exception/adapters"
+	exceptionAudit "github.com/LerianStudio/matcher/internal/exception/adapters/audit"
 	commentRepoAdapter "github.com/LerianStudio/matcher/internal/exception/adapters/postgres/comment"
 	exceptionRepoAdapter "github.com/LerianStudio/matcher/internal/exception/adapters/postgres/exception"
 	exceptionCommand "github.com/LerianStudio/matcher/internal/exception/services/command"
@@ -19,23 +20,38 @@ import (
 	ingestionTxRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/transaction"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
+	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-// wireCommentUseCase creates real CommentUseCase and CommentQueryUseCase backed by PostgreSQL.
+// wireCommentUseCase creates the merged exception UseCase wired with the
+// comment repository plus the CommentQueryUseCase, both backed by
+// PostgreSQL. Comment operations (AddComment, DeleteComment) are the only
+// ones exercised here.
 func wireCommentUseCase(
 	t *testing.T,
 	h *integration.TestHarness,
-) (*exceptionCommand.CommentUseCase, *exceptionQuery.CommentQueryUseCase) {
+) (*exceptionCommand.ExceptionUseCase, *exceptionQuery.CommentQueryUseCase) {
 	t.Helper()
 
 	provider := h.Provider()
+	redisConn := mustRedisConn(t, h.RedisAddr)
+	fullProvider := infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
 
 	commentRepo := commentRepoAdapter.NewRepository(provider)
 	exceptionRepo := exceptionRepoAdapter.NewRepository(provider)
 	actorExtractor := exceptionAdapters.NewAuthActorExtractor()
+	outbox := integration.NewTestOutboxRepository(t, h.Connection)
+	auditPub, err := exceptionAudit.NewOutboxPublisher(outbox)
+	require.NoError(t, err)
 
-	cmdUC, err := exceptionCommand.NewCommentUseCase(commentRepo, exceptionRepo, actorExtractor)
+	cmdUC, err := exceptionCommand.NewExceptionUseCase(
+		exceptionRepo,
+		actorExtractor,
+		auditPub,
+		fullProvider,
+		exceptionCommand.WithCommentRepository(commentRepo),
+	)
 	require.NoError(t, err)
 
 	queryUC, err := exceptionQuery.NewCommentQueryUseCase(commentRepo)

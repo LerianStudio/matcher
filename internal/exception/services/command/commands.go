@@ -1,4 +1,11 @@
-// Package command provides exception resolution command use cases.
+// Package command provides exception command use cases (resolution, disputes,
+// dispatch, comments, callbacks). The merged ExceptionUseCase groups all
+// command operations on the exception bounded context behind a single entry
+// point. Required dependencies (exception repo, actor extractor, audit
+// publisher, infra provider) are constructor arguments. Specialised
+// dependencies used only by a subset of operations (resolution executor,
+// dispute repo, comment repo, external connector, idempotency repo, rate
+// limiter) are wired via UseCaseOption.
 package command
 
 import (
@@ -55,54 +62,139 @@ var (
 	ErrCallbackInProgress        = errors.New("callback is already being processed")
 	ErrCallbackRetryable         = errors.New("callback can be retried")
 	ErrUnexpectedNilResult       = errors.New("unexpected nil result")
+	ErrNilExternalConnector      = errors.New("external connector is required")
 )
 
-// UseCase implements exception resolution commands.
-type UseCase struct {
-	exceptionRepo      repositories.ExceptionRepository
-	resolutionExecutor ports.ResolutionExecutor
-	auditPublisher     ports.AuditPublisher
-	actorExtractor     ports.ActorExtractor
-	infraProvider      sharedPorts.InfrastructureProvider
+// ExceptionUseCase groups every write operation on the exception bounded
+// context: resolution (ForceMatch/AdjustEntry/BulkAssign/BulkResolve),
+// disputes (Open/Close/SubmitEvidence), external dispatch
+// (Dispatch/BulkDispatch), comments (AddComment/DeleteComment), and
+// inbound callbacks (ProcessCallback). Required dependencies are set via
+// the constructor; specialised dependencies used only by a subset of
+// operations are wired through UseCaseOption.
+type ExceptionUseCase struct {
+	// Required dependencies shared by most command paths.
+	exceptionRepo  repositories.ExceptionRepository
+	actorExtractor ports.ActorExtractor
+	auditPublisher ports.AuditPublisher
+	infraProvider  sharedPorts.InfrastructureProvider
 
-	// OTel metrics (initialized once at construction time)
+	// Optional dependencies: each operation that needs one checks for nil
+	// and returns the matching sentinel so callers receive a clear error
+	// when a required option was not wired.
+	resolutionExecutor ports.ResolutionExecutor
+	disputeRepo        repositories.DisputeRepository
+	commentRepo        repositories.CommentRepository
+	connector          ports.ExternalConnector
+	idempotencyRepo    sharedPorts.IdempotencyRepository
+	rateLimiter        ports.CallbackRateLimiter
+
+	// OTel metrics initialised once at construction time.
 	revertFailedCounter metric.Int64Counter
 }
 
-// NewUseCase creates a new UseCase with the required dependencies.
-func NewUseCase(
+// UseCaseOption configures optional dependencies on the merged
+// ExceptionUseCase. Nil values are ignored so callers can pass results of
+// conditional setup without guarding at the call site.
+type UseCaseOption func(*ExceptionUseCase)
+
+// WithResolutionExecutor sets the resolution executor used by ForceMatch,
+// AdjustEntry, BulkAssign and BulkResolve.
+func WithResolutionExecutor(executor ports.ResolutionExecutor) UseCaseOption {
+	return func(uc *ExceptionUseCase) {
+		if executor != nil {
+			uc.resolutionExecutor = executor
+		}
+	}
+}
+
+// WithDisputeRepository sets the dispute repository used by OpenDispute,
+// CloseDispute and SubmitEvidence.
+func WithDisputeRepository(repo repositories.DisputeRepository) UseCaseOption {
+	return func(uc *ExceptionUseCase) {
+		if repo != nil {
+			uc.disputeRepo = repo
+		}
+	}
+}
+
+// WithCommentRepository sets the comment repository used by AddComment and
+// DeleteComment.
+func WithCommentRepository(repo repositories.CommentRepository) UseCaseOption {
+	return func(uc *ExceptionUseCase) {
+		if repo != nil {
+			uc.commentRepo = repo
+		}
+	}
+}
+
+// WithExternalConnector sets the external connector used by Dispatch and
+// BulkDispatch.
+func WithExternalConnector(connector ports.ExternalConnector) UseCaseOption {
+	return func(uc *ExceptionUseCase) {
+		if connector != nil {
+			uc.connector = connector
+		}
+	}
+}
+
+// WithIdempotencyRepository sets the idempotency repository used by
+// ProcessCallback.
+func WithIdempotencyRepository(repo sharedPorts.IdempotencyRepository) UseCaseOption {
+	return func(uc *ExceptionUseCase) {
+		if !sharedPorts.IsNilValue(repo) {
+			uc.idempotencyRepo = repo
+		}
+	}
+}
+
+// WithCallbackRateLimiter sets the rate limiter used by ProcessCallback.
+func WithCallbackRateLimiter(limiter ports.CallbackRateLimiter) UseCaseOption {
+	return func(uc *ExceptionUseCase) {
+		if !sharedPorts.IsNilValue(limiter) {
+			uc.rateLimiter = limiter
+		}
+	}
+}
+
+// NewExceptionUseCase creates a new ExceptionUseCase with the required
+// dependencies. Specialised dependencies are wired via UseCaseOption.
+// Methods that need a specialised dependency not wired by the caller will
+// return the matching ErrNil* sentinel.
+func NewExceptionUseCase(
 	repo repositories.ExceptionRepository,
-	executor ports.ResolutionExecutor,
-	audit ports.AuditPublisher,
 	actor ports.ActorExtractor,
+	audit ports.AuditPublisher,
 	infraProvider sharedPorts.InfrastructureProvider,
-) (*UseCase, error) {
+	opts ...UseCaseOption,
+) (*ExceptionUseCase, error) {
 	if repo == nil {
 		return nil, ErrNilExceptionRepository
-	}
-
-	if executor == nil {
-		return nil, ErrNilResolutionExecutor
-	}
-
-	if audit == nil {
-		return nil, ErrNilAuditPublisher
 	}
 
 	if actor == nil {
 		return nil, ErrNilActorExtractor
 	}
 
+	if audit == nil {
+		return nil, ErrNilAuditPublisher
+	}
+
 	if infraProvider == nil {
 		return nil, ErrNilInfraProvider
 	}
 
-	uc := &UseCase{
-		exceptionRepo:      repo,
-		resolutionExecutor: executor,
-		auditPublisher:     audit,
-		actorExtractor:     actor,
-		infraProvider:      infraProvider,
+	uc := &ExceptionUseCase{
+		exceptionRepo:  repo,
+		actorExtractor: actor,
+		auditPublisher: audit,
+		infraProvider:  infraProvider,
+	}
+
+	for _, opt := range opts {
+		if opt != nil {
+			opt(uc)
+		}
 	}
 
 	if err := uc.initMetrics(); err != nil {
@@ -113,7 +205,7 @@ func NewUseCase(
 }
 
 // initMetrics creates the OTel metric instruments for exception command operations.
-func (uc *UseCase) initMetrics() error {
+func (uc *ExceptionUseCase) initMetrics() error {
 	meter := otel.Meter("matcher.exception.command")
 
 	var err error
@@ -147,7 +239,7 @@ func isBusinessError(err error) bool {
 
 // executeWithRevert executes a gateway operation and reverts exception status on failure.
 // This helper reduces cyclomatic complexity and nested if blocks in resolution commands.
-func (uc *UseCase) executeWithRevert(
+func (uc *ExceptionUseCase) executeWithRevert(
 	ctx context.Context,
 	exception *entities.Exception,
 	previousStatus value_objects.ExceptionStatus,
@@ -167,7 +259,7 @@ func (uc *UseCase) executeWithRevert(
 // revertExceptionStatus attempts to abort resolution and update exception status.
 // Logs errors but does not return them - revert is best-effort.
 // Failures are also recorded on the active span for observability.
-func (uc *UseCase) revertExceptionStatus(
+func (uc *ExceptionUseCase) revertExceptionStatus(
 	ctx context.Context,
 	exception *entities.Exception,
 	previousStatus value_objects.ExceptionStatus,

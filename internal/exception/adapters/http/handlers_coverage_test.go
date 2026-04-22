@@ -148,18 +148,7 @@ func newHandlersWithQueryOptions(
 	exceptionProvider := &stubExceptionProvider{exists: true}
 	disputeProvider := &stubDisputeProvider{exists: true}
 
-	handlers, err := NewHandlers(
-		&command.UseCase{},
-		&command.DisputeUseCase{},
-		queryUC,
-		&command.DispatchUseCase{},
-		&command.CommentUseCase{},
-		&query.CommentQueryUseCase{},
-		&command.CallbackUseCase{},
-		exceptionProvider,
-		disputeProvider,
-		false,
-	)
+	handlers, err := NewHandlers(&command.ExceptionUseCase{}, queryUC, &query.CommentQueryUseCase{}, exceptionProvider, disputeProvider, false)
 	require.NoError(t, err)
 
 	return handlers
@@ -169,28 +158,13 @@ func newHandlersWithQueryOptions(
 // NewHandlers missing nil check
 // ---------------------------------------------------------------------------
 
+// TestNewHandlers_NilCommentUseCase is retained as a documentation marker
+// that the previously separate CommentUseCase has been merged into the
+// single ExceptionUseCase. NilCommentUseCase is no longer a valid
+// constructor error — Handlers only accept the merged command use case.
 func TestNewHandlers_NilCommentUseCase(t *testing.T) {
 	t.Parallel()
-
-	exceptionProvider := &stubExceptionProvider{exists: true}
-	disputeProvider := &stubDisputeProvider{exists: true}
-
-	handlers, err := NewHandlers(
-		&command.UseCase{},
-		&command.DisputeUseCase{},
-		&query.UseCase{},
-		&command.DispatchUseCase{},
-		nil,
-		&query.CommentQueryUseCase{},
-		&command.CallbackUseCase{},
-		exceptionProvider,
-		disputeProvider,
-		false,
-	)
-
-	assert.Nil(t, handlers)
-	require.Error(t, err)
-	require.ErrorIs(t, err, ErrNilCommentUseCase)
+	t.Skip("merged into single ExceptionUseCase; no separate comment UC argument")
 }
 
 // ---------------------------------------------------------------------------

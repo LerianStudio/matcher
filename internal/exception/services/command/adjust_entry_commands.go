@@ -41,11 +41,11 @@ type adjustEntryParams struct {
 	reason   value_objects.AdjustmentReasonCode
 }
 
-func (uc *UseCase) validateAdjustEntry(
+func (uc *ExceptionUseCase) validateAdjustEntry(
 	ctx context.Context,
 	cmd AdjustEntryCommand,
 ) (*adjustEntryParams, error) {
-	if err := uc.validateDependencies(); err != nil {
+	if err := uc.validateResolutionDeps(); err != nil {
 		return nil, err
 	}
 
@@ -84,7 +84,12 @@ func (uc *UseCase) validateAdjustEntry(
 	return &adjustEntryParams{actor: actor, notes: notes, currency: currency, reason: reason}, nil
 }
 
-func (uc *UseCase) validateDependencies() error {
+// validateResolutionDeps checks all dependencies required by the resolution
+// operations (ForceMatch, AdjustEntry). Returns the matching ErrNil*
+// sentinel when a dependency is missing. Safe on a nil receiver — returns
+// ErrNilExceptionRepository so nil-UseCase callers get a deterministic
+// error rather than a panic.
+func (uc *ExceptionUseCase) validateResolutionDeps() error {
 	if uc == nil || uc.exceptionRepo == nil {
 		return ErrNilExceptionRepository
 	}
@@ -105,7 +110,7 @@ func (uc *UseCase) validateDependencies() error {
 }
 
 // AdjustEntry resolves an exception by adjusting the related entry.
-func (uc *UseCase) AdjustEntry(
+func (uc *ExceptionUseCase) AdjustEntry(
 	ctx context.Context,
 	cmd AdjustEntryCommand,
 ) (*entities.Exception, error) {
@@ -122,7 +127,7 @@ func (uc *UseCase) AdjustEntry(
 	return uc.processAdjustEntry(ctx, cmd, params, logger, span)
 }
 
-func (uc *UseCase) processAdjustEntry(
+func (uc *ExceptionUseCase) processAdjustEntry(
 	ctx context.Context,
 	cmd AdjustEntryCommand,
 	params *adjustEntryParams,

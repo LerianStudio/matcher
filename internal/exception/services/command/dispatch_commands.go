@@ -20,7 +20,6 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/services"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
-	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // bulkDispatchConcurrency caps the number of parallel Dispatch calls
@@ -32,7 +31,6 @@ const bulkDispatchConcurrency = 10
 
 // Dispatch errors.
 var (
-	ErrNilExternalConnector           = errors.New("external connector is required")
 	ErrTargetSystemRequired           = errors.New("target system is required")
 	ErrUnsupportedTargetSystem        = errors.New("unsupported target system")
 	ErrDispatchConnectorNotConfigured = errors.New("dispatch connector not configured")
@@ -54,50 +52,31 @@ type DispatchResult struct {
 	DispatchedAt      time.Time `json:"dispatchedAt"`
 }
 
-// DispatchUseCase handles exception dispatch operations.
-type DispatchUseCase struct {
-	exceptionFinder ports.ExceptionFinder
-	connector       ports.ExternalConnector
-	auditPublisher  ports.AuditPublisher
-	actorExtractor  ports.ActorExtractor
-	infraProvider   sharedPorts.InfrastructureProvider
-}
-
-// NewDispatchUseCase creates a new dispatch use case with required dependencies.
-func NewDispatchUseCase(
-	exceptionFinder ports.ExceptionFinder,
-	connector ports.ExternalConnector,
-	audit ports.AuditPublisher,
-	actor ports.ActorExtractor,
-	infraProvider sharedPorts.InfrastructureProvider,
-) (*DispatchUseCase, error) {
-	if exceptionFinder == nil {
-		return nil, ErrNilExceptionRepository
+// validateDispatchDeps checks the dependencies required by dispatch
+// operations. Safe on a nil receiver — returns ErrNilExceptionRepository so
+// nil-UseCase callers get a deterministic error rather than a panic.
+func (uc *ExceptionUseCase) validateDispatchDeps() error {
+	if uc == nil || uc.exceptionRepo == nil {
+		return ErrNilExceptionRepository
 	}
 
-	if connector == nil {
-		return nil, ErrNilExternalConnector
+	if uc.connector == nil {
+		return ErrNilExternalConnector
 	}
 
-	if audit == nil {
-		return nil, ErrNilAuditPublisher
+	if uc.auditPublisher == nil {
+		return ErrNilAuditPublisher
 	}
 
-	if actor == nil {
-		return nil, ErrNilActorExtractor
+	if uc.actorExtractor == nil {
+		return ErrNilActorExtractor
 	}
 
-	if infraProvider == nil {
-		return nil, ErrNilInfraProvider
+	if uc.infraProvider == nil {
+		return ErrNilInfraProvider
 	}
 
-	return &DispatchUseCase{
-		exceptionFinder: exceptionFinder,
-		connector:       connector,
-		auditPublisher:  audit,
-		actorExtractor:  actor,
-		infraProvider:   infraProvider,
-	}, nil
+	return nil
 }
 
 type dispatchParams struct {
@@ -106,10 +85,14 @@ type dispatchParams struct {
 	queue  string
 }
 
-func (uc *DispatchUseCase) validateDispatch(
+func (uc *ExceptionUseCase) validateDispatch(
 	ctx context.Context,
 	cmd DispatchCommand,
 ) (*dispatchParams, error) {
+	if err := uc.validateDispatchDeps(); err != nil {
+		return nil, err
+	}
+
 	if cmd.ExceptionID == uuid.Nil {
 		return nil, ErrExceptionIDRequired
 	}
@@ -137,7 +120,7 @@ func (uc *DispatchUseCase) validateDispatch(
 }
 
 // Dispatch sends an exception to an external system.
-func (uc *DispatchUseCase) Dispatch(
+func (uc *ExceptionUseCase) Dispatch(
 	ctx context.Context,
 	cmd DispatchCommand,
 ) (*DispatchResult, error) {
@@ -154,14 +137,14 @@ func (uc *DispatchUseCase) Dispatch(
 	return uc.processDispatch(ctx, cmd, params, logger, span)
 }
 
-func (uc *DispatchUseCase) processDispatch(
+func (uc *ExceptionUseCase) processDispatch(
 	ctx context.Context,
 	cmd DispatchCommand,
 	params *dispatchParams,
 	logger libLog.Logger,
 	span trace.Span,
 ) (*DispatchResult, error) {
-	exception, err := uc.exceptionFinder.FindByID(ctx, cmd.ExceptionID)
+	exception, err := uc.exceptionRepo.FindByID(ctx, cmd.ExceptionID)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to load exception", err)
 
@@ -344,10 +327,14 @@ func calculateAgeDays(createdAt time.Time, referenceTime ...time.Time) int {
 // happened to preserve request order; callers that relied on that
 // implicit contract now need to sort client-side (no existing caller
 // appears to).
-func (uc *DispatchUseCase) BulkDispatch(
+func (uc *ExceptionUseCase) BulkDispatch(
 	ctx context.Context,
 	input BulkDispatchInput,
 ) (*BulkActionResult, error) {
+	// Input-shape validation runs before the dependency check so callers
+	// that submit malformed payloads always receive the matching input
+	// sentinel (which HTTP maps to 400) rather than a nil-dependency
+	// error mapped to 500.
 	dedupedIDs, err := validateBulkIDs(input.ExceptionIDs)
 	if err != nil {
 		return nil, err
@@ -356,6 +343,10 @@ func (uc *DispatchUseCase) BulkDispatch(
 	targetSystem := strings.TrimSpace(input.TargetSystem)
 	if targetSystem == "" {
 		return nil, ErrBulkTargetSystemEmpty
+	}
+
+	if err := uc.validateDispatchDeps(); err != nil {
+		return nil, err
 	}
 
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)

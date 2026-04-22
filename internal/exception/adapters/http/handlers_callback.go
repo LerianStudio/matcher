@@ -114,7 +114,7 @@ func (handler *Handlers) ProcessCallback(fiberCtx *fiber.Ctx) error {
 	}
 
 	// Process the callback
-	if err := handler.callbackUC.ProcessCallback(ctx, cmd); err != nil {
+	if err := handler.commandUC.ProcessCallback(ctx, cmd); err != nil {
 		return handler.handleCallbackError(ctx, fiberCtx, span, logger, err)
 	}
 

@@ -329,18 +329,7 @@ func newExceptionHandlers(t *testing.T, exceptionRepo *stubExceptionRepo) *Handl
 	exceptionProvider := &stubExceptionProvider{exists: true}
 	disputeProvider := &stubDisputeProvider{exists: true}
 
-	handlers, err := NewHandlers(
-		&command.UseCase{},
-		&command.DisputeUseCase{},
-		queryUC,
-		&command.DispatchUseCase{},
-		&command.CommentUseCase{},
-		&query.CommentQueryUseCase{},
-		&command.CallbackUseCase{},
-		exceptionProvider,
-		disputeProvider,
-		false,
-	)
+	handlers, err := NewHandlers(&command.ExceptionUseCase{}, queryUC, &query.CommentQueryUseCase{}, exceptionProvider, disputeProvider, false)
 	require.NoError(t, err)
 
 	return handlers
@@ -352,46 +341,20 @@ func TestNewHandlers_NilExceptionUseCase(t *testing.T) {
 	exceptionProvider := &stubExceptionProvider{exists: true}
 	disputeProvider := &stubDisputeProvider{exists: true}
 
-	handlers, err := NewHandlers(
-		nil,
-		&command.DisputeUseCase{},
-		&query.UseCase{},
-		&command.DispatchUseCase{},
-		&command.CommentUseCase{},
-		&query.CommentQueryUseCase{},
-		&command.CallbackUseCase{},
-		exceptionProvider,
-		disputeProvider,
-		false,
-	)
+	handlers, err := NewHandlers(nil, &query.UseCase{}, &query.CommentQueryUseCase{}, exceptionProvider, disputeProvider, false)
 
 	assert.Nil(t, handlers)
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrNilExceptionUseCase)
 }
 
+// TestNewHandlers_NilDisputeUseCase is retained as a documentation marker
+// that the previously separate DisputeUseCase has been merged into the
+// single ExceptionUseCase. NilDisputeUseCase is no longer a valid
+// constructor error — Handlers only accept the merged command use case.
 func TestNewHandlers_NilDisputeUseCase(t *testing.T) {
 	t.Parallel()
-
-	exceptionProvider := &stubExceptionProvider{exists: true}
-	disputeProvider := &stubDisputeProvider{exists: true}
-
-	handlers, err := NewHandlers(
-		&command.UseCase{},
-		nil,
-		&query.UseCase{},
-		&command.DispatchUseCase{},
-		&command.CommentUseCase{},
-		&query.CommentQueryUseCase{},
-		&command.CallbackUseCase{},
-		exceptionProvider,
-		disputeProvider,
-		false,
-	)
-
-	assert.Nil(t, handlers)
-	require.Error(t, err)
-	require.ErrorIs(t, err, ErrNilDisputeUseCase)
+	t.Skip("merged into single ExceptionUseCase; no separate dispute UC argument")
 }
 
 func TestNewHandlers_NilQueryUseCase(t *testing.T) {
@@ -400,46 +363,20 @@ func TestNewHandlers_NilQueryUseCase(t *testing.T) {
 	exceptionProvider := &stubExceptionProvider{exists: true}
 	disputeProvider := &stubDisputeProvider{exists: true}
 
-	handlers, err := NewHandlers(
-		&command.UseCase{},
-		&command.DisputeUseCase{},
-		nil,
-		&command.DispatchUseCase{},
-		&command.CommentUseCase{},
-		&query.CommentQueryUseCase{},
-		&command.CallbackUseCase{},
-		exceptionProvider,
-		disputeProvider,
-		false,
-	)
+	handlers, err := NewHandlers(&command.ExceptionUseCase{}, nil, &query.CommentQueryUseCase{}, exceptionProvider, disputeProvider, false)
 
 	assert.Nil(t, handlers)
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrNilQueryUseCase)
 }
 
+// TestNewHandlers_NilDispatchUseCase is retained as a documentation marker
+// that the previously separate DispatchUseCase has been merged into the
+// single ExceptionUseCase. NilDispatchUseCase is no longer a valid
+// constructor error — Handlers only accept the merged command use case.
 func TestNewHandlers_NilDispatchUseCase(t *testing.T) {
 	t.Parallel()
-
-	exceptionProvider := &stubExceptionProvider{exists: true}
-	disputeProvider := &stubDisputeProvider{exists: true}
-
-	handlers, err := NewHandlers(
-		&command.UseCase{},
-		&command.DisputeUseCase{},
-		&query.UseCase{},
-		nil,
-		&command.CommentUseCase{},
-		&query.CommentQueryUseCase{},
-		&command.CallbackUseCase{},
-		exceptionProvider,
-		disputeProvider,
-		false,
-	)
-
-	assert.Nil(t, handlers)
-	require.Error(t, err)
-	require.ErrorIs(t, err, ErrNilDispatchUseCase)
+	t.Skip("merged into single ExceptionUseCase; no separate dispatch UC argument")
 }
 
 func TestNewHandlers_NilCommentQueryUseCase(t *testing.T) {
@@ -448,18 +385,7 @@ func TestNewHandlers_NilCommentQueryUseCase(t *testing.T) {
 	exceptionProvider := &stubExceptionProvider{exists: true}
 	disputeProvider := &stubDisputeProvider{exists: true}
 
-	handlers, err := NewHandlers(
-		&command.UseCase{},
-		&command.DisputeUseCase{},
-		&query.UseCase{},
-		&command.DispatchUseCase{},
-		&command.CommentUseCase{},
-		nil,
-		&command.CallbackUseCase{},
-		exceptionProvider,
-		disputeProvider,
-		false,
-	)
+	handlers, err := NewHandlers(&command.ExceptionUseCase{}, &query.UseCase{}, nil, exceptionProvider, disputeProvider, false)
 
 	assert.Nil(t, handlers)
 	require.Error(t, err)
@@ -471,18 +397,7 @@ func TestNewHandlers_NilExceptionProvider(t *testing.T) {
 
 	disputeProvider := &stubDisputeProvider{exists: true}
 
-	handlers, err := NewHandlers(
-		&command.UseCase{},
-		&command.DisputeUseCase{},
-		&query.UseCase{},
-		&command.DispatchUseCase{},
-		&command.CommentUseCase{},
-		&query.CommentQueryUseCase{},
-		&command.CallbackUseCase{},
-		nil,
-		disputeProvider,
-		false,
-	)
+	handlers, err := NewHandlers(&command.ExceptionUseCase{}, &query.UseCase{}, &query.CommentQueryUseCase{}, nil, disputeProvider, false)
 
 	assert.Nil(t, handlers)
 	require.Error(t, err)
@@ -494,18 +409,7 @@ func TestNewHandlers_NilDisputeProvider(t *testing.T) {
 
 	exceptionProvider := &stubExceptionProvider{exists: true}
 
-	handlers, err := NewHandlers(
-		&command.UseCase{},
-		&command.DisputeUseCase{},
-		&query.UseCase{},
-		&command.DispatchUseCase{},
-		&command.CommentUseCase{},
-		&query.CommentQueryUseCase{},
-		&command.CallbackUseCase{},
-		exceptionProvider,
-		nil,
-		false,
-	)
+	handlers, err := NewHandlers(&command.ExceptionUseCase{}, &query.UseCase{}, &query.CommentQueryUseCase{}, exceptionProvider, nil, false)
 
 	assert.Nil(t, handlers)
 	require.Error(t, err)
@@ -518,18 +422,7 @@ func TestNewHandlers_Success(t *testing.T) {
 	exceptionProvider := &stubExceptionProvider{exists: true}
 	disputeProvider := &stubDisputeProvider{exists: true}
 
-	handlers, err := NewHandlers(
-		&command.UseCase{},
-		&command.DisputeUseCase{},
-		&query.UseCase{},
-		&command.DispatchUseCase{},
-		&command.CommentUseCase{},
-		&query.CommentQueryUseCase{},
-		&command.CallbackUseCase{},
-		exceptionProvider,
-		disputeProvider,
-		false,
-	)
+	handlers, err := NewHandlers(&command.ExceptionUseCase{}, &query.UseCase{}, &query.CommentQueryUseCase{}, exceptionProvider, disputeProvider, false)
 
 	require.NoError(t, err)
 	assert.NotNil(t, handlers)
@@ -743,153 +636,72 @@ func TestHandleDispatchError_Mappings(t *testing.T) {
 	}
 }
 
+// TestHandlersStruct_Fields verifies NewHandlers stores the merged command
+// use case and query use cases on the Handlers struct. The previously
+// split command use-case fields (exceptionUC, disputeUC, dispatchUC,
+// commentUC, callbackUC) have been merged into a single commandUC field.
 func TestHandlersStruct_Fields(t *testing.T) {
 	t.Parallel()
 
-	exceptionUC := &command.UseCase{}
-	disputeUC := &command.DisputeUseCase{}
+	commandUC := &command.ExceptionUseCase{}
 	queryUC := &query.UseCase{}
-	dispatchUC := &command.DispatchUseCase{}
+	commentQueryUC := &query.CommentQueryUseCase{}
 	exceptionProvider := &stubExceptionProvider{exists: true}
 	disputeProvider := &stubDisputeProvider{exists: true}
 
-	commentUC := &command.CommentUseCase{}
-	commentQueryUC := &query.CommentQueryUseCase{}
-	callbackUC := &command.CallbackUseCase{}
-
-	handlers, err := NewHandlers(
-		exceptionUC,
-		disputeUC,
-		queryUC,
-		dispatchUC,
-		commentUC,
-		commentQueryUC,
-		callbackUC,
-		exceptionProvider,
-		disputeProvider,
-		false,
-	)
+	handlers, err := NewHandlers(commandUC, queryUC, commentQueryUC, exceptionProvider, disputeProvider, false)
 
 	require.NoError(t, err)
-	assert.Equal(t, exceptionUC, handlers.exceptionUC)
-	assert.Equal(t, disputeUC, handlers.disputeUC)
+	assert.Equal(t, commandUC, handlers.commandUC)
 	assert.Equal(t, queryUC, handlers.queryUC)
-	assert.Equal(t, dispatchUC, handlers.dispatchUC)
-	assert.Equal(t, commentUC, handlers.commentUC)
 	assert.Equal(t, commentQueryUC, handlers.commentQueryUC)
-	assert.Equal(t, callbackUC, handlers.callbackUC)
 }
 
+// TestValidationOrder verifies NewHandlers validates its dependencies in
+// the documented order. With the merged command use case there are only
+// three use-case arguments to validate (merged command, query, comment
+// query) plus the two providers.
 func TestValidationOrder(t *testing.T) {
 	t.Parallel()
 
 	defaultExceptionProvider := &stubExceptionProvider{exists: true}
 	defaultDisputeProvider := &stubDisputeProvider{exists: true}
 
-	// Test that validation occurs in expected order
 	tests := []struct {
 		name              string
-		exceptionUC       *command.UseCase
-		disputeUC         *command.DisputeUseCase
+		commandUC         *command.ExceptionUseCase
 		queryUC           *query.UseCase
-		dispatchUC        *command.DispatchUseCase
-		commentUC         *command.CommentUseCase
 		commentQueryUC    *query.CommentQueryUseCase
-		callbackUC        *command.CallbackUseCase
 		exceptionProvider *stubExceptionProvider
 		disputeProvider   *stubDisputeProvider
 		expectedErr       error
 	}{
 		{
-			name:              "exception use case checked first",
-			exceptionUC:       nil,
-			disputeUC:         nil,
+			name:              "command use case checked first",
+			commandUC:         nil,
 			queryUC:           nil,
-			dispatchUC:        nil,
-			commentUC:         nil,
 			commentQueryUC:    nil,
-			callbackUC:        nil,
 			exceptionProvider: defaultExceptionProvider,
 			disputeProvider:   defaultDisputeProvider,
 			expectedErr:       ErrNilExceptionUseCase,
 		},
 		{
-			name:              "dispute use case checked second",
-			exceptionUC:       &command.UseCase{},
-			disputeUC:         nil,
+			name:              "query use case checked second",
+			commandUC:         &command.ExceptionUseCase{},
 			queryUC:           nil,
-			dispatchUC:        nil,
-			commentUC:         nil,
 			commentQueryUC:    nil,
-			callbackUC:        nil,
-			exceptionProvider: defaultExceptionProvider,
-			disputeProvider:   defaultDisputeProvider,
-			expectedErr:       ErrNilDisputeUseCase,
-		},
-		{
-			name:              "query use case checked third",
-			exceptionUC:       &command.UseCase{},
-			disputeUC:         &command.DisputeUseCase{},
-			queryUC:           nil,
-			dispatchUC:        nil,
-			commentUC:         nil,
-			commentQueryUC:    nil,
-			callbackUC:        nil,
 			exceptionProvider: defaultExceptionProvider,
 			disputeProvider:   defaultDisputeProvider,
 			expectedErr:       ErrNilQueryUseCase,
 		},
 		{
-			name:              "dispatch use case checked fourth",
-			exceptionUC:       &command.UseCase{},
-			disputeUC:         &command.DisputeUseCase{},
+			name:              "comment query use case checked third",
+			commandUC:         &command.ExceptionUseCase{},
 			queryUC:           &query.UseCase{},
-			dispatchUC:        nil,
-			commentUC:         nil,
 			commentQueryUC:    nil,
-			callbackUC:        nil,
-			exceptionProvider: defaultExceptionProvider,
-			disputeProvider:   defaultDisputeProvider,
-			expectedErr:       ErrNilDispatchUseCase,
-		},
-		{
-			name:              "comment use case checked fifth",
-			exceptionUC:       &command.UseCase{},
-			disputeUC:         &command.DisputeUseCase{},
-			queryUC:           &query.UseCase{},
-			dispatchUC:        &command.DispatchUseCase{},
-			commentUC:         nil,
-			commentQueryUC:    nil,
-			callbackUC:        nil,
-			exceptionProvider: defaultExceptionProvider,
-			disputeProvider:   defaultDisputeProvider,
-			expectedErr:       ErrNilCommentUseCase,
-		},
-		{
-			name:              "comment query use case checked sixth",
-			exceptionUC:       &command.UseCase{},
-			disputeUC:         &command.DisputeUseCase{},
-			queryUC:           &query.UseCase{},
-			dispatchUC:        &command.DispatchUseCase{},
-			commentUC:         &command.CommentUseCase{},
-			commentQueryUC:    nil,
-			callbackUC:        nil,
 			exceptionProvider: defaultExceptionProvider,
 			disputeProvider:   defaultDisputeProvider,
 			expectedErr:       ErrNilCommentQueryUseCase,
-		},
-		{
-			name:              "callback use case checked seventh",
-			exceptionUC:       &command.UseCase{},
-			disputeUC:         &command.DisputeUseCase{},
-			queryUC:           &query.UseCase{},
-			dispatchUC:        &command.DispatchUseCase{},
-			commentUC:         &command.CommentUseCase{},
-			commentQueryUC:    &query.CommentQueryUseCase{},
-			callbackUC:        nil,
-			exceptionProvider: defaultExceptionProvider,
-			disputeProvider:   defaultDisputeProvider,
-			expectedErr:       ErrNilCallbackUseCase,
 		},
 	}
 
@@ -897,18 +709,7 @@ func TestValidationOrder(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := NewHandlers(
-				tt.exceptionUC,
-				tt.disputeUC,
-				tt.queryUC,
-				tt.dispatchUC,
-				tt.commentUC,
-				tt.commentQueryUC,
-				tt.callbackUC,
-				tt.exceptionProvider,
-				tt.disputeProvider,
-				false,
-			)
+			_, err := NewHandlers(tt.commandUC, tt.queryUC, tt.commentQueryUC, tt.exceptionProvider, tt.disputeProvider, false)
 
 			require.Error(t, err)
 			require.ErrorIs(t, err, tt.expectedErr)
@@ -2159,18 +1960,7 @@ func TestValidationOrder_ProviderChecks(t *testing.T) {
 
 		disputeProvider := &stubDisputeProvider{exists: true}
 
-		_, err := NewHandlers(
-			&command.UseCase{},
-			&command.DisputeUseCase{},
-			&query.UseCase{},
-			&command.DispatchUseCase{},
-			&command.CommentUseCase{},
-			&query.CommentQueryUseCase{},
-			&command.CallbackUseCase{},
-			nilExceptionProvider,
-			disputeProvider,
-			false,
-		)
+		_, err := NewHandlers(&command.ExceptionUseCase{}, &query.UseCase{}, &query.CommentQueryUseCase{}, nilExceptionProvider, disputeProvider, false)
 
 		require.Error(t, err)
 		require.ErrorIs(t, err, ErrNilExceptionProvider)
@@ -2183,18 +1973,7 @@ func TestValidationOrder_ProviderChecks(t *testing.T) {
 
 		var nilDisputeProvider disputeProvider = nil
 
-		_, err := NewHandlers(
-			&command.UseCase{},
-			&command.DisputeUseCase{},
-			&query.UseCase{},
-			&command.DispatchUseCase{},
-			&command.CommentUseCase{},
-			&query.CommentQueryUseCase{},
-			&command.CallbackUseCase{},
-			exceptionProvider,
-			nilDisputeProvider,
-			false,
-		)
+		_, err := NewHandlers(&command.ExceptionUseCase{}, &query.UseCase{}, &query.CommentQueryUseCase{}, exceptionProvider, nilDisputeProvider, false)
 
 		require.Error(t, err)
 		require.ErrorIs(t, err, ErrNilDisputeProvider)

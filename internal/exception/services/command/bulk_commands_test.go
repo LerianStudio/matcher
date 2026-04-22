@@ -92,13 +92,7 @@ func TestValidateBulkIDs_AllSameID(t *testing.T) {
 func TestBulkAssign_EmptyIDs(t *testing.T) {
 	t.Parallel()
 
-	uc, err := NewUseCase(
-		&stubExceptionRepo{},
-		&stubResolutionExecutor{},
-		&stubAuditPublisher{},
-		actorExtractor("analyst"),
-		&stubInfraProvider{},
-	)
+	uc, err := NewExceptionUseCase(&stubExceptionRepo{}, actorExtractor("analyst"), &stubAuditPublisher{}, &stubInfraProvider{}, WithResolutionExecutor(&stubResolutionExecutor{}))
 	require.NoError(t, err)
 
 	result, assignErr := uc.BulkAssign(context.Background(), BulkAssignInput{
@@ -113,13 +107,7 @@ func TestBulkAssign_EmptyIDs(t *testing.T) {
 func TestBulkAssign_EmptyAssignee(t *testing.T) {
 	t.Parallel()
 
-	uc, err := NewUseCase(
-		&stubExceptionRepo{},
-		&stubResolutionExecutor{},
-		&stubAuditPublisher{},
-		actorExtractor("analyst"),
-		&stubInfraProvider{},
-	)
+	uc, err := NewExceptionUseCase(&stubExceptionRepo{}, actorExtractor("analyst"), &stubAuditPublisher{}, &stubInfraProvider{}, WithResolutionExecutor(&stubResolutionExecutor{}))
 	require.NoError(t, err)
 
 	result, assignErr := uc.BulkAssign(context.Background(), BulkAssignInput{
@@ -134,13 +122,7 @@ func TestBulkAssign_EmptyAssignee(t *testing.T) {
 func TestBulkAssign_WhitespaceAssignee(t *testing.T) {
 	t.Parallel()
 
-	uc, err := NewUseCase(
-		&stubExceptionRepo{},
-		&stubResolutionExecutor{},
-		&stubAuditPublisher{},
-		actorExtractor("analyst"),
-		&stubInfraProvider{},
-	)
+	uc, err := NewExceptionUseCase(&stubExceptionRepo{}, actorExtractor("analyst"), &stubAuditPublisher{}, &stubInfraProvider{}, WithResolutionExecutor(&stubResolutionExecutor{}))
 	require.NoError(t, err)
 
 	result, assignErr := uc.BulkAssign(context.Background(), BulkAssignInput{
@@ -157,13 +139,7 @@ func TestBulkAssign_WhitespaceAssignee(t *testing.T) {
 func TestBulkResolve_EmptyIDs(t *testing.T) {
 	t.Parallel()
 
-	uc, err := NewUseCase(
-		&stubExceptionRepo{},
-		&stubResolutionExecutor{},
-		&stubAuditPublisher{},
-		actorExtractor("analyst"),
-		&stubInfraProvider{},
-	)
+	uc, err := NewExceptionUseCase(&stubExceptionRepo{}, actorExtractor("analyst"), &stubAuditPublisher{}, &stubInfraProvider{}, WithResolutionExecutor(&stubResolutionExecutor{}))
 	require.NoError(t, err)
 
 	result, resolveErr := uc.BulkResolve(context.Background(), BulkResolveInput{
@@ -178,13 +154,7 @@ func TestBulkResolve_EmptyIDs(t *testing.T) {
 func TestBulkResolve_EmptyResolution(t *testing.T) {
 	t.Parallel()
 
-	uc, err := NewUseCase(
-		&stubExceptionRepo{},
-		&stubResolutionExecutor{},
-		&stubAuditPublisher{},
-		actorExtractor("analyst"),
-		&stubInfraProvider{},
-	)
+	uc, err := NewExceptionUseCase(&stubExceptionRepo{}, actorExtractor("analyst"), &stubAuditPublisher{}, &stubInfraProvider{}, WithResolutionExecutor(&stubResolutionExecutor{}))
 	require.NoError(t, err)
 
 	result, resolveErr := uc.BulkResolve(context.Background(), BulkResolveInput{
@@ -199,13 +169,7 @@ func TestBulkResolve_EmptyResolution(t *testing.T) {
 func TestBulkResolve_WhitespaceResolution(t *testing.T) {
 	t.Parallel()
 
-	uc, err := NewUseCase(
-		&stubExceptionRepo{},
-		&stubResolutionExecutor{},
-		&stubAuditPublisher{},
-		actorExtractor("analyst"),
-		&stubInfraProvider{},
-	)
+	uc, err := NewExceptionUseCase(&stubExceptionRepo{}, actorExtractor("analyst"), &stubAuditPublisher{}, &stubInfraProvider{}, WithResolutionExecutor(&stubResolutionExecutor{}))
 	require.NoError(t, err)
 
 	result, resolveErr := uc.BulkResolve(context.Background(), BulkResolveInput{
@@ -241,7 +205,7 @@ func TestBulkResolve_SkipsPendingResolutionException(t *testing.T) {
 	exec := &stubResolutionExecutor{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst"), &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst"), audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	result, resolveErr := uc.BulkResolve(ctx, BulkResolveInput{
@@ -326,7 +290,7 @@ func TestBulkResolve_NPlusOne_Regression(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	provider := &stubInfraProvider{}
 
-	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst"), provider)
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst"), audit, provider, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	result, resolveErr := uc.BulkResolve(ctx, BulkResolveInput{
@@ -370,7 +334,7 @@ func TestBulkAssign_NPlusOne_Regression(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	provider := &stubInfraProvider{}
 
-	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst"), provider)
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst"), audit, provider, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	result, assignErr := uc.BulkAssign(ctx, BulkAssignInput{
@@ -409,7 +373,7 @@ func TestBulkResolve_MissingIDReportedAsNotFound(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	provider := &stubInfraProvider{}
 
-	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst"), provider)
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst"), audit, provider, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	result, resolveErr := uc.BulkResolve(ctx, BulkResolveInput{

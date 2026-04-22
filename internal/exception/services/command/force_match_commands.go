@@ -31,11 +31,11 @@ type forceMatchParams struct {
 	overrideReason value_objects.OverrideReason
 }
 
-func (uc *UseCase) validateForceMatch(
+func (uc *ExceptionUseCase) validateForceMatch(
 	ctx context.Context,
 	cmd ForceMatchCommand,
 ) (*forceMatchParams, error) {
-	if err := uc.validateDependencies(); err != nil {
+	if err := uc.validateResolutionDeps(); err != nil {
 		return nil, err
 	}
 
@@ -62,7 +62,7 @@ func (uc *UseCase) validateForceMatch(
 }
 
 // ForceMatch resolves an exception by forcing a match with an override reason.
-func (uc *UseCase) ForceMatch(
+func (uc *ExceptionUseCase) ForceMatch(
 	ctx context.Context,
 	cmd ForceMatchCommand,
 ) (*entities.Exception, error) {
@@ -79,7 +79,7 @@ func (uc *UseCase) ForceMatch(
 	return uc.processForceMatch(ctx, cmd, params, logger, span)
 }
 
-func (uc *UseCase) processForceMatch(
+func (uc *ExceptionUseCase) processForceMatch(
 	ctx context.Context,
 	cmd ForceMatchCommand,
 	params *forceMatchParams,

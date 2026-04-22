@@ -3,8 +3,10 @@
 package command
 
 import (
+	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +20,7 @@ func TestNewDisputeUseCase_Success(t *testing.T) {
 	actor := actorExtractor("analyst-1")
 	infra := &stubInfraProvider{}
 
-	uc, err := NewDisputeUseCase(disputeRepo, exceptionRepo, audit, actor, infra)
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, audit, infra, WithDisputeRepository(disputeRepo))
 
 	require.NoError(t, err)
 	require.NotNil(t, uc)
@@ -28,6 +30,10 @@ func TestNewDisputeUseCase_Success(t *testing.T) {
 	assert.Equal(t, actor, uc.actorExtractor)
 }
 
+// TestNewDisputeUseCase_NilDisputeRepository verifies the method-level
+// validation that now owns the optional-dependency check: the merged
+// constructor no longer rejects a nil dispute repository (it is optional),
+// so the caller discovers the missing dependency when invoking OpenDispute.
 func TestNewDisputeUseCase_NilDisputeRepository(t *testing.T) {
 	t.Parallel()
 
@@ -36,10 +42,17 @@ func TestNewDisputeUseCase_NilDisputeRepository(t *testing.T) {
 	actor := actorExtractor("analyst-1")
 	infra := &stubInfraProvider{}
 
-	uc, err := NewDisputeUseCase(nil, exceptionRepo, audit, actor, infra)
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, audit, infra)
+	require.NoError(t, err)
+	require.NotNil(t, uc)
+
+	_, err = uc.OpenDispute(context.Background(), OpenDisputeCommand{
+		ExceptionID: uuid.New(),
+		Category:    "BANK_FEE_ERROR",
+		Description: "test",
+	})
 
 	require.ErrorIs(t, err, ErrNilDisputeRepository)
-	assert.Nil(t, uc)
 }
 
 func TestNewDisputeUseCase_NilExceptionRepository(t *testing.T) {
@@ -50,7 +63,7 @@ func TestNewDisputeUseCase_NilExceptionRepository(t *testing.T) {
 	actor := actorExtractor("analyst-1")
 	infra := &stubInfraProvider{}
 
-	uc, err := NewDisputeUseCase(disputeRepo, nil, audit, actor, infra)
+	uc, err := NewExceptionUseCase(nil, actor, audit, infra, WithDisputeRepository(disputeRepo))
 
 	require.ErrorIs(t, err, ErrNilExceptionRepository)
 	assert.Nil(t, uc)
@@ -64,7 +77,7 @@ func TestNewDisputeUseCase_NilAuditPublisher(t *testing.T) {
 	actor := actorExtractor("analyst-1")
 	infra := &stubInfraProvider{}
 
-	uc, err := NewDisputeUseCase(disputeRepo, exceptionRepo, nil, actor, infra)
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, nil, infra, WithDisputeRepository(disputeRepo))
 
 	require.ErrorIs(t, err, ErrNilAuditPublisher)
 	assert.Nil(t, uc)
@@ -78,7 +91,7 @@ func TestNewDisputeUseCase_NilActorExtractor(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	infra := &stubInfraProvider{}
 
-	uc, err := NewDisputeUseCase(disputeRepo, exceptionRepo, audit, nil, infra)
+	uc, err := NewExceptionUseCase(exceptionRepo, nil, audit, infra, WithDisputeRepository(disputeRepo))
 
 	require.ErrorIs(t, err, ErrNilActorExtractor)
 	assert.Nil(t, uc)
@@ -92,7 +105,7 @@ func TestNewDisputeUseCase_NilInfraProvider(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst-1")
 
-	uc, err := NewDisputeUseCase(disputeRepo, exceptionRepo, audit, actor, nil)
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, audit, nil, WithDisputeRepository(disputeRepo))
 
 	require.ErrorIs(t, err, ErrNilInfraProvider)
 	assert.Nil(t, uc)

@@ -104,7 +104,7 @@ func TestCallbackIdempotency_FirstCall_Processes(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: exception}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, &stubInfraProvider{}, &stubCallbackRateLimiter{allowed: true})
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
 	require.NoError(t, err)
 
 	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
@@ -147,7 +147,7 @@ func TestProcessCallback_AssignedRequiresAssignee(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: exception}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, &stubInfraProvider{}, &stubCallbackRateLimiter{allowed: true})
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
 	require.NoError(t, err)
 
 	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
@@ -177,7 +177,7 @@ func TestProcessCallback_PayloadFallback_Assigns(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: exception}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, &stubInfraProvider{}, &stubCallbackRateLimiter{allowed: true})
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
 	require.NoError(t, err)
 
 	dueAt := time.Now().UTC().Add(2 * time.Hour).Format(time.RFC3339)
@@ -217,7 +217,7 @@ func TestProcessCallback_UpdateErrorMarksFailed(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: exception, updateErr: errTestUpdate}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, &stubInfraProvider{}, &stubCallbackRateLimiter{allowed: true})
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
 	require.NoError(t, err)
 
 	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
@@ -247,7 +247,7 @@ func TestCallbackIdempotency_DuplicateCall_Ignored(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: exception}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, &stubInfraProvider{}, &stubCallbackRateLimiter{allowed: true})
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
 	require.NoError(t, err)
 
 	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
@@ -285,7 +285,7 @@ func TestCallbackIdempotency_InvalidKey_Rejected(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: exception}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, &stubInfraProvider{}, &stubCallbackRateLimiter{allowed: true})
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
 	require.NoError(t, err)
 
 	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
@@ -318,7 +318,7 @@ func TestCallbackIdempotency_ExceptionIDRequired(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, &stubInfraProvider{}, &stubCallbackRateLimiter{allowed: true})
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
 	require.NoError(t, err)
 
 	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
@@ -347,7 +347,7 @@ func TestCallbackIdempotency_TryAcquireError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: exception}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, &stubInfraProvider{}, &stubCallbackRateLimiter{allowed: true})
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
 	require.NoError(t, err)
 
 	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
@@ -373,7 +373,7 @@ func TestCallbackIdempotency_AlreadyProcessing_ReturnsInProgress(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, &stubInfraProvider{}, &stubCallbackRateLimiter{allowed: true})
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
 	require.NoError(t, err)
 
 	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
@@ -399,7 +399,7 @@ func TestCallbackIdempotency_PreviousFailure_ReturnsRetryable(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, &stubInfraProvider{}, &stubCallbackRateLimiter{allowed: true})
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
 	require.NoError(t, err)
 
 	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
@@ -435,7 +435,7 @@ func TestCallbackIdempotency_PreviousFailure_ReacquiresAndProcesses(t *testing.T
 	exceptionRepo := &stubExceptionRepo{exception: exception}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, &stubInfraProvider{}, &stubCallbackRateLimiter{allowed: true})
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
 	require.NoError(t, err)
 
 	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
@@ -465,7 +465,7 @@ func TestCallbackIdempotency_PreviousFailure_ReacquireError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, &stubInfraProvider{}, &stubCallbackRateLimiter{allowed: true})
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
 	require.NoError(t, err)
 
 	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
@@ -487,7 +487,7 @@ func TestCallbackIdempotency_GetCachedResultError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, &stubInfraProvider{}, &stubCallbackRateLimiter{allowed: true})
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
 	require.NoError(t, err)
 
 	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
@@ -508,7 +508,7 @@ func TestCallbackIdempotency_FindExceptionError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{findErr: errTestFind}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, &stubInfraProvider{}, &stubCallbackRateLimiter{allowed: true})
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
 	require.NoError(t, err)
 
 	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
@@ -538,7 +538,7 @@ func TestCallbackIdempotency_MarkCompleteError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: exception}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, &stubInfraProvider{}, &stubCallbackRateLimiter{allowed: true})
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
 	require.NoError(t, err)
 
 	// MarkComplete failure after successful processing should NOT return error
@@ -564,31 +564,48 @@ func TestCallbackIdempotency_MarkCompleteError(t *testing.T) {
 	)
 }
 
+// TestNewCallbackUseCase_Validations verifies dependency validation for the
+// callback path. The four required dependencies (exception repo, actor,
+// audit, infra) are validated by the merged constructor; the two callback-
+// specific dependencies (idempotency repo, rate limiter) are optional at
+// construction time and their nil checks now live on ProcessCallback
+// itself.
 func TestNewCallbackUseCase_Validations(t *testing.T) {
 	t.Parallel()
 
 	idempotencyRepo := &stubIdempotencyRepo{}
 	exceptionRepo := &stubExceptionRepo{}
 	audit := &stubAuditPublisher{}
-
+	actor := actorExtractor("system")
 	infra := &stubInfraProvider{}
-
 	rl := &stubCallbackRateLimiter{allowed: true}
+	cmd := ProcessCallbackCommand{
+		IdempotencyKey:  "valid-key",
+		ExceptionID:     uuid.New(),
+		ExternalSystem:  "JIRA",
+		ExternalIssueID: "PROJ-123",
+		Status:          "OPEN",
+	}
 
-	_, err := NewCallbackUseCase(nil, exceptionRepo, audit, infra, rl)
-	require.ErrorIs(t, err, ErrNilIdempotencyRepository)
+	// Missing idempotency repository surfaces on ProcessCallback.
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, audit, infra, WithCallbackRateLimiter(rl))
+	require.NoError(t, err)
+	require.ErrorIs(t, uc.ProcessCallback(context.Background(), cmd), ErrNilIdempotencyRepository)
 
-	_, err = NewCallbackUseCase(idempotencyRepo, nil, audit, infra, rl)
+	// Missing rate limiter surfaces on ProcessCallback.
+	uc, err = NewExceptionUseCase(exceptionRepo, actor, audit, infra, WithIdempotencyRepository(idempotencyRepo))
+	require.NoError(t, err)
+	require.ErrorIs(t, uc.ProcessCallback(context.Background(), cmd), ErrNilCallbackRateLimiter)
+
+	// Required dependencies still fail at construction time.
+	_, err = NewExceptionUseCase(nil, actor, audit, infra, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(rl))
 	require.ErrorIs(t, err, ErrNilExceptionRepository)
 
-	_, err = NewCallbackUseCase(idempotencyRepo, exceptionRepo, nil, infra, rl)
+	_, err = NewExceptionUseCase(exceptionRepo, actor, nil, infra, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(rl))
 	require.ErrorIs(t, err, ErrNilAuditPublisher)
 
-	_, err = NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, nil, rl)
+	_, err = NewExceptionUseCase(exceptionRepo, actor, audit, nil, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(rl))
 	require.ErrorIs(t, err, ErrNilInfraProvider)
-
-	_, err = NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, infra, nil)
-	require.ErrorIs(t, err, ErrNilCallbackRateLimiter)
 }
 
 func TestProcessCallback_RateLimitKey_IsTenantScoped(t *testing.T) {
@@ -607,7 +624,7 @@ func TestProcessCallback_RateLimitKey_IsTenantScoped(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	rateLimiter := &stubCallbackRateLimiter{allowed: true}
 
-	uc, err := NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, &stubInfraProvider{}, rateLimiter)
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(rateLimiter))
 	require.NoError(t, err)
 
 	ctx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-A")
@@ -655,7 +672,7 @@ func TestProcessCallback_AllCallbackTypes(t *testing.T) {
 			exceptionRepo := &stubExceptionRepo{exception: exception}
 			audit := &stubAuditPublisher{}
 
-			uc, err := NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, &stubInfraProvider{}, &stubCallbackRateLimiter{allowed: true})
+			uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
 			require.NoError(t, err)
 
 			err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
@@ -734,7 +751,7 @@ func TestProcessCallback_PayloadVariations(t *testing.T) {
 			exceptionRepo := &stubExceptionRepo{exception: exception}
 			audit := &stubAuditPublisher{}
 
-			uc, err := NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, &stubInfraProvider{}, &stubCallbackRateLimiter{allowed: true})
+			uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
 			require.NoError(t, err)
 
 			idempotencyKey := "webhook:" + uuid.New().String() + ":callback"

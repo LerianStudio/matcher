@@ -3290,20 +3290,11 @@ func initExceptionModule(
 		return err
 	}
 
-	callbackUseCase, err := initExceptionCallbackUseCase(cfg, configGetter, settingsResolver, provider, exceptionRepository, deps)
-	if err != nil {
-		return err
-	}
-
 	// HTTP Handlers
 	exceptionHandlers, err := exceptionHTTP.NewHandlers(
-		useCases.exception,
-		useCases.dispute,
+		useCases.command,
 		useCases.query,
-		useCases.dispatch,
-		useCases.comment,
 		useCases.commentQuery,
-		callbackUseCase,
 		exceptionRepository,
 		disputeRepository,
 		production,
@@ -3326,13 +3317,14 @@ type exceptionModuleDeps struct {
 	resolutionExecutor *exceptionResolution.Executor
 }
 
-// exceptionUseCases holds all exception use cases created during module initialization.
+// exceptionUseCases holds the merged command use case plus the two read-only
+// query use cases for the exception bounded context. The five previously
+// separate write-side use cases (resolution, disputes, dispatch, comments,
+// callbacks) are now fused into a single ExceptionUseCase with optional
+// dependencies wired via UseCaseOption.
 type exceptionUseCases struct {
-	exception    *exceptionCommand.UseCase
-	dispute      *exceptionCommand.DisputeUseCase
+	command      *exceptionCommand.ExceptionUseCase
 	query        *exceptionQuery.UseCase
-	dispatch     *exceptionCommand.DispatchUseCase
-	comment      *exceptionCommand.CommentUseCase
 	commentQuery *exceptionQuery.CommentQueryUseCase
 }
 
@@ -3376,7 +3368,11 @@ func initExceptionDependencies(
 	}, nil
 }
 
-// initExceptionUseCases creates the core exception use cases (exception, dispute, query, dispatch, comment).
+// initExceptionUseCases creates the merged exception command use case plus
+// the read-only query use cases. The merged command use case hosts every
+// write operation on the exception bounded context (resolution, disputes,
+// dispatch, comments, callbacks); optional dependencies are wired via
+// UseCaseOption.
 func initExceptionUseCases(
 	ctx context.Context,
 	cfg *Config,
@@ -3389,28 +3385,6 @@ func initExceptionUseCases(
 	deps *exceptionModuleDeps,
 	repos *sharedRepositories,
 ) (*exceptionUseCases, error) {
-	exceptionUseCase, err := exceptionCommand.NewUseCase(
-		exceptionRepository,
-		deps.resolutionExecutor,
-		deps.auditPublisher,
-		deps.actorExtractor,
-		provider,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create exception use case: %w", err)
-	}
-
-	disputeUseCase, err := exceptionCommand.NewDisputeUseCase(
-		disputeRepository,
-		exceptionRepository,
-		deps.auditPublisher,
-		deps.actorExtractor,
-		provider,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create dispute use case: %w", err)
-	}
-
 	queryUseCase, err := exceptionQuery.NewUseCase(
 		exceptionRepository,
 		disputeRepository,
@@ -3421,17 +3395,64 @@ func initExceptionUseCases(
 		return nil, fmt.Errorf("create exception query use case: %w", err)
 	}
 
-	webhookDispatchTimeout := configuredWebhookTimeout(ctx, cfg)
+	httpConnector, err := newExceptionHTTPConnector(ctx, cfg, configGetter, settingsResolver)
+	if err != nil {
+		return nil, err
+	}
 
-	// SEC-27: RequireSignedPayloads defaults to true in production so an
-	// unsigned webhook configuration fails validation at startup rather
-	// than silently dispatching unsigned payloads to downstream systems.
-	// Development and test environments retain the permissive default
-	// (false) so local tooling can exercise the dispatch path without a
-	// shared secret. Operators who deploy webhook dispatch to production
-	// without a signing secret must explicitly opt out in code; there is
-	// no runtime toggle because the whole point of the default is that
-	// misconfiguration is visible from the first run.
+	callbackRateLimiter, callbackIdempotencyRepo, err := newCallbackInfra(cfg, configGetter, settingsResolver, provider)
+	if err != nil {
+		return nil, err
+	}
+
+	commandUseCase, err := exceptionCommand.NewExceptionUseCase(
+		exceptionRepository,
+		deps.actorExtractor,
+		deps.auditPublisher,
+		provider,
+		exceptionCommand.WithResolutionExecutor(deps.resolutionExecutor),
+		exceptionCommand.WithDisputeRepository(disputeRepository),
+		exceptionCommand.WithCommentRepository(commentRepository),
+		exceptionCommand.WithExternalConnector(httpConnector),
+		exceptionCommand.WithIdempotencyRepository(callbackIdempotencyRepo),
+		exceptionCommand.WithCallbackRateLimiter(callbackRateLimiter),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create exception use case: %w", err)
+	}
+
+	commentQueryUseCase, err := exceptionQuery.NewCommentQueryUseCase(commentRepository)
+	if err != nil {
+		return nil, fmt.Errorf("create comment query use case: %w", err)
+	}
+
+	return &exceptionUseCases{
+		command:      commandUseCase,
+		query:        queryUseCase,
+		commentQuery: commentQueryUseCase,
+	}, nil
+}
+
+// newExceptionHTTPConnector builds the HTTP connector used by the dispatch
+// path with production-hardened defaults and optional runtime-config
+// resolvers for webhook timeout.
+//
+// SEC-27: RequireSignedPayloads defaults to true in production so an
+// unsigned webhook configuration fails validation at startup rather than
+// silently dispatching unsigned payloads to downstream systems.
+// Development and test environments retain the permissive default (false)
+// so local tooling can exercise the dispatch path without a shared secret.
+// Operators who deploy webhook dispatch to production without a signing
+// secret must explicitly opt out in code; there is no runtime toggle
+// because the whole point of the default is that misconfiguration is
+// visible from the first run.
+func newExceptionHTTPConnector(
+	ctx context.Context,
+	cfg *Config,
+	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
+) (*exceptionConnectors.HTTPConnector, error) {
+	webhookDispatchTimeout := configuredWebhookTimeout(ctx, cfg)
 	isProduction := IsProductionEnvironment(cfg.App.EnvName)
 
 	httpConnector, err := exceptionConnectors.NewHTTPConnector(
@@ -3454,57 +3475,24 @@ func initExceptionUseCases(
 		})
 	}
 
-	dispatchUseCase, err := exceptionCommand.NewDispatchUseCase(
-		exceptionRepository,
-		httpConnector,
-		deps.auditPublisher,
-		deps.actorExtractor,
-		provider,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create dispatch use case: %w", err)
-	}
-
-	commentUseCase, err := exceptionCommand.NewCommentUseCase(
-		commentRepository,
-		exceptionRepository,
-		deps.actorExtractor,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create comment use case: %w", err)
-	}
-
-	commentQueryUseCase, err := exceptionQuery.NewCommentQueryUseCase(commentRepository)
-	if err != nil {
-		return nil, fmt.Errorf("create comment query use case: %w", err)
-	}
-
-	return &exceptionUseCases{
-		exception:    exceptionUseCase,
-		dispute:      disputeUseCase,
-		query:        queryUseCase,
-		dispatch:     dispatchUseCase,
-		comment:      commentUseCase,
-		commentQuery: commentQueryUseCase,
-	}, nil
+	return httpConnector, nil
 }
 
-// initExceptionCallbackUseCase creates the callback use case for processing external system webhooks.
-func initExceptionCallbackUseCase(
+// newCallbackInfra builds the rate limiter and idempotency repository used
+// by the callback path, with runtime-config resolvers where available.
+func newCallbackInfra(
 	cfg *Config,
 	configGetter func() *Config,
 	settingsResolver *runtimeSettingsResolver,
 	provider sharedPorts.InfrastructureProvider,
-	exceptionRepository *exceptionExceptionRepo.Repository,
-	deps *exceptionModuleDeps,
-) (*exceptionCommand.CallbackUseCase, error) {
+) (*exceptionRedis.CallbackRateLimiter, *exceptionRedis.IdempotencyRepository, error) {
 	callbackRateLimiter, err := exceptionRedis.NewCallbackRateLimiter(
 		provider,
 		cfg.CallbackRateLimitPerMinute(),
 		time.Minute,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("create callback rate limiter: %w", err)
+		return nil, nil, fmt.Errorf("create callback rate limiter: %w", err)
 	}
 
 	if configGetter != nil || settingsResolver != nil {
@@ -3520,7 +3508,7 @@ func initExceptionCallbackUseCase(
 		cfg.Idempotency.HMACSecret,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("create callback idempotency repository: %w", err)
+		return nil, nil, fmt.Errorf("create callback idempotency repository: %w", err)
 	}
 
 	if configGetter != nil || settingsResolver != nil {
@@ -3537,16 +3525,5 @@ func initExceptionCallbackUseCase(
 		)
 	}
 
-	callbackUseCase, err := exceptionCommand.NewCallbackUseCase(
-		callbackIdempotencyRepo,
-		exceptionRepository,
-		deps.auditPublisher,
-		provider,
-		callbackRateLimiter,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create callback use case: %w", err)
-	}
-
-	return callbackUseCase, nil
+	return callbackRateLimiter, callbackIdempotencyRepo, nil
 }

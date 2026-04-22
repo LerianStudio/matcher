@@ -17,56 +17,8 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/dispute"
-	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
-	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
-
-// DisputeUseCase implements dispute resolution commands.
-type DisputeUseCase struct {
-	disputeRepo    repositories.DisputeRepository
-	exceptionRepo  repositories.ExceptionRepository
-	auditPublisher ports.AuditPublisher
-	actorExtractor ports.ActorExtractor
-	infraProvider  sharedPorts.InfrastructureProvider
-}
-
-// NewDisputeUseCase creates a new DisputeUseCase with the required dependencies.
-func NewDisputeUseCase(
-	disputeRepo repositories.DisputeRepository,
-	exceptionRepo repositories.ExceptionRepository,
-	audit ports.AuditPublisher,
-	actor ports.ActorExtractor,
-	infraProvider sharedPorts.InfrastructureProvider,
-) (*DisputeUseCase, error) {
-	if disputeRepo == nil {
-		return nil, ErrNilDisputeRepository
-	}
-
-	if exceptionRepo == nil {
-		return nil, ErrNilExceptionRepository
-	}
-
-	if audit == nil {
-		return nil, ErrNilAuditPublisher
-	}
-
-	if actor == nil {
-		return nil, ErrNilActorExtractor
-	}
-
-	if infraProvider == nil {
-		return nil, ErrNilInfraProvider
-	}
-
-	return &DisputeUseCase{
-		disputeRepo:    disputeRepo,
-		exceptionRepo:  exceptionRepo,
-		auditPublisher: audit,
-		actorExtractor: actor,
-		infraProvider:  infraProvider,
-	}, nil
-}
 
 // OpenDisputeCommand contains parameters for opening a dispute.
 type OpenDisputeCommand struct {
@@ -81,24 +33,40 @@ type openDisputeParams struct {
 	description string
 }
 
-func (uc *DisputeUseCase) validateOpenDispute(
-	ctx context.Context,
-	cmd OpenDisputeCommand,
-) (*openDisputeParams, error) {
+// validateDisputeDeps checks all dependencies required by the dispute
+// operations (OpenDispute, CloseDispute, SubmitEvidence). Safe on a nil
+// receiver — returns ErrNilDisputeRepository so nil-UseCase callers get a
+// deterministic error rather than a panic.
+func (uc *ExceptionUseCase) validateDisputeDeps() error {
 	if uc == nil || uc.disputeRepo == nil {
-		return nil, ErrNilDisputeRepository
+		return ErrNilDisputeRepository
 	}
 
 	if uc.exceptionRepo == nil {
-		return nil, ErrNilExceptionRepository
+		return ErrNilExceptionRepository
 	}
 
 	if uc.auditPublisher == nil {
-		return nil, ErrNilAuditPublisher
+		return ErrNilAuditPublisher
 	}
 
 	if uc.actorExtractor == nil {
-		return nil, ErrNilActorExtractor
+		return ErrNilActorExtractor
+	}
+
+	if uc.infraProvider == nil {
+		return ErrNilInfraProvider
+	}
+
+	return nil
+}
+
+func (uc *ExceptionUseCase) validateOpenDispute(
+	ctx context.Context,
+	cmd OpenDisputeCommand,
+) (*openDisputeParams, error) {
+	if err := uc.validateDisputeDeps(); err != nil {
+		return nil, err
 	}
 
 	if cmd.ExceptionID == uuid.Nil {
@@ -129,7 +97,7 @@ func (uc *DisputeUseCase) validateOpenDispute(
 }
 
 // OpenDispute creates and opens a new dispute for an exception.
-func (uc *DisputeUseCase) OpenDispute(
+func (uc *ExceptionUseCase) OpenDispute(
 	ctx context.Context,
 	cmd OpenDisputeCommand,
 ) (*dispute.Dispute, error) {
@@ -146,7 +114,7 @@ func (uc *DisputeUseCase) OpenDispute(
 	return uc.processOpenDispute(ctx, cmd, params, logger, span)
 }
 
-func (uc *DisputeUseCase) processOpenDispute(
+func (uc *ExceptionUseCase) processOpenDispute(
 	ctx context.Context,
 	cmd OpenDisputeCommand,
 	params *openDisputeParams,
@@ -249,24 +217,12 @@ type closeDisputeParams struct {
 	resolution string
 }
 
-func (uc *DisputeUseCase) validateCloseDispute(
+func (uc *ExceptionUseCase) validateCloseDispute(
 	ctx context.Context,
 	cmd CloseDisputeCommand,
 ) (*closeDisputeParams, error) {
-	if uc == nil || uc.disputeRepo == nil {
-		return nil, ErrNilDisputeRepository
-	}
-
-	if uc.exceptionRepo == nil {
-		return nil, ErrNilExceptionRepository
-	}
-
-	if uc.auditPublisher == nil {
-		return nil, ErrNilAuditPublisher
-	}
-
-	if uc.actorExtractor == nil {
-		return nil, ErrNilActorExtractor
+	if err := uc.validateDisputeDeps(); err != nil {
+		return nil, err
 	}
 
 	if cmd.DisputeID == uuid.Nil {
@@ -287,7 +243,7 @@ func (uc *DisputeUseCase) validateCloseDispute(
 }
 
 // CloseDispute closes a dispute as won or lost.
-func (uc *DisputeUseCase) CloseDispute(
+func (uc *ExceptionUseCase) CloseDispute(
 	ctx context.Context,
 	cmd CloseDisputeCommand,
 ) (*dispute.Dispute, error) {
@@ -304,7 +260,7 @@ func (uc *DisputeUseCase) CloseDispute(
 	return uc.processCloseDispute(ctx, cmd, params, logger, span)
 }
 
-func (uc *DisputeUseCase) processCloseDispute(
+func (uc *ExceptionUseCase) processCloseDispute(
 	ctx context.Context,
 	cmd CloseDisputeCommand,
 	params *closeDisputeParams,
@@ -399,11 +355,11 @@ type submitEvidenceParams struct {
 	fileURL *string
 }
 
-func (uc *DisputeUseCase) validateSubmitEvidence(
+func (uc *ExceptionUseCase) validateSubmitEvidence(
 	ctx context.Context,
 	cmd SubmitEvidenceCommand,
 ) (*submitEvidenceParams, error) {
-	if err := uc.validateSubmitEvidenceDeps(); err != nil {
+	if err := uc.validateDisputeDeps(); err != nil {
 		return nil, err
 	}
 
@@ -426,26 +382,6 @@ func (uc *DisputeUseCase) validateSubmitEvidence(
 	return &submitEvidenceParams{actor: actor, comment: comment, fileURL: fileURL}, nil
 }
 
-func (uc *DisputeUseCase) validateSubmitEvidenceDeps() error {
-	if uc == nil || uc.disputeRepo == nil {
-		return ErrNilDisputeRepository
-	}
-
-	if uc.exceptionRepo == nil {
-		return ErrNilExceptionRepository
-	}
-
-	if uc.auditPublisher == nil {
-		return ErrNilAuditPublisher
-	}
-
-	if uc.actorExtractor == nil {
-		return ErrNilActorExtractor
-	}
-
-	return nil
-}
-
 func parseOptionalFileURL(fileURL *string) *string {
 	if fileURL == nil {
 		return nil
@@ -460,7 +396,7 @@ func parseOptionalFileURL(fileURL *string) *string {
 }
 
 // SubmitEvidence adds evidence to an existing dispute.
-func (uc *DisputeUseCase) SubmitEvidence(
+func (uc *ExceptionUseCase) SubmitEvidence(
 	ctx context.Context,
 	cmd SubmitEvidenceCommand,
 ) (*dispute.Dispute, error) {
@@ -477,7 +413,7 @@ func (uc *DisputeUseCase) SubmitEvidence(
 	return uc.processSubmitEvidence(ctx, cmd, params, logger, span)
 }
 
-func (uc *DisputeUseCase) processSubmitEvidence(
+func (uc *ExceptionUseCase) processSubmitEvidence(
 	ctx context.Context,
 	cmd SubmitEvidenceCommand,
 	params *submitEvidenceParams,
