@@ -246,7 +246,9 @@ func TestCrossContextTx_MarkMatched(t *testing.T) {
 		}
 
 		// Act: mark matched through the cross-context adapter.
-		err := adapter.MarkMatched(ctx, seed.ContextID, txIDs)
+		err := adapter.WithTx(ctx, func(tx matchingRepos.Tx) error {
+			return adapter.MarkMatchedWithTx(ctx, tx, seed.ContextID, txIDs)
+		})
 		require.NoError(t, err)
 
 		// Assert: status is now MATCHED.
@@ -289,7 +291,9 @@ func TestCrossContextTx_MarkUnmatched_Rollback(t *testing.T) {
 		require.Len(t, txIDs, 2)
 
 		// Step 1: Transition to MATCHED.
-		err := adapter.MarkMatched(ctx, seed.ContextID, txIDs)
+		err := adapter.WithTx(ctx, func(tx matchingRepos.Tx) error {
+			return adapter.MarkMatchedWithTx(ctx, tx, seed.ContextID, txIDs)
+		})
 		require.NoError(t, err)
 
 		for _, id := range txIDs {
@@ -297,7 +301,9 @@ func TestCrossContextTx_MarkUnmatched_Rollback(t *testing.T) {
 		}
 
 		// Step 2: Revert to UNMATCHED.
-		err = adapter.MarkUnmatched(ctx, seed.ContextID, txIDs)
+		err = adapter.WithTx(ctx, func(tx matchingRepos.Tx) error {
+			return adapter.MarkUnmatchedWithTx(ctx, tx, seed.ContextID, txIDs)
+		})
 		require.NoError(t, err)
 
 		for _, id := range txIDs {
@@ -359,7 +365,9 @@ func TestCrossContextTx_WithTx_Transactional(t *testing.T) {
 		}
 
 		// Revert them to UNMATCHED for the rollback test.
-		err = adapter.MarkUnmatched(ctx, seed.ContextID, txIDs)
+		err = adapter.WithTx(ctx, func(tx matchingRepos.Tx) error {
+			return adapter.MarkUnmatchedWithTx(ctx, tx, seed.ContextID, txIDs)
+		})
 		require.NoError(t, err)
 
 		for _, id := range txIDs {

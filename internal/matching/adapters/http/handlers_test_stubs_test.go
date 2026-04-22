@@ -213,20 +213,12 @@ func (repo *runMatchTxRepo) FindByID(
 	return nil, repo.err
 }
 
-func (repo *runMatchTxRepo) MarkMatched(_ context.Context, _ uuid.UUID, _ []uuid.UUID) error {
-	return nil
-}
-
 func (repo *runMatchTxRepo) MarkMatchedWithTx(
 	_ context.Context,
 	_ matchingRepositories.Tx,
 	_ uuid.UUID,
 	_ []uuid.UUID,
 ) error {
-	return nil
-}
-
-func (repo *runMatchTxRepo) MarkPendingReview(_ context.Context, _ uuid.UUID, _ []uuid.UUID) error {
 	return nil
 }
 
@@ -252,10 +244,6 @@ func (repo *runMatchTxRepo) FindByContextAndIDs(
 	_ []uuid.UUID,
 ) ([]*shared.Transaction, error) {
 	return repo.candidates, repo.err
-}
-
-func (repo *runMatchTxRepo) MarkUnmatched(_ context.Context, _ uuid.UUID, _ []uuid.UUID) error {
-	return nil
 }
 
 func (repo *runMatchTxRepo) MarkUnmatchedWithTx(

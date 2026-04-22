@@ -21,6 +21,10 @@ import (
 // - limit must be > 0; offset must be >= 0.
 // - Tenant scoping and authorization happen in adapters; caller provides contextID.
 // - Ingestion Transaction is treated as a shared-kernel type for matching.
+//
+// Mark* operations are only exposed in transactional form (`*WithTx`) because
+// every matching write path composes multiple repositories inside a single
+// tenant-scoped transaction. Use WithTx to start one.
 type TransactionRepository interface {
 	ListUnmatchedByContext(
 		ctx context.Context,
@@ -35,21 +39,18 @@ type TransactionRepository interface {
 		contextID uuid.UUID,
 		transactionIDs []uuid.UUID,
 	) ([]*shared.Transaction, error)
-	MarkMatched(ctx context.Context, contextID uuid.UUID, transactionIDs []uuid.UUID) error
 	MarkMatchedWithTx(
 		ctx context.Context,
 		tx repositories.Tx,
 		contextID uuid.UUID,
 		transactionIDs []uuid.UUID,
 	) error
-	MarkPendingReview(ctx context.Context, contextID uuid.UUID, transactionIDs []uuid.UUID) error
 	MarkPendingReviewWithTx(
 		ctx context.Context,
 		tx repositories.Tx,
 		contextID uuid.UUID,
 		transactionIDs []uuid.UUID,
 	) error
-	MarkUnmatched(ctx context.Context, contextID uuid.UUID, transactionIDs []uuid.UUID) error
 	MarkUnmatchedWithTx(
 		ctx context.Context,
 		tx repositories.Tx,

@@ -271,8 +271,9 @@ func (stub *stubTxRepo) FindByContextAndIDs(
 	return result, nil
 }
 
-func (stub *stubTxRepo) MarkMatched(
+func (stub *stubTxRepo) MarkMatchedWithTx(
 	_ context.Context,
+	_ matchingRepositories.Tx,
 	_ uuid.UUID,
 	transactionIDs []uuid.UUID,
 ) error {
@@ -292,17 +293,9 @@ func (stub *stubTxRepo) MarkMatched(
 	return nil
 }
 
-func (stub *stubTxRepo) MarkMatchedWithTx(
-	ctx context.Context,
-	_ matchingRepositories.Tx,
-	contextID uuid.UUID,
-	transactionIDs []uuid.UUID,
-) error {
-	return stub.MarkMatched(ctx, contextID, transactionIDs)
-}
-
-func (stub *stubTxRepo) MarkPendingReview(
+func (stub *stubTxRepo) MarkPendingReviewWithTx(
 	_ context.Context,
+	_ matchingRepositories.Tx,
 	_ uuid.UUID,
 	transactionIDs []uuid.UUID,
 ) error {
@@ -319,19 +312,6 @@ func (stub *stubTxRepo) MarkPendingReview(
 	copiedIDs := append([]uuid.UUID{}, transactionIDs...)
 	stub.pendingIDs = append(stub.pendingIDs, copiedIDs...)
 
-	return nil
-}
-
-func (stub *stubTxRepo) MarkPendingReviewWithTx(
-	ctx context.Context,
-	_ matchingRepositories.Tx,
-	contextID uuid.UUID,
-	transactionIDs []uuid.UUID,
-) error {
-	return stub.MarkPendingReview(ctx, contextID, transactionIDs)
-}
-
-func (stub *stubTxRepo) MarkUnmatched(_ context.Context, _ uuid.UUID, _ []uuid.UUID) error {
 	return nil
 }
 
