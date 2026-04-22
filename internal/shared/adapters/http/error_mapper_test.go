@@ -110,7 +110,7 @@ func TestValidateFallbackError_PreservesMatcherAPIError(t *testing.T) {
 func TestValidateFallbackError_TypedNilMatcherErrorFallsBackToInternalError(t *testing.T) {
 	t.Parallel()
 
-	var typedNil *matchererrors.NotFoundError
+	var typedNil *matchererrors.BaseError
 
 	apiError := ValidateFallbackError(typedNil)
 	require.Equal(t, defInternalServerError.Code, apiError.ProductCode())

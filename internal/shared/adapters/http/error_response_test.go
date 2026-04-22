@@ -39,7 +39,7 @@ func TestRespondProductError_FallsBackForTypedNilMatcherError(t *testing.T) {
 
 	app := fiber.New()
 	app.Get("/", func(c *fiber.Ctx) error {
-		var typedNil *matchererrors.NotFoundError
+		var typedNil *matchererrors.BaseError
 
 		return RespondProductError(c, typedNil)
 	})

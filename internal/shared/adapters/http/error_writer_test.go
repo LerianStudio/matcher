@@ -36,7 +36,7 @@ func TestAsProductError_ReturnsTypedMatcherError(t *testing.T) {
 func TestAsProductError_IgnoresTypedNilMatcherError(t *testing.T) {
 	t.Parallel()
 
-	var typedNil *matchererrors.NotFoundError
+	var typedNil *matchererrors.BaseError
 
 	apiError, ok := asProductError(typedNil)
 	require.False(t, ok)
@@ -152,7 +152,7 @@ func TestNewError_EmptyMessageFallsBackToTitle(t *testing.T) {
 func TestIsNilError_AllVariants(t *testing.T) {
 	t.Parallel()
 
-	var typedNil *matchererrors.NotFoundError
+	var typedNil *matchererrors.BaseError
 
 	require.True(t, isNilError(nil))
 	require.True(t, isNilError(typedNil))
