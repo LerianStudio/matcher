@@ -1,3 +1,10 @@
+## [1.4.0-beta.4](https://github.com/LerianStudio/matcher/compare/v1.4.0-beta.3...v1.4.0-beta.4) (2026-04-22)
+
+
+### Bug Fixes
+
+* **tests:** resolve make ci gaps from simplify wave ([bd00bed](https://github.com/LerianStudio/matcher/commit/bd00bed66ab73f2a7b8a7d4bd4c32946cfb5e85a))
+
 ## [1.4.0-beta.3](https://github.com/LerianStudio/matcher/compare/v1.4.0-beta.2...v1.4.0-beta.3) (2026-04-22)
 
 ## [1.4.0-beta.2](https://github.com/LerianStudio/matcher/compare/v1.4.0-beta.1...v1.4.0-beta.2) (2026-04-20)
