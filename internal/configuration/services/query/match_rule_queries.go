@@ -15,36 +15,6 @@ import (
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
-// GetMatchRule retrieves a match rule by ID.
-func (uc *UseCase) GetMatchRule(
-	ctx context.Context,
-	contextID, ruleID uuid.UUID,
-) (*entities.MatchRule, error) {
-	if uc == nil || uc.matchRuleRepo == nil {
-		return nil, ErrNilMatchRuleRepository
-	}
-
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "query.get_match_rule")
-	defer span.End()
-
-	result, err := uc.matchRuleRepo.FindByID(ctx, contextID, ruleID)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get match rule", err)
-
-		logger.With(
-			libLog.Any("context.id", contextID.String()),
-			libLog.Any("rule.id", ruleID.String()),
-			libLog.Err(err),
-		).Log(ctx, libLog.LevelError, "failed to get match rule")
-
-		return nil, fmt.Errorf("finding match rule: %w", err)
-	}
-
-	return result, nil
-}
-
 // ListMatchRules retrieves all match rules with optional type filter using cursor-based pagination.
 func (uc *UseCase) ListMatchRules(
 	ctx context.Context,

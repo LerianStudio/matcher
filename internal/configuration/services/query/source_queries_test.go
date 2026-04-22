@@ -20,69 +20,6 @@ import (
 
 var errSourceRepositoryFailure = errors.New("repository failure")
 
-func TestGetSource_NilSourceRepo(t *testing.T) {
-	t.Parallel()
-
-	uc := &UseCase{}
-
-	_, err := uc.GetSource(context.Background(), uuid.New(), uuid.New())
-	require.ErrorIs(t, err, ErrNilSourceRepository)
-}
-
-func TestGetSource_RepositoryError(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	contextRepo := mocks.NewMockContextRepository(ctrl)
-	sourceRepo := mocks.NewMockSourceRepository(ctrl)
-	fieldMapRepo := mocks.NewMockFieldMapRepository(ctrl)
-	matchRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
-
-	uc, err := NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	contextID := uuid.New()
-	sourceID := uuid.New()
-
-	sourceRepo.EXPECT().
-		FindByID(gomock.Any(), contextID, sourceID).
-		Return(nil, errSourceRepositoryFailure)
-
-	_, err = uc.GetSource(ctx, contextID, sourceID)
-	require.Error(t, err)
-	require.ErrorIs(t, err, errSourceRepositoryFailure)
-	require.Contains(t, err.Error(), "finding reconciliation source")
-}
-
-func TestGetSource_Success(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	contextRepo := mocks.NewMockContextRepository(ctrl)
-	sourceRepo := mocks.NewMockSourceRepository(ctrl)
-	fieldMapRepo := mocks.NewMockFieldMapRepository(ctrl)
-	matchRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
-
-	uc, err := NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	contextID := uuid.New()
-	sourceID := uuid.New()
-	expected := &entities.ReconciliationSource{ID: sourceID}
-
-	sourceRepo.EXPECT().FindByID(gomock.Any(), contextID, sourceID).Return(expected, nil)
-
-	result, err := uc.GetSource(ctx, contextID, sourceID)
-	require.NoError(t, err)
-	require.Equal(t, expected, result)
-}
-
 func TestListSources_NilSourceRepo(t *testing.T) {
 	t.Parallel()
 

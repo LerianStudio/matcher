@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
-
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
@@ -15,32 +13,6 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
-
-// GetContext retrieves a reconciliation context by ID.
-func (uc *UseCase) GetContext(
-	ctx context.Context,
-	contextID uuid.UUID,
-) (*entities.ReconciliationContext, error) {
-	if uc.contextRepo == nil {
-		return nil, ErrNilContextRepository
-	}
-
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "query.get_reconciliation_context")
-	defer span.End()
-
-	result, err := uc.contextRepo.FindByID(ctx, contextID)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get reconciliation context", err)
-
-		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to get reconciliation context")
-
-		return nil, fmt.Errorf("finding reconciliation context: %w", err)
-	}
-
-	return result, nil
-}
 
 // ListContexts retrieves all reconciliation contexts with optional filters using cursor-based pagination.
 func (uc *UseCase) ListContexts(

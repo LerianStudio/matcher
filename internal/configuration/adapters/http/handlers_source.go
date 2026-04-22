@@ -225,7 +225,7 @@ func (handler *Handler) GetSource(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid source id", err)
 	}
 
-	result, err := handler.query.GetSource(ctx, contextID, sourceID)
+	result, err := handler.sourceRepo.FindByID(ctx, contextID, sourceID)
 	if err != nil {
 		handler.logSpanError(ctx, span, logger, "failed to get source", err)
 

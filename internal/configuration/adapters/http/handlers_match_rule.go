@@ -217,7 +217,7 @@ func (handler *Handler) GetMatchRule(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid rule id", err)
 	}
 
-	result, err := handler.query.GetMatchRule(ctx, contextID, ruleID)
+	result, err := handler.matchRuleRepo.FindByID(ctx, contextID, ruleID)
 	if err != nil {
 		handler.logSpanError(ctx, span, logger, "failed to get match rule", err)
 

@@ -642,7 +642,7 @@ func TestNewHandler_NilCommandUseCase(t *testing.T) {
 	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
 	require.NoError(t, err)
 
-	_, err = NewHandler(nil, queryUseCase, false)
+	_, err = NewHandler(nil, queryUseCase, contextRepo, sourceRepo, matchRuleRepo, false)
 	require.ErrorIs(t, err, ErrNilCommandUseCase)
 }
 
@@ -657,8 +657,62 @@ func TestNewHandler_NilQueryUseCase(t *testing.T) {
 	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
 	require.NoError(t, err)
 
-	_, err = NewHandler(commandUseCase, nil, false)
+	_, err = NewHandler(commandUseCase, nil, contextRepo, sourceRepo, matchRuleRepo, false)
 	require.ErrorIs(t, err, ErrNilQueryUseCase)
+}
+
+func TestNewHandler_NilContextRepo(t *testing.T) {
+	t.Parallel()
+
+	contextRepo := newContextRepository()
+	sourceRepo := newSourceRepository()
+	fieldMapRepo := newFieldMapRepository()
+	matchRuleRepo := newMatchRuleRepository()
+
+	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	_, err = NewHandler(commandUseCase, queryUseCase, nil, sourceRepo, matchRuleRepo, false)
+	require.ErrorIs(t, err, ErrNilContextRepository)
+}
+
+func TestNewHandler_NilSourceRepo(t *testing.T) {
+	t.Parallel()
+
+	contextRepo := newContextRepository()
+	sourceRepo := newSourceRepository()
+	fieldMapRepo := newFieldMapRepository()
+	matchRuleRepo := newMatchRuleRepository()
+
+	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	_, err = NewHandler(commandUseCase, queryUseCase, contextRepo, nil, matchRuleRepo, false)
+	require.ErrorIs(t, err, ErrNilSourceRepository)
+}
+
+func TestNewHandler_NilMatchRuleRepo(t *testing.T) {
+	t.Parallel()
+
+	contextRepo := newContextRepository()
+	sourceRepo := newSourceRepository()
+	fieldMapRepo := newFieldMapRepository()
+	matchRuleRepo := newMatchRuleRepository()
+
+	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	_, err = NewHandler(commandUseCase, queryUseCase, contextRepo, sourceRepo, nil, false)
+	require.ErrorIs(t, err, ErrNilMatchRuleRepository)
 }
 
 // ─── safeClientMessage tests ──────────────────────────────────
@@ -951,7 +1005,7 @@ func newScheduleFixture(t *testing.T) *handlerFixtureWithSchedule {
 	)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(commandUseCase, queryUseCase, false)
+	handler, err := NewHandler(commandUseCase, queryUseCase, contextRepo, sourceRepo, matchRuleRepo, false)
 	require.NoError(t, err)
 
 	return &handlerFixtureWithSchedule{
@@ -2122,7 +2176,7 @@ func newFeeScheduleHandlerFixture(t *testing.T) *feeScheduleHandlerFixture {
 	)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(commandUseCase, queryUseCase, false)
+	handler, err := NewHandler(commandUseCase, queryUseCase, contextRepo, sourceRepo, matchRuleRepo, false)
 	require.NoError(t, err)
 
 	return &feeScheduleHandlerFixture{

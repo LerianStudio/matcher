@@ -21,66 +21,6 @@ import (
 
 var errContextRepositoryFailure = errors.New("repository failure")
 
-func TestGetContext_NilContextRepo(t *testing.T) {
-	t.Parallel()
-
-	uc := &UseCase{}
-
-	_, err := uc.GetContext(context.Background(), uuid.New())
-	require.ErrorIs(t, err, ErrNilContextRepository)
-}
-
-func TestGetContext_RepositoryError(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	contextRepo := mocks.NewMockContextRepository(ctrl)
-	sourceRepo := mocks.NewMockSourceRepository(ctrl)
-	fieldMapRepo := mocks.NewMockFieldMapRepository(ctrl)
-	matchRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
-
-	uc, err := NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	contextID := uuid.New()
-
-	contextRepo.EXPECT().FindByID(gomock.Any(), contextID).Return(nil, errContextRepositoryFailure)
-
-	_, err = uc.GetContext(ctx, contextID)
-	require.Error(t, err)
-	require.ErrorIs(t, err, errContextRepositoryFailure)
-	require.Contains(t, err.Error(), "finding reconciliation context")
-}
-
-func TestGetContext_Success(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	contextRepo := mocks.NewMockContextRepository(ctrl)
-	sourceRepo := mocks.NewMockSourceRepository(ctrl)
-	fieldMapRepo := mocks.NewMockFieldMapRepository(ctrl)
-	matchRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
-
-	uc, err := NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	tenantID := uuid.New()
-	contextID := uuid.New()
-	expected := &entities.ReconciliationContext{ID: contextID, TenantID: tenantID}
-
-	contextRepo.EXPECT().FindByID(gomock.Any(), contextID).Return(expected, nil)
-
-	result, err := uc.GetContext(ctx, contextID)
-	require.NoError(t, err)
-	require.Equal(t, expected, result)
-}
-
 func TestListContexts_NilContextRepo(t *testing.T) {
 	t.Parallel()
 

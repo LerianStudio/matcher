@@ -207,7 +207,7 @@ func (handler *Handler) GetContext(fiberCtx *fiber.Ctx) error {
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
-	result, err := handler.query.GetContext(ctx, contextID)
+	result, err := handler.contextRepo.FindByID(ctx, contextID)
 	if err != nil {
 		handler.logSpanError(ctx, span, logger, "failed to get context", err)
 

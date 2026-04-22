@@ -59,7 +59,14 @@ func initConfigurationModule(
 		return fmt.Errorf("create config query use case: %w", err)
 	}
 
-	configHandler, err := configHTTP.NewHandler(configCommandUseCase, configQueryUseCase, production)
+	configHandler, err := configHTTP.NewHandler(
+		configCommandUseCase,
+		configQueryUseCase,
+		repos.configContext,
+		repos.configSource,
+		repos.configMatchRule,
+		production,
+	)
 	if err != nil {
 		return fmt.Errorf("create config handler: %w", err)
 	}

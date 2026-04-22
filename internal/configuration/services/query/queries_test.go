@@ -127,11 +127,6 @@ func TestContextQueries(t *testing.T) {
 	contextID := uuid.New()
 
 	expected := &entities.ReconciliationContext{ID: contextID, TenantID: tenantID}
-	contextRepo.EXPECT().FindByID(gomock.Any(), contextID).Return(expected, nil)
-
-	result, err := uc.GetContext(ctx, contextID)
-	require.NoError(t, err)
-	require.Equal(t, expected, result)
 
 	contextType := shared.ContextTypeOneToOne
 	status := value_objects.ContextStatusActive
@@ -149,29 +144,6 @@ func TestContextQueries(t *testing.T) {
 	count, err := uc.CountContexts(ctx)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), count)
-}
-
-func TestContextQueryErrorsBubble(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	contextRepo := mocks.NewMockContextRepository(ctrl)
-	sourceRepo := mocks.NewMockSourceRepository(ctrl)
-	fieldMapRepo := mocks.NewMockFieldMapRepository(ctrl)
-	matchRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
-
-	uc, err := NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	contextID := uuid.New()
-
-	contextRepo.EXPECT().FindByID(gomock.Any(), contextID).Return(nil, errDBError)
-
-	_, err = uc.GetContext(ctx, contextID)
-	require.ErrorIs(t, err, errDBError)
 }
 
 func TestSourceQueries(t *testing.T) {
@@ -193,11 +165,6 @@ func TestSourceQueries(t *testing.T) {
 	sourceID := uuid.New()
 
 	expected := &entities.ReconciliationSource{ID: sourceID}
-	sourceRepo.EXPECT().FindByID(gomock.Any(), contextID, sourceID).Return(expected, nil)
-
-	result, err := uc.GetSource(ctx, contextID, sourceID)
-	require.NoError(t, err)
-	require.Equal(t, expected, result)
 
 	sourceType := value_objects.SourceTypeBank
 	expectedList := []*entities.ReconciliationSource{expected}
@@ -264,14 +231,8 @@ func TestMatchRuleQueries(t *testing.T) {
 
 	ctx := context.Background()
 	contextID := uuid.New()
-	ruleID := uuid.New()
 
-	expected := &entities.MatchRule{ID: ruleID}
-	matchRuleRepo.EXPECT().FindByID(gomock.Any(), contextID, ruleID).Return(expected, nil)
-
-	result, err := uc.GetMatchRule(ctx, contextID, ruleID)
-	require.NoError(t, err)
-	require.Equal(t, expected, result)
+	expected := &entities.MatchRule{ID: uuid.New()}
 
 	ruleType := shared.RuleTypeExact
 	expectedList := entities.MatchRules{expected}

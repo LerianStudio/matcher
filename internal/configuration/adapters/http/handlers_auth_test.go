@@ -74,22 +74,26 @@ func TestConfigRoutes_AuthEnforced(t *testing.T) {
 		return group
 	}
 
+	ctxRepo := &noopContextRepo{}
+	srcRepo := &noopSourceRepo{}
+	mrRepo := &noopMatchRuleRepo{}
+
 	commandUseCase, err := command.NewUseCase(
-		&noopContextRepo{},
-		&noopSourceRepo{},
+		ctxRepo,
+		srcRepo,
 		&noopFieldMapRepo{},
-		&noopMatchRuleRepo{},
+		mrRepo,
 	)
 	require.NoError(t, err)
 	queryUseCase, err := query.NewUseCase(
-		&noopContextRepo{},
-		&noopSourceRepo{},
+		ctxRepo,
+		srcRepo,
 		&noopFieldMapRepo{},
-		&noopMatchRuleRepo{},
+		mrRepo,
 	)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(commandUseCase, queryUseCase, false)
+	handler, err := NewHandler(commandUseCase, queryUseCase, ctxRepo, srcRepo, mrRepo, false)
 	require.NoError(t, err)
 	err = RegisterRoutes(protected, handler)
 	require.NoError(t, err)

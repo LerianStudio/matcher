@@ -14,26 +14,14 @@ import (
 	"go.uber.org/mock/gomock"
 
 	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
-	"github.com/LerianStudio/matcher/internal/configuration/services/query"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 var errMockQuery = errors.New("mock query error")
-
-func createMockRepositories(ctrl *gomock.Controller) (
-	*mocks.MockContextRepository,
-	*mocks.MockSourceRepository,
-	*mocks.MockFieldMapRepository,
-	*mocks.MockMatchRuleRepository,
-) {
-	return mocks.NewMockContextRepository(ctrl),
-		mocks.NewMockSourceRepository(ctrl),
-		mocks.NewMockFieldMapRepository(ctrl),
-		mocks.NewMockMatchRuleRepository(ctrl)
-}
 
 func setupMockContext(
 	ctxRepo *mocks.MockContextRepository,
@@ -54,21 +42,6 @@ func setupMockContext(
 	}
 }
 
-func createVerifierWithMocks(
-	t *testing.T,
-	ctxRepo *mocks.MockContextRepository,
-	srcRepo *mocks.MockSourceRepository,
-	fmRepo *mocks.MockFieldMapRepository,
-	mrRepo *mocks.MockMatchRuleRepository,
-) libHTTP.TenantOwnershipVerifier {
-	t.Helper()
-
-	uc, err := query.NewUseCase(ctxRepo, srcRepo, fmRepo, mrRepo)
-	require.NoError(t, err)
-
-	return NewTenantOwnershipVerifier(uc)
-}
-
 func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 	t.Parallel()
 
@@ -76,7 +49,7 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 	validContextID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	differentTenantID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
 
-	t.Run("nil query use case returns libHTTP.ErrContextAccessDenied", func(t *testing.T) {
+	t.Run("nil repository returns libHTTP.ErrContextAccessDenied", func(t *testing.T) {
 		t.Parallel()
 
 		v := NewTenantOwnershipVerifier(nil)
@@ -92,7 +65,7 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 
 		defer ctrl.Finish()
 
-		ctxRepo, srcRepo, fmRepo, mrRepo := createMockRepositories(ctrl)
+		ctxRepo := mocks.NewMockContextRepository(ctrl)
 		setupMockContext(
 			ctxRepo,
 			validContextID,
@@ -100,7 +73,7 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 			value_objects.ContextStatusActive,
 			sql.ErrNoRows,
 		)
-		v := createVerifierWithMocks(t, ctxRepo, srcRepo, fmRepo, mrRepo)
+		v := NewTenantOwnershipVerifier(ctxRepo)
 		err := v(context.Background(), validTenantID, validContextID)
 		require.Error(t, err)
 		require.ErrorIs(t, err, libHTTP.ErrContextNotFound)
@@ -112,7 +85,7 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 
 		defer ctrl.Finish()
 
-		ctxRepo, srcRepo, fmRepo, mrRepo := createMockRepositories(ctrl)
+		ctxRepo := mocks.NewMockContextRepository(ctrl)
 		setupMockContext(
 			ctxRepo,
 			validContextID,
@@ -120,7 +93,7 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 			value_objects.ContextStatusActive,
 			errMockQuery,
 		)
-		v := createVerifierWithMocks(t, ctxRepo, srcRepo, fmRepo, mrRepo)
+		v := NewTenantOwnershipVerifier(ctxRepo)
 		err := v(context.Background(), validTenantID, validContextID)
 		require.Error(t, err)
 		require.ErrorIs(t, err, errMockQuery)
@@ -133,9 +106,9 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 
 		defer ctrl.Finish()
 
-		ctxRepo, srcRepo, fmRepo, mrRepo := createMockRepositories(ctrl)
+		ctxRepo := mocks.NewMockContextRepository(ctrl)
 		ctxRepo.EXPECT().FindByID(gomock.Any(), validContextID).Return(nil, nil)
-		v := createVerifierWithMocks(t, ctxRepo, srcRepo, fmRepo, mrRepo)
+		v := NewTenantOwnershipVerifier(ctxRepo)
 		err := v(context.Background(), validTenantID, validContextID)
 		require.Error(t, err)
 		require.ErrorIs(t, err, libHTTP.ErrContextNotFound)
@@ -147,7 +120,7 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 
 		defer ctrl.Finish()
 
-		ctxRepo, srcRepo, fmRepo, mrRepo := createMockRepositories(ctrl)
+		ctxRepo := mocks.NewMockContextRepository(ctrl)
 		setupMockContext(
 			ctxRepo,
 			validContextID,
@@ -155,7 +128,7 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 			value_objects.ContextStatusActive,
 			nil,
 		)
-		v := createVerifierWithMocks(t, ctxRepo, srcRepo, fmRepo, mrRepo)
+		v := NewTenantOwnershipVerifier(ctxRepo)
 		err := v(context.Background(), validTenantID, validContextID)
 		require.Error(t, err)
 		require.ErrorIs(t, err, libHTTP.ErrContextNotOwned)
@@ -167,7 +140,7 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 
 		defer ctrl.Finish()
 
-		ctxRepo, srcRepo, fmRepo, mrRepo := createMockRepositories(ctrl)
+		ctxRepo := mocks.NewMockContextRepository(ctrl)
 		setupMockContext(
 			ctxRepo,
 			validContextID,
@@ -175,7 +148,7 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 			value_objects.ContextStatusPaused,
 			nil,
 		)
-		v := createVerifierWithMocks(t, ctxRepo, srcRepo, fmRepo, mrRepo)
+		v := NewTenantOwnershipVerifier(ctxRepo)
 		err := v(context.Background(), validTenantID, validContextID)
 		assert.NoError(t, err)
 	})
@@ -186,7 +159,7 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 
 		defer ctrl.Finish()
 
-		ctxRepo, srcRepo, fmRepo, mrRepo := createMockRepositories(ctrl)
+		ctxRepo := mocks.NewMockContextRepository(ctrl)
 		setupMockContext(
 			ctxRepo,
 			validContextID,
@@ -194,7 +167,7 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 			value_objects.ContextStatusActive,
 			nil,
 		)
-		v := createVerifierWithMocks(t, ctxRepo, srcRepo, fmRepo, mrRepo)
+		v := NewTenantOwnershipVerifier(ctxRepo)
 		err := v(context.Background(), validTenantID, validContextID)
 		assert.NoError(t, err)
 	})
@@ -203,7 +176,7 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 func TestNewTenantOwnershipVerifier(t *testing.T) {
 	t.Parallel()
 
-	t.Run("creates verifier with nil query use case", func(t *testing.T) {
+	t.Run("creates verifier with nil repository", func(t *testing.T) {
 		t.Parallel()
 
 		verifier := NewTenantOwnershipVerifier(nil)
@@ -214,7 +187,7 @@ func TestNewTenantOwnershipVerifier(t *testing.T) {
 		require.ErrorIs(t, err, libHTTP.ErrContextAccessDenied)
 	})
 
-	t.Run("creates verifier with valid query use case", func(t *testing.T) {
+	t.Run("creates verifier with valid repository", func(t *testing.T) {
 		t.Parallel()
 
 		ctrl := gomock.NewController(t)
@@ -224,7 +197,7 @@ func TestNewTenantOwnershipVerifier(t *testing.T) {
 		validTenantID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 
 		validContextID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-		ctxRepo, srcRepo, fmRepo, mrRepo := createMockRepositories(ctrl)
+		ctxRepo := mocks.NewMockContextRepository(ctrl)
 		setupMockContext(
 			ctxRepo,
 			validContextID,
@@ -232,12 +205,10 @@ func TestNewTenantOwnershipVerifier(t *testing.T) {
 			value_objects.ContextStatusActive,
 			nil,
 		)
-		uc, err := query.NewUseCase(ctxRepo, srcRepo, fmRepo, mrRepo)
-		require.NoError(t, err)
 
-		verifier := NewTenantOwnershipVerifier(uc)
+		verifier := NewTenantOwnershipVerifier(ctxRepo)
 		require.NotNil(t, verifier)
-		err = verifier(context.Background(), validTenantID, validContextID)
+		err := verifier(context.Background(), validTenantID, validContextID)
 		assert.NoError(t, err)
 	})
 }
@@ -251,7 +222,7 @@ func TestTenantOwnershipVerifier_PassesCorrectParameters(t *testing.T) {
 
 	expectedTenantID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	expectedContextID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	ctxRepo, srcRepo, fmRepo, mrRepo := createMockRepositories(ctrl)
+	ctxRepo := mocks.NewMockContextRepository(ctrl)
 	ctxRepo.EXPECT().
 		FindByID(gomock.Any(), expectedContextID).
 		DoAndReturn(func(ctx context.Context, contextID uuid.UUID) (*entities.ReconciliationContext, error) {
@@ -265,7 +236,7 @@ func TestTenantOwnershipVerifier_PassesCorrectParameters(t *testing.T) {
 				Status:   value_objects.ContextStatusActive,
 			}, nil
 		})
-	v := createVerifierWithMocks(t, ctxRepo, srcRepo, fmRepo, mrRepo)
+	v := NewTenantOwnershipVerifier(ctxRepo)
 	err := v(context.Background(), expectedTenantID, expectedContextID)
 	require.NoError(t, err)
 }
@@ -318,10 +289,10 @@ func TestPausedContextRemainsAccessibleForConfiguration(t *testing.T) {
 
 			defer ctrl.Finish()
 
-			ctxRepo, srcRepo, fmRepo, mrRepo := createMockRepositories(ctrl)
+			ctxRepo := mocks.NewMockContextRepository(ctrl)
 			setupMockContext(ctxRepo, validContextID, validTenantID, tt.status, nil)
 
-			v := createVerifierWithMocks(t, ctxRepo, srcRepo, fmRepo, mrRepo)
+			v := NewTenantOwnershipVerifier(ctxRepo)
 			err := v(context.Background(), validTenantID, validContextID)
 
 			assert.NoError(t, err, "configuration verifier must NOT block %s contexts", tt.status)
@@ -371,10 +342,10 @@ func TestPausedContextCanBeReadViaConfigurationVerifier(t *testing.T) {
 	validTenantID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	validContextID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
-	ctxRepo, srcRepo, fmRepo, mrRepo := createMockRepositories(ctrl)
+	ctxRepo := mocks.NewMockContextRepository(ctrl)
 	setupMockContext(ctxRepo, validContextID, validTenantID, value_objects.ContextStatusPaused, nil)
 
-	v := createVerifierWithMocks(t, ctxRepo, srcRepo, fmRepo, mrRepo)
+	v := NewTenantOwnershipVerifier(ctxRepo)
 	err := v(context.Background(), validTenantID, validContextID)
 
 	assert.NoError(t, err, "reading a PAUSED context via configuration verifier must succeed")
@@ -393,10 +364,10 @@ func TestPausedContextCanBeDeletedViaConfigurationVerifier(t *testing.T) {
 	validTenantID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	validContextID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
-	ctxRepo, srcRepo, fmRepo, mrRepo := createMockRepositories(ctrl)
+	ctxRepo := mocks.NewMockContextRepository(ctrl)
 	setupMockContext(ctxRepo, validContextID, validTenantID, value_objects.ContextStatusPaused, nil)
 
-	v := createVerifierWithMocks(t, ctxRepo, srcRepo, fmRepo, mrRepo)
+	v := NewTenantOwnershipVerifier(ctxRepo)
 	err := v(context.Background(), validTenantID, validContextID)
 
 	assert.NoError(t, err, "deleting a PAUSED context via configuration verifier must succeed")
@@ -427,10 +398,10 @@ func TestConfigurationVerifierNeverReturnsErrContextNotActive(t *testing.T) {
 
 			defer ctrl.Finish()
 
-			ctxRepo, srcRepo, fmRepo, mrRepo := createMockRepositories(ctrl)
+			ctxRepo := mocks.NewMockContextRepository(ctrl)
 			setupMockContext(ctxRepo, validContextID, validTenantID, status, nil)
 
-			v := createVerifierWithMocks(t, ctxRepo, srcRepo, fmRepo, mrRepo)
+			v := NewTenantOwnershipVerifier(ctxRepo)
 			err := v(context.Background(), validTenantID, validContextID)
 			if err != nil {
 				assert.False(t,
