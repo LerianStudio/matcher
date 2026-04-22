@@ -745,7 +745,7 @@ func TestRepository_ListByContextID_ScanError(t *testing.T) {
 		Limit: 10,
 	})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parse id")
+	assert.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestRepository_FindByID_QueryError(t *testing.T) {
@@ -777,8 +777,8 @@ func TestPostgreSQLModel_ToEntity_InvalidAdjustmentType(t *testing.T) {
 	t.Parallel()
 
 	model := &PostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
 		Type:      "INVALID_TYPE",
 		Direction: "DEBIT",
 	}
@@ -793,8 +793,8 @@ func TestPostgreSQLModel_ToEntity_InvalidAdjustmentDirection(t *testing.T) {
 	t.Parallel()
 
 	model := &PostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
 		Type:      "BANK_FEE",
 		Direction: "INVALID_DIRECTION",
 	}
@@ -869,7 +869,7 @@ func TestRepository_ListByMatchGroupID_ScanError(t *testing.T) {
 
 	_, err := repo.ListByMatchGroupID(ctx, contextID, matchGroupID)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parse id")
+	assert.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestRepository_Create_SelectError(t *testing.T) {

@@ -85,9 +85,9 @@ func NewTransactionPostgreSQLModel(
 	}
 
 	return &pgcommon.TransactionPostgreSQLModel{
-		ID:                  id.String(),
-		IngestionJobID:      entity.IngestionJobID.String(),
-		SourceID:            entity.SourceID.String(),
+		ID:                  id,
+		IngestionJobID:      entity.IngestionJobID,
+		SourceID:            entity.SourceID,
 		ExternalID:          entity.ExternalID,
 		Amount:              entity.Amount,
 		Currency:            entity.Currency,
@@ -109,28 +109,11 @@ func NewTransactionPostgreSQLModel(
 	}, nil
 }
 
-//
-//nolint:cyclop // field mapping requires multiple parse operations
 func transactionModelToEntity(
 	model *pgcommon.TransactionPostgreSQLModel,
 ) (*shared.Transaction, error) {
 	if model == nil {
 		return nil, errTxModelRequired
-	}
-
-	id, err := uuid.Parse(model.ID)
-	if err != nil {
-		return nil, fmt.Errorf("parsing ID: %w", err)
-	}
-
-	jobID, err := uuid.Parse(model.IngestionJobID)
-	if err != nil {
-		return nil, fmt.Errorf("parsing IngestionJobID: %w", err)
-	}
-
-	sourceID, err := uuid.Parse(model.SourceID)
-	if err != nil {
-		return nil, fmt.Errorf("parsing SourceID: %w", err)
 	}
 
 	extractionStatus, err := shared.ParseExtractionStatus(model.ExtractionStatus)
@@ -151,9 +134,9 @@ func transactionModelToEntity(
 	}
 
 	transaction := &shared.Transaction{
-		ID:               id,
-		IngestionJobID:   jobID,
-		SourceID:         sourceID,
+		ID:               model.ID,
+		IngestionJobID:   model.IngestionJobID,
+		SourceID:         model.SourceID,
 		ExternalID:       model.ExternalID,
 		Amount:           model.Amount,
 		Currency:         model.Currency,

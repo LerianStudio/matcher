@@ -808,7 +808,7 @@ func TestScanFeeRule_InvalidID(t *testing.T) {
 
 	require.Error(t, err)
 	require.Nil(t, result)
-	assert.Contains(t, err.Error(), "parsing ID")
+	assert.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestScanFeeRule_InvalidContextID(t *testing.T) {
@@ -843,7 +843,7 @@ func TestScanFeeRule_InvalidContextID(t *testing.T) {
 
 	require.Error(t, err)
 	require.Nil(t, result)
-	assert.Contains(t, err.Error(), "parsing ContextID")
+	assert.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestScanFeeRule_InvalidFeeScheduleID(t *testing.T) {
@@ -878,7 +878,7 @@ func TestScanFeeRule_InvalidFeeScheduleID(t *testing.T) {
 
 	require.Error(t, err)
 	require.Nil(t, result)
-	assert.Contains(t, err.Error(), "parsing FeeScheduleID")
+	assert.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestScanFeeRule_EmptyPredicates(t *testing.T) {

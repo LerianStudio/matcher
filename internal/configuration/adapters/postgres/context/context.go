@@ -16,8 +16,8 @@ import (
 
 // ContextPostgreSQLModel represents the database model for reconciliation contexts.
 type ContextPostgreSQLModel struct {
-	ID                string
-	TenantID          string
+	ID                uuid.UUID
+	TenantID          uuid.UUID
 	Name              string
 	Type              string
 	Interval          string
@@ -58,8 +58,8 @@ func NewContextPostgreSQLModel(
 	}
 
 	return &ContextPostgreSQLModel{
-		ID:                id.String(),
-		TenantID:          entity.TenantID.String(),
+		ID:                id,
+		TenantID:          entity.TenantID,
 		Name:              entity.Name,
 		Type:              entity.Type.String(),
 		Interval:          entity.Interval,
@@ -77,16 +77,6 @@ func NewContextPostgreSQLModel(
 func (model *ContextPostgreSQLModel) ToEntity() (*entities.ReconciliationContext, error) {
 	if model == nil {
 		return nil, ErrContextModelRequired
-	}
-
-	id, err := uuid.Parse(model.ID)
-	if err != nil {
-		return nil, fmt.Errorf("parsing ID: %w", err)
-	}
-
-	tenantID, err := uuid.Parse(model.TenantID)
-	if err != nil {
-		return nil, fmt.Errorf("parsing TenantID: %w", err)
 	}
 
 	contextType, err := shared.ParseContextType(model.Type)
@@ -117,8 +107,8 @@ func (model *ContextPostgreSQLModel) ToEntity() (*entities.ReconciliationContext
 	}
 
 	return &entities.ReconciliationContext{
-		ID:                id,
-		TenantID:          tenantID,
+		ID:                model.ID,
+		TenantID:          model.TenantID,
 		Name:              model.Name,
 		Type:              contextType,
 		Interval:          model.Interval,

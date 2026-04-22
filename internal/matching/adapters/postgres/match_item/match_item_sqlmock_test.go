@@ -431,7 +431,7 @@ func TestListByMatchGroupID_ScanError(t *testing.T) {
 
 	assert.Nil(t, items)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parse id")
+	assert.Contains(t, err.Error(), "invalid UUID")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -688,7 +688,7 @@ func TestListByMatchGroupID_InvalidMatchGroupIDParse(t *testing.T) {
 
 	assert.Nil(t, items)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parse match group id")
+	assert.Contains(t, err.Error(), "invalid UUID")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -816,7 +816,7 @@ func TestListByMatchGroupIDs_ScanError(t *testing.T) {
 
 	assert.Nil(t, result)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parse id")
+	assert.Contains(t, err.Error(), "invalid UUID")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -969,6 +969,6 @@ func TestListByMatchGroupID_InvalidTransactionIDParse(t *testing.T) {
 
 	assert.Nil(t, items)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parse transaction id")
+	assert.Contains(t, err.Error(), "invalid UUID")
 	require.NoError(t, mock.ExpectationsWereMet())
 }

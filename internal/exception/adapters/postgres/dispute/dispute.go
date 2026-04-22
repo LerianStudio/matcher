@@ -19,8 +19,8 @@ type scanner interface {
 
 func scanDisputeInto(rowScanner scanner) (*dispute.Dispute, error) {
 	var (
-		id           string
-		exceptionID  string
+		id           uuid.UUID
+		exceptionID  uuid.UUID
 		category     string
 		state        string
 		description  string
@@ -38,16 +38,6 @@ func scanDisputeInto(rowScanner scanner) (*dispute.Dispute, error) {
 		&createdAt, &updatedAt,
 	); err != nil {
 		return nil, fmt.Errorf("scan dispute: %w", err)
-	}
-
-	parsedID, err := uuid.Parse(id)
-	if err != nil {
-		return nil, fmt.Errorf("parse dispute id: %w", err)
-	}
-
-	parsedExceptionID, err := uuid.Parse(exceptionID)
-	if err != nil {
-		return nil, fmt.Errorf("parse exception id: %w", err)
 	}
 
 	parsedCategory, err := dispute.ParseDisputeCategory(category)
@@ -72,8 +62,8 @@ func scanDisputeInto(rowScanner scanner) (*dispute.Dispute, error) {
 	}
 
 	return &dispute.Dispute{
-		ID:           parsedID,
-		ExceptionID:  parsedExceptionID,
+		ID:           id,
+		ExceptionID:  exceptionID,
 		Category:     parsedCategory,
 		State:        parsedState,
 		Description:  description,

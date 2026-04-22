@@ -4,14 +4,15 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )
 
 // JobPostgreSQLModel maps to ingestion_jobs table (000001_init_schema.up.sql:71-81).
 type JobPostgreSQLModel struct {
-	ID          string
-	ContextID   string
-	SourceID    string
+	ID          uuid.UUID
+	ContextID   uuid.UUID
+	SourceID    uuid.UUID
 	Status      string
 	StartedAt   time.Time
 	CompletedAt sql.NullTime
@@ -22,9 +23,9 @@ type JobPostgreSQLModel struct {
 
 // TransactionPostgreSQLModel maps to transactions table (000001_init_schema.up.sql:84-104).
 type TransactionPostgreSQLModel struct {
-	ID                  string
-	IngestionJobID      string
-	SourceID            string
+	ID                  uuid.UUID
+	IngestionJobID      uuid.UUID
+	SourceID            uuid.UUID
 	ExternalID          string
 	Amount              decimal.Decimal
 	Currency            string

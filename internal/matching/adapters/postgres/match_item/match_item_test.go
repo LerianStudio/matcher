@@ -82,9 +82,9 @@ func TestNewPostgreSQLModel_Success(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, model)
-	assert.Equal(t, item.ID.String(), model.ID)
-	assert.Equal(t, item.MatchGroupID.String(), model.MatchGroupID)
-	assert.Equal(t, txID.String(), model.TransactionID)
+	assert.Equal(t, item.ID, model.ID)
+	assert.Equal(t, item.MatchGroupID, model.MatchGroupID)
+	assert.Equal(t, txID, model.TransactionID)
 	assert.True(t, model.AllocatedAmount.Equal(decimal.NewFromFloat(150.50)))
 	assert.Equal(t, "EUR", model.AllocatedCurrency)
 	assert.True(t, model.ExpectedAmount.Equal(decimal.NewFromFloat(150.50)))
@@ -104,54 +104,6 @@ func TestToEntity_NilModel(t *testing.T) {
 	require.ErrorIs(t, err, ErrMatchItemModelNeeded)
 }
 
-func TestToEntity_InvalidID(t *testing.T) {
-	t.Parallel()
-
-	model := &PostgreSQLModel{
-		ID:            "not-a-uuid",
-		MatchGroupID:  uuid.New().String(),
-		TransactionID: uuid.New().String(),
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parse id")
-}
-
-func TestToEntity_InvalidMatchGroupID(t *testing.T) {
-	t.Parallel()
-
-	model := &PostgreSQLModel{
-		ID:            uuid.New().String(),
-		MatchGroupID:  "invalid",
-		TransactionID: uuid.New().String(),
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parse match group id")
-}
-
-func TestToEntity_InvalidTransactionID(t *testing.T) {
-	t.Parallel()
-
-	model := &PostgreSQLModel{
-		ID:            uuid.New().String(),
-		MatchGroupID:  uuid.New().String(),
-		TransactionID: "invalid",
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parse transaction id")
-}
-
 func TestToEntity_Success(t *testing.T) {
 	t.Parallel()
 
@@ -161,9 +113,9 @@ func TestToEntity_Success(t *testing.T) {
 	txID := uuid.New()
 
 	model := &PostgreSQLModel{
-		ID:                id.String(),
-		MatchGroupID:      groupID.String(),
-		TransactionID:     txID.String(),
+		ID:                id,
+		MatchGroupID:      groupID,
+		TransactionID:     txID,
 		AllocatedAmount:   decimal.NewFromFloat(200.00),
 		AllocatedCurrency: "USD",
 		ExpectedAmount:    decimal.NewFromFloat(200.00),

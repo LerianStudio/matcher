@@ -115,46 +115,12 @@ func TestToEntity_NilModel(t *testing.T) {
 	require.ErrorIs(t, err, ErrSourceModelRequired)
 }
 
-func TestToEntity_InvalidID(t *testing.T) {
-	t.Parallel()
-
-	model := &SourcePostgreSQLModel{
-		ID:        "not-a-uuid",
-		ContextID: uuid.New().String(),
-		Type:      "LEDGER",
-		Config:    []byte(`{}`),
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parse ID")
-}
-
-func TestToEntity_InvalidContextID(t *testing.T) {
-	t.Parallel()
-
-	model := &SourcePostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: "invalid",
-		Type:      "LEDGER",
-		Config:    []byte(`{}`),
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parse context ID")
-}
-
 func TestToEntity_InvalidType(t *testing.T) {
 	t.Parallel()
 
 	model := &SourcePostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
 		Type:      "INVALID_TYPE",
 		Config:    []byte(`{}`),
 	}
@@ -170,8 +136,8 @@ func TestToEntity_InvalidConfig(t *testing.T) {
 	t.Parallel()
 
 	model := &SourcePostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
 		Type:      "LEDGER",
 		Config:    []byte(`{invalid json}`),
 	}
@@ -188,8 +154,8 @@ func TestToEntity_EmptyConfig(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &SourcePostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
 		Name:      "Test",
 		Type:      "GATEWAY",
 		Config:    []byte{},
@@ -210,8 +176,8 @@ func TestToEntity_NilConfig(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &SourcePostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
 		Name:      "Test",
 		Type:      "CUSTOM",
 		Config:    nil,
@@ -232,8 +198,8 @@ func TestToEntity_ValidWithConfig(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &SourcePostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
 		Name:      "Test Source",
 		Type:      "BANK",
 		Config:    []byte(`{"key":"value","number":42}`),
@@ -338,8 +304,8 @@ func TestToEntity_ConfigWithNullValue(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &SourcePostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
 		Name:      "Test",
 		Type:      "LEDGER",
 		Config:    []byte(`{"key":null,"nested":{"value":null}}`),
@@ -359,8 +325,8 @@ func TestToEntity_ConfigWithArrayOfObjects(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &SourcePostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
 		Name:      "Test",
 		Type:      "GATEWAY",
 		Config:    []byte(`{"items":[{"id":1,"name":"first"},{"id":2,"name":"second"}]}`),

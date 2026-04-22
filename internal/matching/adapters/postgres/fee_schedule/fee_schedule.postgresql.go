@@ -151,7 +151,7 @@ func (repo *Repository) GetByID(ctx context.Context, id uuid.UUID) (*fee.FeeSche
 				return nil, err
 			}
 
-			items, err := queryItems(ctx, tx, model.ID)
+			items, err := queryItems(ctx, tx, model.ID.String())
 			if err != nil {
 				return nil, err
 			}
@@ -395,7 +395,7 @@ func (repo *Repository) List(ctx context.Context, limit int) ([]*fee.FeeSchedule
 
 			ids := make([]string, 0, len(models))
 			for _, m := range models {
-				ids = append(ids, m.ID)
+				ids = append(ids, m.ID.String())
 			}
 
 			groupedItems, itemsErr := queryItemsForSchedules(ctx, tx, ids)
@@ -406,7 +406,7 @@ func (repo *Repository) List(ctx context.Context, limit int) ([]*fee.FeeSchedule
 			schedules := make([]*fee.FeeSchedule, 0, len(models))
 
 			for _, model := range models {
-				entity, convErr := ToEntity(model, groupedItems[model.ID])
+				entity, convErr := ToEntity(model, groupedItems[model.ID.String()])
 				if convErr != nil {
 					return nil, convErr
 				}
@@ -479,7 +479,7 @@ func (repo *Repository) GetByIDs(ctx context.Context, ids []uuid.UUID) (map[uuid
 
 			modelIDs := make([]string, 0, len(models))
 			for _, m := range models {
-				modelIDs = append(modelIDs, m.ID)
+				modelIDs = append(modelIDs, m.ID.String())
 			}
 
 			groupedItems, itemsErr := queryItemsForSchedules(ctx, tx, modelIDs)
@@ -490,7 +490,7 @@ func (repo *Repository) GetByIDs(ctx context.Context, ids []uuid.UUID) (map[uuid
 			scheduleMap := make(map[uuid.UUID]*fee.FeeSchedule, len(models))
 
 			for _, model := range models {
-				entity, convErr := ToEntity(model, groupedItems[model.ID])
+				entity, convErr := ToEntity(model, groupedItems[model.ID.String()])
 				if convErr != nil {
 					return nil, convErr
 				}
@@ -632,7 +632,8 @@ func queryItemsForSchedules(ctx context.Context, tx *sql.Tx, scheduleIDs []strin
 			return nil, fmt.Errorf("scan fee schedule item: %w", err)
 		}
 
-		grouped[item.FeeScheduleID] = append(grouped[item.FeeScheduleID], item)
+		key := item.FeeScheduleID.String()
+		grouped[key] = append(grouped[key], item)
 	}
 
 	if err := rows.Err(); err != nil {

@@ -863,7 +863,7 @@ func TestScanContext_InvalidID(t *testing.T) {
 	result, err := scanContext(sqlRows)
 	require.Error(t, err)
 	require.Nil(t, result)
-	require.Contains(t, err.Error(), "parsing ID")
+	require.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestScanContext_InvalidType(t *testing.T) {
@@ -1501,7 +1501,7 @@ func TestScanContext_InvalidTenantID(t *testing.T) {
 	result, err := scanContext(sqlRows)
 	require.Error(t, err)
 	require.Nil(t, result)
-	require.Contains(t, err.Error(), "parsing TenantID")
+	require.Contains(t, err.Error(), "invalid UUID")
 }
 
 // setupMockWithReplica creates a test repository with sqlmock including replica for full coverage.

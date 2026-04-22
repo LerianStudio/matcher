@@ -104,9 +104,9 @@ func TestNewJobPostgreSQLModel_Success(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, model)
-	assert.Equal(t, jobID.String(), model.ID)
-	assert.Equal(t, contextID.String(), model.ContextID)
-	assert.Equal(t, sourceID.String(), model.SourceID)
+	assert.Equal(t, jobID, model.ID)
+	assert.Equal(t, contextID, model.ContextID)
+	assert.Equal(t, sourceID, model.SourceID)
 	assert.Equal(t, "COMPLETED", model.Status)
 	assert.Equal(t, now, model.StartedAt)
 	assert.True(t, model.CompletedAt.Valid)
@@ -143,10 +143,7 @@ func TestNewJobPostgreSQLModel_GeneratesIDWhenNil(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, model)
-	require.NotEmpty(t, model.ID)
-	parsedID, err := uuid.Parse(model.ID)
-	require.NoError(t, err)
-	require.NotEqual(t, uuid.Nil, parsedID)
+	require.NotEqual(t, uuid.Nil, model.ID)
 }
 
 func TestNewJobPostgreSQLModel_SetsTimestampsWhenZero(t *testing.T) {
@@ -221,9 +218,9 @@ func TestJobModelToEntity_Success(t *testing.T) {
 	sourceID := uuid.New()
 
 	model := &pgcommon.JobPostgreSQLModel{
-		ID:          jobID.String(),
-		ContextID:   contextID.String(),
-		SourceID:    sourceID.String(),
+		ID:          jobID,
+		ContextID:   contextID,
+		SourceID:    sourceID,
 		Status:      "COMPLETED",
 		StartedAt:   now,
 		CompletedAt: sql.NullTime{Time: now.Add(time.Hour), Valid: true},
@@ -259,64 +256,14 @@ func TestJobModelToEntity_NilModel(t *testing.T) {
 	require.ErrorIs(t, err, errJobModelRequired)
 }
 
-func TestJobModelToEntity_InvalidID(t *testing.T) {
-	t.Parallel()
-
-	model := &pgcommon.JobPostgreSQLModel{
-		ID:        "not-a-uuid",
-		ContextID: uuid.New().String(),
-		SourceID:  uuid.New().String(),
-		Status:    "QUEUED",
-	}
-
-	entity, err := jobModelToEntity(model)
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parsing ID")
-}
-
-func TestJobModelToEntity_InvalidContextID(t *testing.T) {
-	t.Parallel()
-
-	model := &pgcommon.JobPostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: "invalid-context",
-		SourceID:  uuid.New().String(),
-		Status:    "QUEUED",
-	}
-
-	entity, err := jobModelToEntity(model)
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parsing ContextID")
-}
-
-func TestJobModelToEntity_InvalidSourceID(t *testing.T) {
-	t.Parallel()
-
-	model := &pgcommon.JobPostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
-		SourceID:  "invalid-source",
-		Status:    "QUEUED",
-	}
-
-	entity, err := jobModelToEntity(model)
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parsing SourceID")
-}
 
 func TestJobModelToEntity_InvalidStatus(t *testing.T) {
 	t.Parallel()
 
 	model := &pgcommon.JobPostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
-		SourceID:  uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
+		SourceID:  uuid.New(),
 		Status:    "INVALID_STATUS",
 	}
 
@@ -332,9 +279,9 @@ func TestJobModelToEntity_InvalidMetadataJSON(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &pgcommon.JobPostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
-		SourceID:  uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
+		SourceID:  uuid.New(),
 		Status:    "PROCESSING",
 		Metadata:  []byte(`{invalid json}`),
 		StartedAt: now,
@@ -354,9 +301,9 @@ func TestJobModelToEntity_NullCompletedAt(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &pgcommon.JobPostgreSQLModel{
-		ID:          uuid.New().String(),
-		ContextID:   uuid.New().String(),
-		SourceID:    uuid.New().String(),
+		ID:          uuid.New(),
+		ContextID:   uuid.New(),
+		SourceID:    uuid.New(),
 		Status:      "PROCESSING",
 		StartedAt:   now,
 		CompletedAt: sql.NullTime{Valid: false},
@@ -376,9 +323,9 @@ func TestJobModelToEntity_EmptyMetadata(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &pgcommon.JobPostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
-		SourceID:  uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
+		SourceID:  uuid.New(),
 		Status:    "QUEUED",
 		StartedAt: now,
 		Metadata:  nil,

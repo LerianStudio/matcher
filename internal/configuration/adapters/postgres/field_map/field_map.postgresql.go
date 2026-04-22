@@ -551,14 +551,9 @@ func (repo *Repository) existsBySourceIDsBatch(
 	}()
 
 	for rows.Next() {
-		var sourceIDStr string
-		if err := rows.Scan(&sourceIDStr); err != nil {
+		var sourceID uuid.UUID
+		if err := rows.Scan(&sourceID); err != nil {
 			return err
-		}
-
-		sourceID, err := uuid.Parse(sourceIDStr)
-		if err != nil {
-			return fmt.Errorf("failed to parse source ID: %w", err)
 		}
 
 		existsMap[sourceID] = true

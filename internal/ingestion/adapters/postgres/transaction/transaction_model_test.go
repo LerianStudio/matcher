@@ -32,7 +32,7 @@ func TestNewTransactionPostgreSQLModelAndToEntity(t *testing.T) {
 
 	model, err := NewTransactionPostgreSQLModel(tx)
 	require.NoError(t, err)
-	require.Equal(t, tx.ID.String(), model.ID)
+	require.Equal(t, tx.ID, model.ID)
 
 	entity, err := transactionModelToEntity(model)
 	require.NoError(t, err)

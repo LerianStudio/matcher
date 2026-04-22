@@ -831,7 +831,7 @@ func TestScanSchedule_InvalidID(t *testing.T) {
 	result, err := scanSchedule(sqlRows)
 	require.Error(t, err)
 	require.Nil(t, result)
-	require.Contains(t, err.Error(), "parsing ID")
+	require.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestScanSchedule_InvalidContextID(t *testing.T) {
@@ -862,7 +862,7 @@ func TestScanSchedule_InvalidContextID(t *testing.T) {
 	result, err := scanSchedule(sqlRows)
 	require.Error(t, err)
 	require.Nil(t, result)
-	require.Contains(t, err.Error(), "parsing ContextID")
+	require.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestScanDueSchedule_ValidRow(t *testing.T) {
@@ -935,5 +935,5 @@ func TestScanDueSchedule_InvalidTenantID(t *testing.T) {
 	result, scanErr := scanDueSchedule(sqlRows)
 	require.Error(t, scanErr)
 	require.Nil(t, result)
-	require.Contains(t, scanErr.Error(), "parsing TenantID")
+	require.Contains(t, scanErr.Error(), "invalid UUID")
 }

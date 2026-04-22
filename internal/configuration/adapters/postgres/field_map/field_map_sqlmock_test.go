@@ -1196,7 +1196,7 @@ func TestScanFieldMap_InvalidUUID(t *testing.T) {
 
 	require.Error(t, err)
 	require.Nil(t, result)
-	assert.Contains(t, err.Error(), "parsing ID")
+	assert.Contains(t, err.Error(), "invalid UUID")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -1383,5 +1383,5 @@ func TestExistsBySourceIDsBatch_ScanError(t *testing.T) {
 
 	require.Error(t, err)
 	require.Nil(t, result)
-	assert.Contains(t, err.Error(), "parse source ID")
+	assert.Contains(t, err.Error(), "invalid UUID")
 }

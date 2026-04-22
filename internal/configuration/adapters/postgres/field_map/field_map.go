@@ -13,9 +13,9 @@ import (
 
 // FieldMapPostgreSQLModel represents the database model for field maps.
 type FieldMapPostgreSQLModel struct {
-	ID        string
-	ContextID string
-	SourceID  string
+	ID        uuid.UUID
+	ContextID uuid.UUID
+	SourceID  uuid.UUID
 	Mapping   []byte
 	Version   int
 	CreatedAt time.Time
@@ -49,9 +49,9 @@ func NewFieldMapPostgreSQLModel(entity *shared.FieldMap) (*FieldMapPostgreSQLMod
 	}
 
 	return &FieldMapPostgreSQLModel{
-		ID:        entity.ID.String(),
-		ContextID: entity.ContextID.String(),
-		SourceID:  entity.SourceID.String(),
+		ID:        entity.ID,
+		ContextID: entity.ContextID,
+		SourceID:  entity.SourceID,
 		Mapping:   mappingJSON,
 		Version:   entity.Version,
 		CreatedAt: createdAt,
@@ -63,21 +63,6 @@ func NewFieldMapPostgreSQLModel(entity *shared.FieldMap) (*FieldMapPostgreSQLMod
 func (model *FieldMapPostgreSQLModel) ToEntity() (*shared.FieldMap, error) {
 	if model == nil {
 		return nil, ErrFieldMapModelRequired
-	}
-
-	id, err := uuid.Parse(model.ID)
-	if err != nil {
-		return nil, fmt.Errorf("parsing ID: %w", err)
-	}
-
-	contextID, err := uuid.Parse(model.ContextID)
-	if err != nil {
-		return nil, fmt.Errorf("parsing ContextID: %w", err)
-	}
-
-	sourceID, err := uuid.Parse(model.SourceID)
-	if err != nil {
-		return nil, fmt.Errorf("parsing SourceID: %w", err)
 	}
 
 	mapping := make(map[string]any)
@@ -92,9 +77,9 @@ func (model *FieldMapPostgreSQLModel) ToEntity() (*shared.FieldMap, error) {
 	}
 
 	return &shared.FieldMap{
-		ID:        id,
-		ContextID: contextID,
-		SourceID:  sourceID,
+		ID:        model.ID,
+		ContextID: model.ContextID,
+		SourceID:  model.SourceID,
 		Mapping:   mapping,
 		Version:   model.Version,
 		CreatedAt: model.CreatedAt,

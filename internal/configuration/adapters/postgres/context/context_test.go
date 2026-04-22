@@ -33,7 +33,7 @@ func TestContextPostgreSQLModelRoundTrip(t *testing.T) {
 
 	model, err := NewContextPostgreSQLModel(ctxEntity)
 	require.NoError(t, err)
-	require.Equal(t, ctxEntity.ID.String(), model.ID)
+	require.Equal(t, ctxEntity.ID, model.ID)
 
 	entity, err := model.ToEntity()
 	require.NoError(t, err)
@@ -113,10 +113,7 @@ func TestNewContextPostgreSQLModel_GeneratesIDWhenNil(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, model)
-	require.NotEmpty(t, model.ID)
-	parsedID, err := uuid.Parse(model.ID)
-	require.NoError(t, err)
-	require.NotEqual(t, uuid.Nil, parsedID)
+	require.NotEqual(t, uuid.Nil, model.ID)
 }
 
 func TestNewContextPostgreSQLModel_WithFeeTolerances(t *testing.T) {
@@ -155,46 +152,12 @@ func TestToEntity_NilModel(t *testing.T) {
 	require.ErrorIs(t, err, ErrContextModelRequired)
 }
 
-func TestToEntity_InvalidID(t *testing.T) {
-	t.Parallel()
-
-	model := &ContextPostgreSQLModel{
-		ID:       "not-a-uuid",
-		TenantID: uuid.New().String(),
-		Type:     "1:1",
-		Status:   "ACTIVE",
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parsing ID")
-}
-
-func TestToEntity_InvalidTenantID(t *testing.T) {
-	t.Parallel()
-
-	model := &ContextPostgreSQLModel{
-		ID:       uuid.New().String(),
-		TenantID: "invalid",
-		Type:     "1:1",
-		Status:   "ACTIVE",
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parsing TenantID")
-}
-
 func TestToEntity_InvalidType(t *testing.T) {
 	t.Parallel()
 
 	model := &ContextPostgreSQLModel{
-		ID:       uuid.New().String(),
-		TenantID: uuid.New().String(),
+		ID:       uuid.New(),
+		TenantID: uuid.New(),
 		Type:     "INVALID_TYPE",
 		Status:   "ACTIVE",
 	}
@@ -210,8 +173,8 @@ func TestToEntity_InvalidStatus(t *testing.T) {
 	t.Parallel()
 
 	model := &ContextPostgreSQLModel{
-		ID:       uuid.New().String(),
-		TenantID: uuid.New().String(),
+		ID:       uuid.New(),
+		TenantID: uuid.New(),
 		Type:     "1:1",
 		Status:   "INVALID_STATUS",
 	}
@@ -227,8 +190,8 @@ func TestToEntity_InvalidFeeToleranceAbs(t *testing.T) {
 	t.Parallel()
 
 	model := &ContextPostgreSQLModel{
-		ID:              uuid.New().String(),
-		TenantID:        uuid.New().String(),
+		ID:              uuid.New(),
+		TenantID:        uuid.New(),
 		Type:            "1:1",
 		Status:          "ACTIVE",
 		FeeToleranceAbs: "not-a-number",
@@ -245,8 +208,8 @@ func TestToEntity_InvalidFeeTolerancePct(t *testing.T) {
 	t.Parallel()
 
 	model := &ContextPostgreSQLModel{
-		ID:              uuid.New().String(),
-		TenantID:        uuid.New().String(),
+		ID:              uuid.New(),
+		TenantID:        uuid.New(),
 		Type:            "1:1",
 		Status:          "ACTIVE",
 		FeeToleranceAbs: "10.5",
@@ -265,8 +228,8 @@ func TestToEntity_InvalidFeeNormalization(t *testing.T) {
 
 	invalidNormalization := "INVALID"
 	model := &ContextPostgreSQLModel{
-		ID:               uuid.New().String(),
-		TenantID:         uuid.New().String(),
+		ID:               uuid.New(),
+		TenantID:         uuid.New(),
 		Type:             "1:1",
 		Status:           "ACTIVE",
 		FeeNormalization: &invalidNormalization,
@@ -284,8 +247,8 @@ func TestToEntity_ValidWithOptionalFields(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &ContextPostgreSQLModel{
-		ID:              uuid.New().String(),
-		TenantID:        uuid.New().String(),
+		ID:              uuid.New(),
+		TenantID:        uuid.New(),
 		Name:            "Test Context",
 		Type:            "1:N",
 		Interval:        "weekly",
@@ -480,8 +443,8 @@ func TestToEntity_EmptyFeeTolerances(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &ContextPostgreSQLModel{
-		ID:              uuid.New().String(),
-		TenantID:        uuid.New().String(),
+		ID:              uuid.New(),
+		TenantID:        uuid.New(),
 		Name:            "Test",
 		Type:            "1:1",
 		Interval:        "daily",

@@ -56,9 +56,9 @@ func NewJobPostgreSQLModel(entity *entities.IngestionJob) (*pgcommon.JobPostgreS
 	}
 
 	return &pgcommon.JobPostgreSQLModel{
-		ID:          id.String(),
-		ContextID:   entity.ContextID.String(),
-		SourceID:    entity.SourceID.String(),
+		ID:          id,
+		ContextID:   entity.ContextID,
+		SourceID:    entity.SourceID,
 		Status:      status.String(),
 		StartedAt:   startedAt,
 		CompletedAt: completedAt,
@@ -71,21 +71,6 @@ func NewJobPostgreSQLModel(entity *entities.IngestionJob) (*pgcommon.JobPostgreS
 func jobModelToEntity(model *pgcommon.JobPostgreSQLModel) (*entities.IngestionJob, error) {
 	if model == nil {
 		return nil, errJobModelRequired
-	}
-
-	id, err := uuid.Parse(model.ID)
-	if err != nil {
-		return nil, fmt.Errorf("parsing ID: %w", err)
-	}
-
-	contextID, err := uuid.Parse(model.ContextID)
-	if err != nil {
-		return nil, fmt.Errorf("parsing ContextID: %w", err)
-	}
-
-	sourceID, err := uuid.Parse(model.SourceID)
-	if err != nil {
-		return nil, fmt.Errorf("parsing SourceID: %w", err)
 	}
 
 	status, err := value_objects.ParseJobStatus(model.Status)
@@ -101,9 +86,9 @@ func jobModelToEntity(model *pgcommon.JobPostgreSQLModel) (*entities.IngestionJo
 	}
 
 	job := &entities.IngestionJob{
-		ID:        id,
-		ContextID: contextID,
-		SourceID:  sourceID,
+		ID:        model.ID,
+		ContextID: model.ContextID,
+		SourceID:  model.SourceID,
 		Status:    status,
 		StartedAt: model.StartedAt,
 		Metadata:  metadata,

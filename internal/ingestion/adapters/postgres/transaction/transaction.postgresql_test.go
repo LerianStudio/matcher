@@ -184,9 +184,9 @@ func TestNewTransactionPostgreSQLModel_Success(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, model)
-	assert.Equal(t, txID.String(), model.ID)
-	assert.Equal(t, jobID.String(), model.IngestionJobID)
-	assert.Equal(t, sourceID.String(), model.SourceID)
+	assert.Equal(t, txID, model.ID)
+	assert.Equal(t, jobID, model.IngestionJobID)
+	assert.Equal(t, sourceID, model.SourceID)
 	assert.Equal(t, "ext-123", model.ExternalID)
 	assert.True(t, model.Amount.Equal(decimal.NewFromFloat(100.00)))
 	assert.Equal(t, "USD", model.Currency)
@@ -238,10 +238,7 @@ func TestNewTransactionPostgreSQLModel_GeneratesIDWhenNil(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, model)
-	require.NotEmpty(t, model.ID)
-	parsedID, err := uuid.Parse(model.ID)
-	require.NoError(t, err)
-	require.NotEqual(t, uuid.Nil, parsedID)
+	require.NotEqual(t, uuid.Nil, model.ID)
 }
 
 func TestNewTransactionPostgreSQLModel_SetsTimestampsWhenZero(t *testing.T) {
@@ -390,9 +387,9 @@ func TestTransactionModelToEntity_Success(t *testing.T) {
 	sourceID := uuid.New()
 
 	model := &pgcommon.TransactionPostgreSQLModel{
-		ID:             txID.String(),
-		IngestionJobID: jobID.String(),
-		SourceID:       sourceID.String(),
+		ID:             txID,
+		IngestionJobID: jobID,
+		SourceID:       sourceID,
 		ExternalID:     "ext-entity-test",
 		Amount:         decimal.NewFromFloat(200.00),
 		Currency:       "EUR",
@@ -448,67 +445,13 @@ func TestTransactionModelToEntity_NilModel(t *testing.T) {
 	require.ErrorIs(t, err, errTxModelRequired)
 }
 
-func TestTransactionModelToEntity_InvalidID(t *testing.T) {
-	t.Parallel()
-
-	model := &pgcommon.TransactionPostgreSQLModel{
-		ID:               "not-a-uuid",
-		IngestionJobID:   uuid.New().String(),
-		SourceID:         uuid.New().String(),
-		ExtractionStatus: "COMPLETE",
-		Status:           "UNMATCHED",
-	}
-
-	entity, err := transactionModelToEntity(model)
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parsing ID")
-}
-
-func TestTransactionModelToEntity_InvalidIngestionJobID(t *testing.T) {
-	t.Parallel()
-
-	model := &pgcommon.TransactionPostgreSQLModel{
-		ID:               uuid.New().String(),
-		IngestionJobID:   "invalid-job-id",
-		SourceID:         uuid.New().String(),
-		ExtractionStatus: "COMPLETE",
-		Status:           "UNMATCHED",
-	}
-
-	entity, err := transactionModelToEntity(model)
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parsing IngestionJobID")
-}
-
-func TestTransactionModelToEntity_InvalidSourceID(t *testing.T) {
-	t.Parallel()
-
-	model := &pgcommon.TransactionPostgreSQLModel{
-		ID:               uuid.New().String(),
-		IngestionJobID:   uuid.New().String(),
-		SourceID:         "invalid-source",
-		ExtractionStatus: "COMPLETE",
-		Status:           "UNMATCHED",
-	}
-
-	entity, err := transactionModelToEntity(model)
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parsing SourceID")
-}
-
 func TestTransactionModelToEntity_InvalidExtractionStatus(t *testing.T) {
 	t.Parallel()
 
 	model := &pgcommon.TransactionPostgreSQLModel{
-		ID:               uuid.New().String(),
-		IngestionJobID:   uuid.New().String(),
-		SourceID:         uuid.New().String(),
+		ID:               uuid.New(),
+		IngestionJobID:   uuid.New(),
+		SourceID:         uuid.New(),
 		ExtractionStatus: "INVALID_EXTRACTION",
 		Status:           "UNMATCHED",
 	}
@@ -524,9 +467,9 @@ func TestTransactionModelToEntity_InvalidTransactionStatus(t *testing.T) {
 	t.Parallel()
 
 	model := &pgcommon.TransactionPostgreSQLModel{
-		ID:               uuid.New().String(),
-		IngestionJobID:   uuid.New().String(),
-		SourceID:         uuid.New().String(),
+		ID:               uuid.New(),
+		IngestionJobID:   uuid.New(),
+		SourceID:         uuid.New(),
 		ExtractionStatus: "COMPLETE",
 		Status:           "BOGUS_STATUS",
 	}
@@ -543,9 +486,9 @@ func TestTransactionModelToEntity_InvalidMetadataJSON(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &pgcommon.TransactionPostgreSQLModel{
-		ID:               uuid.New().String(),
-		IngestionJobID:   uuid.New().String(),
-		SourceID:         uuid.New().String(),
+		ID:               uuid.New(),
+		IngestionJobID:   uuid.New(),
+		SourceID:         uuid.New(),
 		ExternalID:       "ext-bad-json",
 		Amount:           decimal.NewFromFloat(50.00),
 		Currency:         "USD",
@@ -569,9 +512,9 @@ func TestTransactionModelToEntity_NullOptionalFields(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &pgcommon.TransactionPostgreSQLModel{
-		ID:                  uuid.New().String(),
-		IngestionJobID:      uuid.New().String(),
-		SourceID:            uuid.New().String(),
+		ID:                  uuid.New(),
+		IngestionJobID:      uuid.New(),
+		SourceID:            uuid.New(),
 		ExternalID:          "ext-null-opts",
 		Amount:              decimal.NewFromFloat(100.00),
 		Currency:            "USD",
@@ -1935,7 +1878,7 @@ func TestRepository_UpdateStatus_Success(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("UPDATE transactions SET status").
-		WithArgs(shared.TransactionStatusMatched.String(), id.String(), contextID.String()).
+		WithArgs(shared.TransactionStatusMatched.String(), id.String(), contextID).
 		WillReturnRows(sqlmock.NewRows(testTransactionColumns()).AddRow(createTransactionRow(entity)...))
 	mock.ExpectCommit()
 
@@ -1956,7 +1899,7 @@ func TestRepository_UpdateStatus_DBError(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("UPDATE transactions SET status").
-		WithArgs(shared.TransactionStatusMatched.String(), id.String(), contextID.String()).
+		WithArgs(shared.TransactionStatusMatched.String(), id.String(), contextID).
 		WillReturnError(errors.New("db error"))
 	mock.ExpectRollback()
 
@@ -2093,7 +2036,7 @@ func TestRepository_ExistsBulkBySourceAndExternalID_Success(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT t.source_id, t.external_id FROM transactions").
 		WillReturnRows(sqlmock.NewRows([]string{"source_id", "external_id"}).
-			AddRow(sourceID.String(), "ext-1"))
+			AddRow(sourceID, "ext-1"))
 	mock.ExpectCommit()
 
 	result, err := repo.ExistsBulkBySourceAndExternalID(ctx, keys)
@@ -2178,7 +2121,7 @@ func TestRepository_FindBySourceAndExternalID_Success(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT .* FROM transactions WHERE source_id").
-		WithArgs(sourceID.String(), externalID).
+		WithArgs(sourceID, externalID).
 		WillReturnRows(sqlmock.NewRows(testTransactionColumns()).AddRow(createTransactionRow(entity)...))
 	mock.ExpectCommit()
 
@@ -2200,7 +2143,7 @@ func TestRepository_FindBySourceAndExternalID_NotFound(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT .* FROM transactions WHERE source_id").
-		WithArgs(sourceID.String(), externalID).
+		WithArgs(sourceID, externalID).
 		WillReturnError(sql.ErrNoRows)
 	mock.ExpectRollback()
 
@@ -2221,7 +2164,7 @@ func TestRepository_ExistsBySourceAndExternalID_Success(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT EXISTS").
-		WithArgs(sourceID.String(), externalID).
+		WithArgs(sourceID, externalID).
 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectCommit()
 
@@ -2242,7 +2185,7 @@ func TestRepository_ExistsBySourceAndExternalID_NotExists(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT EXISTS").
-		WithArgs(sourceID.String(), externalID).
+		WithArgs(sourceID, externalID).
 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
 	mock.ExpectCommit()
 

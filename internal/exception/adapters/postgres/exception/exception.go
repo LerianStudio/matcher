@@ -25,8 +25,8 @@ type scanner interface {
 
 func scanInto(rowScanner scanner) (*entities.Exception, error) {
 	var (
-		id               string
-		transactionID    string
+		id               uuid.UUID
+		transactionID    uuid.UUID
 		severity         string
 		status           string
 		externalSystem   sql.NullString
@@ -51,16 +51,6 @@ func scanInto(rowScanner scanner) (*entities.Exception, error) {
 		return nil, fmt.Errorf("scan exception row: %w", err)
 	}
 
-	parsedID, err := uuid.Parse(id)
-	if err != nil {
-		return nil, fmt.Errorf("parse exception id: %w", err)
-	}
-
-	parsedTxID, err := uuid.Parse(transactionID)
-	if err != nil {
-		return nil, fmt.Errorf("parse transaction id: %w", err)
-	}
-
 	parsedSeverity, err := sharedexception.ParseExceptionSeverity(severity)
 	if err != nil {
 		return nil, fmt.Errorf("parse severity: %w", err)
@@ -72,8 +62,8 @@ func scanInto(rowScanner scanner) (*entities.Exception, error) {
 	}
 
 	return &entities.Exception{
-		ID:               parsedID,
-		TransactionID:    parsedTxID,
+		ID:               id,
+		TransactionID:    transactionID,
 		Severity:         parsedSeverity,
 		Status:           parsedStatus,
 		ExternalSystem:   pgcommon.NullStringToStringPtr(externalSystem),

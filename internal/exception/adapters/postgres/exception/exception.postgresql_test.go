@@ -1699,7 +1699,7 @@ func TestRepository_FindByID_InvalidExceptionID(t *testing.T) {
 	result, err := repo.FindByID(ctx, exceptionID)
 	require.Error(t, err)
 	require.Nil(t, result)
-	require.Contains(t, err.Error(), "parse exception id")
+	require.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestRepository_FindByID_InvalidTransactionID(t *testing.T) {
@@ -1747,7 +1747,7 @@ func TestRepository_FindByID_InvalidTransactionID(t *testing.T) {
 	result, err := repo.FindByID(ctx, exceptionID)
 	require.Error(t, err)
 	require.Nil(t, result)
-	require.Contains(t, err.Error(), "parse transaction id")
+	require.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestRepository_List_RowsError(t *testing.T) {

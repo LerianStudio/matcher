@@ -204,42 +204,12 @@ func TestToEntityCov_NilModel(t *testing.T) {
 	require.ErrorIs(t, err, ErrMatchRuleModelRequired)
 }
 
-func TestToEntityCov_InvalidID(t *testing.T) {
-	t.Parallel()
-
-	model := &MatchRulePostgreSQLModel{
-		ID:        "not-a-uuid",
-		ContextID: testutil.DeterministicUUID("toentity-invalid-id-context").String(),
-		Type:      "EXACT",
-		Config:    []byte(`{}`),
-	}
-
-	entity, err := model.ToEntity()
-	require.Error(t, err)
-	require.Nil(t, entity)
-}
-
-func TestToEntityCov_InvalidContextID(t *testing.T) {
-	t.Parallel()
-
-	model := &MatchRulePostgreSQLModel{
-		ID:        testutil.DeterministicUUID("toentity-invalid-context-id").String(),
-		ContextID: "not-a-uuid",
-		Type:      "EXACT",
-		Config:    []byte(`{}`),
-	}
-
-	entity, err := model.ToEntity()
-	require.Error(t, err)
-	require.Nil(t, entity)
-}
-
 func TestToEntityCov_InvalidRuleType(t *testing.T) {
 	t.Parallel()
 
 	model := &MatchRulePostgreSQLModel{
-		ID:        testutil.DeterministicUUID("toentity-invalid-type-rule").String(),
-		ContextID: testutil.DeterministicUUID("toentity-invalid-type-context").String(),
+		ID:        testutil.DeterministicUUID("toentity-invalid-type-rule"),
+		ContextID: testutil.DeterministicUUID("toentity-invalid-type-context"),
 		Type:      "INVALID_TYPE",
 		Config:    []byte(`{}`),
 	}
@@ -253,8 +223,8 @@ func TestToEntityCov_InvalidConfig(t *testing.T) {
 	t.Parallel()
 
 	model := &MatchRulePostgreSQLModel{
-		ID:        testutil.DeterministicUUID("toentity-invalid-config-rule").String(),
-		ContextID: testutil.DeterministicUUID("toentity-invalid-config-context").String(),
+		ID:        testutil.DeterministicUUID("toentity-invalid-config-rule"),
+		ContextID: testutil.DeterministicUUID("toentity-invalid-config-context"),
 		Type:      "EXACT",
 		Config:    []byte(`{invalid json`),
 	}
@@ -268,8 +238,8 @@ func TestToEntityCov_EmptyConfig(t *testing.T) {
 	t.Parallel()
 
 	model := &MatchRulePostgreSQLModel{
-		ID:        testutil.DeterministicUUID("toentity-empty-config-rule").String(),
-		ContextID: testutil.DeterministicUUID("toentity-empty-config-context").String(),
+		ID:        testutil.DeterministicUUID("toentity-empty-config-rule"),
+		ContextID: testutil.DeterministicUUID("toentity-empty-config-context"),
 		Type:      "EXACT",
 		Config:    nil,
 	}

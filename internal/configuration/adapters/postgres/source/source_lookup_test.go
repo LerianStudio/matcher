@@ -162,29 +162,7 @@ func TestGetContextIDBySourceID_InvalidContextIDInDB(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Equal(t, uuid.Nil, result)
-	assert.Contains(t, err.Error(), "parse context id")
-}
-
-func TestGetContextIDBySourceID_EmptyContextID(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	repo, mock, cleanup := setupMockWithReplicaForLookup(t)
-	defer cleanup()
-
-	sourceID := uuid.New()
-
-	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT context_id FROM reconciliation_sources WHERE id").
-		WillReturnRows(sqlmock.NewRows([]string{"context_id"}).
-			AddRow(""))
-	mock.ExpectRollback()
-
-	result, err := repo.GetContextIDBySourceID(ctx, sourceID)
-
-	require.Error(t, err)
-	assert.Equal(t, uuid.Nil, result)
-	assert.Contains(t, err.Error(), "parse context id")
+	assert.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestGetContextIDBySourceID_NilUUIDContextID(t *testing.T) {
