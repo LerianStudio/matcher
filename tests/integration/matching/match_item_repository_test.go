@@ -11,7 +11,6 @@ import (
 
 	matchRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/match_rule"
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	jobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
 	txRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/transaction"
 	ingestionEntities "github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
@@ -40,7 +39,7 @@ func TestMatchItemRepository_CreateBatch(t *testing.T) {
 			h.Seed.ContextID,
 			configEntities.CreateMatchRuleInput{
 				Priority: 1,
-				Type:     configVO.RuleTypeExact,
+				Type:     shared.RuleTypeExact,
 				Config:   map[string]any{"matchCurrency": true},
 			},
 		)
@@ -177,7 +176,7 @@ func TestMatchItemRepository_CreateBatch_PartialAllocation(t *testing.T) {
 			h.Seed.ContextID,
 			configEntities.CreateMatchRuleInput{
 				Priority: 1,
-				Type:     configVO.RuleTypeTolerance,
+				Type:     shared.RuleTypeTolerance,
 				Config:   map[string]any{"absTolerance": "0.01"},
 			},
 		)
@@ -304,7 +303,7 @@ func TestMatchItemRepository_CreateBatch_LargeSet(t *testing.T) {
 			h.Seed.ContextID,
 			configEntities.CreateMatchRuleInput{
 				Priority: 1,
-				Type:     configVO.RuleTypeExact,
+				Type:     shared.RuleTypeExact,
 				Config:   map[string]any{"matchCurrency": true},
 			},
 		)

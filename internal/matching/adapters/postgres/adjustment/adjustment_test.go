@@ -4,7 +4,6 @@ package adjustment
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 	"time"
 
@@ -45,10 +44,10 @@ func TestNewPostgreSQLModel(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, model)
 
-		assert.Equal(t, entity.ID.String(), model.ID)
-		assert.Equal(t, entity.ContextID.String(), model.ContextID)
+		assert.Equal(t, entity.ID, model.ID)
+		assert.Equal(t, entity.ContextID, model.ContextID)
 		assert.True(t, model.MatchGroupID.Valid)
-		assert.Equal(t, matchGroupID.String(), model.MatchGroupID.String)
+		assert.Equal(t, matchGroupID, model.MatchGroupID.UUID)
 		assert.False(t, model.TransactionID.Valid)
 		assert.Equal(t, "BANK_FEE", model.Type)
 		assert.True(t, entity.Amount.Equal(model.Amount))
@@ -86,7 +85,7 @@ func TestNewPostgreSQLModel(t *testing.T) {
 
 		assert.False(t, model.MatchGroupID.Valid)
 		assert.True(t, model.TransactionID.Valid)
-		assert.Equal(t, transactionID.String(), model.TransactionID.String)
+		assert.Equal(t, transactionID, model.TransactionID.UUID)
 	})
 
 	t.Run("converts entity with both ids", func(t *testing.T) {
@@ -142,9 +141,9 @@ func TestPostgreSQLModel_ToEntity(t *testing.T) {
 		now := time.Now().UTC()
 
 		model := &PostgreSQLModel{
-			ID:           id.String(),
-			ContextID:    contextID.String(),
-			MatchGroupID: sql.NullString{String: matchGroupID.String(), Valid: true},
+			ID:           id,
+			ContextID:    contextID,
+			MatchGroupID: uuid.NullUUID{UUID: matchGroupID, Valid: true},
 			Type:         "BANK_FEE",
 			Direction:    "DEBIT",
 			Amount:       decimal.NewFromFloat(10.50),
@@ -184,9 +183,9 @@ func TestPostgreSQLModel_ToEntity(t *testing.T) {
 		now := time.Now().UTC()
 
 		model := &PostgreSQLModel{
-			ID:            id.String(),
-			ContextID:     contextID.String(),
-			TransactionID: sql.NullString{String: transactionID.String(), Valid: true},
+			ID:            id,
+			ContextID:     contextID,
+			TransactionID: uuid.NullUUID{UUID: transactionID, Valid: true},
 			Type:          "ROUNDING",
 			Direction:     "DEBIT",
 			Amount:        decimal.NewFromFloat(0.01),
@@ -217,10 +216,10 @@ func TestPostgreSQLModel_ToEntity(t *testing.T) {
 		now := time.Now().UTC()
 
 		model := &PostgreSQLModel{
-			ID:            id.String(),
-			ContextID:     contextID.String(),
-			MatchGroupID:  sql.NullString{String: matchGroupID.String(), Valid: true},
-			TransactionID: sql.NullString{String: transactionID.String(), Valid: true},
+			ID:            id,
+			ContextID:     contextID,
+			MatchGroupID:  uuid.NullUUID{UUID: matchGroupID, Valid: true},
+			TransactionID: uuid.NullUUID{UUID: transactionID, Valid: true},
 			Type:          "FX_DIFFERENCE",
 			Direction:     "DEBIT",
 			Amount:        decimal.NewFromFloat(5.25),
@@ -253,66 +252,6 @@ func TestPostgreSQLModel_ToEntity(t *testing.T) {
 		require.ErrorIs(t, err, ErrAdjustmentModelNeeded)
 	})
 
-	t.Run("returns error for invalid id", func(t *testing.T) {
-		t.Parallel()
-
-		model := &PostgreSQLModel{
-			ID:        "invalid-uuid",
-			ContextID: uuid.New().String(),
-		}
-		entity, err := model.ToEntity()
-		require.Error(t, err)
-		assert.Nil(t, entity)
-		assert.Contains(t, err.Error(), "parse id")
-	})
-
-	t.Run("returns error for invalid context id", func(t *testing.T) {
-		t.Parallel()
-
-		model := &PostgreSQLModel{
-			ID:        uuid.New().String(),
-			ContextID: "invalid-uuid",
-		}
-
-		entity, err := model.ToEntity()
-		require.Error(t, err)
-		assert.Nil(t, entity)
-		assert.Contains(t, err.Error(), "parse context id")
-	})
-
-	t.Run("returns error for invalid match group id", func(t *testing.T) {
-		t.Parallel()
-
-		model := &PostgreSQLModel{
-			ID:           uuid.New().String(),
-			ContextID:    uuid.New().String(),
-			Type:         "BANK_FEE",
-			Direction:    "DEBIT",
-			MatchGroupID: sql.NullString{String: "invalid-uuid", Valid: true},
-		}
-
-		entity, err := model.ToEntity()
-		require.Error(t, err)
-		assert.Nil(t, entity)
-		assert.Contains(t, err.Error(), "parse match group id")
-	})
-
-	t.Run("returns error for invalid transaction id", func(t *testing.T) {
-		t.Parallel()
-
-		model := &PostgreSQLModel{
-			ID:            uuid.New().String(),
-			ContextID:     uuid.New().String(),
-			Type:          "BANK_FEE",
-			Direction:     "DEBIT",
-			TransactionID: sql.NullString{String: "invalid-uuid", Valid: true},
-		}
-
-		entity, err := model.ToEntity()
-		require.Error(t, err)
-		assert.Nil(t, entity)
-		assert.Contains(t, err.Error(), "parse transaction id")
-	})
 }
 
 func TestPostgreSQLModel_RoundTrip(t *testing.T) {

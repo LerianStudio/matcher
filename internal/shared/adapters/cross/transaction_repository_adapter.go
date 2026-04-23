@@ -24,32 +24,10 @@ import (
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
-// BaseTransactionRepository defines the methods required from the base repository.
-// This interface enables mocking for unit tests.
-type BaseTransactionRepository interface {
-	ListUnmatchedByContext(
-		ctx context.Context,
-		contextID uuid.UUID,
-		startInclusive, endInclusive *time.Time,
-		limit, offset int,
-	) ([]*shared.Transaction, error)
-	FindByContextAndIDs(
-		ctx context.Context,
-		contextID uuid.UUID,
-		transactionIDs []uuid.UUID,
-	) ([]*shared.Transaction, error)
-	MarkMatched(ctx context.Context, contextID uuid.UUID, transactionIDs []uuid.UUID) error
-	MarkMatchedWithTx(ctx context.Context, tx *sql.Tx, contextID uuid.UUID, transactionIDs []uuid.UUID) error
-	MarkPendingReview(ctx context.Context, contextID uuid.UUID, transactionIDs []uuid.UUID) error
-	MarkPendingReviewWithTx(ctx context.Context, tx *sql.Tx, contextID uuid.UUID, transactionIDs []uuid.UUID) error
-	MarkUnmatched(ctx context.Context, contextID uuid.UUID, transactionIDs []uuid.UUID) error
-	MarkUnmatchedWithTx(ctx context.Context, tx *sql.Tx, contextID uuid.UUID, transactionIDs []uuid.UUID) error
-}
-
 // TransactionRepositoryAdapter bridges ingestion transactions to matching ports.
 type TransactionRepositoryAdapter struct {
 	provider ports.InfrastructureProvider
-	baseRepo BaseTransactionRepository
+	baseRepo *ingestionTxRepo.Repository
 }
 
 // Sentinel errors for transaction repository adapter.
@@ -127,48 +105,6 @@ func (adapter *TransactionRepositoryAdapter) FindByContextAndIDs(
 	}
 
 	return transactions, nil
-}
-
-// MarkMatched updates transactions as matched within its own transaction.
-func (adapter *TransactionRepositoryAdapter) MarkMatched(
-	ctx context.Context,
-	contextID uuid.UUID,
-	transactionIDs []uuid.UUID,
-) error {
-	if adapter == nil || adapter.baseRepo == nil {
-		return ErrAdapterNotInitialized
-	}
-
-	if contextID == uuid.Nil {
-		return ErrContextIDRequired
-	}
-
-	if err := adapter.baseRepo.MarkMatched(ctx, contextID, transactionIDs); err != nil {
-		return fmt.Errorf("mark matched: %w", err)
-	}
-
-	return nil
-}
-
-// MarkPendingReview updates transactions as pending review within its own transaction.
-func (adapter *TransactionRepositoryAdapter) MarkPendingReview(
-	ctx context.Context,
-	contextID uuid.UUID,
-	transactionIDs []uuid.UUID,
-) error {
-	if adapter == nil || adapter.baseRepo == nil {
-		return ErrAdapterNotInitialized
-	}
-
-	if contextID == uuid.Nil {
-		return ErrContextIDRequired
-	}
-
-	if err := adapter.baseRepo.MarkPendingReview(ctx, contextID, transactionIDs); err != nil {
-		return fmt.Errorf("mark pending review: %w", err)
-	}
-
-	return nil
 }
 
 // MarkMatchedWithTx updates transactions as matched within a provided transaction.
@@ -315,27 +251,6 @@ func (adapter *TransactionRepositoryAdapter) WithTx(
 		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to run transaction wrapper: %v", err))
 
 		return fmt.Errorf("run transaction wrapper: %w", err)
-	}
-
-	return nil
-}
-
-// MarkUnmatched marks transactions as unmatched by their IDs.
-func (adapter *TransactionRepositoryAdapter) MarkUnmatched(
-	ctx context.Context,
-	contextID uuid.UUID,
-	transactionIDs []uuid.UUID,
-) error {
-	if adapter == nil || adapter.baseRepo == nil {
-		return ErrAdapterNotInitialized
-	}
-
-	if contextID == uuid.Nil {
-		return ErrContextIDRequired
-	}
-
-	if err := adapter.baseRepo.MarkUnmatched(ctx, contextID, transactionIDs); err != nil {
-		return fmt.Errorf("mark unmatched: %w", err)
 	}
 
 	return nil

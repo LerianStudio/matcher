@@ -12,10 +12,10 @@ import (
 
 // PostgreSQLModel represents the fee_rules table mapping.
 type PostgreSQLModel struct {
-	ID            string
-	ContextID     string
+	ID            uuid.UUID
+	ContextID     uuid.UUID
 	Side          string
-	FeeScheduleID string
+	FeeScheduleID uuid.UUID
 	Name          string
 	Priority      int
 	Predicates    []byte
@@ -39,10 +39,10 @@ func NewPostgreSQLModel(entity *fee.FeeRule) (*PostgreSQLModel, error) {
 	}
 
 	return &PostgreSQLModel{
-		ID:            entity.ID.String(),
-		ContextID:     entity.ContextID.String(),
+		ID:            entity.ID,
+		ContextID:     entity.ContextID,
 		Side:          string(entity.Side),
-		FeeScheduleID: entity.FeeScheduleID.String(),
+		FeeScheduleID: entity.FeeScheduleID,
 		Name:          entity.Name,
 		Priority:      entity.Priority,
 		Predicates:    predicatesJSON,
@@ -57,21 +57,6 @@ func (model *PostgreSQLModel) ToEntity() (*fee.FeeRule, error) {
 		return nil, ErrFeeRuleModelNeeded
 	}
 
-	id, err := uuid.Parse(model.ID)
-	if err != nil {
-		return nil, fmt.Errorf("parsing ID: %w", err)
-	}
-
-	contextID, err := uuid.Parse(model.ContextID)
-	if err != nil {
-		return nil, fmt.Errorf("parsing ContextID: %w", err)
-	}
-
-	feeScheduleID, err := uuid.Parse(model.FeeScheduleID)
-	if err != nil {
-		return nil, fmt.Errorf("parsing FeeScheduleID: %w", err)
-	}
-
 	var predicates []fee.FieldPredicate
 	if len(model.Predicates) > 0 {
 		if err := json.Unmarshal(model.Predicates, &predicates); err != nil {
@@ -80,10 +65,10 @@ func (model *PostgreSQLModel) ToEntity() (*fee.FeeRule, error) {
 	}
 
 	return &fee.FeeRule{
-		ID:            id,
-		ContextID:     contextID,
+		ID:            model.ID,
+		ContextID:     model.ContextID,
 		Side:          fee.MatchingSide(model.Side),
-		FeeScheduleID: feeScheduleID,
+		FeeScheduleID: model.FeeScheduleID,
 		Name:          model.Name,
 		Priority:      model.Priority,
 		Predicates:    predicates,

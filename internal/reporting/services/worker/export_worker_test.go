@@ -25,7 +25,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 	repomocks "github.com/LerianStudio/matcher/internal/reporting/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query/exports"
-	portsmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
+	storageMocks "github.com/LerianStudio/matcher/internal/shared/objectstorage/mocks"
 )
 
 var (
@@ -114,7 +114,7 @@ func TestNewExportWorker(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 		reportRepo := &mockReportRepoForWorker{}
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := ExportWorkerConfig{}
 		logger := &libLog.NopLogger{}
 
@@ -129,7 +129,7 @@ func TestNewExportWorker(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		reportRepo := &mockReportRepoForWorker{}
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := ExportWorkerConfig{}
 		logger := &libLog.NopLogger{}
 
@@ -145,7 +145,7 @@ func TestNewExportWorker(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := ExportWorkerConfig{}
 		logger := &libLog.NopLogger{}
 
@@ -181,7 +181,7 @@ func TestNewExportWorker(t *testing.T) {
 		cfg := ExportWorkerConfig{}
 		logger := &libLog.NopLogger{}
 
-		var typedNilStorage *portsmocks.MockObjectStorageClient
+		var typedNilStorage *storageMocks.MockBackend
 
 		worker, err := NewExportWorker(jobRepo, reportRepo, typedNilStorage, cfg, logger)
 
@@ -196,7 +196,7 @@ func TestNewExportWorker(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 		reportRepo := &mockReportRepoForWorker{}
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := ExportWorkerConfig{PollInterval: 0}
 		logger := &libLog.NopLogger{}
 
@@ -212,7 +212,7 @@ func TestNewExportWorker(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 		reportRepo := &mockReportRepoForWorker{}
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := ExportWorkerConfig{PageSize: 0}
 		logger := &libLog.NopLogger{}
 
@@ -232,7 +232,7 @@ func TestExportWorker_StartStop(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 		reportRepo := &mockReportRepoForWorker{}
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := ExportWorkerConfig{PollInterval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
@@ -263,7 +263,7 @@ func TestExportWorker_StartStop(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 		reportRepo := &mockReportRepoForWorker{}
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := ExportWorkerConfig{PollInterval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
@@ -293,7 +293,7 @@ func TestExportWorker_StartStop(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 		reportRepo := &mockReportRepoForWorker{}
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := ExportWorkerConfig{PollInterval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
@@ -310,7 +310,7 @@ func TestExportWorker_StartStop(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 		reportRepo := &mockReportRepoForWorker{}
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := ExportWorkerConfig{PollInterval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
@@ -343,7 +343,7 @@ func TestExportWorker_StartStop(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 		reportRepo := &mockReportRepoForWorker{}
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := ExportWorkerConfig{PollInterval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
@@ -367,7 +367,7 @@ func TestNewCleanupWorker(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := CleanupWorkerConfig{}
 		logger := &libLog.NopLogger{}
 
@@ -381,7 +381,7 @@ func TestNewCleanupWorker(t *testing.T) {
 		t.Parallel()
 
 		ctrl := gomock.NewController(t)
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := CleanupWorkerConfig{}
 		logger := &libLog.NopLogger{}
 
@@ -412,7 +412,7 @@ func TestNewCleanupWorker(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		logger := &libLog.NopLogger{}
 		cfg := CleanupWorkerConfig{Interval: 0}
 		worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
@@ -426,7 +426,7 @@ func TestNewCleanupWorker(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		logger := &libLog.NopLogger{}
 		cfg := CleanupWorkerConfig{BatchSize: 0}
 		worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
@@ -444,7 +444,7 @@ func TestCleanupWorker_StartStop(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := CleanupWorkerConfig{Interval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
@@ -477,7 +477,7 @@ func TestCleanupWorker_StartStop(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := CleanupWorkerConfig{Interval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
@@ -509,7 +509,7 @@ func TestCleanupWorker_StartStop(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := CleanupWorkerConfig{Interval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
@@ -544,7 +544,7 @@ func TestCleanupWorker_StartStop(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := CleanupWorkerConfig{Interval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
@@ -655,7 +655,7 @@ func TestExportWorker_RetryConfig(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 		reportRepo := &mockReportRepoForWorker{}
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := ExportWorkerConfig{}
 		logger := &libLog.NopLogger{}
 
@@ -674,7 +674,7 @@ func TestExportWorker_RetryConfig(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 		reportRepo := &mockReportRepoForWorker{}
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := ExportWorkerConfig{
 			MaxRetries:        5,
 			InitialBackoff:    2 * time.Second,
@@ -699,7 +699,7 @@ func TestExportWorker_CalculateBackoff(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 	reportRepo := &mockReportRepoForWorker{}
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{
 		InitialBackoff:    1 * time.Second,
 		MaxBackoff:        5 * time.Minute,
@@ -763,7 +763,7 @@ func TestExportWorker_GetExtension(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 	reportRepo := &mockReportRepoForWorker{}
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{}
 	logger := &libLog.NopLogger{}
 
@@ -818,7 +818,7 @@ func TestExportWorker_GetContentType(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 	reportRepo := &mockReportRepoForWorker{}
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{}
 	logger := &libLog.NopLogger{}
 
@@ -873,7 +873,7 @@ func TestExportWorker_GenerateFileKey(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 	reportRepo := &mockReportRepoForWorker{}
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{}
 	logger := &libLog.NopLogger{}
 
@@ -941,7 +941,7 @@ func TestExportWorker_DefaultTempDir(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 	reportRepo := &mockReportRepoForWorker{}
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{TempDir: ""}
 	logger := &libLog.NopLogger{}
 
@@ -978,7 +978,7 @@ func TestExportWorker_NegativeConfigValues(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 	reportRepo := &mockReportRepoForWorker{}
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{
 		PollInterval:      -1 * time.Second,
 		PageSize:          -100,
@@ -1006,7 +1006,7 @@ func TestExportWorker_WithNilLogger(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 	reportRepo := &mockReportRepoForWorker{}
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{}
 
 	worker, err := NewExportWorker(jobRepo, reportRepo, storage, cfg, nil)
@@ -1022,7 +1022,7 @@ func TestExportWorker_ContextCancellation(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 	reportRepo := &mockReportRepoForWorker{}
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{
 		PollInterval: 1 * time.Hour,
 	}
@@ -1052,7 +1052,7 @@ func TestExportWorker_PollAndProcess_ClaimError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 	reportRepo := &mockReportRepoForWorker{}
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{
 		PollInterval: 50 * time.Millisecond,
 	}
@@ -1088,7 +1088,7 @@ func TestExportWorker_PollAndProcess_NilJob(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 	reportRepo := &mockReportRepoForWorker{}
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{
 		PollInterval: 50 * time.Millisecond,
 	}
@@ -1125,7 +1125,7 @@ func TestExportWorker_StreamExport_UnsupportedReportType(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 	reportRepo := &mockReportRepoForWorker{}
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{}
 	logger := &libLog.NopLogger{}
 
@@ -1155,7 +1155,7 @@ func TestExportWorker_StreamMatched_UnsupportedFormat(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 	reportRepo := &mockReportRepoForWorker{}
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{}
 	logger := &libLog.NopLogger{}
 
@@ -1189,7 +1189,7 @@ func TestExportWorker_StreamUnmatched_UnsupportedFormat(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 	reportRepo := &mockReportRepoForWorker{}
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{}
 	logger := &libLog.NopLogger{}
 
@@ -1223,7 +1223,7 @@ func TestExportWorker_StreamVariance_UnsupportedFormat(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 	reportRepo := &mockReportRepoForWorker{}
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{}
 	logger := &libLog.NopLogger{}
 
@@ -1253,7 +1253,7 @@ func TestExportWorker_FailJob_WithRetry(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 	reportRepo := &mockReportRepoForWorker{}
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{
 		MaxRetries:        3,
 		InitialBackoff:    1 * time.Second,
@@ -1292,7 +1292,7 @@ func TestExportWorker_FailJob_MaxRetriesExceeded(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 	reportRepo := &mockReportRepoForWorker{}
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{
 		MaxRetries:        3,
 		InitialBackoff:    1 * time.Second,
@@ -1332,7 +1332,7 @@ func TestExportWorker_RequeueForRetry_FailsToRequeue(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 	reportRepo := &mockReportRepoForWorker{}
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{
 		MaxRetries:        3,
 		InitialBackoff:    1 * time.Second,
@@ -1365,7 +1365,7 @@ func TestExportWorker_HandleRequeueFailure(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 	reportRepo := &mockReportRepoForWorker{}
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{}
 	logger := &libLog.NopLogger{}
 
@@ -1406,7 +1406,7 @@ func TestExportWorker_HandleRequeueFailure_UpdateStatusFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 	reportRepo := &mockReportRepoForWorker{}
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{}
 	logger := &libLog.NopLogger{}
 
@@ -1435,7 +1435,7 @@ func TestExportWorker_StreamMatchedCSV_Success(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100}
 	logger := &libLog.NopLogger{}
 
@@ -1486,7 +1486,7 @@ func TestExportWorker_StreamMatchedCSV_FetchError(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100}
 	logger := &libLog.NopLogger{}
 
@@ -1523,7 +1523,7 @@ func TestExportWorker_StreamMatchedJSON_Success(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100}
 	logger := &libLog.NopLogger{}
 
@@ -1575,7 +1575,7 @@ func TestExportWorker_StreamMatchedXML_Success(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100}
 	logger := &libLog.NopLogger{}
 
@@ -1627,7 +1627,7 @@ func TestExportWorker_StreamUnmatchedCSV_Success(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100}
 	logger := &libLog.NopLogger{}
 
@@ -1678,7 +1678,7 @@ func TestExportWorker_StreamUnmatchedJSON_Success(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100}
 	logger := &libLog.NopLogger{}
 
@@ -1729,7 +1729,7 @@ func TestExportWorker_StreamUnmatchedXML_Success(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100}
 	logger := &libLog.NopLogger{}
 
@@ -1780,7 +1780,7 @@ func TestExportWorker_StreamVarianceCSV_Success(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100}
 	logger := &libLog.NopLogger{}
 
@@ -1828,7 +1828,7 @@ func TestExportWorker_StreamVarianceJSON_Success(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100}
 	logger := &libLog.NopLogger{}
 
@@ -1882,7 +1882,7 @@ func TestExportWorker_StreamVarianceJSON_PaginatesAcrossPages(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 1}
 	logger := &libLog.NopLogger{}
 
@@ -1987,7 +1987,7 @@ func TestExportWorker_StreamVarianceXML_Success(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100}
 	logger := &libLog.NopLogger{}
 
@@ -2051,7 +2051,7 @@ func TestExportWorker_StreamUnmatchedCSV_FetchError(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100}
 	logger := &libLog.NopLogger{}
 
@@ -2088,7 +2088,7 @@ func TestExportWorker_StreamVarianceCSV_FetchError(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100}
 	logger := &libLog.NopLogger{}
 
@@ -2122,7 +2122,7 @@ func TestExportWorker_StreamExport_MatchedCSV(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100}
 	logger := &libLog.NopLogger{}
 
@@ -2168,7 +2168,7 @@ func TestExportWorker_StreamExport_UnmatchedJSON(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100}
 	logger := &libLog.NopLogger{}
 
@@ -2214,7 +2214,7 @@ func TestExportWorker_StreamExport_VarianceXML(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{PageSize: 100}
 	logger := &libLog.NopLogger{}
 
@@ -2262,7 +2262,7 @@ func TestExportWorker_FailJob_RequeueError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 	reportRepo := &mockReportRepoForWorker{}
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{
 		MaxRetries:        3,
 		InitialBackoff:    1 * time.Second,
@@ -2292,7 +2292,7 @@ func TestExportWorker_FailJob_UpdateStatusError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
 	reportRepo := &mockReportRepoForWorker{}
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{
 		MaxRetries:        3,
 		InitialBackoff:    1 * time.Second,

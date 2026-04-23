@@ -16,7 +16,7 @@ import (
 func TestAdjustEntry_NilUseCase(t *testing.T) {
 	t.Parallel()
 
-	var uc *UseCase
+	var uc *ExceptionUseCase
 
 	ctx := context.Background()
 	_, err := uc.AdjustEntry(ctx, AdjustEntryCommand{
@@ -33,7 +33,7 @@ func TestAdjustEntry_NilUseCase(t *testing.T) {
 func TestForceMatch_NilUseCase(t *testing.T) {
 	t.Parallel()
 
-	var uc *UseCase
+	var uc *ExceptionUseCase
 
 	ctx := context.Background()
 	_, err := uc.ForceMatch(ctx, ForceMatchCommand{
@@ -48,7 +48,7 @@ func TestForceMatch_NilUseCase(t *testing.T) {
 func TestOpenDispute_NilUseCase(t *testing.T) {
 	t.Parallel()
 
-	var uc *DisputeUseCase
+	var uc *ExceptionUseCase
 
 	ctx := context.Background()
 	_, err := uc.OpenDispute(ctx, OpenDisputeCommand{
@@ -63,7 +63,7 @@ func TestOpenDispute_NilUseCase(t *testing.T) {
 func TestCloseDispute_NilUseCase(t *testing.T) {
 	t.Parallel()
 
-	var uc *DisputeUseCase
+	var uc *ExceptionUseCase
 
 	ctx := context.Background()
 	_, err := uc.CloseDispute(ctx, CloseDisputeCommand{
@@ -78,7 +78,7 @@ func TestCloseDispute_NilUseCase(t *testing.T) {
 func TestSubmitEvidence_NilUseCase(t *testing.T) {
 	t.Parallel()
 
-	var uc *DisputeUseCase
+	var uc *ExceptionUseCase
 
 	ctx := context.Background()
 	_, err := uc.SubmitEvidence(ctx, SubmitEvidenceCommand{
@@ -92,7 +92,7 @@ func TestSubmitEvidence_NilUseCase(t *testing.T) {
 func TestProcessCallback_NilUseCase(t *testing.T) {
 	t.Parallel()
 
-	var uc *CallbackUseCase
+	var uc *ExceptionUseCase
 
 	ctx := context.Background()
 	err := uc.ProcessCallback(ctx, ProcessCallbackCommand{
@@ -112,24 +112,24 @@ func TestAdjustEntry_PartialNilDependencies(t *testing.T) {
 
 	testCases := []struct {
 		name        string
-		uc          *UseCase
+		uc          *ExceptionUseCase
 		expectedErr error
 	}{
 		{
 			name:        "nil exception repo",
-			uc:          &UseCase{},
+			uc:          &ExceptionUseCase{},
 			expectedErr: ErrNilExceptionRepository,
 		},
 		{
 			name: "nil resolution executor",
-			uc: &UseCase{
+			uc: &ExceptionUseCase{
 				exceptionRepo: &stubExceptionRepo{},
 			},
 			expectedErr: ErrNilResolutionExecutor,
 		},
 		{
 			name: "nil audit publisher",
-			uc: &UseCase{
+			uc: &ExceptionUseCase{
 				exceptionRepo:      &stubExceptionRepo{},
 				resolutionExecutor: &stubResolutionExecutor{},
 			},
@@ -137,7 +137,7 @@ func TestAdjustEntry_PartialNilDependencies(t *testing.T) {
 		},
 		{
 			name: "nil actor extractor",
-			uc: &UseCase{
+			uc: &ExceptionUseCase{
 				exceptionRepo:      &stubExceptionRepo{},
 				resolutionExecutor: &stubResolutionExecutor{},
 				auditPublisher:     &stubAuditPublisher{},
@@ -169,24 +169,24 @@ func TestForceMatch_PartialNilDependencies(t *testing.T) {
 
 	testCases := []struct {
 		name        string
-		uc          *UseCase
+		uc          *ExceptionUseCase
 		expectedErr error
 	}{
 		{
 			name:        "nil exception repo",
-			uc:          &UseCase{},
+			uc:          &ExceptionUseCase{},
 			expectedErr: ErrNilExceptionRepository,
 		},
 		{
 			name: "nil resolution executor",
-			uc: &UseCase{
+			uc: &ExceptionUseCase{
 				exceptionRepo: &stubExceptionRepo{},
 			},
 			expectedErr: ErrNilResolutionExecutor,
 		},
 		{
 			name: "nil audit publisher",
-			uc: &UseCase{
+			uc: &ExceptionUseCase{
 				exceptionRepo:      &stubExceptionRepo{},
 				resolutionExecutor: &stubResolutionExecutor{},
 			},
@@ -194,7 +194,7 @@ func TestForceMatch_PartialNilDependencies(t *testing.T) {
 		},
 		{
 			name: "nil actor extractor",
-			uc: &UseCase{
+			uc: &ExceptionUseCase{
 				exceptionRepo:      &stubExceptionRepo{},
 				resolutionExecutor: &stubResolutionExecutor{},
 				auditPublisher:     &stubAuditPublisher{},
@@ -224,24 +224,24 @@ func TestOpenDispute_PartialNilDependencies(t *testing.T) {
 
 	testCases := []struct {
 		name        string
-		uc          *DisputeUseCase
+		uc          *ExceptionUseCase
 		expectedErr error
 	}{
 		{
 			name:        "nil dispute repo",
-			uc:          &DisputeUseCase{},
+			uc:          &ExceptionUseCase{},
 			expectedErr: ErrNilDisputeRepository,
 		},
 		{
 			name: "nil exception repo",
-			uc: &DisputeUseCase{
+			uc: &ExceptionUseCase{
 				disputeRepo: &stubDisputeRepo{},
 			},
 			expectedErr: ErrNilExceptionRepository,
 		},
 		{
 			name: "nil audit publisher",
-			uc: &DisputeUseCase{
+			uc: &ExceptionUseCase{
 				disputeRepo:   &stubDisputeRepo{},
 				exceptionRepo: &stubExceptionRepo{},
 			},
@@ -249,7 +249,7 @@ func TestOpenDispute_PartialNilDependencies(t *testing.T) {
 		},
 		{
 			name: "nil actor extractor",
-			uc: &DisputeUseCase{
+			uc: &ExceptionUseCase{
 				disputeRepo:    &stubDisputeRepo{},
 				exceptionRepo:  &stubExceptionRepo{},
 				auditPublisher: &stubAuditPublisher{},
@@ -279,24 +279,24 @@ func TestCloseDispute_PartialNilDependencies(t *testing.T) {
 
 	testCases := []struct {
 		name        string
-		uc          *DisputeUseCase
+		uc          *ExceptionUseCase
 		expectedErr error
 	}{
 		{
 			name:        "nil dispute repo",
-			uc:          &DisputeUseCase{},
+			uc:          &ExceptionUseCase{},
 			expectedErr: ErrNilDisputeRepository,
 		},
 		{
 			name: "nil exception repo",
-			uc: &DisputeUseCase{
+			uc: &ExceptionUseCase{
 				disputeRepo: &stubDisputeRepo{},
 			},
 			expectedErr: ErrNilExceptionRepository,
 		},
 		{
 			name: "nil audit publisher",
-			uc: &DisputeUseCase{
+			uc: &ExceptionUseCase{
 				disputeRepo:   &stubDisputeRepo{},
 				exceptionRepo: &stubExceptionRepo{},
 			},
@@ -304,7 +304,7 @@ func TestCloseDispute_PartialNilDependencies(t *testing.T) {
 		},
 		{
 			name: "nil actor extractor",
-			uc: &DisputeUseCase{
+			uc: &ExceptionUseCase{
 				disputeRepo:    &stubDisputeRepo{},
 				exceptionRepo:  &stubExceptionRepo{},
 				auditPublisher: &stubAuditPublisher{},
@@ -334,24 +334,24 @@ func TestSubmitEvidence_PartialNilDependencies(t *testing.T) {
 
 	testCases := []struct {
 		name        string
-		uc          *DisputeUseCase
+		uc          *ExceptionUseCase
 		expectedErr error
 	}{
 		{
 			name:        "nil dispute repo",
-			uc:          &DisputeUseCase{},
+			uc:          &ExceptionUseCase{},
 			expectedErr: ErrNilDisputeRepository,
 		},
 		{
 			name: "nil exception repo",
-			uc: &DisputeUseCase{
+			uc: &ExceptionUseCase{
 				disputeRepo: &stubDisputeRepo{},
 			},
 			expectedErr: ErrNilExceptionRepository,
 		},
 		{
 			name: "nil audit publisher",
-			uc: &DisputeUseCase{
+			uc: &ExceptionUseCase{
 				disputeRepo:   &stubDisputeRepo{},
 				exceptionRepo: &stubExceptionRepo{},
 			},
@@ -359,7 +359,7 @@ func TestSubmitEvidence_PartialNilDependencies(t *testing.T) {
 		},
 		{
 			name: "nil actor extractor",
-			uc: &DisputeUseCase{
+			uc: &ExceptionUseCase{
 				disputeRepo:    &stubDisputeRepo{},
 				exceptionRepo:  &stubExceptionRepo{},
 				auditPublisher: &stubAuditPublisher{},
@@ -388,24 +388,24 @@ func TestProcessCallback_PartialNilDependencies(t *testing.T) {
 
 	testCases := []struct {
 		name        string
-		uc          *CallbackUseCase
+		uc          *ExceptionUseCase
 		expectedErr error
 	}{
 		{
 			name:        "nil idempotency repo",
-			uc:          &CallbackUseCase{},
+			uc:          &ExceptionUseCase{},
 			expectedErr: ErrNilIdempotencyRepository,
 		},
 		{
 			name: "nil exception repo",
-			uc: &CallbackUseCase{
+			uc: &ExceptionUseCase{
 				idempotencyRepo: &stubIdempotencyRepo{},
 			},
 			expectedErr: ErrNilExceptionRepository,
 		},
 		{
 			name: "nil audit publisher",
-			uc: &CallbackUseCase{
+			uc: &ExceptionUseCase{
 				idempotencyRepo: &stubIdempotencyRepo{},
 				exceptionRepo:   &stubExceptionRepo{},
 			},
@@ -413,7 +413,7 @@ func TestProcessCallback_PartialNilDependencies(t *testing.T) {
 		},
 		{
 			name: "nil infra provider",
-			uc: &CallbackUseCase{
+			uc: &ExceptionUseCase{
 				idempotencyRepo: &stubIdempotencyRepo{},
 				exceptionRepo:   &stubExceptionRepo{},
 				auditPublisher:  &stubAuditPublisher{},
@@ -422,7 +422,7 @@ func TestProcessCallback_PartialNilDependencies(t *testing.T) {
 		},
 		{
 			name: "nil rate limiter",
-			uc: &CallbackUseCase{
+			uc: &ExceptionUseCase{
 				idempotencyRepo: &stubIdempotencyRepo{},
 				exceptionRepo:   &stubExceptionRepo{},
 				auditPublisher:  &stubAuditPublisher{},
@@ -459,27 +459,36 @@ func TestNewUseCase_NilInfraProviderDependency(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst-1")
 
-	uc, err := NewUseCase(repo, exec, audit, actor, nil)
+	uc, err := NewExceptionUseCase(repo, actor, audit, nil, WithResolutionExecutor(exec))
 
 	require.ErrorIs(t, err, ErrNilInfraProvider)
 	require.Nil(t, uc)
 }
 
-// Test all dependency errors are returned correctly.
+// TestNewCallbackUseCase_AllDependenciesNil verifies the first required
+// dependency (exception repo) is validated first, independent of which
+// optional options were supplied. The callback-specific deps (idempotency,
+// rate limiter) are optional at construction time and their nil checks
+// live on ProcessCallback itself.
 func TestNewCallbackUseCase_AllDependenciesNil(t *testing.T) {
 	t.Parallel()
 
-	uc, err := NewCallbackUseCase(nil, nil, nil, nil, nil)
+	uc, err := NewExceptionUseCase(nil, actorExtractor("system"), nil, nil, WithIdempotencyRepository(nil), WithCallbackRateLimiter(nil))
 
-	require.ErrorIs(t, err, ErrNilIdempotencyRepository)
+	require.ErrorIs(t, err, ErrNilExceptionRepository)
 	assert.Nil(t, uc)
 }
 
+// TestNewDisputeUseCase_AllDependenciesNil verifies the first required
+// dependency (exception repo) is validated first, independent of which
+// optional options were supplied. The dispute-specific dep (dispute repo)
+// is optional at construction time and its nil check lives on
+// OpenDispute / CloseDispute / SubmitEvidence themselves.
 func TestNewDisputeUseCase_AllDependenciesNil(t *testing.T) {
 	t.Parallel()
 
-	uc, err := NewDisputeUseCase(nil, nil, nil, nil, nil)
+	uc, err := NewExceptionUseCase(nil, nil, nil, nil, WithDisputeRepository(nil))
 
-	require.ErrorIs(t, err, ErrNilDisputeRepository)
+	require.ErrorIs(t, err, ErrNilExceptionRepository)
 	assert.Nil(t, uc)
 }

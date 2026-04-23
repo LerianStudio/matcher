@@ -5,11 +5,13 @@ package http
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -26,6 +28,8 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
 	"github.com/LerianStudio/matcher/internal/configuration/services/query"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 // errNotImplemented is returned by noop repositories for unimplemented methods.
@@ -73,22 +77,37 @@ func TestConfigRoutes_AuthEnforced(t *testing.T) {
 		return group
 	}
 
+	ctxRepo := &noopContextRepo{}
+	srcRepo := &noopSourceRepo{}
+	mrRepo := &noopMatchRuleRepo{}
+
 	commandUseCase, err := command.NewUseCase(
-		&noopContextRepo{},
-		&noopSourceRepo{},
+		ctxRepo,
+		srcRepo,
 		&noopFieldMapRepo{},
-		&noopMatchRuleRepo{},
+		mrRepo,
 	)
 	require.NoError(t, err)
 	queryUseCase, err := query.NewUseCase(
-		&noopContextRepo{},
-		&noopSourceRepo{},
+		ctxRepo,
+		srcRepo,
 		&noopFieldMapRepo{},
-		&noopMatchRuleRepo{},
+		mrRepo,
 	)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(commandUseCase, queryUseCase, false)
+	handler, err := NewHandler(
+		commandUseCase,
+		queryUseCase,
+		ctxRepo,
+		srcRepo,
+		mrRepo,
+		&noopFieldMapRepo{},
+		&noopFeeRuleRepo{},
+		&noopFeeScheduleRepo{},
+		&noopScheduleRepo{},
+		false,
+	)
 	require.NoError(t, err)
 	err = RegisterRoutes(protected, handler)
 	require.NoError(t, err)
@@ -240,7 +259,7 @@ func (noopContextRepo) FindAll(
 	_ context.Context,
 	_ string,
 	_ int,
-	_ *value_objects.ContextType,
+	_ *shared.ContextType,
 	_ *value_objects.ContextStatus,
 ) ([]*entities.ReconciliationContext, libHTTP.CursorPagination, error) {
 	return nil, libHTTP.CursorPagination{}, errNotImplemented
@@ -307,23 +326,23 @@ func (noopSourceRepo) Delete(_ context.Context, _, _ uuid.UUID) error {
 
 func (noopFieldMapRepo) Create(
 	_ context.Context,
-	_ *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	_ *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	return nil, errNotImplemented
 }
 
-func (noopFieldMapRepo) FindByID(_ context.Context, _ uuid.UUID) (*entities.FieldMap, error) {
+func (noopFieldMapRepo) FindByID(_ context.Context, _ uuid.UUID) (*shared.FieldMap, error) {
 	return nil, errNotImplemented
 }
 
-func (noopFieldMapRepo) FindBySourceID(_ context.Context, _ uuid.UUID) (*entities.FieldMap, error) {
+func (noopFieldMapRepo) FindBySourceID(_ context.Context, _ uuid.UUID) (*shared.FieldMap, error) {
 	return nil, errNotImplemented
 }
 
 func (noopFieldMapRepo) Update(
 	_ context.Context,
-	_ *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	_ *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	return nil, errNotImplemented
 }
 
@@ -361,7 +380,7 @@ func (noopMatchRuleRepo) FindByContextID(
 func (noopMatchRuleRepo) FindByContextIDAndType(
 	_ context.Context,
 	_ uuid.UUID,
-	_ value_objects.RuleType,
+	_ shared.RuleType,
 	_ string,
 	_ int,
 ) (entities.MatchRules, libHTTP.CursorPagination, error) {
@@ -388,5 +407,91 @@ func (noopMatchRuleRepo) Delete(_ context.Context, _, _ uuid.UUID) error {
 }
 
 func (noopMatchRuleRepo) ReorderPriorities(_ context.Context, _ uuid.UUID, _ []uuid.UUID) error {
+	return errNotImplemented
+}
+
+type noopFeeRuleRepo struct{}
+
+func (noopFeeRuleRepo) Create(_ context.Context, _ *fee.FeeRule) error {
+	return errNotImplemented
+}
+
+func (noopFeeRuleRepo) CreateWithTx(_ context.Context, _ *sql.Tx, _ *fee.FeeRule) error {
+	return errNotImplemented
+}
+
+func (noopFeeRuleRepo) FindByID(_ context.Context, _ uuid.UUID) (*fee.FeeRule, error) {
+	return nil, errNotImplemented
+}
+
+func (noopFeeRuleRepo) FindByContextID(_ context.Context, _ uuid.UUID) ([]*fee.FeeRule, error) {
+	return nil, errNotImplemented
+}
+
+func (noopFeeRuleRepo) Update(_ context.Context, _ *fee.FeeRule) error {
+	return errNotImplemented
+}
+
+func (noopFeeRuleRepo) UpdateWithTx(_ context.Context, _ *sql.Tx, _ *fee.FeeRule) error {
+	return errNotImplemented
+}
+
+func (noopFeeRuleRepo) Delete(_ context.Context, _, _ uuid.UUID) error {
+	return errNotImplemented
+}
+
+func (noopFeeRuleRepo) DeleteWithTx(_ context.Context, _ *sql.Tx, _, _ uuid.UUID) error {
+	return errNotImplemented
+}
+
+type noopFeeScheduleRepo struct{}
+
+func (noopFeeScheduleRepo) Create(_ context.Context, s *fee.FeeSchedule) (*fee.FeeSchedule, error) {
+	return s, errNotImplemented
+}
+
+func (noopFeeScheduleRepo) GetByID(_ context.Context, _ uuid.UUID) (*fee.FeeSchedule, error) {
+	return nil, errNotImplemented
+}
+
+func (noopFeeScheduleRepo) GetByIDs(_ context.Context, _ []uuid.UUID) (map[uuid.UUID]*fee.FeeSchedule, error) {
+	return nil, errNotImplemented
+}
+
+func (noopFeeScheduleRepo) Update(_ context.Context, s *fee.FeeSchedule) (*fee.FeeSchedule, error) {
+	return s, errNotImplemented
+}
+
+func (noopFeeScheduleRepo) Delete(_ context.Context, _ uuid.UUID) error {
+	return errNotImplemented
+}
+
+func (noopFeeScheduleRepo) List(_ context.Context, _ int) ([]*fee.FeeSchedule, error) {
+	return nil, errNotImplemented
+}
+
+type noopScheduleRepo struct{}
+
+func (noopScheduleRepo) Create(_ context.Context, s *entities.ReconciliationSchedule) (*entities.ReconciliationSchedule, error) {
+	return s, errNotImplemented
+}
+
+func (noopScheduleRepo) FindByID(_ context.Context, _ uuid.UUID) (*entities.ReconciliationSchedule, error) {
+	return nil, errNotImplemented
+}
+
+func (noopScheduleRepo) FindByContextID(_ context.Context, _ uuid.UUID) ([]*entities.ReconciliationSchedule, error) {
+	return nil, errNotImplemented
+}
+
+func (noopScheduleRepo) FindDueSchedules(_ context.Context, _ time.Time) ([]*entities.ReconciliationSchedule, error) {
+	return nil, errNotImplemented
+}
+
+func (noopScheduleRepo) Update(_ context.Context, s *entities.ReconciliationSchedule) (*entities.ReconciliationSchedule, error) {
+	return s, errNotImplemented
+}
+
+func (noopScheduleRepo) Delete(_ context.Context, _ uuid.UUID) error {
 	return errNotImplemented
 }

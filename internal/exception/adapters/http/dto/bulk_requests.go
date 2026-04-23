@@ -4,7 +4,7 @@ package dto
 // @Description Bulk resolve request payload
 type BulkResolveRequest struct {
 	// Exception IDs to resolve
-	ExceptionIDs []string `json:"exception_ids" validate:"required,min=1,max=100,dive,uuid"`
+	ExceptionIDs []string `json:"exceptionIds" validate:"required,min=1,max=100,dive,uuid"`
 	// Resolution type applied
 	Resolution string `json:"resolution" validate:"required,max=255" example:"ACCEPTED"`
 	// Optional reason for the resolution
@@ -15,7 +15,7 @@ type BulkResolveRequest struct {
 // @Description Bulk assign request payload
 type BulkAssignRequest struct {
 	// Exception IDs to assign
-	ExceptionIDs []string `json:"exception_ids" validate:"required,min=1,max=100,dive,uuid"`
+	ExceptionIDs []string `json:"exceptionIds" validate:"required,min=1,max=100,dive,uuid"`
 	// User to assign exceptions to
 	Assignee string `json:"assignee" validate:"required,max=255" example:"user@example.com"`
 }
@@ -24,9 +24,9 @@ type BulkAssignRequest struct {
 // @Description Bulk dispatch request payload
 type BulkDispatchRequest struct {
 	// Exception IDs to dispatch
-	ExceptionIDs []string `json:"exception_ids" validate:"required,min=1,max=100,dive,uuid"`
+	ExceptionIDs []string `json:"exceptionIds" validate:"required,min=1,max=100,dive,uuid"`
 	// Target system to dispatch to
-	TargetSystem string `json:"target_system" validate:"required,max=255" example:"JIRA"`
+	TargetSystem string `json:"targetSystem" validate:"required,max=255" example:"JIRA"`
 	// Optional queue or team assignment
 	Queue string `json:"queue,omitempty" validate:"omitempty,max=255" example:"RECON-TEAM"`
 }
@@ -46,7 +46,7 @@ type BulkActionResponse struct {
 // @Description Single failure in bulk operation
 type BulkFailure struct {
 	// Exception ID that failed
-	ExceptionID string `json:"exception_id" example:"550e8400-e29b-41d4-a716-446655440000"`
+	ExceptionID string `json:"exceptionId" example:"550e8400-e29b-41d4-a716-446655440000"`
 	// Error description
 	Error string `json:"error" example:"exception not found"`
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
+	reportingRepos "github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query"
 	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
@@ -55,6 +56,8 @@ var (
 	ErrInvalidSortOrder = errors.New("sort_order must be asc or desc")
 	// ErrNilExportUseCase indicates export use case is nil.
 	ErrNilExportUseCase = errors.New("export use case is required")
+	// ErrNilReportRepository indicates report repository is nil.
+	ErrNilReportRepository = errors.New("report repository is required")
 )
 
 // ReconciliationContextInfo contains the context information needed by reporting.
@@ -73,16 +76,22 @@ type contextProvider = sharedPorts.ContextAccessProvider
 type Handlers struct {
 	dashboardUC     *query.DashboardUseCase
 	exportUC        *query.UseCase
+	reportRepo      reportingRepos.ReportRepository
 	contextProvider contextProvider
 	contextVerifier libHTTP.TenantOwnershipVerifier
 	productionMode  bool
 }
 
 // NewHandlers creates a new Handlers instance with the given use cases.
+//
+// reportRepo backs the span-only Get*/Count* handlers directly. The
+// corresponding query UseCase methods were span-only wrappers around
+// the repo — see T-009b handoff for context.
 func NewHandlers(
 	dashboardUC *query.DashboardUseCase,
 	ctxProvider contextProvider,
 	exportUC *query.UseCase,
+	reportRepo reportingRepos.ReportRepository,
 	production bool,
 ) (*Handlers, error) {
 	if dashboardUC == nil {
@@ -97,11 +106,16 @@ func NewHandlers(
 		return nil, ErrNilExportUseCase
 	}
 
+	if reportRepo == nil {
+		return nil, ErrNilReportRepository
+	}
+
 	verifier := NewTenantOwnershipVerifier(ctxProvider)
 
 	return &Handlers{
 		dashboardUC:     dashboardUC,
 		exportUC:        exportUC,
+		reportRepo:      reportRepo,
 		contextProvider: ctxProvider,
 		contextVerifier: verifier,
 		productionMode:  production,
@@ -718,7 +732,7 @@ func (handler *Handlers) CountMatched(fiberCtx *fiber.Ctx) error {
 	return handler.handleCount(
 		fiberCtx,
 		"handler.reporting.count_matched",
-		handler.exportUC.CountMatched,
+		handler.reportRepo.CountMatched,
 	)
 }
 
@@ -746,7 +760,7 @@ func (handler *Handlers) CountTransactions(fiberCtx *fiber.Ctx) error {
 	return handler.handleCount(
 		fiberCtx,
 		"handler.reporting.count_transactions",
-		handler.exportUC.CountTransactions,
+		handler.reportRepo.CountTransactions,
 	)
 }
 
@@ -774,7 +788,7 @@ func (handler *Handlers) CountExceptions(fiberCtx *fiber.Ctx) error {
 	return handler.handleCount(
 		fiberCtx,
 		"handler.reporting.count_exceptions",
-		handler.exportUC.CountExceptions,
+		handler.reportRepo.CountExceptions,
 	)
 }
 
@@ -1098,7 +1112,7 @@ func (handler *Handlers) GetMatchedReport(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
-	items, pagination, err := handler.exportUC.GetMatchedReport(ctx, filter)
+	items, pagination, err := handler.reportRepo.ListMatched(ctx, filter)
 	if err != nil {
 		if errors.Is(err, libHTTP.ErrInvalidCursor) {
 			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
@@ -1166,7 +1180,7 @@ func (handler *Handlers) GetUnmatchedReport(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
-	items, pagination, err := handler.exportUC.GetUnmatchedReport(ctx, filter)
+	items, pagination, err := handler.reportRepo.ListUnmatched(ctx, filter)
 	if err != nil {
 		if errors.Is(err, libHTTP.ErrInvalidCursor) {
 			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
@@ -1231,7 +1245,7 @@ func (handler *Handlers) GetSummaryReport(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
-	summary, err := handler.exportUC.GetSummaryReport(ctx, filter)
+	summary, err := handler.reportRepo.GetSummary(ctx, filter)
 	if err != nil {
 		handler.logSpanError(ctx, span, logger, "failed to get summary report", err)
 
@@ -1292,7 +1306,7 @@ func (handler *Handlers) GetVarianceReport(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
-	rows, pagination, err := handler.exportUC.GetVarianceReport(ctx, filter)
+	rows, pagination, err := handler.reportRepo.GetVarianceReport(ctx, filter)
 	if err != nil {
 		if errors.Is(err, libHTTP.ErrInvalidCursor) {
 			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
@@ -1337,7 +1351,7 @@ func (handler *Handlers) CountUnmatched(fiberCtx *fiber.Ctx) error {
 	return handler.handleCount(
 		fiberCtx,
 		"handler.reporting.count_unmatched",
-		handler.exportUC.CountUnmatched,
+		handler.reportRepo.CountUnmatched,
 	)
 }
 

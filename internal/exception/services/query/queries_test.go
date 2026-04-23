@@ -19,6 +19,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	govEntities "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -176,7 +177,7 @@ func newTestException() *entities.Exception {
 	return &entities.Exception{
 		ID:            uuid.New(),
 		TransactionID: txnID,
-		Severity:      value_objects.ExceptionSeverityHigh,
+		Severity:      sharedexception.ExceptionSeverityHigh,
 		Status:        value_objects.ExceptionStatusOpen,
 		CreatedAt:     time.Now().UTC(),
 		UpdatedAt:     time.Now().UTC(),
@@ -384,7 +385,7 @@ func TestListExceptions_WithFilters(t *testing.T) {
 	t.Parallel()
 
 	status := value_objects.ExceptionStatusOpen
-	severity := value_objects.ExceptionSeverityHigh
+	severity := sharedexception.ExceptionSeverityHigh
 	assignee := "analyst-1"
 
 	exceptions := []*entities.Exception{newTestException()}
@@ -812,7 +813,7 @@ func TestListQuery_WithAllFilters(t *testing.T) {
 	t.Parallel()
 
 	status := value_objects.ExceptionStatusAssigned
-	severity := value_objects.ExceptionSeverityCritical
+	severity := sharedexception.ExceptionSeverityCritical
 	assignee := "team-lead"
 	system := "JIRA"
 	from := time.Now().Add(-24 * time.Hour)

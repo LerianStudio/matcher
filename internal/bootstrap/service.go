@@ -23,7 +23,13 @@ import (
 
 // defaultShutdownGracePeriod is the default time to wait for background workers
 // to finish after requesting stop, before closing infrastructure connections.
-const defaultShutdownGracePeriod = 5 * time.Second
+//
+// Calibrated for Kubernetes readiness probes: a typical readinessProbe runs
+// every 5s with failureThreshold=2, so a pod needs 5s × 2 = 10s of consecutive
+// /readyz=503 responses before K8s stops routing traffic. The 12s grace buys
+// a 2s buffer on top so in-flight requests accepted before the last pre-failure
+// probe finish cleanly. Override via SHUTDOWN_GRACE_PERIOD_SEC.
+const defaultShutdownGracePeriod = 12 * time.Second
 
 // Service is the main application container that orchestrates all components.
 type Service struct {

@@ -13,14 +13,26 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 // --- Constructor tests ---
 
+// TestNewCommentUseCase_NilCommentRepo verifies the method-level
+// validation that now owns the optional-dependency check: the merged
+// constructor no longer rejects a nil comment repository (it is optional),
+// so the caller discovers the missing dependency when invoking AddComment.
 func TestNewCommentUseCase_NilCommentRepo(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewCommentUseCase(nil, nil, nil)
+	uc, err := NewExceptionUseCase(&stubExceptionRepo{}, actorExtractor("a"), &stubAuditPublisher{}, &stubInfraProvider{})
+	require.NoError(t, err)
+	require.NotNil(t, uc)
+
+	_, err = uc.AddComment(context.Background(), AddCommentInput{
+		ExceptionID: uuid.New(),
+		Content:     "test",
+	})
 	require.ErrorIs(t, err, ErrNilCommentRepository)
 }
 
@@ -29,7 +41,7 @@ func TestNewCommentUseCase_NilExceptionRepo(t *testing.T) {
 
 	mockCommentRepo := &mockCommentRepository{}
 
-	_, err := NewCommentUseCase(mockCommentRepo, nil, nil)
+	_, err := NewExceptionUseCase(nil, nil, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(mockCommentRepo))
 	require.ErrorIs(t, err, ErrNilExceptionRepository)
 }
 
@@ -39,7 +51,7 @@ func TestNewCommentUseCase_NilActorExtractor(t *testing.T) {
 	mockCommentRepo := &mockCommentRepository{}
 	mockExceptionRepo := &mockExceptionRepository{}
 
-	_, err := NewCommentUseCase(mockCommentRepo, mockExceptionRepo, nil)
+	_, err := NewExceptionUseCase(mockExceptionRepo, nil, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(mockCommentRepo))
 	require.ErrorIs(t, err, ErrNilActorExtractor)
 }
 
@@ -50,7 +62,7 @@ func TestNewCommentUseCase_Success(t *testing.T) {
 	mockExceptionRepo := &mockExceptionRepository{}
 	mockActor := &mockActorExtractor{}
 
-	uc, err := NewCommentUseCase(mockCommentRepo, mockExceptionRepo, mockActor)
+	uc, err := NewExceptionUseCase(mockExceptionRepo, mockActor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(mockCommentRepo))
 	require.NoError(t, err)
 	assert.NotNil(t, uc)
 }
@@ -75,7 +87,7 @@ func TestAddComment_ResolvedExceptionReturnsError(t *testing.T) {
 	resolvedException := &entities.Exception{
 		ID:              exceptionID,
 		TransactionID:   uuid.New(),
-		Severity:        value_objects.ExceptionSeverityHigh,
+		Severity:        sharedexception.ExceptionSeverityHigh,
 		Status:          value_objects.ExceptionStatusResolved,
 		ResolutionNotes: &resolutionNotes,
 		CreatedAt:       now,
@@ -86,7 +98,7 @@ func TestAddComment_ResolvedExceptionReturnsError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: resolvedException}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewCommentUseCase(commentRepo, exceptionRepo, actor)
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
 	require.NoError(t, err)
 
 	result, err := uc.AddComment(context.Background(), AddCommentInput{
@@ -107,7 +119,7 @@ func TestAddComment_OpenExceptionSucceeds(t *testing.T) {
 	openException := &entities.Exception{
 		ID:            exceptionID,
 		TransactionID: uuid.New(),
-		Severity:      value_objects.ExceptionSeverityMedium,
+		Severity:      sharedexception.ExceptionSeverityMedium,
 		Status:        value_objects.ExceptionStatusOpen,
 		CreatedAt:     now,
 		UpdatedAt:     now,
@@ -117,7 +129,7 @@ func TestAddComment_OpenExceptionSucceeds(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: openException}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewCommentUseCase(commentRepo, exceptionRepo, actor)
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
 	require.NoError(t, err)
 
 	result, err := uc.AddComment(context.Background(), AddCommentInput{
@@ -141,7 +153,7 @@ func TestAddComment_AssignedExceptionSucceeds(t *testing.T) {
 	assignedException := &entities.Exception{
 		ID:            exceptionID,
 		TransactionID: uuid.New(),
-		Severity:      value_objects.ExceptionSeverityLow,
+		Severity:      sharedexception.ExceptionSeverityLow,
 		Status:        value_objects.ExceptionStatusAssigned,
 		AssignedTo:    &assignee,
 		CreatedAt:     now,
@@ -152,7 +164,7 @@ func TestAddComment_AssignedExceptionSucceeds(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: assignedException}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewCommentUseCase(commentRepo, exceptionRepo, actor)
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
 	require.NoError(t, err)
 
 	result, err := uc.AddComment(context.Background(), AddCommentInput{
@@ -171,7 +183,7 @@ func TestAddComment_ExceptionNotFoundReturnsError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{findErr: errTestFind}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewCommentUseCase(commentRepo, exceptionRepo, actor)
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
 	require.NoError(t, err)
 
 	result, err := uc.AddComment(context.Background(), AddCommentInput{
@@ -191,7 +203,7 @@ func TestAddComment_NilExceptionIDReturnsError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewCommentUseCase(commentRepo, exceptionRepo, actor)
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
 	require.NoError(t, err)
 
 	result, err := uc.AddComment(context.Background(), AddCommentInput{
@@ -210,7 +222,7 @@ func TestAddComment_EmptyActorReturnsError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	actor := actorExtractor("")
 
-	uc, err := NewCommentUseCase(commentRepo, exceptionRepo, actor)
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
 	require.NoError(t, err)
 
 	result, err := uc.AddComment(context.Background(), AddCommentInput{
@@ -229,7 +241,7 @@ func TestAddComment_EmptyContentReturnsError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewCommentUseCase(commentRepo, exceptionRepo, actor)
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
 	require.NoError(t, err)
 
 	result, err := uc.AddComment(context.Background(), AddCommentInput{
@@ -263,7 +275,7 @@ func TestDeleteComment_OwnCommentSucceeds(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewCommentUseCase(commentRepo, exceptionRepo, actor)
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
 	require.NoError(t, err)
 
 	err = uc.DeleteComment(context.Background(), exceptionID, commentID)
@@ -291,7 +303,7 @@ func TestDeleteComment_OtherUsersCommentReturnsError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	actor := actorExtractor("different-user@example.com")
 
-	uc, err := NewCommentUseCase(commentRepo, exceptionRepo, actor)
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
 	require.NoError(t, err)
 
 	err = uc.DeleteComment(context.Background(), exceptionID, commentID)
@@ -306,7 +318,7 @@ func TestDeleteComment_CommentNotFoundReturnsError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewCommentUseCase(commentRepo, exceptionRepo, actor)
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
 	require.NoError(t, err)
 
 	err = uc.DeleteComment(context.Background(), uuid.New(), uuid.New())
@@ -322,7 +334,7 @@ func TestDeleteComment_NilCommentIDReturnsError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewCommentUseCase(commentRepo, exceptionRepo, actor)
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
 	require.NoError(t, err)
 
 	err = uc.DeleteComment(context.Background(), uuid.New(), uuid.Nil)
@@ -337,7 +349,7 @@ func TestDeleteComment_EmptyActorReturnsError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	actor := actorExtractor("")
 
-	uc, err := NewCommentUseCase(commentRepo, exceptionRepo, actor)
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
 	require.NoError(t, err)
 
 	err = uc.DeleteComment(context.Background(), uuid.New(), uuid.New())
@@ -368,7 +380,7 @@ func TestDeleteComment_DeleteRepoErrorReturnsError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewCommentUseCase(commentRepo, exceptionRepo, actor)
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
 	require.NoError(t, err)
 
 	err = uc.DeleteComment(context.Background(), exceptionID, commentID)
@@ -403,7 +415,7 @@ func TestDeleteComment_CrossExceptionDeletionRejected(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewCommentUseCase(commentRepo, exceptionRepo, actor)
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
 	require.NoError(t, err)
 
 	err = uc.DeleteComment(context.Background(), victimURLExceptionID, commentID)

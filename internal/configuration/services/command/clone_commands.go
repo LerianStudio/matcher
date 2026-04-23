@@ -15,6 +15,7 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -36,7 +37,7 @@ type (
 		CreateWithTx(ctx context.Context, tx *sql.Tx, entity *entities.ReconciliationSource) (*entities.ReconciliationSource, error)
 	}
 	fieldMapTxCreator interface {
-		CreateWithTx(ctx context.Context, tx *sql.Tx, entity *entities.FieldMap) (*entities.FieldMap, error)
+		CreateWithTx(ctx context.Context, tx *sql.Tx, entity *shared.FieldMap) (*shared.FieldMap, error)
 	}
 	matchRuleTxCreator interface {
 		CreateWithTx(ctx context.Context, tx *sql.Tx, entity *entities.MatchRule) (*entities.MatchRule, error)
@@ -55,7 +56,7 @@ type (
 		ExistsBySourceIDsWithTx(ctx context.Context, tx *sql.Tx, sourceIDs []uuid.UUID) (map[uuid.UUID]bool, error)
 	}
 	fieldMapTxFinder interface {
-		FindBySourceIDWithTx(ctx context.Context, tx *sql.Tx, sourceID uuid.UUID) (*entities.FieldMap, error)
+		FindBySourceIDWithTx(ctx context.Context, tx *sql.Tx, sourceID uuid.UUID) (*shared.FieldMap, error)
 	}
 	matchRuleTxFinder interface {
 		FindByContextIDWithTx(ctx context.Context, tx *sql.Tx, contextID uuid.UUID, cursor string, limit int) (entities.MatchRules, libHTTP.CursorPagination, error)

@@ -21,6 +21,7 @@ import (
 	configSourceRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/source"
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/tests/integration"
@@ -634,21 +635,21 @@ func createMultiRuleFlowTestConfig(
 		"description": "description",
 	}
 
-	ledgerFM, err := configEntities.NewFieldMap(
+	ledgerFM, err := shared.NewFieldMap(
 		ctx,
 		seed.ContextID,
 		seed.SourceID,
-		configEntities.CreateFieldMapInput{Mapping: mapping},
+		shared.CreateFieldMapInput{Mapping: mapping},
 	)
 	require.NoError(t, err)
 	_, err = fmRepo.Create(ctx, ledgerFM)
 	require.NoError(t, err)
 
-	bankFM, err := configEntities.NewFieldMap(
+	bankFM, err := shared.NewFieldMap(
 		ctx,
 		seed.ContextID,
 		createdBankSrc.ID,
-		configEntities.CreateFieldMapInput{Mapping: mapping},
+		shared.CreateFieldMapInput{Mapping: mapping},
 	)
 	require.NoError(t, err)
 	_, err = fmRepo.Create(ctx, bankFM)
@@ -661,7 +662,7 @@ func createMultiRuleFlowTestConfig(
 		seed.ContextID,
 		configEntities.CreateMatchRuleInput{
 			Priority: 1,
-			Type:     configVO.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config: map[string]any{
 				"matchAmount":     true,
 				"matchCurrency":   true,
@@ -687,7 +688,7 @@ func createMultiRuleFlowTestConfig(
 		seed.ContextID,
 		configEntities.CreateMatchRuleInput{
 			Priority: 2,
-			Type:     configVO.RuleTypeTolerance,
+			Type:     shared.RuleTypeTolerance,
 			Config: map[string]any{
 				"matchCurrency":    true,
 				"absTolerance":     "5.00", // Allow up to $5 difference
@@ -850,21 +851,21 @@ func SetupFlowTestConfigWithOptionsGeneric(
 		"description": "description",
 	}
 
-	ledgerFM, err := configEntities.NewFieldMap(
+	ledgerFM, err := shared.NewFieldMap(
 		ctx,
 		contextID,
 		ledgerSourceID,
-		configEntities.CreateFieldMapInput{Mapping: mapping},
+		shared.CreateFieldMapInput{Mapping: mapping},
 	)
 	require.NoError(t, err)
 	_, err = fmRepo.Create(ctx, ledgerFM)
 	require.NoError(t, err)
 
-	bankFM, err := configEntities.NewFieldMap(
+	bankFM, err := shared.NewFieldMap(
 		ctx,
 		contextID,
 		createdBankSrc.ID,
-		configEntities.CreateFieldMapInput{Mapping: mapping},
+		shared.CreateFieldMapInput{Mapping: mapping},
 	)
 	require.NoError(t, err)
 	_, err = fmRepo.Create(ctx, bankFM)
@@ -877,7 +878,7 @@ func SetupFlowTestConfigWithOptionsGeneric(
 
 	rule, err := configEntities.NewMatchRule(ctx, contextID, configEntities.CreateMatchRuleInput{
 		Priority: 1,
-		Type:     configVO.RuleTypeExact,
+		Type:     shared.RuleTypeExact,
 		Config: map[string]any{
 			"matchAmount":     true,
 			"matchCurrency":   true,

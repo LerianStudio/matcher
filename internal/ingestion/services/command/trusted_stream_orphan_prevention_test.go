@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -58,7 +60,7 @@ func TestIngestFromTrustedStream_OrphanPrevention_ShortCircuitsOnRetry(t *testin
 	uc, err := NewUseCase(deps)
 	require.NoError(t, err)
 
-	output, err := uc.IngestFromTrustedStream(ctx, IngestFromTrustedStreamInput{
+	output, err := uc.IngestFromTrustedStream(ctx, sharedPorts.TrustedContentInput{
 		ContextID: contextID,
 		SourceID:  sourceID,
 		Format:    "json",

@@ -12,7 +12,6 @@ import (
 
 	matchRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/match_rule"
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	jobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
 	txRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/transaction"
 	ingestionEntities "github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
@@ -45,7 +44,7 @@ func TestMatchingFlow_CompleteReconciliation(t *testing.T) {
 			h.Seed.ContextID,
 			configEntities.CreateMatchRuleInput{
 				Priority: 1,
-				Type:     configVO.RuleTypeExact,
+				Type:     shared.RuleTypeExact,
 				Config:   map[string]any{"matchCurrency": true, "matchAmount": true},
 			},
 		)
@@ -242,7 +241,7 @@ func TestMatchingFlow_DryRunMode(t *testing.T) {
 			h.Seed.ContextID,
 			configEntities.CreateMatchRuleInput{
 				Priority: 1,
-				Type:     configVO.RuleTypeExact,
+				Type:     shared.RuleTypeExact,
 				Config:   map[string]any{"matchCurrency": true},
 			},
 		)
@@ -405,7 +404,7 @@ func TestMatchingFlow_MultipleRulesWithPriority(t *testing.T) {
 			h.Seed.ContextID,
 			configEntities.CreateMatchRuleInput{
 				Priority: 1,
-				Type:     configVO.RuleTypeExact,
+				Type:     shared.RuleTypeExact,
 				Config:   map[string]any{"matchCurrency": true, "matchAmount": true},
 			},
 		)
@@ -418,7 +417,7 @@ func TestMatchingFlow_MultipleRulesWithPriority(t *testing.T) {
 			h.Seed.ContextID,
 			configEntities.CreateMatchRuleInput{
 				Priority: 2,
-				Type:     configVO.RuleTypeTolerance,
+				Type:     shared.RuleTypeTolerance,
 				Config:   map[string]any{"absTolerance": "5.00"},
 			},
 		)

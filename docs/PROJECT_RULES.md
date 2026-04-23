@@ -410,7 +410,7 @@ All CI uses shared workflows from `LerianStudio/github-actions-shared-workflows`
 - Exports use presigned URLs for secure download.
 - Archive integrity verified with checksums during archival and retrieval.
 - Configuration via `OBJECT_STORAGE_*` and `ARCHIVAL_STORAGE_*` env vars.
-- Functional options pattern via `pkg/storageopt` for operation customization.
+- Functional options pattern via `internal/shared/ports` (`UploadOption`, `WithStorageClass`, `WithServerSideEncryption`) for operation customization.
 
 ## 22. Systemplane (Runtime Configuration)
 

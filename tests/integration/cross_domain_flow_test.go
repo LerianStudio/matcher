@@ -56,7 +56,7 @@ func TestCrossDomainFlow_EndToEndReconciliation(t *testing.T) {
 			h.Seed.TenantID,
 			configEntities.CreateReconciliationContextInput{
 				Name:     "Full E2E Reconciliation Context",
-				Type:     configVO.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "0 0 * * *",
 			},
 		)
@@ -94,11 +94,11 @@ func TestCrossDomainFlow_EndToEndReconciliation(t *testing.T) {
 		require.NoError(t, err)
 		t.Logf("Created sources: ledger=%s, bank=%s", createdLedgerSource.ID, createdBankSource.ID)
 
-		ledgerFieldMap, err := configEntities.NewFieldMap(
+		ledgerFieldMap, err := shared.NewFieldMap(
 			ctx,
 			createdContext.ID,
 			createdLedgerSource.ID,
-			configEntities.CreateFieldMapInput{
+			shared.CreateFieldMapInput{
 				Mapping: map[string]any{
 					"amount":      "transaction_amount",
 					"currency":    "currency_code",
@@ -111,11 +111,11 @@ func TestCrossDomainFlow_EndToEndReconciliation(t *testing.T) {
 		_, err = fmRepo.Create(ctx, ledgerFieldMap)
 		require.NoError(t, err)
 
-		bankFieldMap, err := configEntities.NewFieldMap(
+		bankFieldMap, err := shared.NewFieldMap(
 			ctx,
 			createdContext.ID,
 			createdBankSource.ID,
-			configEntities.CreateFieldMapInput{
+			shared.CreateFieldMapInput{
 				Mapping: map[string]any{
 					"amount":      "amt",
 					"currency":    "curr",
@@ -134,7 +134,7 @@ func TestCrossDomainFlow_EndToEndReconciliation(t *testing.T) {
 			createdContext.ID,
 			configEntities.CreateMatchRuleInput{
 				Priority: 1,
-				Type:     configVO.RuleTypeExact,
+				Type:     shared.RuleTypeExact,
 				Config:   map[string]any{"matchCurrency": true, "matchAmount": true},
 			},
 		)
@@ -147,7 +147,7 @@ func TestCrossDomainFlow_EndToEndReconciliation(t *testing.T) {
 			createdContext.ID,
 			configEntities.CreateMatchRuleInput{
 				Priority: 2,
-				Type:     configVO.RuleTypeTolerance,
+				Type:     shared.RuleTypeTolerance,
 				Config:   map[string]any{"absTolerance": "1.00"},
 			},
 		)
@@ -520,7 +520,7 @@ func TestCrossDomainFlow_MultiTenantIsolation(t *testing.T) {
 			h.Seed.TenantID,
 			configEntities.CreateReconciliationContextInput{
 				Name:     "Tenant 1 Context",
-				Type:     configVO.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "0 0 * * *",
 			},
 		)
@@ -533,7 +533,7 @@ func TestCrossDomainFlow_MultiTenantIsolation(t *testing.T) {
 			h.Seed.TenantID,
 			configEntities.CreateReconciliationContextInput{
 				Name:     "Tenant 2 Context",
-				Type:     configVO.ContextTypeOneToMany,
+				Type:     shared.ContextTypeOneToMany,
 				Interval: "0 */6 * * *",
 			},
 		)

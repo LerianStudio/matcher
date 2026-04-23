@@ -26,6 +26,7 @@ import (
 	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
 	crossAdapters "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 	"github.com/LerianStudio/matcher/internal/shared/adapters/custody"
+	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -121,7 +122,7 @@ type FetcherBridgeDeps struct {
 	// ObjectStorage is the shared object storage client used to persist
 	// custody copies. When nil, the verified-artifact pipeline is
 	// disabled (artifacts cannot be stored anywhere).
-	ObjectStorage sharedPorts.ObjectStorageClient
+	ObjectStorage objectstorage.Backend
 	// Logger is used for bootstrap warnings. Required.
 	Logger libLog.Logger
 }
@@ -170,18 +171,18 @@ func initFetcherBridgeAdapters(
 		return nil, nil
 	}
 
-	intake, err := crossAdapters.NewFetcherBridgeIntakeAdapter(deps.IngestionUseCase)
-	if err != nil {
-		return nil, fmt.Errorf("create fetcher bridge intake adapter: %w", err)
-	}
-
 	linkWriter, err := crossAdapters.NewExtractionLifecycleLinkWriterAdapter(deps.ExtractionRepo)
 	if err != nil {
 		return nil, fmt.Errorf("create extraction lifecycle link writer adapter: %w", err)
 	}
 
+	// T-004 (K-06f): deps.IngestionUseCase satisfies sharedPorts.FetcherBridge
+	// Intake directly via its IngestTrustedContent method. The former
+	// FetcherBridgeIntakeAdapter wrapped the UseCase solely to rename
+	// methods + project a shape-identical outcome struct; both concerns now
+	// live on the UseCase itself.
 	bundle := &FetcherBridgeAdapters{
-		Intake:    intake,
+		Intake:    deps.IngestionUseCase,
 		LinkWrite: linkWriter,
 	}
 
@@ -378,7 +379,7 @@ func newArtifactHTTPClient(cfg *Config) *http.Client {
 // not block the whole service from coming up.
 //
 // T-003 P5 hardening.
-func objectStorageAvailable(ctx context.Context, client sharedPorts.ObjectStorageClient) bool {
+func objectStorageAvailable(ctx context.Context, client objectstorage.Backend) bool {
 	if client == nil {
 		return false
 	}

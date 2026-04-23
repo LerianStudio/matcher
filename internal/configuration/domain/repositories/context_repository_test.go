@@ -14,6 +14,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 func TestContextRepositoryInterfaceCompiles(t *testing.T) {
@@ -67,7 +68,7 @@ func (m *mockContextRepository) FindAll(
 	_ context.Context,
 	_ string,
 	limit int,
-	_ *value_objects.ContextType,
+	_ *shared.ContextType,
 	_ *value_objects.ContextStatus,
 ) ([]*entities.ReconciliationContext, libHTTP.CursorPagination, error) {
 	result := make([]*entities.ReconciliationContext, 0, len(m.contexts))

@@ -836,8 +836,8 @@ func TestConfigWithNullValues(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &MatchRulePostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
 		Priority:  1,
 		Type:      "EXACT",
 		Config:    []byte(`{"nullField":null,"nested":{"nullNested":null}}`),
@@ -914,7 +914,7 @@ func TestScanMatchRule_ScanError(t *testing.T) {
 	defer db.Close()
 
 	rows := sqlmock.NewRows([]string{"id", "context_id", "priority", "type", "config", "created_at", "updated_at"}).
-		AddRow("invalid-uuid", uuid.New().String(), 1, "EXACT", []byte(`{}`), time.Now().UTC(), time.Now().UTC())
+		AddRow("invalid-uuid", uuid.New(), 1, "EXACT", []byte(`{}`), time.Now().UTC(), time.Now().UTC())
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
 	sqlRows, err := db.QueryContext(ctx, "SELECT 1")
@@ -927,7 +927,7 @@ func TestScanMatchRule_ScanError(t *testing.T) {
 	result, err := scanMatchRule(sqlRows)
 	require.Error(t, err)
 	require.Nil(t, result)
-	require.Contains(t, err.Error(), "parse ID")
+	require.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestScanMatchRule_InvalidType(t *testing.T) {
@@ -940,7 +940,7 @@ func TestScanMatchRule_InvalidType(t *testing.T) {
 	defer db.Close()
 
 	rows := sqlmock.NewRows([]string{"id", "context_id", "priority", "type", "config", "created_at", "updated_at"}).
-		AddRow(uuid.New().String(), uuid.New().String(), 1, "INVALID_TYPE", []byte(`{}`), time.Now().UTC(), time.Now().UTC())
+		AddRow(uuid.New(), uuid.New(), 1, "INVALID_TYPE", []byte(`{}`), time.Now().UTC(), time.Now().UTC())
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
 	sqlRows, err := db.QueryContext(ctx, "SELECT 1")
@@ -966,7 +966,7 @@ func TestScanMatchRule_InvalidConfig(t *testing.T) {
 	defer db.Close()
 
 	rows := sqlmock.NewRows([]string{"id", "context_id", "priority", "type", "config", "created_at", "updated_at"}).
-		AddRow(uuid.New().String(), uuid.New().String(), 1, "EXACT", []byte(`{invalid-json`), time.Now().UTC(), time.Now().UTC())
+		AddRow(uuid.New(), uuid.New(), 1, "EXACT", []byte(`{invalid-json`), time.Now().UTC(), time.Now().UTC())
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
 	sqlRows, err := db.QueryContext(ctx, "SELECT 1")
@@ -1061,7 +1061,7 @@ func TestExecuteMatchRulesQuery_ScanError(t *testing.T) {
 	mock.ExpectBegin()
 
 	rows := sqlmock.NewRows([]string{"id", "context_id", "priority", "type", "config", "created_at", "updated_at"}).
-		AddRow("invalid-uuid", uuid.New().String(), 1, "EXACT", []byte(`{}`), time.Now().UTC(), time.Now().UTC())
+		AddRow("invalid-uuid", uuid.New(), 1, "EXACT", []byte(`{}`), time.Now().UTC(), time.Now().UTC())
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
 	tx, err := db.Begin()
@@ -1282,7 +1282,7 @@ func TestExecuteMatchRulesQuery_RowsCloseError(t *testing.T) {
 	mock.ExpectBegin()
 
 	rows := sqlmock.NewRows([]string{"id", "context_id", "priority", "type", "config", "created_at", "updated_at"}).
-		AddRow(uuid.New().String(), uuid.New().String(), 1, "EXACT", []byte(`{}`), time.Now().UTC(), time.Now().UTC()).
+		AddRow(uuid.New(), uuid.New(), 1, "EXACT", []byte(`{}`), time.Now().UTC(), time.Now().UTC()).
 		CloseError(errors.New("close error"))
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -1307,7 +1307,7 @@ func TestExecuteMatchRulesQuery_RowsError(t *testing.T) {
 	mock.ExpectBegin()
 
 	rows := sqlmock.NewRows([]string{"id", "context_id", "priority", "type", "config", "created_at", "updated_at"}).
-		AddRow(uuid.New().String(), uuid.New().String(), 1, "EXACT", []byte(`{}`), time.Now().UTC(), time.Now().UTC()).
+		AddRow(uuid.New(), uuid.New(), 1, "EXACT", []byte(`{}`), time.Now().UTC(), time.Now().UTC()).
 		RowError(0, errors.New("row iteration error"))
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -1452,9 +1452,9 @@ func TestExecuteMatchRulesQuery_MultipleRulesWithDifferentTypes(t *testing.T) {
 	mock.ExpectBegin()
 
 	rows := sqlmock.NewRows([]string{"id", "context_id", "priority", "type", "config", "created_at", "updated_at"}).
-		AddRow(uuid.New().String(), contextID.String(), 1, "EXACT", []byte(`{"field":"amount"}`), now, now).
-		AddRow(uuid.New().String(), contextID.String(), 2, "TOLERANCE", []byte(`{"tolerance":0.01}`), now, now).
-		AddRow(uuid.New().String(), contextID.String(), 3, "DATE_LAG", []byte(`{"maxDays":5}`), now, now)
+		AddRow(uuid.New(), contextID.String(), 1, "EXACT", []byte(`{"field":"amount"}`), now, now).
+		AddRow(uuid.New(), contextID.String(), 2, "TOLERANCE", []byte(`{"tolerance":0.01}`), now, now).
+		AddRow(uuid.New(), contextID.String(), 3, "DATE_LAG", []byte(`{"maxDays":5}`), now, now)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
 	tx, err := db.Begin()
@@ -1823,7 +1823,7 @@ func TestScanMatchRule_InvalidContextID(t *testing.T) {
 	defer db.Close()
 
 	rows := sqlmock.NewRows([]string{"id", "context_id", "priority", "type", "config", "created_at", "updated_at"}).
-		AddRow(uuid.New().String(), "invalid-context-id", 1, "EXACT", []byte(`{}`), time.Now().UTC(), time.Now().UTC())
+		AddRow(uuid.New(), "invalid-context-id", 1, "EXACT", []byte(`{}`), time.Now().UTC(), time.Now().UTC())
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
 	sqlRows, err := db.QueryContext(ctx, "SELECT 1")
@@ -1836,7 +1836,7 @@ func TestScanMatchRule_InvalidContextID(t *testing.T) {
 	result, err := scanMatchRule(sqlRows)
 	require.Error(t, err)
 	require.Nil(t, result)
-	require.Contains(t, err.Error(), "parse context ID")
+	require.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestFetchCursorPriority_VariousPriorityValues(t *testing.T) {
@@ -2554,8 +2554,8 @@ func TestToEntity_WithAllFields(t *testing.T) {
 	updatedAt := time.Date(2024, 8, 20, 14, 45, 30, 0, time.UTC)
 
 	model := &MatchRulePostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
 		Priority:  42,
 		Type:      "TOLERANCE",
 		Config:    []byte(`{"tolerance":0.05,"strict":true,"fields":["amount"]}`),

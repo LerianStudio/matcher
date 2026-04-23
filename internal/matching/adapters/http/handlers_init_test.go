@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	matchingRepositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	"github.com/LerianStudio/matcher/internal/matching/services/command"
 	matchingQuery "github.com/LerianStudio/matcher/internal/matching/services/query"
@@ -23,12 +24,16 @@ func TestNewHandler(t *testing.T) {
 	ctxProv := &stubContextProvider{
 		info: &ports.ReconciliationContextInfo{ID: uuid.New(), Active: true},
 	}
-	queryUC := newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{})
+	runRepo := &stubMatchRunRepo{}
+	groupRepo := &stubMatchGroupRepo{}
+	queryUC := newQueryUseCase(t, runRepo, groupRepo)
 
 	tests := []struct {
 		name           string
 		commandUseCase *command.UseCase
 		queryUseCase   *matchingQuery.UseCase
+		runRepo        matchingRepositories.MatchRunRepository
+		groupRepo      matchingRepositories.MatchGroupRepository
 		ctxProvider    contextProvider
 		expectedErr    error
 	}{
@@ -36,6 +41,8 @@ func TestNewHandler(t *testing.T) {
 			name:           "nil command use case",
 			commandUseCase: nil,
 			queryUseCase:   queryUC,
+			runRepo:        runRepo,
+			groupRepo:      groupRepo,
 			ctxProvider:    ctxProv,
 			expectedErr:    ErrNilCommandUseCase,
 		},
@@ -43,13 +50,35 @@ func TestNewHandler(t *testing.T) {
 			name:           "nil query use case",
 			commandUseCase: &command.UseCase{},
 			queryUseCase:   nil,
+			runRepo:        runRepo,
+			groupRepo:      groupRepo,
 			ctxProvider:    ctxProv,
 			expectedErr:    ErrNilQueryUseCase,
+		},
+		{
+			name:           "nil match run repo",
+			commandUseCase: &command.UseCase{},
+			queryUseCase:   queryUC,
+			runRepo:        nil,
+			groupRepo:      groupRepo,
+			ctxProvider:    ctxProv,
+			expectedErr:    ErrNilMatchRunRepository,
+		},
+		{
+			name:           "nil match group repo",
+			commandUseCase: &command.UseCase{},
+			queryUseCase:   queryUC,
+			runRepo:        runRepo,
+			groupRepo:      nil,
+			ctxProvider:    ctxProv,
+			expectedErr:    ErrNilMatchGroupRepository,
 		},
 		{
 			name:           "nil context provider",
 			commandUseCase: &command.UseCase{},
 			queryUseCase:   queryUC,
+			runRepo:        runRepo,
+			groupRepo:      groupRepo,
 			ctxProvider:    nil,
 			expectedErr:    ErrNilContextProvider,
 		},
@@ -57,6 +86,8 @@ func TestNewHandler(t *testing.T) {
 			name:           "success",
 			commandUseCase: &command.UseCase{},
 			queryUseCase:   queryUC,
+			runRepo:        runRepo,
+			groupRepo:      groupRepo,
 			ctxProvider:    ctxProv,
 			expectedErr:    nil,
 		},
@@ -69,6 +100,8 @@ func TestNewHandler(t *testing.T) {
 			handler, err := NewHandler(
 				tt.commandUseCase,
 				tt.queryUseCase,
+				tt.runRepo,
+				tt.groupRepo,
 				tt.ctxProvider,
 				false,
 			)
@@ -91,9 +124,11 @@ func TestNewHandler_Success_InitializesVerifier(t *testing.T) {
 	ctxProv := &stubContextProvider{
 		info: &ports.ReconciliationContextInfo{ID: uuid.New(), Active: true},
 	}
-	queryUC := newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{})
+	runRepo := &stubMatchRunRepo{}
+	groupRepo := &stubMatchGroupRepo{}
+	queryUC := newQueryUseCase(t, runRepo, groupRepo)
 
-	handler, err := NewHandler(&command.UseCase{}, queryUC, ctxProv, false)
+	handler, err := NewHandler(&command.UseCase{}, queryUC, runRepo, groupRepo, ctxProv, false)
 
 	require.NoError(t, err)
 	require.NotNil(t, handler)
@@ -219,6 +254,8 @@ func TestHandlerSentinelErrors(t *testing.T) {
 		{"ErrNilCommandUseCase", ErrNilCommandUseCase, "command use case is required"},
 		{"ErrNilQueryUseCase", ErrNilQueryUseCase, "query use case is required"},
 		{"ErrNilContextProvider", ErrNilContextProvider, "context provider is required"},
+		{"ErrNilMatchRunRepository", ErrNilMatchRunRepository, "match run repository is required"},
+		{"ErrNilMatchGroupRepository", ErrNilMatchGroupRepository, "match group repository is required"},
 		{"ErrMatchRunResponseNil", ErrMatchRunResponseNil, "match run response is nil"},
 		{"ErrInvalidSortOrder", ErrInvalidSortOrder, "invalid sort_order"},
 		{"ErrInvalidSortBy", ErrInvalidSortBy, "invalid sort_by"},

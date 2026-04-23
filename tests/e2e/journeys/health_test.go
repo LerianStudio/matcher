@@ -29,7 +29,7 @@ func TestHealth_Endpoints(t *testing.T) {
 		})
 
 		t.Run("ready endpoint returns 200", func(t *testing.T) {
-			resp, err := httpClient.Get(cfg.AppBaseURL + "/ready")
+			resp, err := httpClient.Get(cfg.AppBaseURL + "/readyz")
 			require.NoError(t, err)
 			defer resp.Body.Close()
 			require.Equal(t, http.StatusOK, resp.StatusCode)

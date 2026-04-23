@@ -121,14 +121,6 @@ func (m *mockTransactionRepository) ListUnmatchedByContext(
 	return nil, nil
 }
 
-func (m *mockTransactionRepository) MarkMatched(
-	_ context.Context,
-	_ uuid.UUID,
-	_ []uuid.UUID,
-) error {
-	return nil
-}
-
 func (m *mockTransactionRepository) MarkMatchedWithTx(
 	_ context.Context,
 	_ matchingRepositories.Tx,
@@ -138,25 +130,9 @@ func (m *mockTransactionRepository) MarkMatchedWithTx(
 	return nil
 }
 
-func (m *mockTransactionRepository) MarkPendingReview(
-	_ context.Context,
-	_ uuid.UUID,
-	_ []uuid.UUID,
-) error {
-	return nil
-}
-
 func (m *mockTransactionRepository) MarkPendingReviewWithTx(
 	_ context.Context,
 	_ matchingRepositories.Tx,
-	_ uuid.UUID,
-	_ []uuid.UUID,
-) error {
-	return nil
-}
-
-func (m *mockTransactionRepository) MarkUnmatched(
-	_ context.Context,
 	_ uuid.UUID,
 	_ []uuid.UUID,
 ) error {
@@ -471,7 +447,7 @@ func (m *mockFeeScheduleRepo) GetByIDs(
 	return nil, nil
 }
 
-var _ matchingRepositories.FeeScheduleRepository = (*mockFeeScheduleRepo)(nil)
+var _ sharedPorts.FeeScheduleRepository = (*mockFeeScheduleRepo)(nil)
 
 type mockFeeRuleProvider struct{}
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/services"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 func TestExceptionSnapshot_Fields(t *testing.T) {
@@ -25,7 +26,7 @@ func TestExceptionSnapshot_Fields(t *testing.T) {
 	snapshot := ExceptionSnapshot{
 		ID:            id,
 		TransactionID: txID,
-		Severity:      value_objects.ExceptionSeverityHigh,
+		Severity:      sharedexception.ExceptionSeverityHigh,
 		Status:        value_objects.ExceptionStatusOpen,
 		Amount:        decimal.NewFromInt(1000),
 		Currency:      "USD",
@@ -37,7 +38,7 @@ func TestExceptionSnapshot_Fields(t *testing.T) {
 
 	assert.Equal(t, id, snapshot.ID)
 	assert.Equal(t, txID, snapshot.TransactionID)
-	assert.Equal(t, value_objects.ExceptionSeverityHigh, snapshot.Severity)
+	assert.Equal(t, sharedexception.ExceptionSeverityHigh, snapshot.Severity)
 	assert.Equal(t, value_objects.ExceptionStatusOpen, snapshot.Status)
 	assert.True(t, decimal.NewFromInt(1000).Equal(snapshot.Amount))
 	assert.Equal(t, "USD", snapshot.Currency)
@@ -61,11 +62,11 @@ func TestExceptionSnapshot_NilDueAt(t *testing.T) {
 func TestExceptionSnapshot_AllSeverities(t *testing.T) {
 	t.Parallel()
 
-	severities := []value_objects.ExceptionSeverity{
-		value_objects.ExceptionSeverityLow,
-		value_objects.ExceptionSeverityMedium,
-		value_objects.ExceptionSeverityHigh,
-		value_objects.ExceptionSeverityCritical,
+	severities := []sharedexception.ExceptionSeverity{
+		sharedexception.ExceptionSeverityLow,
+		sharedexception.ExceptionSeverityMedium,
+		sharedexception.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityCritical,
 	}
 
 	for _, severity := range severities {
@@ -114,7 +115,7 @@ func TestDispatchContext_Fields(t *testing.T) {
 	snapshot := ExceptionSnapshot{
 		ID:            uuid.New(),
 		TransactionID: uuid.New(),
-		Severity:      value_objects.ExceptionSeverityCritical,
+		Severity:      sharedexception.ExceptionSeverityCritical,
 		Status:        value_objects.ExceptionStatusOpen,
 		Amount:        decimal.NewFromInt(500000),
 		Currency:      "USD",

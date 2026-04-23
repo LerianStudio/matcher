@@ -27,6 +27,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
+	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -76,10 +77,10 @@ var (
 //
 // Both transforms are synchronous with the upload; if upload is
 // streaming, we end up with a streaming SHA and size as a side effect.
-// When the underlying ObjectStorageClient buffers the body, nothing
+// When the underlying object storage backend buffers the body, nothing
 // changes — we still get accurate size + digest.
 type ArtifactCustodyStore struct {
-	storage sharedPorts.ObjectStorageClient
+	storage objectstorage.Backend
 	now     func() time.Time
 }
 
@@ -120,7 +121,7 @@ func WithNowFunc(fn func() time.Time) Option {
 // meaningful default because the bucket, credentials, and TLS posture all
 // live on the storage client.
 func NewArtifactCustodyStore(
-	storage sharedPorts.ObjectStorageClient,
+	storage objectstorage.Backend,
 	opts ...Option,
 ) (*ArtifactCustodyStore, error) {
 	if storage == nil {

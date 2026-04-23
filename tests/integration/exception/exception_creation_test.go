@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	exceptionVO "github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	ingestionJobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	matchingCommand "github.com/LerianStudio/matcher/internal/matching/services/command"
@@ -62,7 +63,7 @@ func TestIntegrationExceptionFromUnmatched(t *testing.T) {
 		require.Equal(t, exceptionVO.ExceptionStatusOpen, exc2.Status)
 		// Per PRD AC-002: MEDIUM requires amount >= 1000 OR age >= 24h
 		// Amount 200.00 EUR is below threshold and age < 24h, so severity is LOW
-		require.Equal(t, exceptionVO.ExceptionSeverityLow, exc2.Severity)
+		require.Equal(t, sharedexception.ExceptionSeverityLow, exc2.Severity)
 
 		exc3, found, err := findExceptionByTransactionID(t, ctx, h.Connection, ledgerTx3.ID)
 		require.NoError(t, err)
@@ -70,7 +71,7 @@ func TestIntegrationExceptionFromUnmatched(t *testing.T) {
 		require.Equal(t, exceptionVO.ExceptionStatusOpen, exc3.Status)
 		// Per PRD AC-002: MEDIUM requires amount >= 1000 OR age >= 24h
 		// Amount 300.00 GBP is below threshold and age < 24h, so severity is LOW
-		require.Equal(t, exceptionVO.ExceptionSeverityLow, exc3.Severity)
+		require.Equal(t, sharedexception.ExceptionSeverityLow, exc3.Severity)
 
 		_, foundMatched, err := findExceptionByTransactionID(t, ctx, h.Connection, ledgerTx1.ID)
 		require.NoError(t, err)
@@ -187,7 +188,7 @@ func TestIntegrationExceptionSeverityBoundaryConditions(t *testing.T) {
 			require.Equal(t, exceptionVO.ExceptionStatusOpen, exc.Status)
 			require.Equal(
 				t,
-				exceptionVO.ExceptionSeverityMedium,
+				sharedexception.ExceptionSeverityMedium,
 				exc.Severity,
 				"amount exactly 1000 should be MEDIUM severity per PRD AC-002",
 			)
@@ -211,7 +212,7 @@ func TestIntegrationExceptionSeverityBoundaryConditions(t *testing.T) {
 			require.Equal(t, exceptionVO.ExceptionStatusOpen, exc.Status)
 			require.Equal(
 				t,
-				exceptionVO.ExceptionSeverityLow,
+				sharedexception.ExceptionSeverityLow,
 				exc.Severity,
 				"amount 999.99 should be LOW severity per PRD AC-002",
 			)
@@ -247,7 +248,7 @@ func TestIntegrationExceptionSeverityBoundaryConditions(t *testing.T) {
 			require.Equal(t, exceptionVO.ExceptionStatusOpen, exc.Status)
 			require.Equal(
 				t,
-				exceptionVO.ExceptionSeverityMedium,
+				sharedexception.ExceptionSeverityMedium,
 				exc.Severity,
 				"transaction aged 24h should be MEDIUM severity per PRD AC-002",
 			)

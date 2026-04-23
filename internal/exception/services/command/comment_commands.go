@@ -13,7 +13,6 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
-	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 )
 
@@ -26,40 +25,23 @@ var (
 	ErrNotCommentAuthor         = errors.New("only the comment author can delete their comment")
 )
 
-// CommentUseCase implements comment operations on exceptions.
-type CommentUseCase struct {
-	commentRepo    repositories.CommentRepository
-	exceptionRepo  repositories.ExceptionRepository
-	actorExtractor interface {
-		GetActor(ctx context.Context) string
-	}
-}
-
-// NewCommentUseCase creates a new CommentUseCase with required dependencies.
-func NewCommentUseCase(
-	commentRepo repositories.CommentRepository,
-	exceptionRepo repositories.ExceptionRepository,
-	actorExtractor interface {
-		GetActor(ctx context.Context) string
-	},
-) (*CommentUseCase, error) {
-	if commentRepo == nil {
-		return nil, ErrNilCommentRepository
+// validateCommentDeps checks the dependencies required by comment
+// operations. Safe on a nil receiver — returns ErrNilCommentRepository so
+// nil-UseCase callers get a deterministic error rather than a panic.
+func (uc *ExceptionUseCase) validateCommentDeps() error {
+	if uc == nil || uc.commentRepo == nil {
+		return ErrNilCommentRepository
 	}
 
-	if exceptionRepo == nil {
-		return nil, ErrNilExceptionRepository
+	if uc.exceptionRepo == nil {
+		return ErrNilExceptionRepository
 	}
 
-	if actorExtractor == nil {
-		return nil, ErrNilActorExtractor
+	if uc.actorExtractor == nil {
+		return ErrNilActorExtractor
 	}
 
-	return &CommentUseCase{
-		commentRepo:    commentRepo,
-		exceptionRepo:  exceptionRepo,
-		actorExtractor: actorExtractor,
-	}, nil
+	return nil
 }
 
 // AddCommentInput contains the input for adding a comment.
@@ -69,10 +51,14 @@ type AddCommentInput struct {
 }
 
 // AddComment adds a comment to an exception.
-func (uc *CommentUseCase) AddComment(
+func (uc *ExceptionUseCase) AddComment(
 	ctx context.Context,
 	input AddCommentInput,
 ) (*entities.ExceptionComment, error) {
+	if err := uc.validateCommentDeps(); err != nil {
+		return nil, err
+	}
+
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 	ctx, span := tracer.Start(ctx, "command.comment.add")
 
@@ -130,10 +116,14 @@ func (uc *CommentUseCase) AddComment(
 // both columns, so a comment that belongs to exception A cannot be deleted
 // by submitting its commentID under exception B's URL. The handler already
 // verifies tenant ownership of the exception before reaching this method.
-func (uc *CommentUseCase) DeleteComment(
+func (uc *ExceptionUseCase) DeleteComment(
 	ctx context.Context,
 	exceptionID, commentID uuid.UUID,
 ) error {
+	if err := uc.validateCommentDeps(); err != nil {
+		return err
+	}
+
 	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled // only tracer needed
 	ctx, span := tracer.Start(ctx, "command.comment.delete")
 

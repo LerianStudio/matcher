@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/services"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	exceptionVO "github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/testutil"
 )
@@ -195,8 +196,8 @@ func TestIntegrationSLARouting_DeterministicOrdering(t *testing.T) {
 func TestIntegrationSLARouting_RoutingDecisions(t *testing.T) {
 	t.Parallel()
 
-	criticalSeverity := exceptionVO.ExceptionSeverityCritical
-	highSeverity := exceptionVO.ExceptionSeverityHigh
+	criticalSeverity := sharedexception.ExceptionSeverityCritical
+	highSeverity := sharedexception.ExceptionSeverityHigh
 
 	testCases := []struct {
 		name           string
@@ -208,7 +209,7 @@ func TestIntegrationSLARouting_RoutingDecisions(t *testing.T) {
 		{
 			name: "critical_severity_routes_to_jira",
 			input: services.RoutingInput{
-				Severity:      exceptionVO.ExceptionSeverityCritical,
+				Severity:      sharedexception.ExceptionSeverityCritical,
 				AmountAbsBase: decimal.NewFromInt(50000),
 				AgeHours:      10,
 			},
@@ -216,8 +217,8 @@ func TestIntegrationSLARouting_RoutingDecisions(t *testing.T) {
 				{
 					Name:     "critical-to-jira",
 					Priority: 1,
-					Severities: []exceptionVO.ExceptionSeverity{
-						exceptionVO.ExceptionSeverityCritical,
+					Severities: []sharedexception.ExceptionSeverity{
+						sharedexception.ExceptionSeverityCritical,
 					},
 					Target: services.RoutingTargetJira,
 					Queue:  "OPS",
@@ -235,7 +236,7 @@ func TestIntegrationSLARouting_RoutingDecisions(t *testing.T) {
 		{
 			name: "high_amount_routes_to_webhook",
 			input: services.RoutingInput{
-				Severity:      exceptionVO.ExceptionSeverityHigh,
+				Severity:      sharedexception.ExceptionSeverityHigh,
 				AmountAbsBase: decimal.NewFromInt(75000),
 				AgeHours:      5,
 			},
@@ -259,7 +260,7 @@ func TestIntegrationSLARouting_RoutingDecisions(t *testing.T) {
 		{
 			name: "severity_override_applied",
 			input: services.RoutingInput{
-				Severity:      exceptionVO.ExceptionSeverityMedium,
+				Severity:      sharedexception.ExceptionSeverityMedium,
 				AmountAbsBase: decimal.NewFromInt(200000),
 				AgeHours:      150,
 			},
@@ -286,7 +287,7 @@ func TestIntegrationSLARouting_RoutingDecisions(t *testing.T) {
 		{
 			name: "priority_ordering",
 			input: services.RoutingInput{
-				Severity:      exceptionVO.ExceptionSeverityHigh,
+				Severity:      sharedexception.ExceptionSeverityHigh,
 				AmountAbsBase: decimal.NewFromInt(20000),
 				AgeHours:      50,
 			},
@@ -294,16 +295,16 @@ func TestIntegrationSLARouting_RoutingDecisions(t *testing.T) {
 				{
 					Name:     "low-priority-webhook",
 					Priority: 10,
-					Severities: []exceptionVO.ExceptionSeverity{
-						exceptionVO.ExceptionSeverityHigh,
+					Severities: []sharedexception.ExceptionSeverity{
+						sharedexception.ExceptionSeverityHigh,
 					},
 					Target: services.RoutingTargetWebhook,
 				},
 				{
 					Name:     "high-priority-jira",
 					Priority: 1,
-					Severities: []exceptionVO.ExceptionSeverity{
-						exceptionVO.ExceptionSeverityHigh,
+					Severities: []sharedexception.ExceptionSeverity{
+						sharedexception.ExceptionSeverityHigh,
 					},
 					Target:           services.RoutingTargetJira,
 					OverrideSeverity: &highSeverity,
@@ -335,7 +336,7 @@ func TestIntegrationSLARouting_NoMatchingRule(t *testing.T) {
 	t.Parallel()
 
 	input := services.RoutingInput{
-		Severity:      exceptionVO.ExceptionSeverityLow,
+		Severity:      sharedexception.ExceptionSeverityLow,
 		AmountAbsBase: decimal.NewFromInt(100),
 		AgeHours:      1,
 	}
@@ -344,7 +345,7 @@ func TestIntegrationSLARouting_NoMatchingRule(t *testing.T) {
 		{
 			Name:       "critical-only",
 			Priority:   1,
-			Severities: []exceptionVO.ExceptionSeverity{exceptionVO.ExceptionSeverityCritical},
+			Severities: []sharedexception.ExceptionSeverity{sharedexception.ExceptionSeverityCritical},
 			Target:     services.RoutingTargetJira,
 		},
 	}
@@ -368,7 +369,7 @@ func TestIntegrationSLARouting_EmptyRules(t *testing.T) {
 	require.ErrorIs(t, err, services.ErrEmptySLARules)
 
 	routingInput := services.RoutingInput{
-		Severity:      exceptionVO.ExceptionSeverityMedium,
+		Severity:      sharedexception.ExceptionSeverityMedium,
 		AmountAbsBase: decimal.NewFromInt(100),
 	}
 

@@ -45,7 +45,7 @@ func TestRunMatchHandler_InvalidPayload(t *testing.T) {
 	}
 	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
+	handler, err := newTestHandler(t, uc, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/contexts/:contextId/run", handler.RunMatch)
@@ -85,7 +85,7 @@ func TestRunMatchHandler_EmptyMode(t *testing.T) {
 	}
 	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
+	handler, err := newTestHandler(t, uc, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/contexts/:contextId/run", handler.RunMatch)
@@ -128,7 +128,7 @@ func TestRunMatchHandler_InvalidMode(t *testing.T) {
 	}
 	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
+	handler, err := newTestHandler(t, uc, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/contexts/:contextId/run", handler.RunMatch)
@@ -169,12 +169,7 @@ func TestRunMatchHandler_ContextNotFound(t *testing.T) {
 	app := newFiberTestApp(ctx)
 
 	ctxProv := &stubContextProvider{info: nil}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/contexts/:contextId/run", handler.RunMatch)
@@ -212,12 +207,7 @@ func TestRunMatchHandler_ContextNotActive(t *testing.T) {
 	ctxProv := &stubContextProvider{
 		info: &ports.ReconciliationContextInfo{ID: contextID, Active: false},
 	}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/contexts/:contextId/run", handler.RunMatch)
@@ -259,12 +249,7 @@ func TestGetMatchRunHandler_InvalidRunID(t *testing.T) {
 	ctxProv := &stubContextProvider{
 		info: &ports.ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Get("/v1/matching/runs/:runId", handler.GetMatchRun)
@@ -299,12 +284,7 @@ func TestGetMatchRunHandler_MissingContextID(t *testing.T) {
 	app := newFiberTestApp(ctx)
 
 	ctxProv := &stubContextProvider{info: nil}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Get("/v1/matching/runs/:runId", handler.GetMatchRun)
@@ -333,12 +313,7 @@ func TestListMatchRunsHandler_InvalidSortOrder(t *testing.T) {
 	ctxProv := &stubContextProvider{
 		info: &ports.ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Get("/v1/matching/contexts/:contextId/runs", handler.ListMatchRuns)
@@ -391,12 +366,7 @@ func TestListMatchRunsHandler_LimitBounds(t *testing.T) {
 			ctxProv := &stubContextProvider{
 				info: &ports.ReconciliationContextInfo{ID: contextID, Active: true},
 			}
-			handler, err := NewHandler(
-				&command.UseCase{},
-				newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-				ctxProv,
-				false,
-			)
+			handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 			require.NoError(t, err)
 
 			app.Get("/v1/matching/contexts/:contextId/runs", handler.ListMatchRuns)
@@ -435,12 +405,7 @@ func TestGetMatchRunResultsHandler_InvalidRunID(t *testing.T) {
 	ctxProv := &stubContextProvider{
 		info: &ports.ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Get("/v1/matching/runs/:runId/groups", handler.GetMatchRunResults)
@@ -478,12 +443,7 @@ func TestGetMatchRunResultsHandler_InvalidSortOrder(t *testing.T) {
 	ctxProv := &stubContextProvider{
 		info: &ports.ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Get("/v1/matching/runs/:runId/groups", handler.GetMatchRunResults)
@@ -521,12 +481,7 @@ func TestGetMatchRunResultsHandler_InvalidSortBy(t *testing.T) {
 	ctxProv := &stubContextProvider{
 		info: &ports.ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Get("/v1/matching/runs/:runId/groups", handler.GetMatchRunResults)
@@ -571,7 +526,7 @@ func TestGetMatchRunHandler_Success(t *testing.T) {
 	}
 	runRepo := &stubMatchRunRepo{run: run}
 
-	handler, err := NewHandler(&command.UseCase{}, newQueryUseCase(t, runRepo, &stubMatchGroupRepo{}), ctxProv, false)
+	handler, err := newTestHandler(t, &command.UseCase{}, runRepo, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Get("/v1/matching/runs/:runId", handler.GetMatchRun)
@@ -607,7 +562,7 @@ func TestGetMatchRunHandler_NotFound(t *testing.T) {
 	}
 	runRepo := &stubMatchRunRepo{run: nil}
 
-	handler, err := NewHandler(&command.UseCase{}, newQueryUseCase(t, runRepo, &stubMatchGroupRepo{}), ctxProv, false)
+	handler, err := newTestHandler(t, &command.UseCase{}, runRepo, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Get("/v1/matching/runs/:runId", handler.GetMatchRun)
@@ -641,12 +596,7 @@ func TestGetMatchRunHandler_ContextNotActive(t *testing.T) {
 	ctxProv := &stubContextProvider{
 		info: &ports.ReconciliationContextInfo{ID: contextID, Active: false},
 	}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Get("/v1/matching/runs/:runId", handler.GetMatchRun)
@@ -682,12 +632,7 @@ func TestGetMatchRunHandler_ContextNotFound(t *testing.T) {
 	app := newFiberTestApp(ctx)
 
 	ctxProv := &stubContextProvider{info: nil}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Get("/v1/matching/runs/:runId", handler.GetMatchRun)
@@ -723,7 +668,7 @@ func TestGetMatchRunHandler_RepoError(t *testing.T) {
 	}
 	runRepo := &stubMatchRunRepo{run: nil, err: errTestDatabaseError}
 
-	handler, err := NewHandler(&command.UseCase{}, newQueryUseCase(t, runRepo, &stubMatchGroupRepo{}), ctxProv, false)
+	handler, err := newTestHandler(t, &command.UseCase{}, runRepo, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Get("/v1/matching/runs/:runId", handler.GetMatchRun)
@@ -763,7 +708,7 @@ func TestListMatchRunsHandler_Success(t *testing.T) {
 	}
 	runRepo := &stubMatchRunRepo{run: run}
 
-	handler, err := NewHandler(&command.UseCase{}, newQueryUseCase(t, runRepo, &stubMatchGroupRepo{}), ctxProv, false)
+	handler, err := newTestHandler(t, &command.UseCase{}, runRepo, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Get("/v1/matching/contexts/:contextId/runs", handler.ListMatchRuns)
@@ -794,12 +739,7 @@ func TestListMatchRunsHandler_ContextNotFound(t *testing.T) {
 	app := newFiberTestApp(ctx)
 
 	ctxProv := &stubContextProvider{info: nil}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Get("/v1/matching/contexts/:contextId/runs", handler.ListMatchRuns)
@@ -834,7 +774,7 @@ func TestListMatchRunsHandler_RepoError(t *testing.T) {
 	}
 	runRepo := &stubMatchRunRepo{err: errTestDatabaseError}
 
-	handler, err := NewHandler(&command.UseCase{}, newQueryUseCase(t, runRepo, &stubMatchGroupRepo{}), ctxProv, false)
+	handler, err := newTestHandler(t, &command.UseCase{}, runRepo, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Get("/v1/matching/contexts/:contextId/runs", handler.ListMatchRuns)
@@ -870,7 +810,7 @@ func TestGetMatchRunResultsHandler_Success(t *testing.T) {
 	}
 	groupRepo := &stubMatchGroupRepo{groups: []*matchingEntities.MatchGroup{}}
 
-	handler, err := NewHandler(&command.UseCase{}, newQueryUseCase(t, &stubMatchRunRepo{}, groupRepo), ctxProv, false)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, groupRepo, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Get("/v1/matching/runs/:runId/groups", handler.GetMatchRunResults)
@@ -906,7 +846,7 @@ func TestGetMatchRunResultsHandler_RepoError(t *testing.T) {
 	}
 	groupRepo := &stubMatchGroupRepo{err: errTestDatabaseError}
 
-	handler, err := NewHandler(&command.UseCase{}, newQueryUseCase(t, &stubMatchRunRepo{}, groupRepo), ctxProv, false)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, groupRepo, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Get("/v1/matching/runs/:runId/groups", handler.GetMatchRunResults)
@@ -957,7 +897,7 @@ func TestGetMatchRunResultsHandler_LimitBounds(t *testing.T) {
 			}
 			groupRepo := &stubMatchGroupRepo{groups: []*matchingEntities.MatchGroup{}}
 
-			handler, err := NewHandler(&command.UseCase{}, newQueryUseCase(t, &stubMatchRunRepo{}, groupRepo), ctxProv, false)
+			handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, groupRepo, ctxProv, false)
 			require.NoError(t, err)
 
 			app.Get("/v1/matching/runs/:runId/groups", handler.GetMatchRunResults)
@@ -1189,12 +1129,7 @@ func TestListMatchRunsHandler_SortOrderAsc(t *testing.T) {
 	ctxProv := &stubContextProvider{
 		info: &ports.ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Get("/v1/matching/contexts/:contextId/runs", handler.ListMatchRuns)
@@ -1227,12 +1162,7 @@ func TestListMatchRunsHandler_WithCursor(t *testing.T) {
 	ctxProv := &stubContextProvider{
 		info: &ports.ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Get("/v1/matching/contexts/:contextId/runs", handler.ListMatchRuns)
@@ -1281,7 +1211,7 @@ func TestGetMatchRunResultsHandler_ValidSortBy(t *testing.T) {
 			}
 			groupRepo := &stubMatchGroupRepo{groups: []*matchingEntities.MatchGroup{}}
 
-			handler, err := NewHandler(&command.UseCase{}, newQueryUseCase(t, &stubMatchRunRepo{}, groupRepo), ctxProv, false)
+			handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, groupRepo, ctxProv, false)
 			require.NoError(t, err)
 
 			app.Get("/v1/matching/runs/:runId/groups", handler.GetMatchRunResults)
@@ -1315,12 +1245,7 @@ func TestGetMatchRunResultsHandler_ContextNotFound(t *testing.T) {
 	app := newFiberTestApp(ctx)
 
 	ctxProv := &stubContextProvider{info: nil}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Get("/v1/matching/runs/:runId/groups", handler.GetMatchRunResults)
@@ -1354,12 +1279,7 @@ func TestGetMatchRunResultsHandler_ContextNotActive(t *testing.T) {
 	ctxProv := &stubContextProvider{
 		info: &ports.ReconciliationContextInfo{ID: contextID, Active: false},
 	}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Get("/v1/matching/runs/:runId/groups", handler.GetMatchRunResults)
@@ -1402,7 +1322,7 @@ func TestRunMatchHandler_RunMatchWithoutPrimarySourceID(t *testing.T) {
 	}
 	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
+	handler, err := newTestHandler(t, uc, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/contexts/:contextId/run", handler.RunMatch)

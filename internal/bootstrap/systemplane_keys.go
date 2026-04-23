@@ -68,6 +68,8 @@ const (
 	defaultPGPassword        = "matcher_dev_password" // #nosec G101 -- Dev-mode default; rejected by validateProductionConfig in production. //nolint:gosec
 	defaultPGDB              = "matcher"
 	defaultPGSSLMode         = "disable"
+	defaultPGTLSRequired     = false
+	defaultPGReplicaTLSReq   = false
 	defaultPGMaxOpenConns    = 25
 	defaultPGMaxIdleConns    = 5
 	defaultPGConnMaxLifeMins = 30
@@ -81,6 +83,7 @@ const (
 	defaultRedisDB           = 0
 	defaultRedisProtocol     = 3
 	defaultRedisTLS          = false
+	defaultRedisTLSRequired  = false
 	defaultRedisPoolSize     = 10
 	defaultRedisMinIdleConn  = 2
 	defaultRedisReadTimeout  = 3000
@@ -96,6 +99,7 @@ const (
 	defaultRabbitVHost               = "/"
 	defaultRabbitHealthURL           = "http://localhost:15672"
 	defaultRabbitAllowInsecureHealth = false
+	defaultRabbitTLSRequired         = false
 
 	// Auth defaults.
 	defaultAuthEnabled = false
@@ -128,8 +132,9 @@ const (
 	defaultRateLimitAdminExp = 60
 
 	// Infrastructure defaults.
-	defaultInfraConnectTimeout     = 30
-	defaultInfraHealthCheckTimeout = 5
+	defaultInfraConnectTimeout       = 30
+	defaultInfraHealthCheckTimeout   = 5
+	defaultInfraHealthCheckTimeoutMs = 800
 
 	// Idempotency defaults.
 	defaultIdempotencyRetryWindow = 300
@@ -181,6 +186,7 @@ const (
 	defaultObjStorageBucket        = "matcher-exports"
 	defaultObjStoragePathStyle     = true
 	defaultObjStorageAllowInsecure = false
+	defaultObjStorageTLSRequired   = false
 
 	// Export worker defaults.
 	defaultExportEnabled    = true
@@ -421,9 +427,26 @@ func matcherKeyDefs(cfg *Config) []matcherKeyDef {
 
 	// --- App ---
 	// app.log_level intentionally NOT registered: LOG_LEVEL is bootstrap-only.
-	// Runtime log-level swapping would require re-wiring SwappableLogger.Swap to
-	// systemplane OnChange, which is not implemented. Set LOG_LEVEL via env var
+	// Runtime log-level swapping is not implemented. Set LOG_LEVEL via env var
 	// and restart to change.
+	//
+	// app.mode intentionally NOT registered: DEPLOYMENT_MODE is bootstrap-only.
+	// It is consumed at startup to seed logger configuration defaults and the
+	// /readyz response envelope's "deployment_mode" field. A runtime PUT of
+	// app.mode would appear to succeed but would be silently ineffective —
+	// logger environment is already resolved and cached. Change via
+	// DEPLOYMENT_MODE env var and restart the process.
+	//
+	// The following per-stack TLS enforcement flags are also intentionally NOT
+	// registered because TLS posture is decided pre-connection at bootstrap:
+	//   - POSTGRES_TLS_REQUIRED            (postgres.tls_required)
+	//   - POSTGRES_REPLICA_TLS_REQUIRED    (postgres.replica_tls_required)
+	//   - REDIS_TLS_REQUIRED               (redis.tls_required)
+	//   - RABBITMQ_TLS_REQUIRED            (rabbitmq.tls_required)
+	//   - OBJECT_STORAGE_TLS_REQUIRED      (object_storage.tls_required)
+	// ValidateRequiredTLS runs once before any infra connection opens;
+	// flipping a flag at runtime would appear to succeed but would have no
+	// effect on the already-open connections. Change via env var and restart.
 	defs = append(defs,
 		matcherKeyDef{key: "app.env_name", defaultValue: cfg.App.EnvName, description: "Application environment name (e.g., development, staging, production)"},
 	)
@@ -543,7 +566,8 @@ func matcherKeyDefs(cfg *Config) []matcherKeyDef {
 	// --- Infrastructure ---
 	defs = append(defs,
 		matcherKeyDef{key: "infrastructure.connect_timeout_sec", defaultValue: cfg.Infrastructure.ConnectTimeoutSec, description: "Infrastructure connect timeout in seconds"},
-		matcherKeyDef{key: "infrastructure.health_check_timeout_sec", defaultValue: cfg.Infrastructure.HealthCheckTimeoutSec, description: "Health check timeout in seconds"},
+		matcherKeyDef{key: "infrastructure.health_check_timeout_sec", defaultValue: cfg.Infrastructure.HealthCheckTimeoutSec, description: "Health check timeout in seconds (legacy; prefer health_check_timeout_ms)"},
+		matcherKeyDef{key: "infrastructure.health_check_timeout_ms", defaultValue: cfg.Infrastructure.HealthCheckTimeoutMs, description: "Per-check health probe timeout in milliseconds"},
 	)
 
 	// --- Idempotency ---

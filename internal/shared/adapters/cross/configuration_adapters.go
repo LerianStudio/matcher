@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 
-	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configRepositories "github.com/LerianStudio/matcher/internal/configuration/domain/repositories"
 	ingestionPorts "github.com/LerianStudio/matcher/internal/ingestion/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
@@ -66,19 +65,7 @@ func (adapter *FieldMapRepositoryAdapter) FindBySourceID(
 		return nil, nil
 	}
 
-	return toSharedFieldMap(fm), nil
-}
-
-func toSharedFieldMap(fm *configEntities.FieldMap) *shared.FieldMap {
-	return &shared.FieldMap{
-		ID:        fm.ID,
-		ContextID: fm.ContextID,
-		SourceID:  fm.SourceID,
-		Mapping:   fm.Mapping,
-		Version:   fm.Version,
-		CreatedAt: fm.CreatedAt,
-		UpdatedAt: fm.UpdatedAt,
-	}
+	return fm, nil
 }
 
 // SourceRepositoryAdapter wraps a configuration SourceRepository
@@ -115,20 +102,5 @@ func (adapter *SourceRepositoryAdapter) FindByID(
 		return nil, nil
 	}
 
-	return toSharedReconciliationSource(source), nil
-}
-
-func toSharedReconciliationSource(
-	src *configEntities.ReconciliationSource,
-) *shared.ReconciliationSource {
-	return &shared.ReconciliationSource{
-		ID:        src.ID,
-		ContextID: src.ContextID,
-		Name:      src.Name,
-		Type:      string(src.Type),
-		Side:      src.Side,
-		Config:    src.Config,
-		CreatedAt: src.CreatedAt,
-		UpdatedAt: src.UpdatedAt,
-	}
+	return source, nil
 }

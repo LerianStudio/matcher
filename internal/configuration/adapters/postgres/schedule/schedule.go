@@ -2,7 +2,6 @@
 package schedule
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,8 +11,8 @@ import (
 
 // SchedulePostgreSQLModel represents the database model for reconciliation schedules.
 type SchedulePostgreSQLModel struct {
-	ID             string
-	ContextID      string
+	ID             uuid.UUID
+	ContextID      uuid.UUID
 	CronExpression string
 	Enabled        bool
 	LastRunAt      *time.Time
@@ -48,8 +47,8 @@ func NewSchedulePostgreSQLModel(entity *entities.ReconciliationSchedule) (*Sched
 	}
 
 	return &SchedulePostgreSQLModel{
-		ID:             id.String(),
-		ContextID:      entity.ContextID.String(),
+		ID:             id,
+		ContextID:      entity.ContextID,
 		CronExpression: entity.CronExpression,
 		Enabled:        entity.Enabled,
 		LastRunAt:      entity.LastRunAt,
@@ -65,19 +64,9 @@ func (model *SchedulePostgreSQLModel) ToEntity() (*entities.ReconciliationSchedu
 		return nil, ErrScheduleModelRequired
 	}
 
-	id, err := uuid.Parse(model.ID)
-	if err != nil {
-		return nil, fmt.Errorf("parsing ID: %w", err)
-	}
-
-	contextID, err := uuid.Parse(model.ContextID)
-	if err != nil {
-		return nil, fmt.Errorf("parsing ContextID: %w", err)
-	}
-
 	return &entities.ReconciliationSchedule{
-		ID:             id,
-		ContextID:      contextID,
+		ID:             model.ID,
+		ContextID:      model.ContextID,
 		CronExpression: model.CronExpression,
 		Enabled:        model.Enabled,
 		LastRunAt:      model.LastRunAt,

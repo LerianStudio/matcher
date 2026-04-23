@@ -16,13 +16,26 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	configCommand "github.com/LerianStudio/matcher/internal/configuration/services/command"
 	configQuery "github.com/LerianStudio/matcher/internal/configuration/services/query"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
+// testRepos bundles the three aggregate repositories that the HTTP CRUD tests
+// reach for directly after T-009b Phase 1 deleted the span-only query wrappers
+// (GetContext / GetSource / GetMatchRule). Handlers now call the repos; tests
+// mirror that layering.
+type testRepos struct {
+	ctx       *contextRepo.Repository
+	source    *sourceRepo.Repository
+	matchRule *matchRuleRepo.Repository
+}
+
 // buildUseCases constructs the command and query use cases wired to real Postgres
-// repositories through the test harness infrastructure provider.
-func buildUseCases(t *testing.T, harness *integration.TestHarness) (*configCommand.UseCase, *configQuery.UseCase) {
+// repositories through the test harness infrastructure provider, and returns the
+// underlying repositories so tests can exercise read paths directly (matching
+// production HTTP handlers post-T-009b).
+func buildUseCases(t *testing.T, harness *integration.TestHarness) (*configCommand.UseCase, *configQuery.UseCase, testRepos) {
 	t.Helper()
 
 	provider := harness.Provider()
@@ -42,7 +55,7 @@ func buildUseCases(t *testing.T, harness *integration.TestHarness) (*configComma
 	queryUC, err := configQuery.NewUseCase(ctxRepo, srcRepo, fmRepo, mrRepo)
 	require.NoError(t, err)
 
-	return cmdUC, queryUC
+	return cmdUC, queryUC, testRepos{ctx: ctxRepo, source: srcRepo, matchRule: mrRepo}
 }
 
 // createTestContext is a helper that creates a reconciliation context via the command
@@ -60,7 +73,7 @@ func createTestContext(
 
 	created, err := cmdUC.CreateContext(ctx, harness.Seed.TenantID, entities.CreateReconciliationContextInput{
 		Name:     name + " " + uuid.New().String()[:8],
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 	})
 	require.NoError(t, err)
@@ -74,24 +87,24 @@ func TestConfigServiceCRUD_ContextLifecycle(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
-		cmdUC, queryUC := buildUseCases(t, h)
+		cmdUC, _, repos := buildUseCases(t, h)
 		ctx := h.Ctx()
 
 		// CREATE.
 		contextName := "CRUD Context " + uuid.New().String()[:8]
 		created, err := cmdUC.CreateContext(ctx, h.Seed.TenantID, entities.CreateReconciliationContextInput{
 			Name:     contextName,
-			Type:     value_objects.ContextTypeOneToMany,
+			Type:     shared.ContextTypeOneToMany,
 			Interval: "0 */6 * * *",
 		})
 		require.NoError(t, err)
 		require.NotEqual(t, uuid.Nil, created.ID)
 		require.Equal(t, contextName, created.Name)
-		require.Equal(t, value_objects.ContextTypeOneToMany, created.Type)
+		require.Equal(t, shared.ContextTypeOneToMany, created.Type)
 		require.Equal(t, value_objects.ContextStatusDraft, created.Status)
 
 		// GET.
-		fetched, err := queryUC.GetContext(ctx, created.ID)
+		fetched, err := repos.ctx.FindByID(ctx, created.ID)
 		require.NoError(t, err)
 		require.Equal(t, created.ID, fetched.ID)
 		require.Equal(t, contextName, fetched.Name)
@@ -105,7 +118,7 @@ func TestConfigServiceCRUD_ContextLifecycle(t *testing.T) {
 		require.Equal(t, updatedName, updated.Name)
 
 		// LIST — verify present.
-		contexts, _, err := queryUC.ListContexts(ctx, "", 50, nil, nil)
+		contexts, _, err := repos.ctx.FindAll(ctx, "", 50, nil, nil)
 		require.NoError(t, err)
 
 		var found bool
@@ -127,7 +140,7 @@ func TestConfigServiceCRUD_ContextLifecycle(t *testing.T) {
 		require.NoError(t, err)
 
 		// GET after delete — verify error.
-		_, err = queryUC.GetContext(ctx, created.ID)
+		_, err = repos.ctx.FindByID(ctx, created.ID)
 		require.Error(t, err)
 	})
 }
@@ -137,7 +150,7 @@ func TestConfigServiceCRUD_SourceLifecycle(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
-		cmdUC, queryUC := buildUseCases(t, h)
+		cmdUC, queryUC, repos := buildUseCases(t, h)
 		ctx := h.Ctx()
 
 		// Pre-requisite: create a context (sources belong to a context).
@@ -156,7 +169,7 @@ func TestConfigServiceCRUD_SourceLifecycle(t *testing.T) {
 		require.Equal(t, value_objects.SourceTypeLedger, created.Type)
 
 		// GET.
-		fetched, err := queryUC.GetSource(ctx, parent.ID, created.ID)
+		fetched, err := repos.source.FindByID(ctx, parent.ID, created.ID)
 		require.NoError(t, err)
 		require.Equal(t, created.ID, fetched.ID)
 
@@ -192,7 +205,7 @@ func TestConfigServiceCRUD_SourceLifecycle(t *testing.T) {
 		require.NoError(t, err)
 
 		// GET after delete — verify error.
-		_, err = queryUC.GetSource(ctx, parent.ID, created.ID)
+		_, err = repos.source.FindByID(ctx, parent.ID, created.ID)
 		require.Error(t, err)
 	})
 }
@@ -202,7 +215,7 @@ func TestConfigServiceCRUD_FieldMapLifecycle(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
-		cmdUC, queryUC := buildUseCases(t, h)
+		cmdUC, queryUC, _ := buildUseCases(t, h)
 		ctx := h.Ctx()
 
 		// Pre-requisites: context + source.
@@ -217,7 +230,7 @@ func TestConfigServiceCRUD_FieldMapLifecycle(t *testing.T) {
 		require.NoError(t, err)
 
 		// CREATE.
-		created, err := cmdUC.CreateFieldMap(ctx, parent.ID, source.ID, entities.CreateFieldMapInput{
+		created, err := cmdUC.CreateFieldMap(ctx, parent.ID, source.ID, shared.CreateFieldMapInput{
 			Mapping: map[string]any{
 				"amount":   "tx_amount",
 				"currency": "tx_currency",
@@ -235,7 +248,7 @@ func TestConfigServiceCRUD_FieldMapLifecycle(t *testing.T) {
 		require.Equal(t, "tx_amount", fetched.Mapping["amount"])
 
 		// UPDATE mapping.
-		updated, err := cmdUC.UpdateFieldMap(ctx, created.ID, entities.UpdateFieldMapInput{
+		updated, err := cmdUC.UpdateFieldMap(ctx, created.ID, shared.UpdateFieldMapInput{
 			Mapping: map[string]any{
 				"amount":    "transaction_amount",
 				"currency":  "transaction_currency",
@@ -262,7 +275,7 @@ func TestConfigServiceCRUD_MatchRuleLifecycle(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
-		cmdUC, queryUC := buildUseCases(t, h)
+		cmdUC, queryUC, repos := buildUseCases(t, h)
 		ctx := h.Ctx()
 
 		parent := createTestContext(t, cmdUC, h, "MatchRule Parent")
@@ -270,16 +283,16 @@ func TestConfigServiceCRUD_MatchRuleLifecycle(t *testing.T) {
 		// CREATE.
 		created, err := cmdUC.CreateMatchRule(ctx, parent.ID, entities.CreateMatchRuleInput{
 			Priority: 1,
-			Type:     value_objects.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config:   map[string]any{"matchAmount": true, "matchCurrency": true},
 		})
 		require.NoError(t, err)
 		require.NotEqual(t, uuid.Nil, created.ID)
 		require.Equal(t, 1, created.Priority)
-		require.Equal(t, value_objects.RuleTypeExact, created.Type)
+		require.Equal(t, shared.RuleTypeExact, created.Type)
 
 		// GET.
-		fetched, err := queryUC.GetMatchRule(ctx, parent.ID, created.ID)
+		fetched, err := repos.matchRule.FindByID(ctx, parent.ID, created.ID)
 		require.NoError(t, err)
 		require.Equal(t, created.ID, fetched.ID)
 
@@ -313,7 +326,7 @@ func TestConfigServiceCRUD_MatchRuleLifecycle(t *testing.T) {
 		require.NoError(t, err)
 
 		// GET after delete — verify error.
-		_, err = queryUC.GetMatchRule(ctx, parent.ID, created.ID)
+		_, err = repos.matchRule.FindByID(ctx, parent.ID, created.ID)
 		require.Error(t, err)
 	})
 }
@@ -323,13 +336,13 @@ func TestConfigServiceCRUD_CreateContextValidation(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
-		cmdUC, _ := buildUseCases(t, h)
+		cmdUC, _, _ := buildUseCases(t, h)
 		ctx := h.Ctx()
 
 		// Empty name should fail validation.
 		_, err := cmdUC.CreateContext(ctx, h.Seed.TenantID, entities.CreateReconciliationContextInput{
 			Name:     "",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		})
 		require.Error(t, err, "creating a context with an empty name must fail")
@@ -341,7 +354,7 @@ func TestConfigServiceCRUD_CreateSourceNonExistentContext(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
-		cmdUC, _ := buildUseCases(t, h)
+		cmdUC, _, _ := buildUseCases(t, h)
 		ctx := h.Ctx()
 
 		// Using a random UUID that does not correspond to any context. The source
@@ -364,7 +377,7 @@ func TestConfigServiceCRUD_UpdateNonExistentContext(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
-		cmdUC, _ := buildUseCases(t, h)
+		cmdUC, _, _ := buildUseCases(t, h)
 		ctx := h.Ctx()
 
 		newName := "Ghost"
@@ -381,7 +394,7 @@ func TestConfigServiceCRUD_DeleteNonExistentContext(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
-		cmdUC, _ := buildUseCases(t, h)
+		cmdUC, _, _ := buildUseCases(t, h)
 		ctx := h.Ctx()
 
 		err := cmdUC.DeleteContext(ctx, uuid.New())
@@ -394,7 +407,7 @@ func TestConfigServiceCRUD_RuleReorderPriorities(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
-		cmdUC, queryUC := buildUseCases(t, h)
+		cmdUC, _, repos := buildUseCases(t, h)
 		ctx := h.Ctx()
 
 		parent := createTestContext(t, cmdUC, h, "Reorder Parent")
@@ -402,21 +415,21 @@ func TestConfigServiceCRUD_RuleReorderPriorities(t *testing.T) {
 		// Create 3 rules with priorities 1, 2, 3.
 		rule1, err := cmdUC.CreateMatchRule(ctx, parent.ID, entities.CreateMatchRuleInput{
 			Priority: 1,
-			Type:     value_objects.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config:   map[string]any{"matchAmount": true},
 		})
 		require.NoError(t, err)
 
 		rule2, err := cmdUC.CreateMatchRule(ctx, parent.ID, entities.CreateMatchRuleInput{
 			Priority: 2,
-			Type:     value_objects.RuleTypeTolerance,
+			Type:     shared.RuleTypeTolerance,
 			Config:   map[string]any{"absTolerance": 0.01},
 		})
 		require.NoError(t, err)
 
 		rule3, err := cmdUC.CreateMatchRule(ctx, parent.ID, entities.CreateMatchRuleInput{
 			Priority: 3,
-			Type:     value_objects.RuleTypeDateLag,
+			Type:     shared.RuleTypeDateLag,
 			Config:   map[string]any{"minDays": 0, "maxDays": 5},
 		})
 		require.NoError(t, err)
@@ -426,15 +439,15 @@ func TestConfigServiceCRUD_RuleReorderPriorities(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify new priorities.
-		fetchedRule3, err := queryUC.GetMatchRule(ctx, parent.ID, rule3.ID)
+		fetchedRule3, err := repos.matchRule.FindByID(ctx, parent.ID, rule3.ID)
 		require.NoError(t, err)
 		require.Equal(t, 1, fetchedRule3.Priority, "rule3 should now have priority 1")
 
-		fetchedRule1, err := queryUC.GetMatchRule(ctx, parent.ID, rule1.ID)
+		fetchedRule1, err := repos.matchRule.FindByID(ctx, parent.ID, rule1.ID)
 		require.NoError(t, err)
 		require.Equal(t, 2, fetchedRule1.Priority, "rule1 should now have priority 2")
 
-		fetchedRule2, err := queryUC.GetMatchRule(ctx, parent.ID, rule2.ID)
+		fetchedRule2, err := repos.matchRule.FindByID(ctx, parent.ID, rule2.ID)
 		require.NoError(t, err)
 		require.Equal(t, 3, fetchedRule2.Priority, "rule2 should now have priority 3")
 	})
@@ -445,7 +458,7 @@ func TestConfigServiceCRUD_ListContextsPagination(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
-		cmdUC, queryUC := buildUseCases(t, h)
+		cmdUC, _, repos := buildUseCases(t, h)
 		ctx := h.Ctx()
 
 		// Create 5 contexts (the seed data already has 1, but we create 5 fresh ones
@@ -458,14 +471,14 @@ func TestConfigServiceCRUD_ListContextsPagination(t *testing.T) {
 		}
 
 		// Request with limit=2 to exercise pagination.
-		page1, pagination, err := queryUC.ListContexts(ctx, "", 2, nil, nil)
+		page1, pagination, err := repos.ctx.FindAll(ctx, "", 2, nil, nil)
 		require.NoError(t, err)
 		require.Len(t, page1, 2, "first page must return exactly the requested limit")
 
 		// Use the cursor from the first page to get the second page.
 		require.NotEmpty(t, pagination.Next, "pagination cursor must be set when more results exist")
 
-		page2, _, err := queryUC.ListContexts(ctx, pagination.Next, 2, nil, nil)
+		page2, _, err := repos.ctx.FindAll(ctx, pagination.Next, 2, nil, nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, page2, "second page must not be empty")
 

@@ -18,6 +18,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
 	portMocks "github.com/LerianStudio/matcher/internal/exception/ports/mocks"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 // fixedTestTime returns a deterministic timestamp for test reproducibility.
@@ -138,7 +139,7 @@ func TestAdjustEntry_ValidationOrder(t *testing.T) {
 			exec := &stubResolutionExecutor{}
 			audit := &stubAuditPublisher{}
 
-			uc, err := NewUseCase(repo, exec, audit, actorExtractor(tc.actor), &stubInfraProvider{})
+			uc, err := NewExceptionUseCase(repo, actorExtractor(tc.actor), audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 			require.NoError(t, err)
 
 			_, err = uc.AdjustEntry(context.Background(), tc.cmd)
@@ -156,7 +157,7 @@ func TestAdjustEntry_NotesTrimmedInAuditEvent(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -173,7 +174,7 @@ func TestAdjustEntry_NotesTrimmedInAuditEvent(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst-1"), infra)
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, infra, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	_, err = uc.AdjustEntry(ctx, AdjustEntryCommand{
@@ -201,7 +202,7 @@ func TestAdjustEntry_ActorTrimmedInAuditEvent(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -219,7 +220,7 @@ func TestAdjustEntry_ActorTrimmedInAuditEvent(t *testing.T) {
 	infra := &stubInfraProvider{tx: tx}
 
 	// Actor with leading/trailing whitespace.
-	uc, err := NewUseCase(repo, exec, audit, actorExtractor("  spaced-analyst  "), infra)
+	uc, err := NewExceptionUseCase(repo, actorExtractor("  spaced-analyst  "), audit, infra, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	_, err = uc.AdjustEntry(ctx, AdjustEntryCommand{
@@ -248,7 +249,7 @@ func TestAdjustEntry_AuditEventFieldCompleteness(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -265,7 +266,7 @@ func TestAdjustEntry_AuditEventFieldCompleteness(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst-1"), infra)
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, infra, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	before := time.Now().UTC()
@@ -314,7 +315,7 @@ func TestAdjustEntry_AdjustmentInputPassthrough(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -325,7 +326,7 @@ func TestAdjustEntry_AdjustmentInputPassthrough(t *testing.T) {
 
 	ctx := context.Background()
 
-	uc, err := NewUseCase(repo, capExec, audit, actorExtractor("analyst-1"), &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithResolutionExecutor(capExec))
 	require.NoError(t, err)
 
 	effectiveAt := fixedTestTime()
@@ -364,7 +365,7 @@ func TestAdjustEntry_ZeroValueCommand(t *testing.T) {
 	exec := &stubResolutionExecutor{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst-1"), &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	_, err = uc.AdjustEntry(context.Background(), AdjustEntryCommand{})
@@ -380,7 +381,7 @@ func TestAdjustEntry_DecimalPrecisionPreserved(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -391,7 +392,7 @@ func TestAdjustEntry_DecimalPrecisionPreserved(t *testing.T) {
 
 	ctx := context.Background()
 
-	uc, err := NewUseCase(repo, capExec, audit, actorExtractor("analyst-1"), &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithResolutionExecutor(capExec))
 	require.NoError(t, err)
 
 	// 8 decimal places -- more than most currencies need, exercises precision.
@@ -422,7 +423,7 @@ func TestAdjustEntry_PendingResolutionRejected(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -438,7 +439,7 @@ func TestAdjustEntry_PendingResolutionRejected(t *testing.T) {
 	repo.EXPECT().FindByID(gomock.Any(), exception.ID).Return(exception, nil)
 	// StartResolution should fail, so no executor call, no update, no audit.
 
-	uc, err := NewUseCase(repo, exec, audit, actor, &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	_, err = uc.AdjustEntry(context.Background(), AdjustEntryCommand{
@@ -463,7 +464,7 @@ func TestAdjustEntry_GatewayFailureRevertsStatus(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -494,7 +495,7 @@ func TestAdjustEntry_GatewayFailureRevertsStatus(t *testing.T) {
 			return exc, nil
 		})
 
-	uc, err := NewUseCase(repo, exec, audit, actor, &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	_, err = uc.AdjustEntry(context.Background(), AdjustEntryCommand{
@@ -520,7 +521,7 @@ func TestAdjustEntry_GatewayFailureRevertsAssignedStatus(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -551,7 +552,7 @@ func TestAdjustEntry_GatewayFailureRevertsAssignedStatus(t *testing.T) {
 			return exc, nil
 		})
 
-	uc, err := NewUseCase(repo, exec, audit, actor, &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	_, err = uc.AdjustEntry(context.Background(), AdjustEntryCommand{

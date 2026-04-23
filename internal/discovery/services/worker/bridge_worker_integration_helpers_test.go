@@ -40,6 +40,7 @@ import (
 
 	reportingStorage "github.com/LerianStudio/matcher/internal/reporting/adapters/storage"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
@@ -211,7 +212,7 @@ func (h *bridgeMinIOHarness) rawS3Client(ctx context.Context) *s3.Client {
 // storageClient builds the same production S3Client the custody store
 // wraps in bootstrap. Exercising the production client here proves the
 // full wiring path works end-to-end.
-func (h *bridgeMinIOHarness) storageClient(ctx context.Context, tb testing.TB) sharedPorts.ObjectStorageClient {
+func (h *bridgeMinIOHarness) storageClient(ctx context.Context, tb testing.TB) objectstorage.Backend {
 	tb.Helper()
 
 	client, err := reportingStorage.NewS3Client(ctx, reportingStorage.S3Config{

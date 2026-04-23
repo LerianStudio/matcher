@@ -16,8 +16,8 @@ type scanner interface {
 
 func scanCommentInto(rowScanner scanner) (*entities.ExceptionComment, error) {
 	var (
-		id          string
-		exceptionID string
+		id          uuid.UUID
+		exceptionID uuid.UUID
 		author      string
 		content     string
 		createdAt   time.Time
@@ -30,19 +30,9 @@ func scanCommentInto(rowScanner scanner) (*entities.ExceptionComment, error) {
 		return nil, fmt.Errorf("scan comment: %w", err)
 	}
 
-	parsedID, err := uuid.Parse(id)
-	if err != nil {
-		return nil, fmt.Errorf("parse comment id: %w", err)
-	}
-
-	parsedExceptionID, err := uuid.Parse(exceptionID)
-	if err != nil {
-		return nil, fmt.Errorf("parse exception id: %w", err)
-	}
-
 	return &entities.ExceptionComment{
-		ID:          parsedID,
-		ExceptionID: parsedExceptionID,
+		ID:          id,
+		ExceptionID: exceptionID,
 		Author:      author,
 		Content:     content,
 		CreatedAt:   createdAt,

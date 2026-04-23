@@ -14,10 +14,12 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
+	configSourceRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/source"
 	exceptionPorts "github.com/LerianStudio/matcher/internal/exception/ports"
+	ingestionJobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
+	ingestionTxRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/transaction"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepos "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
-	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // Sentinel errors for exception matching gateway operations.
@@ -33,27 +35,21 @@ var (
 	ErrInvalidDirection            = errors.New("invalid adjustment direction")
 )
 
-// ExceptionTransactionRepository contains the minimal transaction operations needed
-// for exception resolution: force-match status updates.
-type ExceptionTransactionRepository interface {
-	FindByID(ctx context.Context, transactionID uuid.UUID) (*shared.Transaction, error)
-	MarkMatched(ctx context.Context, contextID uuid.UUID, transactionIDs []uuid.UUID) error
-}
-
 // ExceptionMatchingGateway implements exception.ports.MatchingGateway by coordinating
 // with matching and ingestion repositories directly through one bridge.
 type ExceptionMatchingGateway struct {
 	adjustmentRepo  matchingRepos.AdjustmentRepository
-	transactionRepo ExceptionTransactionRepository
-	contextLookup   ExceptionContextLookup
+	transactionRepo *ingestionTxRepo.Repository
+	contextLookup   *TransactionContextLookup
 }
 
 // NewExceptionMatchingGateway creates a new matching gateway for exception resolution.
+// sourceFinder is optional; pass nil to disable source-based context resolution fallback.
 func NewExceptionMatchingGateway(
 	adjustmentRepo matchingRepos.AdjustmentRepository,
-	transactionRepo ExceptionTransactionRepository,
-	jobFinder JobFinder,
-	sourceFinder SourceContextFinder,
+	transactionRepo *ingestionTxRepo.Repository,
+	jobFinder *ingestionJobRepo.Repository,
+	sourceFinder *configSourceRepo.Repository,
 ) (*ExceptionMatchingGateway, error) {
 	if adjustmentRepo == nil {
 		return nil, ErrNilAdjustmentRepository

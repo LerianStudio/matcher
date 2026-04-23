@@ -74,20 +74,6 @@ func (mr *MockTransactionRepositoryMockRecorder) ListUnmatchedByContext(ctx, con
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListUnmatchedByContext", reflect.TypeOf((*MockTransactionRepository)(nil).ListUnmatchedByContext), ctx, contextID, startInclusive, endInclusive, limit, offset)
 }
 
-// MarkMatched mocks base method.
-func (m *MockTransactionRepository) MarkMatched(ctx context.Context, contextID uuid.UUID, transactionIDs []uuid.UUID) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MarkMatched", ctx, contextID, transactionIDs)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// MarkMatched indicates an expected call of MarkMatched.
-func (mr *MockTransactionRepositoryMockRecorder) MarkMatched(ctx, contextID, transactionIDs any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkMatched", reflect.TypeOf((*MockTransactionRepository)(nil).MarkMatched), ctx, contextID, transactionIDs)
-}
-
 // MarkMatchedWithTx mocks base method.
 func (m *MockTransactionRepository) MarkMatchedWithTx(ctx context.Context, tx repositories.Tx, contextID uuid.UUID, transactionIDs []uuid.UUID) error {
 	m.ctrl.T.Helper()
@@ -102,20 +88,6 @@ func (mr *MockTransactionRepositoryMockRecorder) MarkMatchedWithTx(ctx, tx, cont
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkMatchedWithTx", reflect.TypeOf((*MockTransactionRepository)(nil).MarkMatchedWithTx), ctx, tx, contextID, transactionIDs)
 }
 
-// MarkPendingReview mocks base method.
-func (m *MockTransactionRepository) MarkPendingReview(ctx context.Context, contextID uuid.UUID, transactionIDs []uuid.UUID) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MarkPendingReview", ctx, contextID, transactionIDs)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// MarkPendingReview indicates an expected call of MarkPendingReview.
-func (mr *MockTransactionRepositoryMockRecorder) MarkPendingReview(ctx, contextID, transactionIDs any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkPendingReview", reflect.TypeOf((*MockTransactionRepository)(nil).MarkPendingReview), ctx, contextID, transactionIDs)
-}
-
 // MarkPendingReviewWithTx mocks base method.
 func (m *MockTransactionRepository) MarkPendingReviewWithTx(ctx context.Context, tx repositories.Tx, contextID uuid.UUID, transactionIDs []uuid.UUID) error {
 	m.ctrl.T.Helper()
@@ -128,20 +100,6 @@ func (m *MockTransactionRepository) MarkPendingReviewWithTx(ctx context.Context,
 func (mr *MockTransactionRepositoryMockRecorder) MarkPendingReviewWithTx(ctx, tx, contextID, transactionIDs any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkPendingReviewWithTx", reflect.TypeOf((*MockTransactionRepository)(nil).MarkPendingReviewWithTx), ctx, tx, contextID, transactionIDs)
-}
-
-// MarkUnmatched mocks base method.
-func (m *MockTransactionRepository) MarkUnmatched(ctx context.Context, contextID uuid.UUID, transactionIDs []uuid.UUID) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MarkUnmatched", ctx, contextID, transactionIDs)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// MarkUnmatched indicates an expected call of MarkUnmatched.
-func (mr *MockTransactionRepositoryMockRecorder) MarkUnmatched(ctx, contextID, transactionIDs any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkUnmatched", reflect.TypeOf((*MockTransactionRepository)(nil).MarkUnmatched), ctx, contextID, transactionIDs)
 }
 
 // MarkUnmatchedWithTx mocks base method.

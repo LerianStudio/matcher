@@ -11,37 +11,50 @@ import (
 	"github.com/stretchr/testify/require"
 
 	exceptionAdapters "github.com/LerianStudio/matcher/internal/exception/adapters"
+	exceptionAudit "github.com/LerianStudio/matcher/internal/exception/adapters/audit"
 	commentRepoAdapter "github.com/LerianStudio/matcher/internal/exception/adapters/postgres/comment"
 	exceptionRepoAdapter "github.com/LerianStudio/matcher/internal/exception/adapters/postgres/exception"
-	exceptionVO "github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	exceptionCommand "github.com/LerianStudio/matcher/internal/exception/services/command"
-	exceptionQuery "github.com/LerianStudio/matcher/internal/exception/services/query"
 	ingestionJobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
 	ingestionTxRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/transaction"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
+	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-// wireCommentUseCase creates real CommentUseCase and CommentQueryUseCase backed by PostgreSQL.
+// wireCommentUseCase creates the merged exception UseCase wired with the
+// comment repository, plus returns the comment repo directly for read-side
+// assertions. Post-T-009, comment reads go handler→repo directly (no query
+// UseCase), so tests that previously used queryUC.ListComments now call
+// commentRepo.FindByExceptionID.
 func wireCommentUseCase(
 	t *testing.T,
 	h *integration.TestHarness,
-) (*exceptionCommand.CommentUseCase, *exceptionQuery.CommentQueryUseCase) {
+) (*exceptionCommand.ExceptionUseCase, *commentRepoAdapter.Repository) {
 	t.Helper()
 
 	provider := h.Provider()
+	redisConn := mustRedisConn(t, h.RedisAddr)
+	fullProvider := infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
 
 	commentRepo := commentRepoAdapter.NewRepository(provider)
 	exceptionRepo := exceptionRepoAdapter.NewRepository(provider)
 	actorExtractor := exceptionAdapters.NewAuthActorExtractor()
-
-	cmdUC, err := exceptionCommand.NewCommentUseCase(commentRepo, exceptionRepo, actorExtractor)
+	outbox := integration.NewTestOutboxRepository(t, h.Connection)
+	auditPub, err := exceptionAudit.NewOutboxPublisher(outbox)
 	require.NoError(t, err)
 
-	queryUC, err := exceptionQuery.NewCommentQueryUseCase(commentRepo)
+	cmdUC, err := exceptionCommand.NewExceptionUseCase(
+		exceptionRepo,
+		actorExtractor,
+		auditPub,
+		fullProvider,
+		exceptionCommand.WithCommentRepository(commentRepo),
+	)
 	require.NoError(t, err)
 
-	return cmdUC, queryUC
+	return cmdUC, commentRepo
 }
 
 // setupExceptionForComments creates a transaction and exception ready for comment tests.
@@ -59,7 +72,7 @@ func setupExceptionForComments(t *testing.T, h *integration.TestHarness) uuid.UU
 		"COMMENT-TX-"+uuid.New().String()[:8], decimal.NewFromFloat(100.00), "USD")
 
 	exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-		exceptionVO.ExceptionSeverityMedium, "test exception for comments")
+		sharedexception.ExceptionSeverityMedium, "test exception for comments")
 
 	return exc.ID
 }
@@ -89,7 +102,7 @@ func TestCommentCRUD_ListComments(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		excID := setupExceptionForComments(t, h)
 		ctx := testCtxWithActor(t, h, "lister-user")
-		cmdUC, queryUC := wireCommentUseCase(t, h)
+		cmdUC, commentRepo := wireCommentUseCase(t, h)
 
 		contents := []string{
 			"First comment",
@@ -105,7 +118,7 @@ func TestCommentCRUD_ListComments(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		comments, err := queryUC.ListComments(ctx, excID)
+		comments, err := commentRepo.FindByExceptionID(ctx, excID)
 		require.NoError(t, err)
 		require.Len(t, comments, 3)
 
@@ -125,7 +138,7 @@ func TestCommentCRUD_DeleteOwnComment(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		excID := setupExceptionForComments(t, h)
 		ctx := testCtxWithActor(t, h, "delete-user")
-		cmdUC, queryUC := wireCommentUseCase(t, h)
+		cmdUC, commentRepo := wireCommentUseCase(t, h)
 
 		comment, err := cmdUC.AddComment(ctx, exceptionCommand.AddCommentInput{
 			ExceptionID: excID,
@@ -139,7 +152,7 @@ func TestCommentCRUD_DeleteOwnComment(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify the comment no longer appears in the list.
-		remaining, err := queryUC.ListComments(ctx, excID)
+		remaining, err := commentRepo.FindByExceptionID(ctx, excID)
 		require.NoError(t, err)
 		require.Empty(t, remaining)
 	})
@@ -211,10 +224,10 @@ func TestCommentCRUD_ListCommentsEmptyException(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		excID := setupExceptionForComments(t, h)
 		ctx := testCtxWithActor(t, h, "empty-lister")
-		_, queryUC := wireCommentUseCase(t, h)
+		_, commentRepo := wireCommentUseCase(t, h)
 
 		// No comments added — list should return empty slice, not error.
-		comments, err := queryUC.ListComments(ctx, excID)
+		comments, err := commentRepo.FindByExceptionID(ctx, excID)
 		require.NoError(t, err)
 		require.NotNil(t, comments)
 		require.Empty(t, comments)

@@ -12,6 +12,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 func TestCloneResultToResponse_Nil(t *testing.T) {
@@ -33,7 +34,7 @@ func TestCloneResultToResponse_WithData(t *testing.T) {
 			ID:              uuid.New(),
 			TenantID:        uuid.New(),
 			Name:            "Cloned Context",
-			Type:            value_objects.ContextType("1:1"),
+			Type:            shared.ContextType("1:1"),
 			Interval:        "daily",
 			Status:          value_objects.ContextStatusActive,
 			FeeToleranceAbs: decimal.Zero,

@@ -14,8 +14,8 @@ import (
 
 // PostgreSQLModel represents the fee_schedules table mapping.
 type PostgreSQLModel struct {
-	ID               string
-	TenantID         string
+	ID               uuid.UUID
+	TenantID         uuid.UUID
 	Name             string
 	Currency         string
 	ApplicationOrder string
@@ -27,8 +27,8 @@ type PostgreSQLModel struct {
 
 // ItemPostgreSQLModel represents the fee_schedule_items table mapping.
 type ItemPostgreSQLModel struct {
-	ID            string
-	FeeScheduleID string
+	ID            uuid.UUID
+	FeeScheduleID uuid.UUID
 	Name          string
 	Priority      int
 	StructureType string
@@ -64,16 +64,6 @@ func ToEntity(model *PostgreSQLModel, items []ItemPostgreSQLModel) (*fee.FeeSche
 		return nil, ErrFeeScheduleModelNeeded
 	}
 
-	id, err := uuid.Parse(model.ID)
-	if err != nil {
-		return nil, fmt.Errorf("parse id: %w", err)
-	}
-
-	tenantID, err := uuid.Parse(model.TenantID)
-	if err != nil {
-		return nil, fmt.Errorf("parse tenant id: %w", err)
-	}
-
 	feeItems := make([]fee.FeeScheduleItem, 0, len(items))
 
 	for idx, item := range items {
@@ -86,8 +76,8 @@ func ToEntity(model *PostgreSQLModel, items []ItemPostgreSQLModel) (*fee.FeeSche
 	}
 
 	return &fee.FeeSchedule{
-		ID:               id,
-		TenantID:         tenantID,
+		ID:               model.ID,
+		TenantID:         model.TenantID,
 		Name:             model.Name,
 		Currency:         model.Currency,
 		ApplicationOrder: fee.ApplicationOrder(model.ApplicationOrder),
@@ -100,18 +90,13 @@ func ToEntity(model *PostgreSQLModel, items []ItemPostgreSQLModel) (*fee.FeeSche
 }
 
 func itemToEntity(item ItemPostgreSQLModel) (*fee.FeeScheduleItem, error) {
-	id, err := uuid.Parse(item.ID)
-	if err != nil {
-		return nil, fmt.Errorf("parse item id: %w", err)
-	}
-
 	structure, err := parseStructure(item.StructureType, item.StructureData)
 	if err != nil {
 		return nil, fmt.Errorf("parse structure: %w", err)
 	}
 
 	return &fee.FeeScheduleItem{
-		ID:        id,
+		ID:        item.ID,
 		Name:      item.Name,
 		Priority:  item.Priority,
 		Structure: structure,
@@ -199,8 +184,8 @@ func FromEntity(schedule *fee.FeeSchedule) (*PostgreSQLModel, []ItemPostgreSQLMo
 	}
 
 	model := &PostgreSQLModel{
-		ID:               schedule.ID.String(),
-		TenantID:         schedule.TenantID.String(),
+		ID:               schedule.ID,
+		TenantID:         schedule.TenantID,
 		Name:             schedule.Name,
 		Currency:         schedule.Currency,
 		ApplicationOrder: string(schedule.ApplicationOrder),
@@ -219,8 +204,8 @@ func FromEntity(schedule *fee.FeeSchedule) (*PostgreSQLModel, []ItemPostgreSQLMo
 		}
 
 		items = append(items, ItemPostgreSQLModel{
-			ID:            item.ID.String(),
-			FeeScheduleID: schedule.ID.String(),
+			ID:            item.ID,
+			FeeScheduleID: schedule.ID,
 			Name:          item.Name,
 			Priority:      item.Priority,
 			StructureType: string(structureType),

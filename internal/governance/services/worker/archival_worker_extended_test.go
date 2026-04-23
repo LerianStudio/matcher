@@ -928,8 +928,7 @@ func TestStreamPartitionUpload_HashMatchesExternalComputation(t *testing.T) {
 			return "archives/test-key", nil
 		})
 
-	resultRowCount, checksum, compressedSize, err :=
-		w.streamPartitionUpload(ctx, metadata, "archives/test-key")
+	resultRowCount, checksum, compressedSize, err := w.streamPartitionUpload(ctx, metadata, "archives/test-key")
 
 	require.NoError(t, err)
 	assert.Equal(t, int64(rowCount), resultRowCount, "row count must match seeded rows")

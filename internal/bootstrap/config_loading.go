@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
@@ -297,6 +298,19 @@ func loadConfigFromEnv(cfg *Config) error {
 	loadErr = errors.Join(loadErr, libCommons.SetConfigFromEnvVars(&cfg.CallbackRateLimit))
 	loadErr = errors.Join(loadErr, libCommons.SetConfigFromEnvVars(&cfg.CleanupWorker))
 	loadErr = errors.Join(loadErr, libCommons.SetConfigFromEnvVars(&cfg.Fetcher))
+
+	// ShutdownGracePeriod is a top-level time.Duration field marked
+	// mapstructure:"-" (bootstrap-only; not part of the runtime config plane).
+	// lib-commons SetConfigFromEnvVars is only called against the sub-structs
+	// above, so the env wiring here is explicit. SHUTDOWN_GRACE_PERIOD_SEC is
+	// parsed as a positive integer number of seconds; non-positive or
+	// unparseable values fall back to defaultShutdownGracePeriod via the
+	// Shutdown path.
+	if v := strings.TrimSpace(libCommons.GetenvOrDefault("SHUTDOWN_GRACE_PERIOD_SEC", "")); v != "" {
+		if secs, err := strconv.Atoi(v); err == nil && secs > 0 {
+			cfg.ShutdownGracePeriod = time.Duration(secs) * time.Second
+		}
+	}
 
 	return loadErr
 }

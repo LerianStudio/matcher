@@ -20,6 +20,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
@@ -38,7 +39,7 @@ func TestBuildClonedContextEntity(t *testing.T) {
 		ID:                uuid.New(),
 		TenantID:          tenantID,
 		Name:              "Original",
-		Type:              value_objects.ContextTypeOneToOne,
+		Type:              shared.ContextTypeOneToOne,
 		Interval:          "0 0 * * *",
 		Status:            value_objects.ContextStatusActive,
 		FeeToleranceAbs:   decimal.NewFromFloat(0.01),
@@ -134,7 +135,7 @@ func TestCreateClonedContext_Success(t *testing.T) {
 		ID:       uuid.New(),
 		TenantID: uuid.New(),
 		Name:     "Original",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "daily",
 	}
 
@@ -178,7 +179,7 @@ func TestCreateClonedContext_RepoError(t *testing.T) {
 	_, err := uc.createClonedContext(
 		context.Background(),
 		CloneContextInput{NewName: "Clone"},
-		&entities.ReconciliationContext{ID: uuid.New(), TenantID: uuid.New(), Type: value_objects.ContextTypeOneToOne, Interval: "daily"},
+		&entities.ReconciliationContext{ID: uuid.New(), TenantID: uuid.New(), Type: shared.ContextTypeOneToOne, Interval: "daily"},
 		false,
 	)
 
@@ -198,7 +199,7 @@ func TestCreateClonedContextWithTx_Success(t *testing.T) {
 		ID:       uuid.New(),
 		TenantID: uuid.New(),
 		Name:     "Source",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "hourly",
 	}
 
@@ -241,7 +242,7 @@ func TestCreateClonedContextWithTx_RepoDoesNotSupportTx(t *testing.T) {
 		context.Background(),
 		fakeTx,
 		CloneContextInput{NewName: "No Tx Support"},
-		&entities.ReconciliationContext{ID: uuid.New(), TenantID: uuid.New(), Type: value_objects.ContextTypeOneToOne, Interval: "daily"},
+		&entities.ReconciliationContext{ID: uuid.New(), TenantID: uuid.New(), Type: shared.ContextTypeOneToOne, Interval: "daily"},
 		false,
 	)
 
@@ -268,7 +269,7 @@ func TestCreateClonedContextWithTx_CreateError(t *testing.T) {
 		context.Background(),
 		fakeTx,
 		CloneContextInput{NewName: "Fail"},
-		&entities.ReconciliationContext{ID: uuid.New(), TenantID: uuid.New(), Type: value_objects.ContextTypeOneToOne, Interval: "daily"},
+		&entities.ReconciliationContext{ID: uuid.New(), TenantID: uuid.New(), Type: shared.ContextTypeOneToOne, Interval: "daily"},
 		false,
 	)
 
@@ -289,7 +290,7 @@ func TestCloneContextNonTransactional_ContextOnly(t *testing.T) {
 		ID:       sourceCtxID,
 		TenantID: uuid.New(),
 		Name:     "Source",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "daily",
 	}
 
@@ -337,7 +338,7 @@ func TestCloneContextNonTransactional_WithSources(t *testing.T) {
 		ID:       sourceCtxID,
 		TenantID: uuid.New(),
 		Name:     "Source",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "daily",
 	}
 
@@ -363,7 +364,7 @@ func TestCloneContextNonTransactional_WithSources(t *testing.T) {
 	}
 
 	fmRepo := &fieldMapRepoStub{
-		findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*entities.FieldMap, error) {
+		findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*shared.FieldMap, error) {
 			return nil, sql.ErrNoRows
 		},
 	}
@@ -401,7 +402,7 @@ func TestCloneContextNonTransactional_WithRules(t *testing.T) {
 		ID:       sourceCtxID,
 		TenantID: uuid.New(),
 		Name:     "Source",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "daily",
 	}
 
@@ -414,7 +415,7 @@ func TestCloneContextNonTransactional_WithRules(t *testing.T) {
 	ruleRepo := &matchRuleRepoStub{
 		findByContextIDFn: func(_ context.Context, _ uuid.UUID, _ string, _ int) (entities.MatchRules, libHTTP.CursorPagination, error) {
 			return entities.MatchRules{
-				{ID: uuid.New(), ContextID: sourceCtxID, Priority: 1, Type: value_objects.RuleTypeExact, Config: map[string]any{}},
+				{ID: uuid.New(), ContextID: sourceCtxID, Priority: 1, Type: shared.RuleTypeExact, Config: map[string]any{}},
 			}, libHTTP.CursorPagination{}, nil
 		},
 		createFn: func(_ context.Context, rule *entities.MatchRule) (*entities.MatchRule, error) {
@@ -460,7 +461,7 @@ func TestCloneContextNonTransactional_SourceCloneError(t *testing.T) {
 		ID:       sourceCtxID,
 		TenantID: uuid.New(),
 		Name:     "Source",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "daily",
 	}
 
@@ -508,7 +509,7 @@ func TestCloneContextNonTransactional_RuleCloneError(t *testing.T) {
 		ID:       sourceCtxID,
 		TenantID: uuid.New(),
 		Name:     "Source",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "daily",
 	}
 
@@ -556,7 +557,7 @@ func TestCloneContextNonTransactional_FeeRuleCloneError(t *testing.T) {
 		ID:       sourceCtxID,
 		TenantID: uuid.New(),
 		Name:     "Source",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "daily",
 	}
 
@@ -614,7 +615,7 @@ func TestCloneContextNonTransactional_CreateContextError(t *testing.T) {
 	_, err := uc.cloneContextNonTransactional(
 		context.Background(),
 		CloneContextInput{NewName: "Fail"},
-		&entities.ReconciliationContext{ID: uuid.New(), TenantID: uuid.New(), Type: value_objects.ContextTypeOneToOne, Interval: "daily"},
+		&entities.ReconciliationContext{ID: uuid.New(), TenantID: uuid.New(), Type: shared.ContextTypeOneToOne, Interval: "daily"},
 		false,
 	)
 
@@ -637,7 +638,7 @@ func TestCloneContextTransactional_Success(t *testing.T) {
 		ID:       sourceCtxID,
 		TenantID: uuid.New(),
 		Name:     "Original",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "daily",
 	}
 
@@ -763,7 +764,7 @@ func TestCloneContextTransactional_CommitError(t *testing.T) {
 	ctxRepo := &contextRepoTxStub{
 		contextRepoStub: &contextRepoStub{},
 		findByIDWithTxFn: func(_ context.Context, _ *sql.Tx, _ uuid.UUID) (*entities.ReconciliationContext, error) {
-			return &entities.ReconciliationContext{ID: sourceCtxID, TenantID: uuid.New(), Type: value_objects.ContextTypeOneToOne, Interval: "daily"}, nil
+			return &entities.ReconciliationContext{ID: sourceCtxID, TenantID: uuid.New(), Type: shared.ContextTypeOneToOne, Interval: "daily"}, nil
 		},
 		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
 			return entity, nil
@@ -810,7 +811,7 @@ func TestCloneContextTransactional_SourceCloneError(t *testing.T) {
 	ctxRepo := &contextRepoTxStub{
 		contextRepoStub: &contextRepoStub{},
 		findByIDWithTxFn: func(_ context.Context, _ *sql.Tx, _ uuid.UUID) (*entities.ReconciliationContext, error) {
-			return &entities.ReconciliationContext{ID: sourceCtxID, TenantID: uuid.New(), Type: value_objects.ContextTypeOneToOne, Interval: "daily"}, nil
+			return &entities.ReconciliationContext{ID: sourceCtxID, TenantID: uuid.New(), Type: shared.ContextTypeOneToOne, Interval: "daily"}, nil
 		},
 		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
 			return entity, nil
@@ -861,7 +862,7 @@ func TestCloneContextTransactional_WithAllIncludes(t *testing.T) {
 		ID:       sourceCtxID,
 		TenantID: tenantID,
 		Name:     "Full Clone Source",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "daily",
 	}
 
@@ -902,7 +903,7 @@ func TestCloneContextTransactional_WithAllIncludes(t *testing.T) {
 		matchRuleRepoStub: &matchRuleRepoStub{
 			findByContextIDFn: func(_ context.Context, _ uuid.UUID, _ string, _ int) (entities.MatchRules, libHTTP.CursorPagination, error) {
 				return entities.MatchRules{
-					{ID: uuid.New(), ContextID: sourceCtxID, Priority: 1, Type: value_objects.RuleTypeExact, Config: map[string]any{}},
+					{ID: uuid.New(), ContextID: sourceCtxID, Priority: 1, Type: shared.RuleTypeExact, Config: map[string]any{}},
 				}, libHTTP.CursorPagination{}, nil
 			},
 		},

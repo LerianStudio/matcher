@@ -14,10 +14,10 @@ import (
 
 	commentRepoAdapter "github.com/LerianStudio/matcher/internal/exception/adapters/postgres/comment"
 	exceptionEntities "github.com/LerianStudio/matcher/internal/exception/domain/entities"
-	exceptionVO "github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	ingestionJobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
 	ingestionTxRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/transaction"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -42,7 +42,7 @@ func setupCommentRepoTest(
 		decimal.NewFromFloat(100.00), "USD")
 
 	exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-		exceptionVO.ExceptionSeverityHigh, "repo test reason")
+		sharedexception.ExceptionSeverityHigh, "repo test reason")
 
 	cRepo := commentRepoAdapter.NewRepository(provider)
 
@@ -229,9 +229,9 @@ func TestCommentRepository_FindByExceptionID_IsolationBetweenExceptions(t *testi
 			"ISO-B-"+uuid.New().String()[:8], decimal.NewFromFloat(75.00), "EUR")
 
 		exc1 := createExceptionForTransaction(t, ctx, h.Connection, tx1.ID,
-			exceptionVO.ExceptionSeverityHigh, "exception alpha")
+			sharedexception.ExceptionSeverityHigh, "exception alpha")
 		exc2 := createExceptionForTransaction(t, ctx, h.Connection, tx2.ID,
-			exceptionVO.ExceptionSeverityMedium, "exception beta")
+			sharedexception.ExceptionSeverityMedium, "exception beta")
 
 		cRepo := commentRepoAdapter.NewRepository(provider)
 

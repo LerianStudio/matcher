@@ -82,7 +82,7 @@ type CreateContextSourceRequest struct {
 func (req *CreateContextRequest) ToDomainInput() (entities.CreateReconciliationContextInput, error) {
 	input := entities.CreateReconciliationContextInput{
 		Name:              req.Name,
-		Type:              value_objects.ContextType(req.Type),
+		Type:              shared.ContextType(req.Type),
 		Interval:          req.Interval,
 		FeeToleranceAbs:   req.FeeToleranceAbs,
 		FeeTolerancePct:   req.FeeTolerancePct,
@@ -189,7 +189,7 @@ func (req *UpdateContextRequest) ToDomainInput() (entities.UpdateReconciliationC
 	}
 
 	if req.Type != nil {
-		ct := value_objects.ContextType(*req.Type)
+		ct := shared.ContextType(*req.Type)
 		input.Type = &ct
 	}
 
@@ -283,8 +283,8 @@ type CreateFieldMapRequest struct {
 }
 
 // ToDomainInput converts the API request to a domain input struct.
-func (r *CreateFieldMapRequest) ToDomainInput() entities.CreateFieldMapInput {
-	return entities.CreateFieldMapInput{
+func (r *CreateFieldMapRequest) ToDomainInput() shared.CreateFieldMapInput {
+	return shared.CreateFieldMapInput{
 		Mapping: r.Mapping,
 	}
 }
@@ -296,8 +296,8 @@ type UpdateFieldMapRequest struct {
 }
 
 // ToDomainInput converts the API request to a domain input struct.
-func (r *UpdateFieldMapRequest) ToDomainInput() entities.UpdateFieldMapInput {
-	return entities.UpdateFieldMapInput{
+func (r *UpdateFieldMapRequest) ToDomainInput() shared.UpdateFieldMapInput {
+	return shared.UpdateFieldMapInput{
 		Mapping: r.Mapping,
 	}
 }

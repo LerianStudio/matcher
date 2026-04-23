@@ -37,8 +37,8 @@ func (repo *Repository) FindByID(
 			row := qe.QueryRowContext(
 				ctx,
 				"SELECT "+sourceColumns+" FROM reconciliation_sources WHERE context_id = $1 AND id = $2",
-				contextID.String(),
-				id.String(),
+				contextID,
+				id,
 			)
 
 			return scanSource(row)
@@ -77,24 +77,19 @@ func (repo *Repository) GetContextIDBySourceID(
 		ctx,
 		repo.provider,
 		func(qe common.QueryExecutor) (uuid.UUID, error) {
-			var contextIDStr string
+			var contextID uuid.UUID
 
 			row := qe.QueryRowContext(
 				ctx,
 				"SELECT context_id FROM reconciliation_sources WHERE id = $1",
-				sourceID.String(),
+				sourceID,
 			)
 
-			if err := row.Scan(&contextIDStr); err != nil {
+			if err := row.Scan(&contextID); err != nil {
 				return uuid.Nil, err
 			}
 
-			parsed, err := uuid.Parse(contextIDStr)
-			if err != nil {
-				return uuid.Nil, fmt.Errorf("parse context id: %w", err)
-			}
-
-			return parsed, nil
+			return contextID, nil
 		},
 	)
 	if err != nil {

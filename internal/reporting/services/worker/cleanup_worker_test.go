@@ -18,7 +18,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	repomocks "github.com/LerianStudio/matcher/internal/reporting/domain/repositories/mocks"
-	portsmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
+	storageMocks "github.com/LerianStudio/matcher/internal/shared/objectstorage/mocks"
 )
 
 var (
@@ -48,12 +48,12 @@ func waitForCondition(t *testing.T, timeout, interval time.Duration, condition f
 
 func setupCleanupWorkerMocks(
 	t *testing.T,
-) (*repomocks.MockExportJobRepository, *portsmocks.MockObjectStorageClient, CleanupWorkerConfig, *libLog.NopLogger) {
+) (*repomocks.MockExportJobRepository, *storageMocks.MockBackend, CleanupWorkerConfig, *libLog.NopLogger) {
 	t.Helper()
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{
 		Interval:              50 * time.Millisecond,
 		BatchSize:             10,
@@ -82,7 +82,7 @@ func TestNewCleanupWorker_ValidDependencies(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{}
 	logger := &libLog.NopLogger{}
 
@@ -98,7 +98,7 @@ func TestNewCleanupWorker_NilJobRepository(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{}
 	logger := &libLog.NopLogger{}
 
@@ -129,7 +129,7 @@ func TestNewCleanupWorker_DefaultIntervalWhenZero(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{Interval: 0}
 	logger := &libLog.NopLogger{}
 	worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
@@ -143,7 +143,7 @@ func TestNewCleanupWorker_DefaultIntervalWhenNegative(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{Interval: -1 * time.Hour}
 	logger := &libLog.NopLogger{}
 	worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
@@ -157,7 +157,7 @@ func TestNewCleanupWorker_DefaultBatchSizeWhenZero(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{BatchSize: 0}
 	logger := &libLog.NopLogger{}
 	worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
@@ -171,7 +171,7 @@ func TestNewCleanupWorker_DefaultBatchSizeWhenNegative(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{BatchSize: -10}
 	logger := &libLog.NopLogger{}
 	worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
@@ -185,7 +185,7 @@ func TestNewCleanupWorker_CustomIntervalWhenPositive(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{Interval: 30 * time.Minute}
 	logger := &libLog.NopLogger{}
 	worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
@@ -199,7 +199,7 @@ func TestNewCleanupWorker_CustomBatchSizeWhenPositive(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{BatchSize: 50}
 	logger := &libLog.NopLogger{}
 	worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
@@ -213,7 +213,7 @@ func TestNewCleanupWorker_DefaultGracePeriodWhenZero(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{FileDeleteGracePeriod: 0}
 	logger := &libLog.NopLogger{}
 	worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
@@ -227,7 +227,7 @@ func TestNewCleanupWorker_DefaultGracePeriodWhenNegative(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{FileDeleteGracePeriod: -30 * time.Minute}
 	logger := &libLog.NopLogger{}
 	worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
@@ -241,7 +241,7 @@ func TestNewCleanupWorker_CustomGracePeriodWhenPositive(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{FileDeleteGracePeriod: 2 * time.Hour}
 	logger := &libLog.NopLogger{}
 	worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
@@ -255,7 +255,7 @@ func TestNewCleanupWorker_WithNilLogger(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{}
 	worker, err := NewCleanupWorker(jobRepo, storage, cfg, nil)
 
@@ -272,7 +272,7 @@ func TestCleanupWorker_Start(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := CleanupWorkerConfig{Interval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
@@ -305,7 +305,7 @@ func TestCleanupWorker_Start(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := CleanupWorkerConfig{Interval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
@@ -345,7 +345,7 @@ func TestCleanupWorker_Stop(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := CleanupWorkerConfig{Interval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
@@ -375,7 +375,7 @@ func TestCleanupWorker_Stop(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := CleanupWorkerConfig{Interval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
@@ -554,7 +554,7 @@ func TestCleanupWorker_CleanupExpired_UpdateError(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{
 		Interval:  50 * time.Millisecond,
 		BatchSize: 10,
@@ -602,7 +602,7 @@ func TestCleanupWorker_CleanupExpired_NoFileKey(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{
 		Interval:  50 * time.Millisecond,
 		BatchSize: 10,
@@ -647,7 +647,7 @@ func TestCleanupWorker_ContextCancellation(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := CleanupWorkerConfig{
 			Interval:  1 * time.Hour,
 			BatchSize: 10,
@@ -696,7 +696,7 @@ func TestCleanupWorker_MultipleExpiredJobs(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := CleanupWorkerConfig{
 			Interval:  50 * time.Millisecond,
 			BatchSize: 10,
@@ -753,7 +753,7 @@ func TestCleanupWorker_TickerBehavior(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		cfg := CleanupWorkerConfig{
 			Interval:  30 * time.Millisecond,
 			BatchSize: 10,
@@ -795,7 +795,7 @@ func TestCleanupWorker_Done(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{
 		Interval:  100 * time.Millisecond,
 		BatchSize: 10,
@@ -832,7 +832,7 @@ func TestCleanupWorker_ListExpiredError_ContinuesRunning(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{
 		Interval:  30 * time.Millisecond,
 		BatchSize: 10,
@@ -871,7 +871,7 @@ func TestCleanupWorker_StopTwice(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{
 		Interval:  100 * time.Millisecond,
 		BatchSize: 10,
@@ -906,7 +906,7 @@ func TestCleanupWorker_StartTwice(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{
 		Interval:  100 * time.Millisecond,
 		BatchSize: 10,
@@ -937,7 +937,7 @@ func TestCleanupWorker_StopBeforeStart(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{
 		Interval:  100 * time.Millisecond,
 		BatchSize: 10,
@@ -956,7 +956,7 @@ func TestCleanupWorker_CleanupExpired_EmptyJobsList(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{
 		Interval:  50 * time.Millisecond,
 		BatchSize: 10,
@@ -1005,7 +1005,7 @@ func TestCleanupWorker_GracePeriod_FileNotDeletedWithinGrace(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{
 		Interval:              50 * time.Millisecond,
 		BatchSize:             10,
@@ -1059,7 +1059,7 @@ func TestCleanupWorker_GracePeriod_FileDeletedAfterGrace(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{
 		Interval:              50 * time.Millisecond,
 		BatchSize:             10,
@@ -1114,7 +1114,7 @@ func TestCleanupWorker_AlreadyExpiredJob_SkipsMarkExpired(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{
 		Interval:              50 * time.Millisecond,
 		BatchSize:             10,
@@ -1176,7 +1176,7 @@ func TestCleanupWorker_ParallelCleanupDoesNotShortCircuit(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
-	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := CleanupWorkerConfig{
 		Interval:              50 * time.Millisecond,
 		BatchSize:             jobCount + 5,

@@ -150,7 +150,7 @@ func (handler *Handler) GetMatchRun(fiberCtx *fiber.Ctx) error {
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
-	run, err := handler.query.GetMatchRun(ctx, contextID, runID)
+	run, err := handler.matchRunRepo.FindByID(ctx, contextID, runID)
 	if errors.Is(err, sql.ErrNoRows) {
 		libOpentelemetry.HandleSpanError(span, "match run not found", err)
 
@@ -237,7 +237,7 @@ func (handler *Handler) ListMatchRuns(fiberCtx *fiber.Ctx) error {
 		)
 	}
 
-	runs, pagination, err := handler.query.ListMatchRuns(
+	runs, pagination, err := handler.matchRunRepo.ListByContextID(
 		ctx,
 		contextID,
 		matchingRepos.CursorFilter{

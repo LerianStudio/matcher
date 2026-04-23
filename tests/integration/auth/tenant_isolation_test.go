@@ -14,8 +14,8 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	configContextRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/context"
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -46,7 +46,7 @@ func TestCrossTenantIsolation_H03(t *testing.T) {
 				tenantAID,
 				configEntities.CreateReconciliationContextInput{
 					Name:     "Tenant A Context",
-					Type:     configVO.ContextTypeOneToOne,
+					Type:     shared.ContextTypeOneToOne,
 					Interval: "0 0 * * *",
 				},
 			)
@@ -60,7 +60,7 @@ func TestCrossTenantIsolation_H03(t *testing.T) {
 				tenantBID,
 				configEntities.CreateReconciliationContextInput{
 					Name:     "Tenant B Context",
-					Type:     configVO.ContextTypeOneToMany,
+					Type:     shared.ContextTypeOneToMany,
 					Interval: "0 0 * * *",
 				},
 			)

@@ -34,7 +34,7 @@ func TestReconciliationContextToResponse(t *testing.T) {
 				ID:              uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 				TenantID:        uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 				Name:            "Bank Reconciliation Q1",
-				Type:            value_objects.ContextTypeOneToOne,
+				Type:            shared.ContextTypeOneToOne,
 				Interval:        "daily",
 				Status:          value_objects.ContextStatusActive,
 				FeeToleranceAbs: decimal.NewFromFloat(0.50),
@@ -61,7 +61,7 @@ func TestReconciliationContextToResponse(t *testing.T) {
 				ID:              uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 				TenantID:        uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 				Name:            "FX Reconciliation",
-				Type:            value_objects.ContextTypeOneToMany,
+				Type:            shared.ContextTypeOneToMany,
 				Interval:        "weekly",
 				Status:          value_objects.ContextStatusPaused,
 				FeeToleranceAbs: decimal.Zero,
@@ -119,7 +119,7 @@ func TestReconciliationContextsToResponse(t *testing.T) {
 					ID:              uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 					TenantID:        uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 					Name:            "Test Context",
-					Type:            value_objects.ContextTypeOneToOne,
+					Type:            shared.ContextTypeOneToOne,
 					Interval:        "daily",
 					Status:          value_objects.ContextStatusActive,
 					FeeToleranceAbs: decimal.Zero,
@@ -365,7 +365,7 @@ func TestFieldMapToResponse(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		input    *entities.FieldMap
+		input    *shared.FieldMap
 		expected FieldMapResponse
 	}{
 		{
@@ -377,7 +377,7 @@ func TestFieldMapToResponse(t *testing.T) {
 		},
 		{
 			name: "full entity conversion",
-			input: &entities.FieldMap{
+			input: &shared.FieldMap{
 				ID:        uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 				ContextID: uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 				SourceID:  uuid.MustParse("33333333-3333-3333-3333-333333333333"),
@@ -398,7 +398,7 @@ func TestFieldMapToResponse(t *testing.T) {
 		},
 		{
 			name: "nil mapping returns empty map",
-			input: &entities.FieldMap{
+			input: &shared.FieldMap{
 				ID:        uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 				ContextID: uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 				SourceID:  uuid.MustParse("33333333-3333-3333-3333-333333333333"),
@@ -434,7 +434,7 @@ func TestFieldMapsToResponse(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		input    []*entities.FieldMap
+		input    []*shared.FieldMap
 		expected []FieldMapResponse
 	}{
 		{
@@ -444,12 +444,12 @@ func TestFieldMapsToResponse(t *testing.T) {
 		},
 		{
 			name:     "empty slice returns empty slice",
-			input:    []*entities.FieldMap{},
+			input:    []*shared.FieldMap{},
 			expected: []FieldMapResponse{},
 		},
 		{
 			name: "filters nil elements",
-			input: []*entities.FieldMap{
+			input: []*shared.FieldMap{
 				{
 					ID:        uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 					ContextID: uuid.MustParse("22222222-2222-2222-2222-222222222222"),

@@ -1223,7 +1223,7 @@ definitions:
         example: user@example.com
         maxLength: 255
         type: string
-      exception_ids:
+      exceptionIds:
         description: Exception IDs to assign
         items:
           type: string
@@ -1232,12 +1232,12 @@ definitions:
         type: array
     required:
     - assignee
-    - exception_ids
+    - exceptionIds
     type: object
   github_com_LerianStudio_matcher_internal_exception_adapters_http_dto.BulkDispatchRequest:
     description: Bulk dispatch request payload
     properties:
-      exception_ids:
+      exceptionIds:
         description: Exception IDs to dispatch
         items:
           type: string
@@ -1249,14 +1249,14 @@ definitions:
         example: RECON-TEAM
         maxLength: 255
         type: string
-      target_system:
+      targetSystem:
         description: Target system to dispatch to
         example: JIRA
         maxLength: 255
         type: string
     required:
-    - exception_ids
-    - target_system
+    - exceptionIds
+    - targetSystem
     type: object
   github_com_LerianStudio_matcher_internal_exception_adapters_http_dto.BulkFailure:
     description: Single failure in bulk operation
@@ -1265,7 +1265,7 @@ definitions:
         description: Error description
         example: exception not found
         type: string
-      exception_id:
+      exceptionId:
         description: Exception ID that failed
         example: 550e8400-e29b-41d4-a716-446655440000
         type: string
@@ -1273,7 +1273,7 @@ definitions:
   github_com_LerianStudio_matcher_internal_exception_adapters_http_dto.BulkResolveRequest:
     description: Bulk resolve request payload
     properties:
-      exception_ids:
+      exceptionIds:
         description: Exception IDs to resolve
         items:
           type: string
@@ -1291,7 +1291,7 @@ definitions:
         maxLength: 255
         type: string
     required:
-    - exception_ids
+    - exceptionIds
     - resolution
     type: object
   github_com_LerianStudio_matcher_internal_exception_adapters_http_dto.CloseDisputeRequest:
@@ -1744,15 +1744,15 @@ definitions:
   github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.ActorMappingResponse:
     description: Actor mapping entry linking an opaque actor ID to PII
     properties:
-      actor_id:
+      actorId:
         description: Opaque actor identifier
         example: user:550e8400-e29b-41d4-a716-446655440000
         type: string
-      created_at:
+      createdAt:
         description: Timestamp when the mapping was created (RFC3339)
         example: "2026-01-15T10:30:00Z"
         type: string
-      display_name:
+      displayName:
         description: Human-readable display name
         example: John Doe
         type: string
@@ -1760,7 +1760,7 @@ definitions:
         description: Email address
         example: john.doe@example.com
         type: string
-      updated_at:
+      updatedAt:
         description: Timestamp when the mapping was last updated (RFC3339)
         example: "2026-01-15T10:30:00Z"
         type: string
@@ -1768,19 +1768,19 @@ definitions:
   github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.ArchiveMetadataResponse:
     description: Completed audit log archive metadata
     properties:
-      archived_at:
+      archivedAt:
         description: Timestamp when archival completed (RFC3339)
         example: "2024-04-01T02:30:00Z"
         type: string
-      compressed_size_bytes:
+      compressedSizeBytes:
         description: Compressed file size in bytes
         example: 10485760
         type: integer
-      date_range_end:
+      dateRangeEnd:
         description: End of the archived date range (RFC3339)
         example: "2024-03-31T23:59:59Z"
         type: string
-      date_range_start:
+      dateRangeStart:
         description: Start of the archived date range (RFC3339)
         example: "2024-01-01T00:00:00Z"
         type: string
@@ -1788,11 +1788,11 @@ definitions:
         description: Unique identifier for the archive
         example: 550e8400-e29b-41d4-a716-446655440000
         type: string
-      partition_name:
+      partitionName:
         description: Name of the database partition that was archived
         example: audit_logs_2024_q1
         type: string
-      row_count:
+      rowCount:
         description: Number of rows archived
         example: 150000
         type: integer
@@ -1802,7 +1802,7 @@ definitions:
         - COMPLETE
         example: COMPLETE
         type: string
-      storage_class:
+      storageClass:
         description: Object storage class
         enum:
         - STANDARD
@@ -1893,7 +1893,7 @@ definitions:
   github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.UpsertActorMappingRequest:
     description: Request body for upserting an actor mapping
     properties:
-      display_name:
+      displayName:
         description: Human-readable display name for the actor
         example: John Doe
         type: string
@@ -2808,65 +2808,56 @@ definitions:
       prev:
         type: string
     type: object
-  internal_bootstrap.DependencyChecks:
-    description: Individual dependency health status
+  internal_bootstrap.CheckResult:
     properties:
-      database:
-        description: 'Database check status: ok, down, or unknown'
-        enum:
-        - ok
-        - down
-        - unknown
-        example: ok
+      error:
         type: string
-      databaseReplica:
-        description: 'DatabaseReplica check status: ok, down, or unknown'
-        enum:
-        - ok
-        - down
-        - unknown
-        example: ok
+      latency_ms:
+        example: 2
+        type: integer
+      reason:
         type: string
-      objectStorage:
-        description: 'ObjectStorage check status: ok, down, or unknown'
+      status:
         enum:
-        - ok
+        - up
         - down
-        - unknown
-        example: ok
+        - degraded
+        - skipped
+        - n/a
+        example: up
         type: string
-      rabbitmq:
-        description: 'RabbitMQ check status: ok, down, or unknown'
-        enum:
-        - ok
-        - down
-        - unknown
-        example: ok
-        type: string
-      redis:
-        description: 'Redis check status: ok, down, or unknown'
-        enum:
-        - ok
-        - down
-        - unknown
-        example: ok
-        type: string
+      tls:
+        description: |-
+          TLS is a pointer so json omitempty drops it for deps that have no TLS
+          concept (e.g., in-process cache). For deps that do have TLS posture,
+          false and true are both meaningful and must serialise.
+        type: boolean
     type: object
   internal_bootstrap.ReadinessResponse:
-    description: Service readiness status with optional dependency checks
+    description: Kubernetes readiness probe response in the canonical contract shape
+      (dev-readyz skill). Top-level "status" is "healthy" iff every check is in {up,
+      skipped, n/a}; any "down" or "degraded" in a required dep yields "unhealthy"
+      and HTTP 503.
     properties:
       checks:
-        allOf:
-        - $ref: '#/definitions/internal_bootstrap.DependencyChecks'
-        description: Checks contains individual dependency status (only in development/test
-          environments)
-      status:
-        description: Status is "ok" when all required dependencies are available,
-          "degraded" otherwise
+        additionalProperties:
+          $ref: '#/definitions/internal_bootstrap.CheckResult'
+        type: object
+      deployment_mode:
         enum:
-        - ok
-        - degraded
-        example: ok
+        - saas
+        - byoc
+        - local
+        example: local
+        type: string
+      status:
+        enum:
+        - healthy
+        - unhealthy
+        example: healthy
+        type: string
+      version:
+        example: 1.3.0
         type: string
     type: object
   internal_configuration_adapters_http.ListContextsResponse:
@@ -3321,8 +3312,11 @@ paths:
   /health:
     get:
       description: |-
-        Returns a simple health check response to indicate the service is alive.
-        Used by Kubernetes liveness probes to detect if the service needs to be restarted.
+        Returns HTTP 200 with "healthy" once the startup self-probe
+        has confirmed every required dependency. Returns 503 before
+        that gate is cleared so Kubernetes does not route traffic
+        to a partially-initialised pod. Separate from /readyz, which
+        probes on every request.
       operationId: getHealth
       produces:
       - text/plain
@@ -3331,26 +3325,30 @@ paths:
           description: healthy
           schema:
             type: string
+        "503":
+          description: self-probe failed
+          schema:
+            type: string
       summary: Liveness check
       tags:
       - Health
-  /ready:
+  /readyz:
     get:
       description: |-
-        Checks if the service is ready to accept traffic by verifying all required dependencies.
-        Used by Kubernetes readiness probes to control traffic routing.
-        Returns 200 OK when all required dependencies are healthy, 503 Service Unavailable otherwise.
-        Dependency check details are only included in development/test environments.
-      operationId: getReady
+        Canonical Kubernetes readiness probe. Per-check status
+        vocabulary: up, down, degraded, skipped, n/a. Top-level
+        "healthy" iff every required dep is in {up, skipped, n/a};
+        anything else yields "unhealthy" and HTTP 503.
+      operationId: getReadyz
       produces:
       - application/json
       responses:
         "200":
-          description: Service is ready to accept traffic
+          description: Service is ready
           schema:
             $ref: '#/definitions/internal_bootstrap.ReadinessResponse'
         "503":
-          description: Service is not ready (degraded state)
+          description: Service is not ready
           schema:
             $ref: '#/definitions/internal_bootstrap.ReadinessResponse'
       summary: Readiness check
@@ -10045,8 +10043,9 @@ paths:
       - Reporting
   /version:
     get:
-      description: Returns the service version from the VERSION environment variable
-        (defaults to "0.0.0").
+      description: |-
+        Returns the service version from the VERSION environment
+        variable (defaults to "0.0.0").
       operationId: getVersion
       produces:
       - application/json

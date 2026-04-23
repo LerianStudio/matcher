@@ -8,43 +8,25 @@ import (
 
 	"github.com/google/uuid"
 
-	ingestionEntities "github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
-	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	configSourceRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/source"
+	ingestionJobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
+	ingestionTxRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/transaction"
 )
-
-// ExceptionContextLookup resolves a reconciliation context ID for a transaction.
-type ExceptionContextLookup interface {
-	GetContextIDByTransactionID(ctx context.Context, transactionID uuid.UUID) (uuid.UUID, error)
-}
-
-// TransactionFinder is an interface for finding transactions by ID.
-type TransactionFinder interface {
-	FindByID(ctx context.Context, transactionID uuid.UUID) (*shared.Transaction, error)
-}
-
-// JobFinder is an interface for finding ingestion jobs by ID.
-type JobFinder interface {
-	FindByID(ctx context.Context, jobID uuid.UUID) (*ingestionEntities.IngestionJob, error)
-}
-
-// SourceContextFinder is an optional interface for resolving context IDs via the source path.
-type SourceContextFinder interface {
-	GetContextIDBySourceID(ctx context.Context, sourceID uuid.UUID) (uuid.UUID, error)
-}
 
 // TransactionContextLookup resolves context IDs using transaction, ingestion job,
 // and optional source fallback lookups.
 type TransactionContextLookup struct {
-	transactionFinder TransactionFinder
-	jobFinder         JobFinder
-	sourceFinder      SourceContextFinder
+	transactionFinder *ingestionTxRepo.Repository
+	jobFinder         *ingestionJobRepo.Repository
+	sourceFinder      *configSourceRepo.Repository
 }
 
 // NewTransactionContextLookup creates a context resolver that derives context IDs from transaction metadata.
+// The sourceFinder is optional; pass nil to disable source-based fallback.
 func NewTransactionContextLookup(
-	transactionFinder TransactionFinder,
-	jobFinder JobFinder,
-	sourceFinder SourceContextFinder,
+	transactionFinder *ingestionTxRepo.Repository,
+	jobFinder *ingestionJobRepo.Repository,
+	sourceFinder *configSourceRepo.Repository,
 ) (*TransactionContextLookup, error) {
 	if transactionFinder == nil {
 		return nil, ErrNilTransactionRepository
@@ -131,5 +113,3 @@ func (lookup *TransactionContextLookup) resolveViaIngestionJob(
 
 	return job.ContextID, nil
 }
-
-var _ ExceptionContextLookup = (*TransactionContextLookup)(nil)

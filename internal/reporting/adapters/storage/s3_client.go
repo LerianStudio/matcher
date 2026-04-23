@@ -22,6 +22,7 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
+	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -523,5 +524,6 @@ func isPreconditionFailed(err error) bool {
 	return false
 }
 
-// Compile-time interface check.
-var _ sharedPorts.ObjectStorageClient = (*S3Client)(nil)
+// Compile-time interface check: the S3Client is a Backend for the
+// shared hot-reloadable object storage client.
+var _ objectstorage.Backend = (*S3Client)(nil)

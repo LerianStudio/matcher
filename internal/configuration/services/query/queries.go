@@ -18,35 +18,15 @@ var (
 
 // UseCase provides query operations for configuration entities.
 type UseCase struct {
-	contextRepo     repositories.ContextRepository
-	sourceRepo      repositories.SourceRepository
-	fieldMapRepo    repositories.FieldMapRepository
-	matchRuleRepo   repositories.MatchRuleRepository
-	feeScheduleRepo configPorts.FeeScheduleRepository
-	feeRuleRepo     repositories.FeeRuleRepository
-	scheduleRepo    configPorts.ScheduleRepository
+	contextRepo   repositories.ContextRepository
+	sourceRepo    repositories.SourceRepository
+	fieldMapRepo  repositories.FieldMapRepository
+	matchRuleRepo repositories.MatchRuleRepository
+	scheduleRepo  configPorts.ScheduleRepository
 }
 
 // QueryUseCaseOption configures the query use case.
 type QueryUseCaseOption func(*UseCase)
-
-// WithFeeScheduleRepository sets the fee schedule repository for the query use case.
-func WithFeeScheduleRepository(repo configPorts.FeeScheduleRepository) QueryUseCaseOption {
-	return func(uc *UseCase) {
-		if repo != nil {
-			uc.feeScheduleRepo = repo
-		}
-	}
-}
-
-// WithFeeRuleRepository sets the fee rule repository for the query use case.
-func WithFeeRuleRepository(repo repositories.FeeRuleRepository) QueryUseCaseOption {
-	return func(uc *UseCase) {
-		if repo != nil {
-			uc.feeRuleRepo = repo
-		}
-	}
-}
 
 // WithScheduleRepository sets the schedule repository for the query use case.
 func WithScheduleRepository(repo configPorts.ScheduleRepository) QueryUseCaseOption {

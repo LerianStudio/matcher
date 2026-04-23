@@ -61,9 +61,18 @@ var ErrConfigNil = errors.New("config must be provided")
 var ErrSystemplaneClientNil = errors.New("systemplane client must be provided")
 
 // AppConfig holds core application metadata.
+//
+// Mode is the deployment mode used purely for informational purposes. It
+// surfaces in the /readyz "deployment_mode" field and drives logger
+// configuration defaults; it does NOT gate TLS enforcement. Allowed values are
+// "saas", "byoc", and "local" (default). Matching is case-insensitive and
+// trimmed. TLS enforcement is opt-in per infra stack via the
+// X_TLS_REQUIRED boolean flags on each stack's config struct — see
+// ValidateRequiredTLS.
 type AppConfig struct {
-	EnvName  string `env:"ENV_NAME"  envDefault:"development" mapstructure:"env_name"`
-	LogLevel string `env:"LOG_LEVEL" envDefault:"info"        mapstructure:"log_level"`
+	EnvName  string `env:"ENV_NAME"         envDefault:"development" mapstructure:"env_name"`
+	LogLevel string `env:"LOG_LEVEL"        envDefault:"info"        mapstructure:"log_level"`
+	Mode     string `env:"DEPLOYMENT_MODE"  envDefault:"local"       mapstructure:"mode"`
 }
 
 // ServerConfig configures the HTTP server and middleware.
@@ -102,6 +111,13 @@ type TenancyConfig struct {
 }
 
 // PostgresConfig configures primary/replica connections and pooling.
+//
+// TLSRequired and ReplicaTLSRequired are bootstrap-only per-stack opt-in
+// flags consumed once by ValidateRequiredTLS at startup. When true, the
+// corresponding connection MUST declare TLS (sslmode != "disable"); otherwise
+// bootstrap fails closed with ErrTLSRequiredButNotDeclared. Unset (default
+// false) = no enforcement, operator's call. These do NOT switch TLS on by
+// themselves — they only enforce that a TLS-intent config is present.
 type PostgresConfig struct {
 	PrimaryHost     string `env:"POSTGRES_HOST"     envDefault:"localhost" mapstructure:"primary_host"`
 	PrimaryPort     string `env:"POSTGRES_PORT"     envDefault:"5432"      mapstructure:"primary_port"`
@@ -109,13 +125,15 @@ type PostgresConfig struct {
 	PrimaryPassword string `env:"POSTGRES_PASSWORD" envDefault:"matcher_dev_password" mapstructure:"primary_password"`
 	PrimaryDB       string `env:"POSTGRES_DB"       envDefault:"matcher"   mapstructure:"primary_db"`
 	PrimarySSLMode  string `env:"POSTGRES_SSLMODE"  envDefault:"disable"   mapstructure:"primary_ssl_mode"`
+	TLSRequired     bool   `env:"POSTGRES_TLS_REQUIRED" envDefault:"false" mapstructure:"tls_required"`
 
-	ReplicaHost     string `env:"POSTGRES_REPLICA_HOST"                    mapstructure:"replica_host"`
-	ReplicaPort     string `env:"POSTGRES_REPLICA_PORT"                    mapstructure:"replica_port"`
-	ReplicaUser     string `env:"POSTGRES_REPLICA_USER"                    mapstructure:"replica_user"`
-	ReplicaPassword string `env:"POSTGRES_REPLICA_PASSWORD"                mapstructure:"replica_password"`
-	ReplicaDB       string `env:"POSTGRES_REPLICA_DB"                      mapstructure:"replica_db"`
-	ReplicaSSLMode  string `env:"POSTGRES_REPLICA_SSLMODE"                 mapstructure:"replica_ssl_mode"`
+	ReplicaHost        string `env:"POSTGRES_REPLICA_HOST"                            mapstructure:"replica_host"`
+	ReplicaPort        string `env:"POSTGRES_REPLICA_PORT"                            mapstructure:"replica_port"`
+	ReplicaUser        string `env:"POSTGRES_REPLICA_USER"                            mapstructure:"replica_user"`
+	ReplicaPassword    string `env:"POSTGRES_REPLICA_PASSWORD"                        mapstructure:"replica_password"`
+	ReplicaDB          string `env:"POSTGRES_REPLICA_DB"                              mapstructure:"replica_db"`
+	ReplicaSSLMode     string `env:"POSTGRES_REPLICA_SSLMODE"                         mapstructure:"replica_ssl_mode"`
+	ReplicaTLSRequired bool   `env:"POSTGRES_REPLICA_TLS_REQUIRED" envDefault:"false" mapstructure:"replica_tls_required"`
 
 	MaxOpenConnections  int    `env:"POSTGRES_MAX_OPEN_CONNS"          envDefault:"25"         mapstructure:"max_open_connections"`
 	MaxIdleConnections  int    `env:"POSTGRES_MAX_IDLE_CONNS"          envDefault:"5"          mapstructure:"max_idle_connections"`
@@ -127,6 +145,11 @@ type PostgresConfig struct {
 }
 
 // RedisConfig configures Redis connections.
+//
+// TLSRequired is a bootstrap-only opt-in flag consumed once by
+// ValidateRequiredTLS. When true, cfg.Redis.TLS MUST also be true; otherwise
+// bootstrap fails closed with ErrTLSRequiredButNotDeclared. Orthogonal to the
+// TLS field itself — TLS declares intent, TLSRequired enforces it.
 type RedisConfig struct {
 	Host           string `env:"REDIS_HOST"             envDefault:"localhost:6379" mapstructure:"host"`
 	MasterName     string `env:"REDIS_MASTER_NAME"                                 mapstructure:"master_name"`
@@ -134,6 +157,7 @@ type RedisConfig struct {
 	DB             int    `env:"REDIS_DB"               envDefault:"0"             mapstructure:"db"`
 	Protocol       int    `env:"REDIS_PROTOCOL"         envDefault:"3"             mapstructure:"protocol"`
 	TLS            bool   `env:"REDIS_TLS"              envDefault:"false"         mapstructure:"tls"`
+	TLSRequired    bool   `env:"REDIS_TLS_REQUIRED"     envDefault:"false"         mapstructure:"tls_required"`
 	CACert         string `env:"REDIS_CA_CERT"                                     mapstructure:"ca_cert"`
 	PoolSize       int    `env:"REDIS_POOL_SIZE"        envDefault:"10"            mapstructure:"pool_size"`
 	MinIdleConn    int    `env:"REDIS_MIN_IDLE_CONNS"   envDefault:"2"             mapstructure:"min_idle_conn"`
@@ -143,6 +167,11 @@ type RedisConfig struct {
 }
 
 // RabbitMQConfig configures RabbitMQ connection settings.
+//
+// TLSRequired is a bootstrap-only opt-in flag consumed once by
+// ValidateRequiredTLS. When true, the constructed AMQP URL MUST use the
+// amqps:// scheme (URI="amqps"); otherwise bootstrap fails closed with
+// ErrTLSRequiredButNotDeclared.
 type RabbitMQConfig struct {
 	URI                      string `env:"RABBITMQ_URI"                         envDefault:"amqp"                mapstructure:"uri"`
 	Host                     string `env:"RABBITMQ_HOST"                        envDefault:"localhost"           mapstructure:"host"`
@@ -152,6 +181,7 @@ type RabbitMQConfig struct {
 	VHost                    string `env:"RABBITMQ_VHOST"                       envDefault:"/"                   mapstructure:"vhost"`
 	HealthURL                string `env:"RABBITMQ_HEALTH_URL"                  envDefault:"http://localhost:15672" mapstructure:"health_url"`
 	AllowInsecureHealthCheck bool   `env:"RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK" envDefault:"false"               mapstructure:"allow_insecure_health_check"`
+	TLSRequired              bool   `env:"RABBITMQ_TLS_REQUIRED"                envDefault:"false"               mapstructure:"tls_required"`
 }
 
 // AuthConfig configures authentication and authorization.
@@ -211,8 +241,36 @@ type RateLimitConfig struct {
 
 // InfrastructureConfig configures infrastructure-level behavior.
 type InfrastructureConfig struct {
-	ConnectTimeoutSec     int `env:"INFRA_CONNECT_TIMEOUT_SEC"  envDefault:"30" mapstructure:"connect_timeout_sec"`
+	ConnectTimeoutSec int `env:"INFRA_CONNECT_TIMEOUT_SEC"  envDefault:"30" mapstructure:"connect_timeout_sec"`
+	// HealthCheckTimeoutSec is the legacy seconds-precision per-check probe
+	// timeout. Deprecated: prefer HealthCheckTimeoutMs, which is kubelet-aware
+	// (default timeoutSeconds=1). Kept for backwards compatibility — used only
+	// when HealthCheckTimeoutMs is zero.
 	HealthCheckTimeoutSec int `env:"HEALTH_CHECK_TIMEOUT_SEC"   envDefault:"5"  mapstructure:"health_check_timeout_sec"`
+	// HealthCheckTimeoutMs is the preferred milliseconds-precise per-check
+	// probe timeout. Default 800ms keeps the handler worst-case below kubelet's
+	// default probe timeoutSeconds=1. When both are set, HealthCheckTimeoutMs
+	// takes precedence.
+	HealthCheckTimeoutMs int `env:"HEALTH_CHECK_TIMEOUT_MS"    envDefault:"800" mapstructure:"health_check_timeout_ms"`
+}
+
+// HealthCheckTimeout returns the effective per-check probe timeout. Prefers
+// HealthCheckTimeoutMs; falls back to HealthCheckTimeoutSec when zero. Both
+// unset returns 0 (callers apply their own default).
+func (cfg *InfrastructureConfig) HealthCheckTimeout() time.Duration {
+	if cfg == nil {
+		return 0
+	}
+
+	if cfg.HealthCheckTimeoutMs > 0 {
+		return time.Duration(cfg.HealthCheckTimeoutMs) * time.Millisecond
+	}
+
+	if cfg.HealthCheckTimeoutSec > 0 {
+		return time.Duration(cfg.HealthCheckTimeoutSec) * time.Second
+	}
+
+	return 0
 }
 
 // OutboxConfig configures the outbox dispatcher behavior.
@@ -392,6 +450,11 @@ type DedupeConfig struct {
 }
 
 // ObjectStorageConfig configures object storage (S3-compatible) settings.
+//
+// TLSRequired is a bootstrap-only opt-in flag consumed once by
+// ValidateRequiredTLS. When true, the configured Endpoint MUST use https://
+// (or be empty, which means AWS default HTTPS); otherwise bootstrap fails
+// closed with ErrTLSRequiredButNotDeclared.
 type ObjectStorageConfig struct {
 	Endpoint        string `env:"OBJECT_STORAGE_ENDPOINT"          envDefault:"http://localhost:8333" mapstructure:"endpoint"`
 	Region          string `env:"OBJECT_STORAGE_REGION"            envDefault:"us-east-1"            mapstructure:"region"`
@@ -400,6 +463,7 @@ type ObjectStorageConfig struct {
 	SecretAccessKey string `env:"OBJECT_STORAGE_SECRET_ACCESS_KEY"                                   mapstructure:"secret_access_key"`
 	UsePathStyle    bool   `env:"OBJECT_STORAGE_USE_PATH_STYLE"    envDefault:"true"                 mapstructure:"use_path_style"`
 	AllowInsecure   bool   `env:"OBJECT_STORAGE_ALLOW_INSECURE_ENDPOINT" envDefault:"false"          mapstructure:"allow_insecure_endpoint"`
+	TLSRequired     bool   `env:"OBJECT_STORAGE_TLS_REQUIRED"      envDefault:"false"                mapstructure:"tls_required"`
 }
 
 // ExportWorkerConfig configures reporting export workers.

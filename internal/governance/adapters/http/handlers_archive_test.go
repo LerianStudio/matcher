@@ -24,7 +24,7 @@ import (
 	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
 	repoMocks "github.com/LerianStudio/matcher/internal/governance/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
-	storageMocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
+	storageMocks "github.com/LerianStudio/matcher/internal/shared/objectstorage/mocks"
 )
 
 var (
@@ -39,7 +39,7 @@ func TestNewArchiveHandler(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
-	storage := storageMocks.NewMockObjectStorageClient(ctrl)
+	storage := storageMocks.NewMockBackend(ctrl)
 
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
@@ -103,7 +103,7 @@ func TestListArchives(t *testing.T) {
 			).
 			Return(archives, nil)
 
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 
 		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
@@ -139,7 +139,7 @@ func TestListArchives(t *testing.T) {
 			).
 			Return([]*entities.ArchiveMetadata{}, nil)
 
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 
 		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
@@ -172,7 +172,7 @@ func TestListArchives(t *testing.T) {
 			).
 			Return([]*entities.ArchiveMetadata{}, nil)
 
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 
 		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
@@ -192,7 +192,7 @@ func TestListArchives(t *testing.T) {
 		tenantID := uuid.New()
 
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 
 		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
@@ -216,7 +216,7 @@ func TestListArchives(t *testing.T) {
 		tenantID := uuid.New()
 
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 
 		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
@@ -248,7 +248,7 @@ func TestListArchives(t *testing.T) {
 			).
 			Return([]*entities.ArchiveMetadata{}, nil)
 
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 
 		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
@@ -272,7 +272,7 @@ func TestListArchives(t *testing.T) {
 		tenantID := uuid.New()
 
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 
 		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
@@ -305,7 +305,7 @@ func TestListArchives(t *testing.T) {
 			).
 			Return([]*entities.ArchiveMetadata{}, nil)
 
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 
 		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
@@ -337,7 +337,7 @@ func TestListArchives(t *testing.T) {
 			).
 			Return(nil, errTestRepoFailed)
 
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 
 		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
@@ -365,7 +365,7 @@ func TestListArchives(t *testing.T) {
 			).
 			Return([]*entities.ArchiveMetadata{}, nil)
 
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 
 		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
@@ -398,7 +398,7 @@ func TestListArchives(t *testing.T) {
 			ListByTenant(gomock.Any(), tenantID, entities.StatusComplete, (*time.Time)(nil), (*time.Time)(nil), 6, 0).
 			Return(archives, nil)
 
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 
 		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
@@ -431,7 +431,7 @@ func TestListArchives(t *testing.T) {
 			ListByTenant(gomock.Any(), tenantID, entities.StatusComplete, (*time.Time)(nil), (*time.Time)(nil), 6, 0).
 			Return(archives, nil)
 
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 
 		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
@@ -466,7 +466,7 @@ func TestDownloadArchive(t *testing.T) {
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		repo.EXPECT().GetByID(gomock.Any(), archiveID).Return(archive, nil)
 
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		storage.EXPECT().
 			GeneratePresignedURL(gomock.Any(), archive.ArchiveKey, testPresignExpiry).
 			Return(testPresignedURL, nil)
@@ -502,7 +502,7 @@ func TestDownloadArchive(t *testing.T) {
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		repo.EXPECT().GetByID(gomock.Any(), archiveID).Return(archive, nil)
 
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		storage.EXPECT().
 			GeneratePresignedURL(gomock.Any(), archive.ArchiveKey, runtimeExpiry).
 			Return(testPresignedURL, nil)
@@ -530,7 +530,7 @@ func TestDownloadArchive(t *testing.T) {
 		tenantID := uuid.New()
 
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 
 		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
@@ -551,7 +551,7 @@ func TestDownloadArchive(t *testing.T) {
 		tenantID := uuid.New()
 
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 
 		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
@@ -578,7 +578,7 @@ func TestDownloadArchive(t *testing.T) {
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		repo.EXPECT().GetByID(gomock.Any(), archiveID).Return(nil, governanceErrors.ErrMetadataNotFound)
 
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 
 		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
@@ -601,7 +601,7 @@ func TestDownloadArchive(t *testing.T) {
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		repo.EXPECT().GetByID(gomock.Any(), archiveID).Return(nil, nil)
 
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 
 		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
@@ -628,7 +628,7 @@ func TestDownloadArchive(t *testing.T) {
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		repo.EXPECT().GetByID(gomock.Any(), archiveID).Return(archive, nil)
 
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 
 		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
@@ -651,7 +651,7 @@ func TestDownloadArchive(t *testing.T) {
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		repo.EXPECT().GetByID(gomock.Any(), archiveID).Return(nil, errTestRepoFailed)
 
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 
 		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
@@ -677,7 +677,7 @@ func TestDownloadArchive(t *testing.T) {
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		repo.EXPECT().GetByID(gomock.Any(), archiveID).Return(archive, nil)
 
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 		storage.EXPECT().
 			GeneratePresignedURL(gomock.Any(), archive.ArchiveKey, testPresignExpiry).
 			Return("", errTestStorageFailed)
@@ -815,7 +815,7 @@ func TestRegisterArchiveRoutes(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 
 		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)
@@ -841,7 +841,7 @@ func TestRegisterArchiveRoutes(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
-		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage := storageMocks.NewMockBackend(ctrl)
 
 		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry, false)
 		require.NoError(t, err)

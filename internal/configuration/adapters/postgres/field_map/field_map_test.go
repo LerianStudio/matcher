@@ -10,14 +10,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 func TestFieldMapPostgreSQLModelRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC()
-	entity := &entities.FieldMap{
+	entity := &shared.FieldMap{
 		ID:        uuid.New(),
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
@@ -41,7 +41,7 @@ func TestFieldMapPostgreSQLModelRoundTrip(t *testing.T) {
 func TestFieldMapPostgreSQLModelDefaults(t *testing.T) {
 	t.Parallel()
 
-	entity := &entities.FieldMap{
+	entity := &shared.FieldMap{
 		ID:        uuid.New(),
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
@@ -69,7 +69,7 @@ func TestNewFieldMapPostgreSQLModel_NilEntityID(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC()
-	entity := &entities.FieldMap{
+	entity := &shared.FieldMap{
 		ID:        uuid.Nil,
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
@@ -90,7 +90,7 @@ func TestNewFieldMapPostgreSQLModel_EmptyMapping(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC()
-	entity := &entities.FieldMap{
+	entity := &shared.FieldMap{
 		ID:        uuid.New(),
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
@@ -111,7 +111,7 @@ func TestNewFieldMapPostgreSQLModel_ComplexMapping(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC()
-	entity := &entities.FieldMap{
+	entity := &shared.FieldMap{
 		ID:        uuid.New(),
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
@@ -146,64 +146,13 @@ func TestToEntity_NilModel(t *testing.T) {
 	require.ErrorIs(t, err, ErrFieldMapModelRequired)
 }
 
-func TestToEntity_InvalidID(t *testing.T) {
-	t.Parallel()
-
-	model := &FieldMapPostgreSQLModel{
-		ID:        "not-a-uuid",
-		ContextID: uuid.New().String(),
-		SourceID:  uuid.New().String(),
-		Mapping:   []byte(`{}`),
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parsing ID")
-}
-
-func TestToEntity_InvalidContextID(t *testing.T) {
-	t.Parallel()
-
-	model := &FieldMapPostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: "invalid",
-		SourceID:  uuid.New().String(),
-		Mapping:   []byte(`{}`),
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parsing ContextID")
-}
-
-func TestToEntity_InvalidSourceID(t *testing.T) {
-	t.Parallel()
-
-	model := &FieldMapPostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
-		SourceID:  "invalid",
-		Mapping:   []byte(`{}`),
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parsing SourceID")
-}
-
 func TestToEntity_InvalidMappingJSON(t *testing.T) {
 	t.Parallel()
 
 	model := &FieldMapPostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
-		SourceID:  uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
+		SourceID:  uuid.New(),
 		Mapping:   []byte(`{invalid json}`),
 	}
 
@@ -219,9 +168,9 @@ func TestToEntity_EmptyMapping(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &FieldMapPostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
-		SourceID:  uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
+		SourceID:  uuid.New(),
 		Mapping:   []byte{},
 		Version:   1,
 		CreatedAt: now,
@@ -241,9 +190,9 @@ func TestToEntity_NilMapping(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &FieldMapPostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
-		SourceID:  uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
+		SourceID:  uuid.New(),
 		Mapping:   nil,
 		Version:   1,
 		CreatedAt: now,
@@ -263,9 +212,9 @@ func TestToEntity_ValidWithVersion(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &FieldMapPostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
-		SourceID:  uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
+		SourceID:  uuid.New(),
 		Mapping:   []byte(`{"field1":"value1","field2":"value2"}`),
 		Version:   5,
 		CreatedAt: now,
@@ -309,7 +258,7 @@ func TestNewFieldMapPostgreSQLModel_ZeroUpdatedAt(t *testing.T) {
 	t.Parallel()
 
 	createdAt := time.Now().UTC()
-	entity := &entities.FieldMap{
+	entity := &shared.FieldMap{
 		ID:        uuid.New(),
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
@@ -330,7 +279,7 @@ func TestNewFieldMapPostgreSQLModel_NilMapping(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC()
-	entity := &entities.FieldMap{
+	entity := &shared.FieldMap{
 		ID:        uuid.New(),
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
@@ -352,9 +301,9 @@ func TestToEntity_MappingWithNullValue(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &FieldMapPostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
-		SourceID:  uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
+		SourceID:  uuid.New(),
 		Mapping:   []byte(`{"key":null,"nested":{"value":null}}`),
 		Version:   1,
 		CreatedAt: now,
@@ -377,7 +326,7 @@ func TestModelPreservesAllFields(t *testing.T) {
 	contextID := uuid.New()
 	sourceID := uuid.New()
 
-	entity := &entities.FieldMap{
+	entity := &shared.FieldMap{
 		ID:        entityID,
 		ContextID: contextID,
 		SourceID:  sourceID,
@@ -411,9 +360,9 @@ func TestToEntity_MappingWithComplexTypes(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &FieldMapPostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
-		SourceID:  uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
+		SourceID:  uuid.New(),
 		Mapping:   []byte(`{"array":[1,2,3],"nested":{"deep":{"value":true}},"number":42.5}`),
 		Version:   1,
 		CreatedAt: now,
@@ -439,7 +388,7 @@ func TestToEntity_LargeMappingPayload(t *testing.T) {
 		largeMapping[key] = "value_" + key
 	}
 
-	entity := &entities.FieldMap{
+	entity := &shared.FieldMap{
 		ID:        uuid.New(),
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
@@ -462,9 +411,9 @@ func TestToEntity_VersionZero(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &FieldMapPostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
-		SourceID:  uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
+		SourceID:  uuid.New(),
 		Mapping:   []byte(`{}`),
 		Version:   0,
 		CreatedAt: now,

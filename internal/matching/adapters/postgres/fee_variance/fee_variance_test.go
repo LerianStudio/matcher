@@ -54,12 +54,12 @@ func TestNewPostgreSQLModel(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, model)
 
-			assert.Equal(t, tt.entity.ID.String(), model.ID)
-			assert.Equal(t, tt.entity.ContextID.String(), model.ContextID)
-			assert.Equal(t, tt.entity.RunID.String(), model.RunID)
-			assert.Equal(t, tt.entity.MatchGroupID.String(), model.MatchGroupID)
-			assert.Equal(t, tt.entity.TransactionID.String(), model.TransactionID)
-			assert.Equal(t, tt.entity.FeeScheduleID.String(), model.FeeScheduleID)
+			assert.Equal(t, tt.entity.ID, model.ID)
+			assert.Equal(t, tt.entity.ContextID, model.ContextID)
+			assert.Equal(t, tt.entity.RunID, model.RunID)
+			assert.Equal(t, tt.entity.MatchGroupID, model.MatchGroupID)
+			assert.Equal(t, tt.entity.TransactionID, model.TransactionID)
+			assert.Equal(t, tt.entity.FeeScheduleID, model.FeeScheduleID)
 			assert.Equal(t, tt.entity.FeeScheduleNameSnapshot, model.FeeScheduleNameSnapshot)
 			assert.Equal(t, tt.entity.Currency, model.Currency)
 			assert.True(t, tt.entity.ExpectedFee.Equal(model.ExpectedFee))
@@ -97,72 +97,6 @@ func TestToEntity(t *testing.T) {
 			wantErr:    false,
 			errContain: "",
 		},
-		{
-			name: "invalid ID returns error",
-			model: func() *PostgreSQLModel {
-				m := createValidPostgreSQLModel()
-				m.ID = "invalid-uuid"
-
-				return m
-			}(),
-			wantErr:    true,
-			errContain: "parse id",
-		},
-		{
-			name: "invalid context ID returns error",
-			model: func() *PostgreSQLModel {
-				m := createValidPostgreSQLModel()
-				m.ContextID = "invalid-uuid"
-
-				return m
-			}(),
-			wantErr:    true,
-			errContain: "parse context id",
-		},
-		{
-			name: "invalid run ID returns error",
-			model: func() *PostgreSQLModel {
-				m := createValidPostgreSQLModel()
-				m.RunID = "invalid-uuid"
-
-				return m
-			}(),
-			wantErr:    true,
-			errContain: "parse run id",
-		},
-		{
-			name: "invalid match group ID returns error",
-			model: func() *PostgreSQLModel {
-				m := createValidPostgreSQLModel()
-				m.MatchGroupID = "invalid-uuid"
-
-				return m
-			}(),
-			wantErr:    true,
-			errContain: "parse match group id",
-		},
-		{
-			name: "invalid transaction ID returns error",
-			model: func() *PostgreSQLModel {
-				m := createValidPostgreSQLModel()
-				m.TransactionID = "invalid-uuid"
-
-				return m
-			}(),
-			wantErr:    true,
-			errContain: "parse transaction id",
-		},
-		{
-			name: "invalid fee schedule ID returns error",
-			model: func() *PostgreSQLModel {
-				m := createValidPostgreSQLModel()
-				m.FeeScheduleID = "invalid-uuid"
-
-				return m
-			}(),
-			wantErr:    true,
-			errContain: "parse fee schedule id",
-		},
 	}
 
 	for _, tt := range tests {
@@ -182,12 +116,12 @@ func TestToEntity(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, entity)
 
-			assert.Equal(t, tt.model.ID, entity.ID.String())
-			assert.Equal(t, tt.model.ContextID, entity.ContextID.String())
-			assert.Equal(t, tt.model.RunID, entity.RunID.String())
-			assert.Equal(t, tt.model.MatchGroupID, entity.MatchGroupID.String())
-			assert.Equal(t, tt.model.TransactionID, entity.TransactionID.String())
-			assert.Equal(t, tt.model.FeeScheduleID, entity.FeeScheduleID.String())
+			assert.Equal(t, tt.model.ID, entity.ID)
+			assert.Equal(t, tt.model.ContextID, entity.ContextID)
+			assert.Equal(t, tt.model.RunID, entity.RunID)
+			assert.Equal(t, tt.model.MatchGroupID, entity.MatchGroupID)
+			assert.Equal(t, tt.model.TransactionID, entity.TransactionID)
+			assert.Equal(t, tt.model.FeeScheduleID, entity.FeeScheduleID)
 			assert.Equal(t, tt.model.FeeScheduleNameSnapshot, entity.FeeScheduleNameSnapshot)
 			assert.Equal(t, tt.model.Currency, entity.Currency)
 			assert.True(t, tt.model.ExpectedFee.Equal(entity.ExpectedFee))
@@ -273,12 +207,12 @@ func createValidPostgreSQLModel() *PostgreSQLModel {
 	now := time.Now().UTC()
 
 	return &PostgreSQLModel{
-		ID:                      uuid.New().String(),
-		ContextID:               uuid.New().String(),
-		RunID:                   uuid.New().String(),
-		MatchGroupID:            uuid.New().String(),
-		TransactionID:           uuid.New().String(),
-		FeeScheduleID:           uuid.New().String(),
+		ID:                      uuid.New(),
+		ContextID:               uuid.New(),
+		RunID:                   uuid.New(),
+		MatchGroupID:            uuid.New(),
+		TransactionID:           uuid.New(),
+		FeeScheduleID:           uuid.New(),
 		FeeScheduleNameSnapshot: "Visa Domestic",
 		Currency:                "USD",
 		ExpectedFee:             decimal.NewFromFloat(100.50),

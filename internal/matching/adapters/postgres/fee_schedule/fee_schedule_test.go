@@ -25,46 +25,6 @@ func TestToEntity_NilModel(t *testing.T) {
 	require.ErrorIs(t, err, ErrFeeScheduleModelNeeded)
 }
 
-func TestToEntity_InvalidID(t *testing.T) {
-	t.Parallel()
-
-	model := &PostgreSQLModel{
-		ID:               "not-a-uuid",
-		TenantID:         uuid.NewString(),
-		Name:             "Test",
-		Currency:         "USD",
-		ApplicationOrder: "PARALLEL",
-		RoundingScale:    2,
-		RoundingMode:     "HALF_UP",
-	}
-
-	result, err := ToEntity(model, nil)
-
-	require.Nil(t, result)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parse id")
-}
-
-func TestToEntity_InvalidTenantID(t *testing.T) {
-	t.Parallel()
-
-	model := &PostgreSQLModel{
-		ID:               uuid.NewString(),
-		TenantID:         "not-a-uuid",
-		Name:             "Test",
-		Currency:         "USD",
-		ApplicationOrder: "PARALLEL",
-		RoundingScale:    2,
-		RoundingMode:     "HALF_UP",
-	}
-
-	result, err := ToEntity(model, nil)
-
-	require.Nil(t, result)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parse tenant id")
-}
-
 func TestToEntity_ValidScheduleNoItems(t *testing.T) {
 	t.Parallel()
 
@@ -73,8 +33,8 @@ func TestToEntity_ValidScheduleNoItems(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 
 	model := &PostgreSQLModel{
-		ID:               id.String(),
-		TenantID:         tenantID.String(),
+		ID:               id,
+		TenantID:         tenantID,
 		Name:             "Test Schedule",
 		Currency:         "USD",
 		ApplicationOrder: "PARALLEL",
@@ -109,8 +69,8 @@ func TestToEntity_WithFlatFeeItem(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 
 	model := &PostgreSQLModel{
-		ID:               scheduleID.String(),
-		TenantID:         tenantID.String(),
+		ID:               scheduleID,
+		TenantID:         tenantID,
 		Name:             "Flat Schedule",
 		Currency:         "USD",
 		ApplicationOrder: "PARALLEL",
@@ -122,8 +82,8 @@ func TestToEntity_WithFlatFeeItem(t *testing.T) {
 
 	items := []ItemPostgreSQLModel{
 		{
-			ID:            itemID.String(),
-			FeeScheduleID: scheduleID.String(),
+			ID:            itemID,
+			FeeScheduleID: scheduleID,
 			Name:          "Fixed Fee",
 			Priority:      0,
 			StructureType: string(fee.FeeStructureFlat),
@@ -157,8 +117,8 @@ func TestToEntity_WithPercentageFeeItem(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 
 	model := &PostgreSQLModel{
-		ID:               scheduleID.String(),
-		TenantID:         tenantID.String(),
+		ID:               scheduleID,
+		TenantID:         tenantID,
 		Name:             "Percentage Schedule",
 		Currency:         "EUR",
 		ApplicationOrder: "CASCADING",
@@ -170,8 +130,8 @@ func TestToEntity_WithPercentageFeeItem(t *testing.T) {
 
 	items := []ItemPostgreSQLModel{
 		{
-			ID:            itemID.String(),
-			FeeScheduleID: scheduleID.String(),
+			ID:            itemID,
+			FeeScheduleID: scheduleID,
 			Name:          "Service Fee",
 			Priority:      1,
 			StructureType: string(fee.FeeStructurePercentage),
@@ -201,8 +161,8 @@ func TestToEntity_WithTieredFeeItem(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 
 	model := &PostgreSQLModel{
-		ID:               scheduleID.String(),
-		TenantID:         tenantID.String(),
+		ID:               scheduleID,
+		TenantID:         tenantID,
 		Name:             "Tiered Schedule",
 		Currency:         "BRL",
 		ApplicationOrder: "PARALLEL",
@@ -214,8 +174,8 @@ func TestToEntity_WithTieredFeeItem(t *testing.T) {
 
 	items := []ItemPostgreSQLModel{
 		{
-			ID:            itemID.String(),
-			FeeScheduleID: scheduleID.String(),
+			ID:            itemID,
+			FeeScheduleID: scheduleID,
 			Name:          "Volume Discount",
 			Priority:      0,
 			StructureType: string(fee.FeeStructureTiered),
@@ -241,42 +201,12 @@ func TestToEntity_WithTieredFeeItem(t *testing.T) {
 	assert.True(t, tieredFee.Tiers[2].Rate.Equal(decimal.NewFromFloat(0.03)))
 }
 
-func TestToEntity_InvalidItemID(t *testing.T) {
-	t.Parallel()
-
-	model := &PostgreSQLModel{
-		ID:               uuid.NewString(),
-		TenantID:         uuid.NewString(),
-		Name:             "Test",
-		Currency:         "USD",
-		ApplicationOrder: "PARALLEL",
-		RoundingScale:    2,
-		RoundingMode:     "HALF_UP",
-	}
-
-	items := []ItemPostgreSQLModel{
-		{
-			ID:            "not-a-uuid",
-			FeeScheduleID: model.ID,
-			Name:          "Bad Item",
-			StructureType: string(fee.FeeStructureFlat),
-			StructureData: []byte(`{"amount":"10"}`),
-		},
-	}
-
-	result, err := ToEntity(model, items)
-
-	require.Nil(t, result)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parse item[0]")
-}
-
 func TestToEntity_UnknownStructureType(t *testing.T) {
 	t.Parallel()
 
 	model := &PostgreSQLModel{
-		ID:               uuid.NewString(),
-		TenantID:         uuid.NewString(),
+		ID:               uuid.New(),
+		TenantID:         uuid.New(),
 		Name:             "Test",
 		Currency:         "USD",
 		ApplicationOrder: "PARALLEL",
@@ -286,7 +216,7 @@ func TestToEntity_UnknownStructureType(t *testing.T) {
 
 	items := []ItemPostgreSQLModel{
 		{
-			ID:            uuid.NewString(),
+			ID:            uuid.New(),
 			FeeScheduleID: model.ID,
 			Name:          "Unknown",
 			StructureType: "UNKNOWN",
@@ -350,8 +280,8 @@ func TestFromEntity_ValidScheduleWithItems(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, model)
-	assert.Equal(t, schedule.ID.String(), model.ID)
-	assert.Equal(t, schedule.TenantID.String(), model.TenantID)
+	assert.Equal(t, schedule.ID, model.ID)
+	assert.Equal(t, schedule.TenantID, model.TenantID)
 	assert.Equal(t, "Test Schedule", model.Name)
 	assert.Equal(t, "USD", model.Currency)
 	assert.Equal(t, "PARALLEL", model.ApplicationOrder)
@@ -359,8 +289,8 @@ func TestFromEntity_ValidScheduleWithItems(t *testing.T) {
 	assert.Equal(t, "HALF_UP", model.RoundingMode)
 
 	require.Len(t, items, 2)
-	assert.Equal(t, schedule.Items[0].ID.String(), items[0].ID)
-	assert.Equal(t, schedule.ID.String(), items[0].FeeScheduleID)
+	assert.Equal(t, schedule.Items[0].ID, items[0].ID)
+	assert.Equal(t, schedule.ID, items[0].FeeScheduleID)
 	assert.Equal(t, "Flat Fee", items[0].Name)
 	assert.Equal(t, 0, items[0].Priority)
 	assert.Equal(t, string(fee.FeeStructureFlat), items[0].StructureType)
@@ -504,8 +434,8 @@ func TestParseStructure_InvalidFlatJSON(t *testing.T) {
 	t.Parallel()
 
 	model := &PostgreSQLModel{
-		ID:               uuid.NewString(),
-		TenantID:         uuid.NewString(),
+		ID:               uuid.New(),
+		TenantID:         uuid.New(),
 		Name:             "Test",
 		Currency:         "USD",
 		ApplicationOrder: "PARALLEL",
@@ -515,7 +445,7 @@ func TestParseStructure_InvalidFlatJSON(t *testing.T) {
 
 	items := []ItemPostgreSQLModel{
 		{
-			ID:            uuid.NewString(),
+			ID:            uuid.New(),
 			FeeScheduleID: model.ID,
 			Name:          "Bad JSON",
 			StructureType: string(fee.FeeStructureFlat),
@@ -534,8 +464,8 @@ func TestParseStructure_InvalidPercentageJSON(t *testing.T) {
 	t.Parallel()
 
 	model := &PostgreSQLModel{
-		ID:               uuid.NewString(),
-		TenantID:         uuid.NewString(),
+		ID:               uuid.New(),
+		TenantID:         uuid.New(),
 		Name:             "Test",
 		Currency:         "USD",
 		ApplicationOrder: "PARALLEL",
@@ -545,7 +475,7 @@ func TestParseStructure_InvalidPercentageJSON(t *testing.T) {
 
 	items := []ItemPostgreSQLModel{
 		{
-			ID:            uuid.NewString(),
+			ID:            uuid.New(),
 			FeeScheduleID: model.ID,
 			Name:          "Bad",
 			StructureType: string(fee.FeeStructurePercentage),
@@ -564,8 +494,8 @@ func TestParseStructure_InvalidTieredJSON(t *testing.T) {
 	t.Parallel()
 
 	model := &PostgreSQLModel{
-		ID:               uuid.NewString(),
-		TenantID:         uuid.NewString(),
+		ID:               uuid.New(),
+		TenantID:         uuid.New(),
 		Name:             "Test",
 		Currency:         "USD",
 		ApplicationOrder: "PARALLEL",
@@ -575,7 +505,7 @@ func TestParseStructure_InvalidTieredJSON(t *testing.T) {
 
 	items := []ItemPostgreSQLModel{
 		{
-			ID:            uuid.NewString(),
+			ID:            uuid.New(),
 			FeeScheduleID: model.ID,
 			Name:          "Bad",
 			StructureType: string(fee.FeeStructureTiered),
@@ -594,8 +524,8 @@ func TestParseStructure_InvalidFlatAmount(t *testing.T) {
 	t.Parallel()
 
 	model := &PostgreSQLModel{
-		ID:               uuid.NewString(),
-		TenantID:         uuid.NewString(),
+		ID:               uuid.New(),
+		TenantID:         uuid.New(),
 		Name:             "Test",
 		Currency:         "USD",
 		ApplicationOrder: "PARALLEL",
@@ -605,7 +535,7 @@ func TestParseStructure_InvalidFlatAmount(t *testing.T) {
 
 	items := []ItemPostgreSQLModel{
 		{
-			ID:            uuid.NewString(),
+			ID:            uuid.New(),
 			FeeScheduleID: model.ID,
 			Name:          "Bad Amount",
 			StructureType: string(fee.FeeStructureFlat),
@@ -624,8 +554,8 @@ func TestParseStructure_InvalidPercentageRate(t *testing.T) {
 	t.Parallel()
 
 	model := &PostgreSQLModel{
-		ID:               uuid.NewString(),
-		TenantID:         uuid.NewString(),
+		ID:               uuid.New(),
+		TenantID:         uuid.New(),
 		Name:             "Test",
 		Currency:         "USD",
 		ApplicationOrder: "PARALLEL",
@@ -635,7 +565,7 @@ func TestParseStructure_InvalidPercentageRate(t *testing.T) {
 
 	items := []ItemPostgreSQLModel{
 		{
-			ID:            uuid.NewString(),
+			ID:            uuid.New(),
 			FeeScheduleID: model.ID,
 			Name:          "Bad Rate",
 			StructureType: string(fee.FeeStructurePercentage),
@@ -654,8 +584,8 @@ func TestParseStructure_InvalidTierRate(t *testing.T) {
 	t.Parallel()
 
 	model := &PostgreSQLModel{
-		ID:               uuid.NewString(),
-		TenantID:         uuid.NewString(),
+		ID:               uuid.New(),
+		TenantID:         uuid.New(),
 		Name:             "Test",
 		Currency:         "USD",
 		ApplicationOrder: "PARALLEL",
@@ -665,7 +595,7 @@ func TestParseStructure_InvalidTierRate(t *testing.T) {
 
 	items := []ItemPostgreSQLModel{
 		{
-			ID:            uuid.NewString(),
+			ID:            uuid.New(),
 			FeeScheduleID: model.ID,
 			Name:          "Bad Tier Rate",
 			StructureType: string(fee.FeeStructureTiered),
@@ -684,8 +614,8 @@ func TestParseStructure_InvalidTierUpTo(t *testing.T) {
 	t.Parallel()
 
 	model := &PostgreSQLModel{
-		ID:               uuid.NewString(),
-		TenantID:         uuid.NewString(),
+		ID:               uuid.New(),
+		TenantID:         uuid.New(),
 		Name:             "Test",
 		Currency:         "USD",
 		ApplicationOrder: "PARALLEL",
@@ -695,7 +625,7 @@ func TestParseStructure_InvalidTierUpTo(t *testing.T) {
 
 	items := []ItemPostgreSQLModel{
 		{
-			ID:            uuid.NewString(),
+			ID:            uuid.New(),
 			FeeScheduleID: model.ID,
 			Name:          "Bad Tier UpTo",
 			StructureType: string(fee.FeeStructureTiered),

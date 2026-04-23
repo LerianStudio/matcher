@@ -27,7 +27,7 @@ import (
 // hitting ErrConcurrentModification or a transient failure still rolls
 // back only that item's UPDATE and leaves the rest of the batch
 // independently committable.
-func (uc *UseCase) preloadExceptions(
+func (uc *ExceptionUseCase) preloadExceptions(
 	ctx context.Context,
 	ids []uuid.UUID,
 ) (map[uuid.UUID]*entities.Exception, error) {
@@ -122,7 +122,7 @@ type BulkItemFailure struct {
 // reporting relies on each item's commit being independent of its peers.
 // A single outer transaction would couple all items' fates and regress both
 // guarantees on any single infrastructure blip mid-batch.
-func (uc *UseCase) BulkAssign(ctx context.Context, input BulkAssignInput) (*BulkActionResult, error) {
+func (uc *ExceptionUseCase) BulkAssign(ctx context.Context, input BulkAssignInput) (*BulkActionResult, error) {
 	dedupedIDs, err := validateBulkIDs(input.ExceptionIDs)
 	if err != nil {
 		return nil, err
@@ -180,7 +180,7 @@ func (uc *UseCase) BulkAssign(ctx context.Context, input BulkAssignInput) (*Bulk
 	return result, nil
 }
 
-func (uc *UseCase) assignSingle(
+func (uc *ExceptionUseCase) assignSingle(
 	ctx context.Context,
 	preloaded map[uuid.UUID]*entities.Exception,
 	exceptionID uuid.UUID,
@@ -235,7 +235,7 @@ func (uc *UseCase) assignSingle(
 // per-item transactions. See BulkAssign for the rationale on why the
 // per-item transaction boundary is deliberate (optimistic-locking
 // detection and partial-success reporting).
-func (uc *UseCase) BulkResolve(ctx context.Context, input BulkResolveInput) (*BulkActionResult, error) {
+func (uc *ExceptionUseCase) BulkResolve(ctx context.Context, input BulkResolveInput) (*BulkActionResult, error) {
 	dedupedIDs, err := validateBulkIDs(input.ExceptionIDs)
 	if err != nil {
 		return nil, err
@@ -295,7 +295,7 @@ func (uc *UseCase) BulkResolve(ctx context.Context, input BulkResolveInput) (*Bu
 	return result, nil
 }
 
-func (uc *UseCase) resolveSingle(
+func (uc *ExceptionUseCase) resolveSingle(
 	ctx context.Context,
 	preloaded map[uuid.UUID]*entities.Exception,
 	exceptionID uuid.UUID,

@@ -16,7 +16,7 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/common"
-	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -41,8 +41,8 @@ func NewRepository(provider ports.InfrastructureProvider) *Repository {
 // Create inserts a new field map into the database.
 func (repo *Repository) Create(
 	ctx stdctx.Context,
-	entity *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	entity *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	if repo == nil || repo.provider == nil {
 		return nil, ErrRepoNotInitialized
 	}
@@ -59,7 +59,7 @@ func (repo *Repository) Create(
 	result, err := common.WithTenantTxProvider(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) (*entities.FieldMap, error) {
+		func(tx *sql.Tx) (*shared.FieldMap, error) {
 			return repo.executeCreate(ctx, tx, entity)
 		},
 	)
@@ -79,8 +79,8 @@ func (repo *Repository) Create(
 func (repo *Repository) CreateWithTx(
 	ctx stdctx.Context,
 	tx *sql.Tx,
-	entity *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	entity *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	if repo == nil || repo.provider == nil {
 		return nil, ErrRepoNotInitialized
 	}
@@ -102,7 +102,7 @@ func (repo *Repository) CreateWithTx(
 		ctx,
 		repo.provider,
 		tx,
-		func(innerTx *sql.Tx) (*entities.FieldMap, error) {
+		func(innerTx *sql.Tx) (*shared.FieldMap, error) {
 			return repo.executeCreate(ctx, innerTx, entity)
 		},
 	)
@@ -122,8 +122,8 @@ func (repo *Repository) CreateWithTx(
 func (repo *Repository) executeCreate(
 	ctx stdctx.Context,
 	tx *sql.Tx,
-	entity *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	entity *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	model, err := NewFieldMapPostgreSQLModel(entity)
 	if err != nil {
 		return nil, err
@@ -149,7 +149,7 @@ func (repo *Repository) executeCreate(
 }
 
 // FindByID retrieves a field map by its ID.
-func (repo *Repository) FindByID(ctx stdctx.Context, id uuid.UUID) (*entities.FieldMap, error) {
+func (repo *Repository) FindByID(ctx stdctx.Context, id uuid.UUID) (*shared.FieldMap, error) {
 	if repo == nil || repo.provider == nil {
 		return nil, ErrRepoNotInitialized
 	}
@@ -162,7 +162,7 @@ func (repo *Repository) FindByID(ctx stdctx.Context, id uuid.UUID) (*entities.Fi
 	result, err := common.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(qe common.QueryExecutor) (*entities.FieldMap, error) {
+		func(qe common.QueryExecutor) (*shared.FieldMap, error) {
 			row := qe.QueryRowContext(
 				ctx,
 				"SELECT "+fieldMapColumns+" FROM field_maps WHERE id = $1",
@@ -189,7 +189,7 @@ func (repo *Repository) FindByID(ctx stdctx.Context, id uuid.UUID) (*entities.Fi
 func (repo *Repository) FindBySourceID(
 	ctx stdctx.Context,
 	sourceID uuid.UUID,
-) (*entities.FieldMap, error) {
+) (*shared.FieldMap, error) {
 	if repo == nil || repo.provider == nil {
 		return nil, ErrRepoNotInitialized
 	}
@@ -202,7 +202,7 @@ func (repo *Repository) FindBySourceID(
 	result, err := common.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(qe common.QueryExecutor) (*entities.FieldMap, error) {
+		func(qe common.QueryExecutor) (*shared.FieldMap, error) {
 			row := qe.QueryRowContext(
 				ctx,
 				"SELECT "+fieldMapColumns+" FROM field_maps WHERE source_id = $1 ORDER BY version DESC LIMIT 1",
@@ -231,7 +231,7 @@ func (repo *Repository) FindBySourceIDWithTx(
 	ctx stdctx.Context,
 	tx *sql.Tx,
 	sourceID uuid.UUID,
-) (*entities.FieldMap, error) {
+) (*shared.FieldMap, error) {
 	if repo == nil || repo.provider == nil {
 		return nil, ErrRepoNotInitialized
 	}
@@ -249,7 +249,7 @@ func (repo *Repository) FindBySourceIDWithTx(
 		ctx,
 		repo.provider,
 		tx,
-		func(innerTx *sql.Tx) (*entities.FieldMap, error) {
+		func(innerTx *sql.Tx) (*shared.FieldMap, error) {
 			row := innerTx.QueryRowContext(
 				ctx,
 				"SELECT "+fieldMapColumns+" FROM field_maps WHERE source_id = $1 ORDER BY version DESC LIMIT 1",
@@ -333,8 +333,8 @@ func (repo *Repository) ExistsBySourceIDsWithTx(
 // Update modifies an existing field map.
 func (repo *Repository) Update(
 	ctx stdctx.Context,
-	entity *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	entity *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	if repo == nil || repo.provider == nil {
 		return nil, ErrRepoNotInitialized
 	}
@@ -353,7 +353,7 @@ func (repo *Repository) Update(
 	result, err := common.WithTenantTxProvider(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) (*entities.FieldMap, error) {
+		func(tx *sql.Tx) (*shared.FieldMap, error) {
 			return repo.executeUpdate(ctx, tx, entity)
 		},
 	)
@@ -376,8 +376,8 @@ func (repo *Repository) Update(
 func (repo *Repository) UpdateWithTx(
 	ctx stdctx.Context,
 	tx *sql.Tx,
-	entity *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	entity *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	if repo == nil || repo.provider == nil {
 		return nil, ErrRepoNotInitialized
 	}
@@ -401,7 +401,7 @@ func (repo *Repository) UpdateWithTx(
 		ctx,
 		repo.provider,
 		tx,
-		func(innerTx *sql.Tx) (*entities.FieldMap, error) {
+		func(innerTx *sql.Tx) (*shared.FieldMap, error) {
 			return repo.executeUpdate(ctx, innerTx, entity)
 		},
 	)
@@ -424,8 +424,8 @@ func (repo *Repository) UpdateWithTx(
 func (repo *Repository) executeUpdate(
 	ctx stdctx.Context,
 	tx *sql.Tx,
-	entity *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	entity *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	model, err := NewFieldMapPostgreSQLModel(entity)
 	if err != nil {
 		return nil, err
@@ -551,14 +551,9 @@ func (repo *Repository) existsBySourceIDsBatch(
 	}()
 
 	for rows.Next() {
-		var sourceIDStr string
-		if err := rows.Scan(&sourceIDStr); err != nil {
+		var sourceID uuid.UUID
+		if err := rows.Scan(&sourceID); err != nil {
 			return err
-		}
-
-		sourceID, err := uuid.Parse(sourceIDStr)
-		if err != nil {
-			return fmt.Errorf("failed to parse source ID: %w", err)
 		}
 
 		existsMap[sourceID] = true
@@ -671,7 +666,7 @@ func (repo *Repository) executeDelete(ctx stdctx.Context, tx *sql.Tx, id uuid.UU
 	return true, nil
 }
 
-func scanFieldMap(scanner interface{ Scan(dest ...any) error }) (*entities.FieldMap, error) {
+func scanFieldMap(scanner interface{ Scan(dest ...any) error }) (*shared.FieldMap, error) {
 	var model FieldMapPostgreSQLModel
 	if err := scanner.Scan(
 		&model.ID,

@@ -33,6 +33,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
@@ -72,7 +73,7 @@ type ReconciliationContext struct {
 	ID                uuid.UUID
 	TenantID          uuid.UUID
 	Name              string
-	Type              value_objects.ContextType
+	Type              shared.ContextType
 	Interval          string
 	Status            value_objects.ContextStatus
 	FeeToleranceAbs   decimal.Decimal
@@ -86,7 +87,7 @@ type ReconciliationContext struct {
 // CreateReconciliationContextInput defines the input required to create a context.
 type CreateReconciliationContextInput struct {
 	Name              string                     `json:"name"                      validate:"required,max=100" example:"Bank Reconciliation Q1"               minLength:"1" maxLength:"100"`
-	Type              value_objects.ContextType  `json:"type"                      validate:"required"         example:"1:1"                                                                enums:"1:1,1:N,N:M"`
+	Type              shared.ContextType         `json:"type"                      validate:"required"         example:"1:1"                                                                enums:"1:1,1:N,N:M"`
 	Interval          string                     `json:"interval"                  validate:"required,max=100" example:"daily"                                minLength:"1" maxLength:"100"`
 	FeeToleranceAbs   *string                    `json:"feeToleranceAbs,omitempty"                             example:"0.01"`
 	FeeTolerancePct   *string                    `json:"feeTolerancePct,omitempty"                             example:"0.5"`
@@ -99,7 +100,7 @@ type CreateReconciliationContextInput struct {
 // UpdateReconciliationContextInput defines fields that can be updated on a context.
 type UpdateReconciliationContextInput struct {
 	Name              *string                      `json:"name,omitempty"             validate:"omitempty,max=100" example:"Bank Reconciliation Q2"               maxLength:"100"`
-	Type              *value_objects.ContextType   `json:"type,omitempty"                                          example:"1:N"                                                  enums:"1:1,1:N,N:M"`
+	Type              *shared.ContextType          `json:"type,omitempty"                                          example:"1:N"                                                  enums:"1:1,1:N,N:M"`
 	Interval          *string                      `json:"interval,omitempty"         validate:"omitempty,max=100" example:"weekly"                               maxLength:"100"`
 	Status            *value_objects.ContextStatus `json:"status,omitempty"                                        example:"ACTIVE"                                               enums:"DRAFT,ACTIVE,PAUSED,ARCHIVED"`
 	FeeToleranceAbs   *string                      `json:"feeToleranceAbs,omitempty"                               example:"0.01"`
@@ -231,7 +232,7 @@ func (rc *ReconciliationContext) updateName(_ context.Context, name *string) err
 
 func (rc *ReconciliationContext) updateType(
 	_ context.Context,
-	ctxType *value_objects.ContextType,
+	ctxType *shared.ContextType,
 ) error {
 	if ctxType == nil {
 		return nil

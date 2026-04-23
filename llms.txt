@@ -58,4 +58,3 @@ Matcher is a Go service built as a modular monolith using DDD, hexagonal archite
 
 - [Config Directory](config/README.md): Environment templates and storage configuration
 - [CLI Entry Points](cmd/README.md): Application binaries (matcher, health-probe)
-- [Storage Options](pkg/storageopt/README.md): Functional options for object storage

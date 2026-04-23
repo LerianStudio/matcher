@@ -29,8 +29,8 @@ var (
 	// ErrNilCommentUseCase indicates the comment use case is nil.
 	ErrNilCommentUseCase = errors.New("comment use case is required")
 
-	// ErrNilCommentQueryUseCase indicates the comment query use case is nil.
-	ErrNilCommentQueryUseCase = errors.New("comment query use case is required")
+	// ErrNilCommentRepository indicates the comment repository is nil.
+	ErrNilCommentRepository = errors.New("comment repository is required")
 
 	// ErrNilCallbackUseCase indicates the callback use case is nil.
 	ErrNilCallbackUseCase = errors.New("callback use case is required")

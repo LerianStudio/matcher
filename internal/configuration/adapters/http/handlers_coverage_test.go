@@ -28,6 +28,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
 	"github.com/LerianStudio/matcher/internal/configuration/services/query"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
@@ -452,7 +453,7 @@ func TestUpdateFieldMap_NotFound(t *testing.T) {
 
 	app.Patch("/v1/field-maps/:fieldMapId", fixture.handler.UpdateFieldMap)
 
-	payload := mustJSON(t, entities.UpdateFieldMapInput{
+	payload := mustJSON(t, shared.UpdateFieldMapInput{
 		Mapping: map[string]any{"field": "updated"},
 	})
 
@@ -501,7 +502,7 @@ func TestUpdateFieldMap_UnauthorizedTenant(t *testing.T) {
 
 	app.Patch("/v1/field-maps/:fieldMapId", fixture.handler.UpdateFieldMap)
 
-	payload := mustJSON(t, entities.UpdateFieldMapInput{
+	payload := mustJSON(t, shared.UpdateFieldMapInput{
 		Mapping: map[string]any{"field": "updated"},
 	})
 
@@ -530,7 +531,7 @@ func TestUpdateFieldMap_OwnershipDenied(t *testing.T) {
 
 	app.Patch("/v1/field-maps/:fieldMapId", fixture.handler.UpdateFieldMap)
 
-	payload := mustJSON(t, entities.UpdateFieldMapInput{
+	payload := mustJSON(t, shared.UpdateFieldMapInput{
 		Mapping: map[string]any{"field": "updated"},
 	})
 
@@ -637,11 +638,14 @@ func TestNewHandler_NilCommandUseCase(t *testing.T) {
 	sourceRepo := newSourceRepository()
 	fieldMapRepo := newFieldMapRepository()
 	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
+	feeScheduleRepo := newFeeScheduleRepository()
+	scheduleRepo := newScheduleRepository()
 
 	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
 	require.NoError(t, err)
 
-	_, err = NewHandler(nil, queryUseCase, false)
+	_, err = NewHandler(nil, queryUseCase, contextRepo, sourceRepo, matchRuleRepo, fieldMapRepo, feeRuleRepo, feeScheduleRepo, scheduleRepo, false)
 	require.ErrorIs(t, err, ErrNilCommandUseCase)
 }
 
@@ -652,12 +656,159 @@ func TestNewHandler_NilQueryUseCase(t *testing.T) {
 	sourceRepo := newSourceRepository()
 	fieldMapRepo := newFieldMapRepository()
 	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
+	feeScheduleRepo := newFeeScheduleRepository()
+	scheduleRepo := newScheduleRepository()
 
 	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
 	require.NoError(t, err)
 
-	_, err = NewHandler(commandUseCase, nil, false)
+	_, err = NewHandler(commandUseCase, nil, contextRepo, sourceRepo, matchRuleRepo, fieldMapRepo, feeRuleRepo, feeScheduleRepo, scheduleRepo, false)
 	require.ErrorIs(t, err, ErrNilQueryUseCase)
+}
+
+func TestNewHandler_NilContextRepo(t *testing.T) {
+	t.Parallel()
+
+	contextRepo := newContextRepository()
+	sourceRepo := newSourceRepository()
+	fieldMapRepo := newFieldMapRepository()
+	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
+	feeScheduleRepo := newFeeScheduleRepository()
+	scheduleRepo := newScheduleRepository()
+
+	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	_, err = NewHandler(commandUseCase, queryUseCase, nil, sourceRepo, matchRuleRepo, fieldMapRepo, feeRuleRepo, feeScheduleRepo, scheduleRepo, false)
+	require.ErrorIs(t, err, ErrNilContextRepository)
+}
+
+func TestNewHandler_NilSourceRepo(t *testing.T) {
+	t.Parallel()
+
+	contextRepo := newContextRepository()
+	sourceRepo := newSourceRepository()
+	fieldMapRepo := newFieldMapRepository()
+	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
+	feeScheduleRepo := newFeeScheduleRepository()
+	scheduleRepo := newScheduleRepository()
+
+	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	_, err = NewHandler(commandUseCase, queryUseCase, contextRepo, nil, matchRuleRepo, fieldMapRepo, feeRuleRepo, feeScheduleRepo, scheduleRepo, false)
+	require.ErrorIs(t, err, ErrNilSourceRepository)
+}
+
+func TestNewHandler_NilMatchRuleRepo(t *testing.T) {
+	t.Parallel()
+
+	contextRepo := newContextRepository()
+	sourceRepo := newSourceRepository()
+	fieldMapRepo := newFieldMapRepository()
+	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
+	feeScheduleRepo := newFeeScheduleRepository()
+	scheduleRepo := newScheduleRepository()
+
+	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	_, err = NewHandler(commandUseCase, queryUseCase, contextRepo, sourceRepo, nil, fieldMapRepo, feeRuleRepo, feeScheduleRepo, scheduleRepo, false)
+	require.ErrorIs(t, err, ErrNilMatchRuleRepository)
+}
+
+func TestNewHandler_NilFieldMapRepo(t *testing.T) {
+	t.Parallel()
+
+	contextRepo := newContextRepository()
+	sourceRepo := newSourceRepository()
+	fieldMapRepo := newFieldMapRepository()
+	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
+	feeScheduleRepo := newFeeScheduleRepository()
+	scheduleRepo := newScheduleRepository()
+
+	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	_, err = NewHandler(commandUseCase, queryUseCase, contextRepo, sourceRepo, matchRuleRepo, nil, feeRuleRepo, feeScheduleRepo, scheduleRepo, false)
+	require.ErrorIs(t, err, ErrNilFieldMapRepository)
+}
+
+func TestNewHandler_NilFeeRuleRepo(t *testing.T) {
+	t.Parallel()
+
+	contextRepo := newContextRepository()
+	sourceRepo := newSourceRepository()
+	fieldMapRepo := newFieldMapRepository()
+	matchRuleRepo := newMatchRuleRepository()
+	feeScheduleRepo := newFeeScheduleRepository()
+	scheduleRepo := newScheduleRepository()
+
+	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	_, err = NewHandler(commandUseCase, queryUseCase, contextRepo, sourceRepo, matchRuleRepo, fieldMapRepo, nil, feeScheduleRepo, scheduleRepo, false)
+	require.ErrorIs(t, err, ErrNilFeeRuleRepository)
+}
+
+func TestNewHandler_NilFeeScheduleRepo(t *testing.T) {
+	t.Parallel()
+
+	contextRepo := newContextRepository()
+	sourceRepo := newSourceRepository()
+	fieldMapRepo := newFieldMapRepository()
+	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
+	scheduleRepo := newScheduleRepository()
+
+	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	_, err = NewHandler(commandUseCase, queryUseCase, contextRepo, sourceRepo, matchRuleRepo, fieldMapRepo, feeRuleRepo, nil, scheduleRepo, false)
+	require.ErrorIs(t, err, ErrNilFeeScheduleRepository)
+}
+
+func TestNewHandler_NilScheduleRepo(t *testing.T) {
+	t.Parallel()
+
+	contextRepo := newContextRepository()
+	sourceRepo := newSourceRepository()
+	fieldMapRepo := newFieldMapRepository()
+	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
+	feeScheduleRepo := newFeeScheduleRepository()
+
+	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	_, err = NewHandler(commandUseCase, queryUseCase, contextRepo, sourceRepo, matchRuleRepo, fieldMapRepo, feeRuleRepo, feeScheduleRepo, nil, false)
+	require.ErrorIs(t, err, ErrNilScheduleRepository)
 }
 
 // ─── safeClientMessage tests ──────────────────────────────────
@@ -731,11 +882,11 @@ func TestIsClientSafeError_Comprehensive(t *testing.T) {
 		entities.ErrSourceNameTooLong,
 		entities.ErrSourceTypeInvalid,
 		entities.ErrSourceContextRequired,
-		entities.ErrFieldMapNil,
-		entities.ErrFieldMapContextRequired,
-		entities.ErrFieldMapSourceRequired,
-		entities.ErrFieldMapMappingRequired,
-		entities.ErrFieldMapMappingValueEmpty,
+		shared.ErrFieldMapNil,
+		shared.ErrFieldMapContextRequired,
+		shared.ErrFieldMapSourceRequired,
+		shared.ErrFieldMapMappingRequired,
+		shared.ErrFieldMapMappingValueEmpty,
 		entities.ErrMatchRuleNil,
 		entities.ErrRuleContextRequired,
 		entities.ErrRulePriorityInvalid,
@@ -936,6 +1087,8 @@ func newScheduleFixture(t *testing.T) *handlerFixtureWithSchedule {
 	sourceRepo := newSourceRepository()
 	fieldMapRepo := newFieldMapRepository()
 	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
+	feeScheduleRepo := newFeeScheduleRepository()
 	scheduleRepo := newScheduleRepository()
 
 	commandUseCase, err := command.NewUseCase(
@@ -950,7 +1103,18 @@ func newScheduleFixture(t *testing.T) *handlerFixtureWithSchedule {
 	)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(commandUseCase, queryUseCase, false)
+	handler, err := NewHandler(
+		commandUseCase,
+		queryUseCase,
+		contextRepo,
+		sourceRepo,
+		matchRuleRepo,
+		fieldMapRepo,
+		feeRuleRepo,
+		feeScheduleRepo,
+		scheduleRepo,
+		false,
+	)
 	require.NoError(t, err)
 
 	return &handlerFixtureWithSchedule{
@@ -980,7 +1144,7 @@ func (f *handlerFixtureWithSchedule) seedContext(
 
 	input := entities.CreateReconciliationContextInput{
 		Name:     "Test Context",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "daily",
 	}
 
@@ -1997,7 +2161,7 @@ func TestCreateFieldMap_InvalidSourceUUID(t *testing.T) {
 
 	app.Post("/v1/contexts/:contextId/sources/:sourceId/field-maps", fixture.handler.CreateFieldMap)
 
-	payload := entities.CreateFieldMapInput{
+	payload := shared.CreateFieldMapInput{
 		Mapping: map[string]any{"field": "value"},
 	}
 
@@ -2107,7 +2271,9 @@ func newFeeScheduleHandlerFixture(t *testing.T) *feeScheduleHandlerFixture {
 	sourceRepo := newSourceRepository()
 	fieldMapRepo := newFieldMapRepository()
 	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
 	feeRepo := newFeeScheduleRepository()
+	scheduleRepo := newScheduleRepository()
 
 	commandUseCase, err := command.NewUseCase(
 		contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo,
@@ -2117,11 +2283,21 @@ func newFeeScheduleHandlerFixture(t *testing.T) *feeScheduleHandlerFixture {
 
 	queryUseCase, err := query.NewUseCase(
 		contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo,
-		query.WithFeeScheduleRepository(feeRepo),
 	)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(commandUseCase, queryUseCase, false)
+	handler, err := NewHandler(
+		commandUseCase,
+		queryUseCase,
+		contextRepo,
+		sourceRepo,
+		matchRuleRepo,
+		fieldMapRepo,
+		feeRuleRepo,
+		feeRepo,
+		scheduleRepo,
+		false,
+	)
 	require.NoError(t, err)
 
 	return &feeScheduleHandlerFixture{

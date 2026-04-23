@@ -12,6 +12,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/dispute"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	"github.com/LerianStudio/matcher/internal/testutil"
 )
 
@@ -33,7 +34,7 @@ func TestExceptionToResponse(t *testing.T) {
 			input: &entities.Exception{
 				ID:            uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 				TransactionID: uuid.MustParse("22222222-2222-2222-2222-222222222222"),
-				Severity:      value_objects.ExceptionSeverityHigh,
+				Severity:      sharedexception.ExceptionSeverityHigh,
 				Status:        value_objects.ExceptionStatusOpen,
 				CreatedAt:     time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
 				UpdatedAt:     time.Date(2025, 1, 15, 10, 35, 0, 0, time.UTC),
@@ -52,7 +53,7 @@ func TestExceptionToResponse(t *testing.T) {
 			input: &entities.Exception{
 				ID:               uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 				TransactionID:    uuid.MustParse("22222222-2222-2222-2222-222222222222"),
-				Severity:         value_objects.ExceptionSeverityCritical,
+				Severity:         sharedexception.ExceptionSeverityCritical,
 				Status:           value_objects.ExceptionStatusResolved,
 				ExternalSystem:   testutil.StringPtr("JIRA"),
 				ExternalIssueID:  testutil.StringPtr("RECON-123"),
@@ -118,7 +119,7 @@ func TestExceptionsToResponse(t *testing.T) {
 				{
 					ID:            uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 					TransactionID: uuid.MustParse("22222222-2222-2222-2222-222222222222"),
-					Severity:      value_objects.ExceptionSeverityLow,
+					Severity:      sharedexception.ExceptionSeverityLow,
 					Status:        value_objects.ExceptionStatusOpen,
 					CreatedAt:     time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
 					UpdatedAt:     time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),

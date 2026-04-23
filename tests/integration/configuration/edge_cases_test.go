@@ -15,6 +15,7 @@ import (
 	sourceRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/source"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
@@ -29,7 +30,7 @@ func TestContextRepository_UniqueNameConstraint(t *testing.T) {
 			h.Seed.TenantID,
 			entities.CreateReconciliationContextInput{
 				Name:     "Duplicate Name Context",
-				Type:     value_objects.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "0 0 * * *",
 			},
 		)
@@ -43,7 +44,7 @@ func TestContextRepository_UniqueNameConstraint(t *testing.T) {
 			h.Seed.TenantID,
 			entities.CreateReconciliationContextInput{
 				Name:     "Duplicate Name Context",
-				Type:     value_objects.ContextTypeOneToMany,
+				Type:     shared.ContextTypeOneToMany,
 				Interval: "0 */6 * * *",
 			},
 		)
@@ -87,11 +88,11 @@ func TestFieldMapRepository_ForeignKeyConstraint(t *testing.T) {
 
 		nonExistentSourceID := uuid.New()
 
-		entity, err := entities.NewFieldMap(
+		entity, err := shared.NewFieldMap(
 			ctx,
 			h.Seed.ContextID,
 			nonExistentSourceID,
-			entities.CreateFieldMapInput{
+			shared.CreateFieldMapInput{
 				Mapping: map[string]any{"amount": "amt"},
 			},
 		)
@@ -114,7 +115,7 @@ func TestMatchRuleRepository_ForeignKeyConstraint(t *testing.T) {
 			nonExistentContextID,
 			entities.CreateMatchRuleInput{
 				Priority: 1,
-				Type:     value_objects.RuleTypeExact,
+				Type:     shared.RuleTypeExact,
 				Config:   map[string]any{"matchCurrency": true},
 			},
 		)
@@ -138,7 +139,7 @@ func TestContextRepository_DeleteWithSources_CascadeDeletesChildren(t *testing.T
 			h.Seed.TenantID,
 			entities.CreateReconciliationContextInput{
 				Name:     "Context With Sources",
-				Type:     value_objects.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "0 0 * * *",
 			},
 		)
@@ -190,11 +191,11 @@ func TestSourceRepository_DeleteWithFieldMaps_CascadeDeletesChildren(t *testing.
 		createdSource, err := srcRepo.Create(ctx, sourceEntity)
 		require.NoError(t, err)
 
-		fieldMapEntity, err := entities.NewFieldMap(
+		fieldMapEntity, err := shared.NewFieldMap(
 			ctx,
 			h.Seed.ContextID,
 			createdSource.ID,
-			entities.CreateFieldMapInput{
+			shared.CreateFieldMapInput{
 				Mapping: map[string]any{"amount": "amt"},
 			},
 		)
@@ -217,7 +218,7 @@ func TestMatchRuleRepository_PriorityUniqueness(t *testing.T) {
 
 		rule1, err := entities.NewMatchRule(ctx, h.Seed.ContextID, entities.CreateMatchRuleInput{
 			Priority: 100,
-			Type:     value_objects.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config:   map[string]any{"matchCurrency": true},
 		})
 		require.NoError(t, err)
@@ -226,7 +227,7 @@ func TestMatchRuleRepository_PriorityUniqueness(t *testing.T) {
 
 		rule2, err := entities.NewMatchRule(ctx, h.Seed.ContextID, entities.CreateMatchRuleInput{
 			Priority: 100,
-			Type:     value_objects.RuleTypeTolerance,
+			Type:     shared.RuleTypeTolerance,
 			Config:   map[string]any{"absTolerance": "0.01"},
 		})
 		require.NoError(t, err)
@@ -245,7 +246,7 @@ func TestContextRepository_UpdateNonExistent(t *testing.T) {
 			h.Seed.TenantID,
 			entities.CreateReconciliationContextInput{
 				Name:     "Non Existent",
-				Type:     value_objects.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "0 0 * * *",
 			},
 		)
@@ -364,11 +365,11 @@ func TestFieldMapRepository_ComplexMapping(t *testing.T) {
 			"metadata":     map[string]any{"field1": "value1", "field2": "value2"},
 		}
 
-		entity, err := entities.NewFieldMap(
+		entity, err := shared.NewFieldMap(
 			ctx,
 			h.Seed.ContextID,
 			createdSource.ID,
-			entities.CreateFieldMapInput{
+			shared.CreateFieldMapInput{
 				Mapping: complexMapping,
 			},
 		)
@@ -393,7 +394,7 @@ func TestContextRepository_Pagination(t *testing.T) {
 				h.Seed.TenantID,
 				entities.CreateReconciliationContextInput{
 					Name:     "Pagination Context " + uuid.New().String()[:8],
-					Type:     value_objects.ContextTypeOneToOne,
+					Type:     shared.ContextTypeOneToOne,
 					Interval: "0 0 * * *",
 				},
 			)

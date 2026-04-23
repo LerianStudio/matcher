@@ -791,4 +791,3 @@ func TestWithTenantTxProvider_NonDefaultTenant_Success(t *testing.T) {
 	assert.Equal(t, "provider-tenant-scoped", result)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
-

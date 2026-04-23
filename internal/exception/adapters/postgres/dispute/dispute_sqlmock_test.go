@@ -537,7 +537,7 @@ func TestScanDisputeRows_InvalidUUID_Sqlmock(t *testing.T) {
 
 	require.Error(t, err)
 	require.Nil(t, result)
-	assert.Contains(t, err.Error(), "parse dispute id")
+	assert.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestScanDisputeRows_InvalidExceptionID_Sqlmock(t *testing.T) {
@@ -564,7 +564,7 @@ func TestScanDisputeRows_InvalidExceptionID_Sqlmock(t *testing.T) {
 
 	require.Error(t, err)
 	require.Nil(t, result)
-	assert.Contains(t, err.Error(), "parse exception id")
+	assert.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestScanDisputeRows_InvalidCategory_Sqlmock(t *testing.T) {

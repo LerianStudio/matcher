@@ -13,6 +13,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 func TestNewExceptionDefaults(t *testing.T) {
@@ -24,12 +25,12 @@ func TestNewExceptionDefaults(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityMedium,
+		sharedexception.ExceptionSeverityMedium,
 		&reason,
 	)
 	require.NoError(t, err)
 	require.Equal(t, value_objects.ExceptionStatusOpen, exception.Status)
-	require.Equal(t, value_objects.ExceptionSeverityMedium, exception.Severity)
+	require.Equal(t, sharedexception.ExceptionSeverityMedium, exception.Severity)
 	require.NotNil(t, exception.Reason)
 	require.Equal(t, "FX_RATE_UNAVAILABLE", *exception.Reason)
 	require.Nil(t, exception.AssignedTo)
@@ -43,10 +44,10 @@ func TestNewExceptionValidation(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err := entities.NewException(ctx, uuid.Nil, value_objects.ExceptionSeverityMedium, nil)
+	_, err := entities.NewException(ctx, uuid.Nil, sharedexception.ExceptionSeverityMedium, nil)
 	require.ErrorIs(t, err, entities.ErrTransactionIDRequired)
 
-	_, err = entities.NewException(ctx, uuid.New(), value_objects.ExceptionSeverity("BAD"), nil)
+	_, err = entities.NewException(ctx, uuid.New(), sharedexception.ExceptionSeverity("BAD"), nil)
 	require.ErrorIs(t, err, entities.ErrInvalidExceptionSeverity)
 }
 
@@ -57,7 +58,7 @@ func TestExceptionAssignAndResolveLifecycle(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -82,7 +83,7 @@ func TestExceptionResolveFromOpen(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityLow,
+		sharedexception.ExceptionSeverityLow,
 		nil,
 	)
 	require.NoError(t, err)
@@ -100,7 +101,7 @@ func TestExceptionAssignValidation(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityLow,
+		sharedexception.ExceptionSeverityLow,
 		nil,
 	)
 	require.NoError(t, err)
@@ -127,7 +128,7 @@ func TestExceptionResolveValidation(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityLow,
+		sharedexception.ExceptionSeverityLow,
 		nil,
 	)
 	require.NoError(t, err)
@@ -209,7 +210,7 @@ func TestException_StateTransitions(t *testing.T) {
 			exception, err := entities.NewException(
 				ctx,
 				uuid.New(),
-				value_objects.ExceptionSeverityMedium,
+				sharedexception.ExceptionSeverityMedium,
 				nil,
 			)
 			require.NoError(t, err)
@@ -256,7 +257,7 @@ func TestException_Assign_IdempotentFields(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityHigh,
+			sharedexception.ExceptionSeverityHigh,
 			nil,
 		)
 		require.NoError(t, err)
@@ -273,7 +274,7 @@ func TestException_Assign_IdempotentFields(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityHigh,
+			sharedexception.ExceptionSeverityHigh,
 			nil,
 		)
 		require.NoError(t, err)
@@ -289,7 +290,7 @@ func TestException_Assign_IdempotentFields(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityHigh,
+			sharedexception.ExceptionSeverityHigh,
 			nil,
 		)
 		require.NoError(t, err)
@@ -307,7 +308,7 @@ func TestException_Assign_IdempotentFields(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityHigh,
+			sharedexception.ExceptionSeverityHigh,
 			nil,
 		)
 		require.NoError(t, err)
@@ -328,7 +329,7 @@ func TestException_Resolve_PreservesAssignee(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			nil,
 		)
 		require.NoError(t, err)
@@ -352,7 +353,7 @@ func TestException_Resolve_PreservesAssignee(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityLow,
+			sharedexception.ExceptionSeverityLow,
 			nil,
 		)
 		require.NoError(t, err)
@@ -375,7 +376,7 @@ func TestException_TimestampInvariants(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			nil,
 		)
 		require.NoError(t, err)
@@ -393,7 +394,7 @@ func TestException_TimestampInvariants(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			nil,
 		)
 		require.NoError(t, err)
@@ -411,7 +412,7 @@ func TestException_TimestampInvariants(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			nil,
 		)
 		require.NoError(t, err)
@@ -431,7 +432,7 @@ func TestException_TimestampInvariants(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			nil,
 		)
 		require.NoError(t, err)
@@ -451,7 +452,7 @@ func TestException_TimestampInvariants(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityHigh,
+			sharedexception.ExceptionSeverityHigh,
 			nil,
 		)
 		require.NoError(t, err)
@@ -488,7 +489,7 @@ func TestException_Repeated_Transitions(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityHigh,
+			sharedexception.ExceptionSeverityHigh,
 			nil,
 		)
 		require.NoError(t, err)
@@ -519,7 +520,7 @@ func TestException_Repeated_Transitions(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			nil,
 		)
 		require.NoError(t, err)
@@ -550,7 +551,7 @@ func TestException_Repeated_Transitions(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityLow,
+			sharedexception.ExceptionSeverityLow,
 			nil,
 		)
 		require.NoError(t, err)
@@ -593,7 +594,7 @@ func TestException_Unassign(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			nil,
 		)
 		require.NoError(t, err)
@@ -616,7 +617,7 @@ func TestException_Unassign(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityLow,
+			sharedexception.ExceptionSeverityLow,
 			nil,
 		)
 		require.NoError(t, err)
@@ -632,7 +633,7 @@ func TestException_Unassign(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityLow,
+			sharedexception.ExceptionSeverityLow,
 			nil,
 		)
 		require.NoError(t, err)
@@ -656,7 +657,7 @@ func TestException_Unassign(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityHigh,
+			sharedexception.ExceptionSeverityHigh,
 			nil,
 		)
 		require.NoError(t, err)
@@ -677,7 +678,7 @@ func TestException_Unassign(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			nil,
 		)
 		require.NoError(t, err)
@@ -702,7 +703,7 @@ func TestException_Unassign_ThenReassign(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityHigh,
+			sharedexception.ExceptionSeverityHigh,
 			nil,
 		)
 		require.NoError(t, err)
@@ -724,7 +725,7 @@ func TestException_Unassign_ThenReassign(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			nil,
 		)
 		require.NoError(t, err)
@@ -751,7 +752,7 @@ func TestException_Resolve_WithOptions(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			nil,
 		)
 		require.NoError(t, err)
@@ -772,7 +773,7 @@ func TestException_Resolve_WithOptions(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityLow,
+			sharedexception.ExceptionSeverityLow,
 			nil,
 		)
 		require.NoError(t, err)
@@ -793,7 +794,7 @@ func TestException_Resolve_WithOptions(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityHigh,
+			sharedexception.ExceptionSeverityHigh,
 			nil,
 		)
 		require.NoError(t, err)
@@ -816,7 +817,7 @@ func TestException_Resolve_WithOptions(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			nil,
 		)
 		require.NoError(t, err)
@@ -837,7 +838,7 @@ func TestException_Resolve_WithOptions(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityCritical,
+			sharedexception.ExceptionSeverityCritical,
 			nil,
 		)
 		require.NoError(t, err)
@@ -867,7 +868,7 @@ func TestNewException_ReasonNormalization(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityLow,
+			sharedexception.ExceptionSeverityLow,
 			nil,
 		)
 		require.NoError(t, err)
@@ -881,7 +882,7 @@ func TestNewException_ReasonNormalization(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityLow,
+			sharedexception.ExceptionSeverityLow,
 			&emptyReason,
 		)
 		require.NoError(t, err)
@@ -895,7 +896,7 @@ func TestNewException_ReasonNormalization(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityLow,
+			sharedexception.ExceptionSeverityLow,
 			&whitespaceReason,
 		)
 		require.NoError(t, err)
@@ -909,7 +910,7 @@ func TestNewException_ReasonNormalization(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			&reason,
 		)
 		require.NoError(t, err)
@@ -924,7 +925,7 @@ func TestNewException_ReasonNormalization(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityHigh,
+			sharedexception.ExceptionSeverityHigh,
 			&reason,
 		)
 		require.NoError(t, err)
@@ -938,11 +939,11 @@ func TestNewException_AllSeverityLevels(t *testing.T) {
 
 	ctx := context.Background()
 
-	severities := []value_objects.ExceptionSeverity{
-		value_objects.ExceptionSeverityLow,
-		value_objects.ExceptionSeverityMedium,
-		value_objects.ExceptionSeverityHigh,
-		value_objects.ExceptionSeverityCritical,
+	severities := []sharedexception.ExceptionSeverity{
+		sharedexception.ExceptionSeverityLow,
+		sharedexception.ExceptionSeverityMedium,
+		sharedexception.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityCritical,
 	}
 
 	for _, severity := range severities {
@@ -981,7 +982,7 @@ func TestException_Assign_EmptyAssigneeVariants(t *testing.T) {
 			exception, err := entities.NewException(
 				ctx,
 				uuid.New(),
-				value_objects.ExceptionSeverityLow,
+				sharedexception.ExceptionSeverityLow,
 				nil,
 			)
 			require.NoError(t, err)
@@ -1017,7 +1018,7 @@ func TestException_Resolve_EmptyNotesVariants(t *testing.T) {
 			exception, err := entities.NewException(
 				ctx,
 				uuid.New(),
-				value_objects.ExceptionSeverityMedium,
+				sharedexception.ExceptionSeverityMedium,
 				nil,
 			)
 			require.NoError(t, err)
@@ -1040,7 +1041,7 @@ func TestException_Resolve_NotesTrimming(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityLow,
+			sharedexception.ExceptionSeverityLow,
 			nil,
 		)
 		require.NoError(t, err)
@@ -1056,7 +1057,7 @@ func TestException_Resolve_NotesTrimming(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			nil,
 		)
 		require.NoError(t, err)
@@ -1078,7 +1079,7 @@ func TestException_AssignedExceptionWithEmptyAssignee(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityHigh,
+			sharedexception.ExceptionSeverityHigh,
 			nil,
 		)
 		require.NoError(t, err)
@@ -1097,7 +1098,7 @@ func TestException_AssignedExceptionWithEmptyAssignee(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			nil,
 		)
 		require.NoError(t, err)
@@ -1126,7 +1127,7 @@ func TestNewException_IDGeneration(t *testing.T) {
 			exception, err := entities.NewException(
 				ctx,
 				uuid.New(),
-				value_objects.ExceptionSeverityLow,
+				sharedexception.ExceptionSeverityLow,
 				nil,
 			)
 			require.NoError(t, err)
@@ -1143,7 +1144,7 @@ func TestNewException_IDGeneration(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			nil,
 		)
 		require.NoError(t, err)
@@ -1160,7 +1161,7 @@ func TestNewException_TransactionIDPreserved(t *testing.T) {
 		t.Parallel()
 
 		txID := uuid.New()
-		exception, err := entities.NewException(ctx, txID, value_objects.ExceptionSeverityHigh, nil)
+		exception, err := entities.NewException(ctx, txID, sharedexception.ExceptionSeverityHigh, nil)
 		require.NoError(t, err)
 		require.Equal(t, txID, exception.TransactionID)
 	})
@@ -1177,7 +1178,7 @@ func TestException_Version(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityLow,
+			sharedexception.ExceptionSeverityLow,
 			nil,
 		)
 		require.NoError(t, err)
@@ -1196,7 +1197,7 @@ func TestException_ExternalSystemFields(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			nil,
 		)
 		require.NoError(t, err)
@@ -1217,7 +1218,7 @@ func TestException_StartResolution(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			nil,
 		)
 		require.NoError(t, err)
@@ -1233,7 +1234,7 @@ func TestException_StartResolution(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityHigh,
+			sharedexception.ExceptionSeverityHigh,
 			nil,
 		)
 		require.NoError(t, err)
@@ -1252,7 +1253,7 @@ func TestException_StartResolution(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityLow,
+			sharedexception.ExceptionSeverityLow,
 			nil,
 		)
 		require.NoError(t, err)
@@ -1269,7 +1270,7 @@ func TestException_StartResolution(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityLow,
+			sharedexception.ExceptionSeverityLow,
 			nil,
 		)
 		require.NoError(t, err)
@@ -1292,7 +1293,7 @@ func TestException_StartResolution(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			nil,
 		)
 		require.NoError(t, err)
@@ -1318,7 +1319,7 @@ func TestException_AbortResolution(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			nil,
 		)
 		require.NoError(t, err)
@@ -1335,7 +1336,7 @@ func TestException_AbortResolution(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityHigh,
+			sharedexception.ExceptionSeverityHigh,
 			nil,
 		)
 		require.NoError(t, err)
@@ -1354,7 +1355,7 @@ func TestException_AbortResolution(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityLow,
+			sharedexception.ExceptionSeverityLow,
 			nil,
 		)
 		require.NoError(t, err)
@@ -1380,7 +1381,7 @@ func TestException_AbortResolution(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			nil,
 		)
 		require.NoError(t, err)
@@ -1417,7 +1418,7 @@ func TestException_AbortResolution_InvalidTargetStatus(t *testing.T) {
 			exception, err := entities.NewException(
 				ctx,
 				uuid.New(),
-				value_objects.ExceptionSeverityMedium,
+				sharedexception.ExceptionSeverityMedium,
 				nil,
 			)
 			require.NoError(t, err)
@@ -1443,7 +1444,7 @@ func TestException_ResolveFromPendingResolution(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			nil,
 		)
 		require.NoError(t, err)
@@ -1462,7 +1463,7 @@ func TestException_ResolveFromPendingResolution(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityHigh,
+			sharedexception.ExceptionSeverityHigh,
 			nil,
 		)
 		require.NoError(t, err)
@@ -1492,7 +1493,7 @@ func TestException_FullPendingResolutionLifecycle(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityMedium,
 			nil,
 		)
 		require.NoError(t, err)
@@ -1510,7 +1511,7 @@ func TestException_FullPendingResolutionLifecycle(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityHigh,
+			sharedexception.ExceptionSeverityHigh,
 			nil,
 		)
 		require.NoError(t, err)
@@ -1530,7 +1531,7 @@ func TestException_FullPendingResolutionLifecycle(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityLow,
+			sharedexception.ExceptionSeverityLow,
 			nil,
 		)
 		require.NoError(t, err)

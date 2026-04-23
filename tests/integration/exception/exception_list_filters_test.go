@@ -18,12 +18,13 @@ import (
 	ingestionJobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
 	ingestionTxRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/transaction"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func severityPtr(s exceptionVO.ExceptionSeverity) *exceptionVO.ExceptionSeverity { return &s }
-func statusPtr(s exceptionVO.ExceptionStatus) *exceptionVO.ExceptionStatus       { return &s }
-func timePtr(t time.Time) *time.Time                                             { return &t }
+func severityPtr(s sharedexception.ExceptionSeverity) *sharedexception.ExceptionSeverity { return &s }
+func statusPtr(s exceptionVO.ExceptionStatus) *exceptionVO.ExceptionStatus               { return &s }
+func timePtr(t time.Time) *time.Time                                                     { return &t }
 
 // setupListFilterTestData creates the infrastructure needed for list filter tests:
 // a seed config, ingestion job repo, transaction repo, and exception repo backed
@@ -110,7 +111,7 @@ func TestListFilters_StatusOnly(t *testing.T) {
 			)
 
 			exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-				exceptionVO.ExceptionSeverityLow, "UNMATCHED: status filter test")
+				sharedexception.ExceptionSeverityLow, "UNMATCHED: status filter test")
 
 			if i >= 3 {
 				resolvedIDs = append(resolvedIDs, exc.ID)
@@ -151,11 +152,11 @@ func TestListFilters_SeverityOnly(t *testing.T) {
 
 		job := createIngestionJob(t, ctx, jRepo, seed.ContextID, seed.LedgerSourceID, 4)
 
-		severities := []exceptionVO.ExceptionSeverity{
-			exceptionVO.ExceptionSeverityHigh,
-			exceptionVO.ExceptionSeverityMedium,
-			exceptionVO.ExceptionSeverityLow,
-			exceptionVO.ExceptionSeverityCritical,
+		severities := []sharedexception.ExceptionSeverity{
+			sharedexception.ExceptionSeverityHigh,
+			sharedexception.ExceptionSeverityMedium,
+			sharedexception.ExceptionSeverityLow,
+			sharedexception.ExceptionSeverityCritical,
 		}
 
 		var highIDs []uuid.UUID
@@ -170,13 +171,13 @@ func TestListFilters_SeverityOnly(t *testing.T) {
 			exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID, sev,
 				"UNMATCHED: severity filter test")
 
-			if sev == exceptionVO.ExceptionSeverityHigh {
+			if sev == sharedexception.ExceptionSeverityHigh {
 				highIDs = append(highIDs, exc.ID)
 			}
 		}
 
 		filter := repositories.ExceptionFilter{
-			Severity: severityPtr(exceptionVO.ExceptionSeverityHigh),
+			Severity: severityPtr(sharedexception.ExceptionSeverityHigh),
 		}
 		cursor := repositories.CursorFilter{Limit: 50}
 
@@ -186,7 +187,7 @@ func TestListFilters_SeverityOnly(t *testing.T) {
 			"expected at least %d HIGH-severity exceptions", len(highIDs))
 
 		for _, exc := range results {
-			require.Equal(t, exceptionVO.ExceptionSeverityHigh, exc.Severity,
+			require.Equal(t, sharedexception.ExceptionSeverityHigh, exc.Severity,
 				"all returned exceptions must be HIGH severity, got %s for %s",
 				exc.Severity, exc.ID)
 		}
@@ -207,7 +208,7 @@ func TestListFilters_CombinedStatusAndSeverity(t *testing.T) {
 		job := createIngestionJob(t, ctx, jRepo, seed.ContextID, seed.LedgerSourceID, 6)
 
 		type testCase struct {
-			severity     exceptionVO.ExceptionSeverity
+			severity     sharedexception.ExceptionSeverity
 			markResolved bool
 		}
 
@@ -219,12 +220,12 @@ func TestListFilters_CombinedStatusAndSeverity(t *testing.T) {
 		// 4: MEDIUM + OPEN
 		// 5: CRITICAL + RESOLVED
 		cases := []testCase{
-			{severity: exceptionVO.ExceptionSeverityHigh, markResolved: false},
-			{severity: exceptionVO.ExceptionSeverityHigh, markResolved: false},
-			{severity: exceptionVO.ExceptionSeverityHigh, markResolved: true},
-			{severity: exceptionVO.ExceptionSeverityLow, markResolved: false},
-			{severity: exceptionVO.ExceptionSeverityMedium, markResolved: false},
-			{severity: exceptionVO.ExceptionSeverityCritical, markResolved: true},
+			{severity: sharedexception.ExceptionSeverityHigh, markResolved: false},
+			{severity: sharedexception.ExceptionSeverityHigh, markResolved: false},
+			{severity: sharedexception.ExceptionSeverityHigh, markResolved: true},
+			{severity: sharedexception.ExceptionSeverityLow, markResolved: false},
+			{severity: sharedexception.ExceptionSeverityMedium, markResolved: false},
+			{severity: sharedexception.ExceptionSeverityCritical, markResolved: true},
 		}
 
 		var matchingCount int
@@ -243,14 +244,14 @@ func TestListFilters_CombinedStatusAndSeverity(t *testing.T) {
 				updateExceptionStatus(t, ctx, h, exc.ID, exceptionVO.ExceptionStatusResolved)
 			}
 
-			if tc.severity == exceptionVO.ExceptionSeverityHigh && !tc.markResolved {
+			if tc.severity == sharedexception.ExceptionSeverityHigh && !tc.markResolved {
 				matchingCount++
 			}
 		}
 
 		filter := repositories.ExceptionFilter{
 			Status:   statusPtr(exceptionVO.ExceptionStatusOpen),
-			Severity: severityPtr(exceptionVO.ExceptionSeverityHigh),
+			Severity: severityPtr(sharedexception.ExceptionSeverityHigh),
 		}
 		cursor := repositories.CursorFilter{Limit: 50}
 
@@ -262,7 +263,7 @@ func TestListFilters_CombinedStatusAndSeverity(t *testing.T) {
 		for _, exc := range results {
 			require.Equal(t, exceptionVO.ExceptionStatusOpen, exc.Status,
 				"all returned exceptions must be OPEN, got %s for %s", exc.Status, exc.ID)
-			require.Equal(t, exceptionVO.ExceptionSeverityHigh, exc.Severity,
+			require.Equal(t, sharedexception.ExceptionSeverityHigh, exc.Severity,
 				"all returned exceptions must be HIGH severity, got %s for %s",
 				exc.Severity, exc.ID)
 		}
@@ -307,7 +308,7 @@ func TestListFilters_DateRange(t *testing.T) {
 			)
 
 			exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-				exceptionVO.ExceptionSeverityLow, "UNMATCHED: date filter test")
+				sharedexception.ExceptionSeverityLow, "UNMATCHED: date filter test")
 
 			overrideExceptionCreatedAt(t, ctx, h, exc.ID, dc.createdAt)
 
@@ -374,13 +375,13 @@ func TestListFilters_PaginationWithFilter(t *testing.T) {
 			)
 
 			exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-				exceptionVO.ExceptionSeverityHigh, "UNMATCHED: pagination filter test")
+				sharedexception.ExceptionSeverityHigh, "UNMATCHED: pagination filter test")
 
 			createdIDs[exc.ID] = true
 		}
 
 		filter := repositories.ExceptionFilter{
-			Severity: severityPtr(exceptionVO.ExceptionSeverityHigh),
+			Severity: severityPtr(sharedexception.ExceptionSeverityHigh),
 		}
 
 		collectedIDs := make(map[uuid.UUID]bool)
@@ -399,7 +400,7 @@ func TestListFilters_PaginationWithFilter(t *testing.T) {
 			require.NoError(t, err)
 
 			for _, exc := range results {
-				require.Equal(t, exceptionVO.ExceptionSeverityHigh, exc.Severity,
+				require.Equal(t, sharedexception.ExceptionSeverityHigh, exc.Severity,
 					"page %d: all results must be HIGH severity", page)
 				collectedIDs[exc.ID] = true
 			}
@@ -442,7 +443,7 @@ func TestListFilters_SortOrder(t *testing.T) {
 			)
 
 			exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-				exceptionVO.ExceptionSeverityMedium, "UNMATCHED: sort order test")
+				sharedexception.ExceptionSeverityMedium, "UNMATCHED: sort order test")
 
 			// Stagger: i=0 earliest, i=2 latest.
 			targetTime := baseTime.Add(time.Duration(i) * time.Hour)
@@ -453,7 +454,7 @@ func TestListFilters_SortOrder(t *testing.T) {
 
 		// Scope the query tightly to avoid noise from other tests.
 		filter := repositories.ExceptionFilter{
-			Severity: severityPtr(exceptionVO.ExceptionSeverityMedium),
+			Severity: severityPtr(sharedexception.ExceptionSeverityMedium),
 			DateFrom: timePtr(baseTime.Add(-time.Minute)),
 			DateTo:   timePtr(baseTime.Add(3 * time.Hour)),
 		}

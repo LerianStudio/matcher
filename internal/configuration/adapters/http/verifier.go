@@ -11,10 +11,10 @@ import (
 
 	sharedhttp "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
-	"github.com/LerianStudio/matcher/internal/configuration/services/query"
+	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories"
 )
 
-// NewTenantOwnershipVerifier creates a new verifier using the configuration query use case.
+// NewTenantOwnershipVerifier creates a new verifier using the context repository directly.
 //
 // SECURITY AUDIT NOTE (Taura Security, 2026-03):
 // This verifier intentionally does NOT check context active status (unlike the matching,
@@ -38,13 +38,13 @@ import (
 //	PAUSED  -> ACTIVE                   (Activate)  <-- this is the recovery path
 //	PAUSED  -> ARCHIVED                 (Archive)
 //	ARCHIVED -> (terminal, no transitions out)
-func NewTenantOwnershipVerifier(queryUseCase *query.UseCase) sharedhttp.TenantOwnershipVerifier {
+func NewTenantOwnershipVerifier(contextRepo repositories.ContextRepository) sharedhttp.TenantOwnershipVerifier {
 	return func(ctx context.Context, tenantID, contextID uuid.UUID) error {
-		if queryUseCase == nil {
+		if contextRepo == nil {
 			return fmt.Errorf("%w: verifier not initialized", sharedhttp.ErrContextAccessDenied)
 		}
 
-		reconciliationCtx, err := queryUseCase.GetContext(ctx, contextID)
+		reconciliationCtx, err := contextRepo.FindByID(ctx, contextID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return sharedhttp.ErrContextNotFound

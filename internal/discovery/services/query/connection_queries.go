@@ -62,23 +62,6 @@ func (uc *UseCase) GetDiscoveryStatus(ctx context.Context) (*DiscoveryStatus, er
 	return status, nil
 }
 
-// ListConnections returns all discovered Fetcher connections.
-func (uc *UseCase) ListConnections(ctx context.Context) ([]*entities.FetcherConnection, error) {
-	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled
-
-	ctx, span := tracer.Start(ctx, "query.discovery.list_connections")
-	defer span.End()
-
-	conns, err := uc.connRepo.FindAll(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "list connections", err)
-
-		return nil, fmt.Errorf("list connections: %w", err)
-	}
-
-	return conns, nil
-}
-
 // GetConnection returns a single connection by its internal ID.
 func (uc *UseCase) GetConnection(ctx context.Context, id uuid.UUID) (*entities.FetcherConnection, error) {
 	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled

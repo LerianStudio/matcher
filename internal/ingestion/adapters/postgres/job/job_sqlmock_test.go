@@ -1408,7 +1408,7 @@ func TestScanJob_InvalidUUID(t *testing.T) {
 
 	require.Error(t, err)
 	require.Nil(t, result)
-	require.Contains(t, err.Error(), "parsing ID")
+	require.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestScanJob_InvalidStatus(t *testing.T) {

@@ -16,9 +16,9 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/exception/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
-	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
 	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 var _ = sharedhttp.ErrorResponse{}
@@ -114,7 +114,7 @@ func (handler *Handlers) ProcessCallback(fiberCtx *fiber.Ctx) error {
 	}
 
 	// Process the callback
-	if err := handler.callbackUC.ProcessCallback(ctx, cmd); err != nil {
+	if err := handler.commandUC.ProcessCallback(ctx, cmd); err != nil {
 		return handler.handleCallbackError(ctx, fiberCtx, span, logger, err)
 	}
 
@@ -132,8 +132,8 @@ var callbackValidationErrors = []error{
 	command.ErrCallbackExternalIssueID,
 	command.ErrCallbackStatusRequired,
 	command.ErrCallbackAssigneeRequired,
-	value_objects.ErrEmptyIdempotencyKey,
-	value_objects.ErrInvalidIdempotencyKey,
+	shared.ErrEmptyIdempotencyKey,
+	shared.ErrInvalidIdempotencyKey,
 	command.ErrCallbackOpenNotValidTarget,
 	command.ErrCallbackStatusUnsupported,
 	command.ErrExceptionIDRequired,

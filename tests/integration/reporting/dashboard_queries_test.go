@@ -14,12 +14,12 @@ import (
 	configFieldMapRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/field_map"
 	configMatchRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/match_rule"
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	reportingDashboard "github.com/LerianStudio/matcher/internal/reporting/adapters/postgres/dashboard"
 	reportingReport "github.com/LerianStudio/matcher/internal/reporting/adapters/postgres/report"
 	reportingEntities "github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	reportingQuery "github.com/LerianStudio/matcher/internal/reporting/services/query"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -50,11 +50,11 @@ func seedDashboardConfig(t *testing.T, harness *integration.TestHarness) dashboa
 		"description": "description",
 	}
 
-	fm, err := configEntities.NewFieldMap(
+	fm, err := shared.NewFieldMap(
 		ctx,
 		harness.Seed.ContextID,
 		harness.Seed.SourceID,
-		configEntities.CreateFieldMapInput{Mapping: mapping},
+		shared.CreateFieldMapInput{Mapping: mapping},
 	)
 	require.NoError(t, err)
 
@@ -66,7 +66,7 @@ func seedDashboardConfig(t *testing.T, harness *integration.TestHarness) dashboa
 		harness.Seed.ContextID,
 		configEntities.CreateMatchRuleInput{
 			Priority: 1,
-			Type:     configVO.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config:   map[string]any{"matchAmount": true},
 		},
 	)

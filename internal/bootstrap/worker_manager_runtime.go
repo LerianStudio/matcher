@@ -16,7 +16,7 @@ import (
 	discoveryWorker "github.com/LerianStudio/matcher/internal/discovery/services/worker"
 	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
 	reportingWorker "github.com/LerianStudio/matcher/internal/reporting/services/worker"
-	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 )
 
 type exportWorkerComparableConfig struct {
@@ -394,7 +394,7 @@ func applyArchivalRuntimeConfig(ctx context.Context, worker WorkerLifecycle, cfg
 	}
 
 	if storageAwareWorker, storageAware := worker.(interface {
-		UpdateRuntimeStorage(sharedPorts.ObjectStorageClient) error
+		UpdateRuntimeStorage(objectstorage.Backend) error
 	}); storageAware {
 		storage, err := createArchivalStorage(ctx, cfg)
 		if err != nil {

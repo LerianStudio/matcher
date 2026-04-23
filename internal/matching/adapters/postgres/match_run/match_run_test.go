@@ -46,17 +46,11 @@ func TestPostgreSQLModel_ToEntity_Errors(t *testing.T) {
 		wantErr string
 	}{
 		{name: "nil model", model: nil, wantErr: ErrMatchRunModelNeeded.Error()},
-		{name: "invalid id", model: &PostgreSQLModel{ID: "not-a-uuid"}, wantErr: "parse id"},
-		{
-			name:    "invalid context id",
-			model:   &PostgreSQLModel{ID: uuid.NewString(), ContextID: "not-a-uuid"},
-			wantErr: "parse context id",
-		},
 		{
 			name: "invalid mode",
 			model: &PostgreSQLModel{
-				ID:        uuid.NewString(),
-				ContextID: uuid.NewString(),
+				ID:        uuid.New(),
+				ContextID: uuid.New(),
 				Mode:      "BAD",
 			},
 			wantErr: "parse mode",
@@ -64,8 +58,8 @@ func TestPostgreSQLModel_ToEntity_Errors(t *testing.T) {
 		{
 			name: "invalid status",
 			model: &PostgreSQLModel{
-				ID:        uuid.NewString(),
-				ContextID: uuid.NewString(),
+				ID:        uuid.New(),
+				ContextID: uuid.New(),
 				Mode:      matchingVO.MatchRunModeCommit.String(),
 				Status:    "BAD",
 			},
@@ -74,8 +68,8 @@ func TestPostgreSQLModel_ToEntity_Errors(t *testing.T) {
 		{
 			name: "invalid stats",
 			model: &PostgreSQLModel{
-				ID:        uuid.NewString(),
-				ContextID: uuid.NewString(),
+				ID:        uuid.New(),
+				ContextID: uuid.New(),
 				Mode:      matchingVO.MatchRunModeCommit.String(),
 				Status:    matchingVO.MatchRunStatusProcessing.String(),
 				Stats:     []byte("not-json"),

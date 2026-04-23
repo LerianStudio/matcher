@@ -14,8 +14,8 @@ import (
 
 // PostgreSQLModel represents the match_runs table mapping.
 type PostgreSQLModel struct {
-	ID        string
-	ContextID string
+	ID        uuid.UUID
+	ContextID uuid.UUID
 	Mode      string
 	Status    string
 
@@ -40,8 +40,8 @@ func NewPostgreSQLModel(entity *matchingEntities.MatchRun) (*PostgreSQLModel, er
 	}
 
 	return &PostgreSQLModel{
-		ID:            entity.ID.String(),
-		ContextID:     entity.ContextID.String(),
+		ID:            entity.ID,
+		ContextID:     entity.ContextID,
 		Mode:          entity.Mode.String(),
 		Status:        entity.Status.String(),
 		StartedAt:     entity.StartedAt,
@@ -57,16 +57,6 @@ func NewPostgreSQLModel(entity *matchingEntities.MatchRun) (*PostgreSQLModel, er
 func (model *PostgreSQLModel) ToEntity() (*matchingEntities.MatchRun, error) {
 	if model == nil {
 		return nil, ErrMatchRunModelNeeded
-	}
-
-	id, err := uuid.Parse(model.ID)
-	if err != nil {
-		return nil, fmt.Errorf("parse id: %w", err)
-	}
-
-	contextID, err := uuid.Parse(model.ContextID)
-	if err != nil {
-		return nil, fmt.Errorf("parse context id: %w", err)
 	}
 
 	mode, err := matchingVO.ParseMatchRunMode(model.Mode)
@@ -87,8 +77,8 @@ func (model *PostgreSQLModel) ToEntity() (*matchingEntities.MatchRun, error) {
 	}
 
 	return &matchingEntities.MatchRun{
-		ID:            id,
-		ContextID:     contextID,
+		ID:            model.ID,
+		ContextID:     model.ContextID,
 		Mode:          mode,
 		Status:        status,
 		StartedAt:     model.StartedAt,

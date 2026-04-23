@@ -19,7 +19,6 @@ import (
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
-	discoveryPorts "github.com/LerianStudio/matcher/internal/discovery/ports"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -176,7 +175,7 @@ type stubSchemaCache struct {
 	invalidateSchemaFn func(ctx context.Context, connectionID string) error
 }
 
-var _ discoveryPorts.SchemaCache = (*stubSchemaCache)(nil)
+var _ SchemaCache = (*stubSchemaCache)(nil)
 
 func (m *stubSchemaCache) GetSchema(_ context.Context, _ string) (*sharedPorts.FetcherSchema, error) {
 	return nil, nil

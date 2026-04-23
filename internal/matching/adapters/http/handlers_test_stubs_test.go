@@ -213,20 +213,12 @@ func (repo *runMatchTxRepo) FindByID(
 	return nil, repo.err
 }
 
-func (repo *runMatchTxRepo) MarkMatched(_ context.Context, _ uuid.UUID, _ []uuid.UUID) error {
-	return nil
-}
-
 func (repo *runMatchTxRepo) MarkMatchedWithTx(
 	_ context.Context,
 	_ matchingRepositories.Tx,
 	_ uuid.UUID,
 	_ []uuid.UUID,
 ) error {
-	return nil
-}
-
-func (repo *runMatchTxRepo) MarkPendingReview(_ context.Context, _ uuid.UUID, _ []uuid.UUID) error {
 	return nil
 }
 
@@ -252,10 +244,6 @@ func (repo *runMatchTxRepo) FindByContextAndIDs(
 	_ []uuid.UUID,
 ) ([]*shared.Transaction, error) {
 	return repo.candidates, repo.err
-}
-
-func (repo *runMatchTxRepo) MarkUnmatched(_ context.Context, _ uuid.UUID, _ []uuid.UUID) error {
-	return nil
 }
 
 func (repo *runMatchTxRepo) MarkUnmatchedWithTx(
@@ -757,6 +745,30 @@ func newQueryUseCase(
 	require.NoError(t, err)
 
 	return uc
+}
+
+// newTestHandler constructs a Handler for tests, injecting the stub run/group
+// repos both into the query UseCase (for ListMatchRunGroups enrichment) and
+// directly into the Handler (for GetMatchRun / ListMatchRuns which call the
+// repos directly post-T-009b).
+func newTestHandler(
+	t *testing.T,
+	uc *command.UseCase,
+	runRepo *stubMatchRunRepo,
+	groupRepo *stubMatchGroupRepo,
+	ctxProvider contextProvider,
+	production bool,
+) (*Handler, error) {
+	t.Helper()
+
+	return NewHandler(
+		uc,
+		newQueryUseCase(t, runRepo, groupRepo),
+		runRepo,
+		groupRepo,
+		ctxProvider,
+		production,
+	)
 }
 
 func newFiberTestApp(ctx context.Context) *fiber.App {

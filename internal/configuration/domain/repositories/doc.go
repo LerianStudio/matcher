@@ -12,7 +12,7 @@
 //     data sources within a reconciliation context (internal ledger, external gateway).
 //     Operations are scoped to a parent context ID.
 //
-//   - [FieldMapRepository]: Manages [entities.FieldMap] entities that define field mappings
+//   - [FieldMapRepository]: Manages [shared.FieldMap] entities that define field mappings
 //     from raw source data to normalized transaction fields. Supports lookup by source ID
 //     and batch existence checks for validation.
 //

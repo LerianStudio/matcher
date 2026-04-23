@@ -111,6 +111,30 @@ func (cfg *Config) validateServerConfig(ctx context.Context, asserter *assert.As
 		return fmt.Errorf("config validation: %w", err)
 	}
 
+	if err := cfg.validateTimeoutBoundaries(ctx, asserter); err != nil {
+		return err
+	}
+
+	if err := validateTrustedProxies(ctx, asserter, cfg.Server.TrustedProxies); err != nil {
+		return err
+	}
+
+	if err := cfg.validateLogLevel(ctx, asserter); err != nil {
+		return err
+	}
+
+	if err := cfg.validateDeploymentMode(ctx, asserter); err != nil {
+		return err
+	}
+
+	if err := cfg.validateTelemetryConfig(ctx, asserter); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (cfg *Config) validateTimeoutBoundaries(ctx context.Context, asserter *assert.Asserter) error {
 	if err := asserter.That(ctx, cfg.Postgres.ConnectTimeoutSec >= 0, "PostgresConnectTimeoutSec must be non-negative", "postgres_connect_timeout_sec", cfg.Postgres.ConnectTimeoutSec); err != nil {
 		return fmt.Errorf("config validation: %w", err)
 	}
@@ -123,20 +147,8 @@ func (cfg *Config) validateServerConfig(ctx context.Context, asserter *assert.As
 		return fmt.Errorf("config validation: %w", err)
 	}
 
-	if err := validateTrustedProxies(ctx, asserter, cfg.Server.TrustedProxies); err != nil {
-		return err
-	}
-
 	if err := asserter.That(ctx, cfg.Infrastructure.ConnectTimeoutSec > 0, "InfraConnectTimeoutSec must be positive", "infra_connect_timeout_sec", cfg.Infrastructure.ConnectTimeoutSec); err != nil {
 		return fmt.Errorf("config validation: %w", err)
-	}
-
-	if err := cfg.validateLogLevel(ctx, asserter); err != nil {
-		return err
-	}
-
-	if err := cfg.validateTelemetryConfig(ctx, asserter); err != nil {
-		return err
 	}
 
 	return nil
@@ -155,6 +167,25 @@ func (cfg *Config) validateLogLevel(ctx context.Context, asserter *assert.Assert
 	_, validLogLevel := validLogLevels[logLevel]
 
 	if err := asserter.That(ctx, validLogLevel, "LOG_LEVEL must be one of: debug, info, warn, error, fatal", "log_level", cfg.App.LogLevel); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	return nil
+}
+
+func (cfg *Config) validateDeploymentMode(ctx context.Context, asserter *assert.Asserter) error {
+	mode := strings.ToLower(strings.TrimSpace(cfg.App.Mode))
+	if mode == "" {
+		return nil
+	}
+
+	validModes := map[string]bool{
+		deploymentModeSaaS:  true,
+		deploymentModeByoc:  true,
+		deploymentModeLocal: true,
+	}
+
+	if err := asserter.That(ctx, validModes[mode], "DEPLOYMENT_MODE must be one of: saas, byoc, local", "deployment_mode", cfg.App.Mode); err != nil {
 		return fmt.Errorf("config validation: %w", err)
 	}
 

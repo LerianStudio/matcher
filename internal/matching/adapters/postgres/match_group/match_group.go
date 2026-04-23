@@ -7,18 +7,16 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/LerianStudio/lib-commons/v5/commons/pointers"
-
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 )
 
 // PostgreSQLModel represents the match_groups table mapping.
 type PostgreSQLModel struct {
-	ID         string
-	ContextID  string
-	RunID      string
-	RuleID     *string // nullable: NULL for manual matches
+	ID         uuid.UUID
+	ContextID  uuid.UUID
+	RunID      uuid.UUID
+	RuleID     uuid.NullUUID // nullable: NULL for manual matches
 	Confidence int
 	Status     string
 
@@ -35,16 +33,16 @@ func NewPostgreSQLModel(entity *matchingEntities.MatchGroup) (*PostgreSQLModel, 
 		return nil, ErrMatchGroupEntityNeeded
 	}
 
-	var ruleID *string
+	var ruleID uuid.NullUUID
 
 	if entity.RuleID != uuid.Nil {
-		ruleID = pointers.String(entity.RuleID.String())
+		ruleID = uuid.NullUUID{UUID: entity.RuleID, Valid: true}
 	}
 
 	return &PostgreSQLModel{
-		ID:             entity.ID.String(),
-		ContextID:      entity.ContextID.String(),
-		RunID:          entity.RunID.String(),
+		ID:             entity.ID,
+		ContextID:      entity.ContextID,
+		RunID:          entity.RunID,
 		RuleID:         ruleID,
 		Confidence:     entity.Confidence.Value(),
 		Status:         entity.Status.String(),
@@ -61,27 +59,9 @@ func (model *PostgreSQLModel) ToEntity() (*matchingEntities.MatchGroup, error) {
 		return nil, ErrMatchGroupModelNeeded
 	}
 
-	id, err := uuid.Parse(model.ID)
-	if err != nil {
-		return nil, fmt.Errorf("parse id: %w", err)
-	}
-
-	contextID, err := uuid.Parse(model.ContextID)
-	if err != nil {
-		return nil, fmt.Errorf("parse context id: %w", err)
-	}
-
-	runID, err := uuid.Parse(model.RunID)
-	if err != nil {
-		return nil, fmt.Errorf("parse run id: %w", err)
-	}
-
 	var ruleID uuid.UUID
-	if model.RuleID != nil {
-		ruleID, err = uuid.Parse(*model.RuleID)
-		if err != nil {
-			return nil, fmt.Errorf("parse rule id: %w", err)
-		}
+	if model.RuleID.Valid {
+		ruleID = model.RuleID.UUID
 	}
 
 	conf, err := matchingVO.ParseConfidenceScore(model.Confidence)
@@ -95,9 +75,9 @@ func (model *PostgreSQLModel) ToEntity() (*matchingEntities.MatchGroup, error) {
 	}
 
 	return &matchingEntities.MatchGroup{
-		ID:             id,
-		ContextID:      contextID,
-		RunID:          runID,
+		ID:             model.ID,
+		ContextID:      model.ContextID,
+		RunID:          model.RunID,
 		RuleID:         ruleID,
 		Confidence:     conf,
 		Status:         status,

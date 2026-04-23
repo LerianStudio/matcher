@@ -43,10 +43,10 @@ func TestNewPostgreSQLModel_Success(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, model)
-	assert.Equal(t, entity.ID.String(), model.ID)
-	assert.Equal(t, entity.ContextID.String(), model.ContextID)
+	assert.Equal(t, entity.ID, model.ID)
+	assert.Equal(t, entity.ContextID, model.ContextID)
 	assert.Equal(t, string(entity.Side), model.Side)
-	assert.Equal(t, entity.FeeScheduleID.String(), model.FeeScheduleID)
+	assert.Equal(t, entity.FeeScheduleID, model.FeeScheduleID)
 	assert.Equal(t, entity.Name, model.Name)
 	assert.Equal(t, entity.Priority, model.Priority)
 	assert.Equal(t, entity.CreatedAt, model.CreatedAt)
@@ -130,10 +130,10 @@ func TestToEntity_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	model := &PostgreSQLModel{
-		ID:            id.String(),
-		ContextID:     contextID.String(),
+		ID:            id,
+		ContextID:     contextID,
 		Side:          "RIGHT",
-		FeeScheduleID: feeScheduleID.String(),
+		FeeScheduleID: feeScheduleID,
 		Name:          "percentage-brl",
 		Priority:      5,
 		Predicates:    predicatesJSON,
@@ -179,10 +179,10 @@ func TestToEntity_InvalidPredicatesJSON(t *testing.T) {
 	now := time.Now().UTC()
 
 	model := &PostgreSQLModel{
-		ID:            id.String(),
-		ContextID:     contextID.String(),
+		ID:            id,
+		ContextID:     contextID,
 		Side:          "LEFT",
-		FeeScheduleID: feeScheduleID.String(),
+		FeeScheduleID: feeScheduleID,
 		Name:          "broken-predicates",
 		Priority:      1,
 		Predicates:    []byte(`{not valid json`),
@@ -197,88 +197,16 @@ func TestToEntity_InvalidPredicatesJSON(t *testing.T) {
 	assert.Contains(t, err.Error(), "unmarshal predicates")
 }
 
-func TestToEntity_InvalidID(t *testing.T) {
-	t.Parallel()
-
-	now := time.Now().UTC()
-
-	model := &PostgreSQLModel{
-		ID:            "not-a-uuid",
-		ContextID:     uuid.New().String(),
-		Side:          "LEFT",
-		FeeScheduleID: uuid.New().String(),
-		Name:          "bad-id",
-		Priority:      1,
-		Predicates:    []byte("[]"),
-		CreatedAt:     now,
-		UpdatedAt:     now,
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	assert.Contains(t, err.Error(), "parsing ID")
-}
-
-func TestToEntity_InvalidContextID(t *testing.T) {
-	t.Parallel()
-
-	now := time.Now().UTC()
-
-	model := &PostgreSQLModel{
-		ID:            uuid.New().String(),
-		ContextID:     "invalid-context-id",
-		Side:          "LEFT",
-		FeeScheduleID: uuid.New().String(),
-		Name:          "bad-context",
-		Priority:      1,
-		Predicates:    []byte("[]"),
-		CreatedAt:     now,
-		UpdatedAt:     now,
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	assert.Contains(t, err.Error(), "parsing ContextID")
-}
-
-func TestToEntity_InvalidFeeScheduleID(t *testing.T) {
-	t.Parallel()
-
-	now := time.Now().UTC()
-
-	model := &PostgreSQLModel{
-		ID:            uuid.New().String(),
-		ContextID:     uuid.New().String(),
-		Side:          "ANY",
-		FeeScheduleID: "bad-schedule-id",
-		Name:          "bad-schedule",
-		Priority:      1,
-		Predicates:    []byte("[]"),
-		CreatedAt:     now,
-		UpdatedAt:     now,
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	assert.Contains(t, err.Error(), "parsing FeeScheduleID")
-}
-
 func TestToEntity_EmptyPredicatesSlice(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC()
 
 	model := &PostgreSQLModel{
-		ID:            uuid.New().String(),
-		ContextID:     uuid.New().String(),
+		ID:            uuid.New(),
+		ContextID:     uuid.New(),
 		Side:          "ANY",
-		FeeScheduleID: uuid.New().String(),
+		FeeScheduleID: uuid.New(),
 		Name:          "no-predicates",
 		Priority:      0,
 		Predicates:    nil,
@@ -302,7 +230,7 @@ func TestFromEntity_DelegatesToNewPostgreSQLModel(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, model)
-	assert.Equal(t, entity.ID.String(), model.ID)
+	assert.Equal(t, entity.ID, model.ID)
 }
 
 func TestFromEntity_NilEntity(t *testing.T) {

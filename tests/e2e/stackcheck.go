@@ -76,28 +76,60 @@ func (sc *StackChecker) checkApp(ctx context.Context) StackCheckResult {
 	result := StackCheckResult{Service: "app"}
 	start := time.Now()
 
+	// Retry loop for /health. The self-probe gate returns 503 until startup
+	// completes its dependency probes; a single-shot GET races against that
+	// bootstrap under the E2E harness. 10 × 1s = 10s total budget is generous
+	// for CI where compose-managed deps may still be warming up.
+	const (
+		maxAttempts = 10
+		backoff     = 1 * time.Second
+	)
+
 	client := &http.Client{Timeout: sc.cfg.StackCheckTimeout}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sc.cfg.AppBaseURL+"/health", nil)
-	if err != nil {
-		result.Error = fmt.Errorf("failed to create request: %w", err)
-		return result
+
+	var lastErr error
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, sc.cfg.AppBaseURL+"/health", nil)
+		if err != nil {
+			result.Error = fmt.Errorf("failed to create request: %w", err)
+			return result
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("health check failed (attempt %d/%d): %w", attempt, maxAttempts, err)
+		} else {
+			func() {
+				defer resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					result.Latency = time.Since(start)
+					result.OK = true
+					lastErr = nil
+					return
+				}
+
+				lastErr = fmt.Errorf("health check returned %d (attempt %d/%d)", resp.StatusCode, attempt, maxAttempts)
+			}()
+
+			if result.OK {
+				return result
+			}
+		}
+
+		if attempt == maxAttempts {
+			break
+		}
+
+		select {
+		case <-ctx.Done():
+			result.Error = fmt.Errorf("health check cancelled after %d attempts: %w", attempt, ctx.Err())
+			return result
+		case <-time.After(backoff):
+		}
 	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		result.Error = fmt.Errorf("health check failed: %w", err)
-		return result
-	}
-	defer resp.Body.Close()
-
-	result.Latency = time.Since(start)
-
-	if resp.StatusCode != http.StatusOK {
-		result.Error = fmt.Errorf("health check returned %d", resp.StatusCode)
-		return result
-	}
-
-	result.OK = true
+	result.Error = lastErr
 	return result
 }
 

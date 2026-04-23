@@ -17,6 +17,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
 	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // CreateContext creates a reconciliation context.
@@ -115,10 +116,10 @@ func (handler *Handler) ListContexts(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination", err)
 	}
 
-	var contextType *value_objects.ContextType
+	var contextType *shared.ContextType
 
 	if typeParam := strings.TrimSpace(fiberCtx.Query("type")); typeParam != "" {
-		parsed, err := value_objects.ParseContextType(strings.ToUpper(typeParam))
+		parsed, err := shared.ParseContextType(strings.ToUpper(typeParam))
 		if err != nil {
 			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid context type", err)
 		}
@@ -137,7 +138,7 @@ func (handler *Handler) ListContexts(fiberCtx *fiber.Ctx) error {
 		status = &parsed
 	}
 
-	result, pagination, err := handler.query.ListContexts(ctx, cursor, limit, contextType, status)
+	result, pagination, err := handler.contextRepo.FindAll(ctx, cursor, limit, contextType, status)
 	if err != nil {
 		if errors.Is(err, libHTTP.ErrInvalidCursor) {
 			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination", err)
@@ -206,7 +207,7 @@ func (handler *Handler) GetContext(fiberCtx *fiber.Ctx) error {
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
-	result, err := handler.query.GetContext(ctx, contextID)
+	result, err := handler.contextRepo.FindByID(ctx, contextID)
 	if err != nil {
 		handler.logSpanError(ctx, span, logger, "failed to get context", err)
 

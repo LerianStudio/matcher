@@ -255,7 +255,7 @@ func (repo *Repository) createBatch(
 					return nil, fmt.Errorf("failed to execute statement: %w", err)
 				}
 
-				insertedIDs = append(insertedIDs, model.ID)
+				insertedIDs = append(insertedIDs, model.ID.String())
 			}
 
 			query, args, err := squirrel.Select(strings.Split(transactionColumns, ", ")...).
@@ -1091,14 +1091,13 @@ func (repo *Repository) ExistsBulkBySourceAndExternalID(
 			defer rows.Close()
 
 			for rows.Next() {
-				var sourceIDStr, externalID string
-				if err := rows.Scan(&sourceIDStr, &externalID); err != nil {
-					return nil, fmt.Errorf("failed to scan row: %w", err)
-				}
+				var (
+					sourceID   uuid.UUID
+					externalID string
+				)
 
-				sourceID, err := uuid.Parse(sourceIDStr)
-				if err != nil {
-					return nil, fmt.Errorf("failed to parse source ID: %w", err)
+				if err := rows.Scan(&sourceID, &externalID); err != nil {
+					return nil, fmt.Errorf("failed to scan row: %w", err)
 				}
 
 				existsMap[repositories.ExternalIDKey{SourceID: sourceID, ExternalID: externalID}] = true

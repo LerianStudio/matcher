@@ -17,6 +17,7 @@ func defaultConfig() *Config {
 		App: AppConfig{
 			EnvName:  defaultEnvName,
 			LogLevel: defaultLogLevel,
+			Mode:     deploymentModeLocal,
 		},
 		Server: ServerConfig{
 			Address:               defaultServerAddress,
@@ -47,6 +48,8 @@ func defaultConfig() *Config {
 			PrimaryPassword:     defaultPGPassword,
 			PrimaryDB:           defaultPGDB,
 			PrimarySSLMode:      defaultPGSSLMode,
+			TLSRequired:         defaultPGTLSRequired,
+			ReplicaTLSRequired:  defaultPGReplicaTLSReq,
 			MaxOpenConnections:  defaultPGMaxOpenConns,
 			MaxIdleConnections:  defaultPGMaxIdleConns,
 			ConnMaxLifetimeMins: defaultPGConnMaxLifeMins,
@@ -60,6 +63,7 @@ func defaultConfig() *Config {
 			DB:             defaultRedisDB,
 			Protocol:       defaultRedisProtocol,
 			TLS:            defaultRedisTLS,
+			TLSRequired:    defaultRedisTLSRequired,
 			PoolSize:       defaultRedisPoolSize,
 			MinIdleConn:    defaultRedisMinIdleConn,
 			ReadTimeoutMs:  defaultRedisReadTimeout,
@@ -75,6 +79,7 @@ func defaultConfig() *Config {
 			VHost:                    defaultRabbitVHost,
 			HealthURL:                defaultRabbitHealthURL,
 			AllowInsecureHealthCheck: defaultRabbitAllowInsecureHealth,
+			TLSRequired:              defaultRabbitTLSRequired,
 		},
 		Auth: AuthConfig{
 			Enabled: defaultAuthEnabled,
@@ -106,6 +111,7 @@ func defaultConfig() *Config {
 		Infrastructure: InfrastructureConfig{
 			ConnectTimeoutSec:     defaultInfraConnectTimeout,
 			HealthCheckTimeoutSec: defaultInfraHealthCheckTimeout,
+			HealthCheckTimeoutMs:  defaultInfraHealthCheckTimeoutMs,
 		},
 		Idempotency: IdempotencyConfig{
 			RetryWindowSec:  defaultIdempotencyRetryWindow,
@@ -153,6 +159,7 @@ func defaultConfig() *Config {
 			Bucket:        defaultObjStorageBucket,
 			UsePathStyle:  defaultObjStoragePathStyle,
 			AllowInsecure: defaultObjStorageAllowInsecure,
+			TLSRequired:   defaultObjStorageTLSRequired,
 		},
 		ExportWorker: ExportWorkerConfig{
 			Enabled:          defaultExportEnabled,

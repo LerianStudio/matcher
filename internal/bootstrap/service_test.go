@@ -402,7 +402,7 @@ func waitForServerToListen(t *testing.T, address string, timeout time.Duration) 
 
 	deadline := time.Now().Add(timeout)
 	client := &http.Client{Timeout: 100 * time.Millisecond}
-	url := "http://" + address + "/ready"
+	url := "http://" + address + "/readyz"
 
 	for time.Now().Before(deadline) {
 		req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, url, http.NoBody)

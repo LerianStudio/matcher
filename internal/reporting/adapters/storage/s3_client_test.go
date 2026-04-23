@@ -17,7 +17,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
-	"github.com/LerianStudio/matcher/pkg/storageopt"
 )
 
 // mockReadCloser provides a test double for io.ReadCloser.
@@ -146,7 +145,7 @@ func TestUploadWithOptions_EmptyKeyReturnsError(t *testing.T) {
 
 	url, err := client.UploadWithOptions(
 		context.Background(), "", nil, "application/gzip",
-		storageopt.WithStorageClass("GLACIER"),
+		sharedPorts.WithStorageClass("GLACIER"),
 	)
 
 	require.Error(t, err)
@@ -478,7 +477,7 @@ func TestEmptyKeyValidation_TableDriven(t *testing.T) {
 			name:   "UploadWithOptions_EmptyKey",
 			method: "UploadWithOptions",
 			action: func() error {
-				_, err := client.UploadWithOptions(context.Background(), "", nil, "text/plain", storageopt.WithStorageClass("GLACIER"))
+				_, err := client.UploadWithOptions(context.Background(), "", nil, "text/plain", sharedPorts.WithStorageClass("GLACIER"))
 				return err
 			},
 		},
@@ -1036,7 +1035,7 @@ func TestContextCancellation(t *testing.T) {
 		t.Parallel()
 
 		reader := bytes.NewReader([]byte("test"))
-		_, err := client.UploadWithOptions(ctx, "key", reader, "application/gzip", storageopt.WithStorageClass("GLACIER"))
+		_, err := client.UploadWithOptions(ctx, "key", reader, "application/gzip", sharedPorts.WithStorageClass("GLACIER"))
 
 		assert.Error(t, err)
 	})

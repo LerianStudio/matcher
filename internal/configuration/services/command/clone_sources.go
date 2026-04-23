@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 func (uc *UseCase) cloneSourcesIntoResult(ctx context.Context, input CloneContextInput, newContextID uuid.UUID, result *entities.CloneResult) error {
@@ -124,7 +125,7 @@ func (uc *UseCase) cloneFieldMap(ctx context.Context, tx *sql.Tx, oldSourceID, n
 		return false, nil
 	}
 
-	newFieldMap := &entities.FieldMap{
+	newFieldMap := &shared.FieldMap{
 		ID:        uuid.New(),
 		ContextID: newContextID,
 		SourceID:  newSourceID,
@@ -227,7 +228,7 @@ func (uc *UseCase) existsBySourceIDsWithOptionalTx(ctx context.Context, tx *sql.
 
 // findBySourceIDWithOptionalTx reads a field map by source ID, using the
 // transaction when available for snapshot consistency.
-func (uc *UseCase) findBySourceIDWithOptionalTx(ctx context.Context, tx *sql.Tx, sourceID uuid.UUID) (*entities.FieldMap, error) {
+func (uc *UseCase) findBySourceIDWithOptionalTx(ctx context.Context, tx *sql.Tx, sourceID uuid.UUID) (*shared.FieldMap, error) {
 	if tx == nil {
 		return uc.fieldMapRepo.FindBySourceID(ctx, sourceID)
 	}

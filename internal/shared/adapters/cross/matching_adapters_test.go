@@ -29,30 +29,41 @@ import (
 // errTestRepo is a sentinel error used for testing repository failure scenarios.
 var errTestRepo = errors.New("database error")
 
-func newTestMatchRuleProviderAdapter(repo configRepositories.MatchRuleRepository) (*MatchRuleProviderAdapter, error) {
+func newTestProviderWithMatchRuleRepo(repo configRepositories.MatchRuleRepository) (*MatchingConfigurationProvider, error) {
 	if repo == nil {
 		return nil, ErrMatchRuleRepositoryRequired
 	}
 
-	provider, err := NewMatchingConfigurationProvider(nil, nil, repo, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return provider.MatchRuleProvider(), nil
+	return NewMatchingConfigurationProvider(nil, nil, repo, nil)
 }
 
-func newTestContextProviderAdapter(repo configRepositories.ContextRepository) (*ContextProviderAdapter, error) {
+func newTestProviderWithContextRepo(repo configRepositories.ContextRepository) (*MatchingConfigurationProvider, error) {
 	if repo == nil {
 		return nil, ErrContextRepositoryRequired
 	}
 
-	provider, err := NewMatchingConfigurationProvider(repo, nil, nil, nil)
+	return NewMatchingConfigurationProvider(repo, nil, nil, nil)
+}
+
+func newTestProviderWithSourceRepo(repo configRepositories.SourceRepository) (*MatchingConfigurationProvider, error) {
+	if repo == nil {
+		return nil, ErrSourceRepositoryRequired
+	}
+
+	return NewMatchingConfigurationProvider(nil, repo, nil, nil)
+}
+
+func newTestFeeRuleProviderAdapter(repo configRepositories.FeeRuleRepository) (*FeeRuleProviderAdapter, error) {
+	if repo == nil {
+		return nil, ErrFeeRuleRepositoryRequired
+	}
+
+	provider, err := NewMatchingConfigurationProvider(nil, nil, nil, repo)
 	if err != nil {
 		return nil, err
 	}
 
-	return provider.ContextProvider(), nil
+	return provider.FeeRuleProvider(), nil
 }
 
 type feeRuleRepositoryStub struct {
@@ -87,51 +98,52 @@ func (stub *feeRuleRepositoryStub) DeleteWithTx(context.Context, *sql.Tx, uuid.U
 	return nil
 }
 
-func TestNewMatchRuleProviderAdapter_NilRepo(t *testing.T) {
+// -----------------------------------------------------------------------------
+// MatchRuleProvider satisfaction (provider implements port directly)
+// -----------------------------------------------------------------------------
+
+func TestProvider_MatchRuleRepo_Nil(t *testing.T) {
 	t.Parallel()
 
-	adapter, err := newTestMatchRuleProviderAdapter(nil)
+	provider, err := newTestProviderWithMatchRuleRepo(nil)
 	require.ErrorIs(t, err, ErrMatchRuleRepositoryRequired)
-	assert.Nil(t, adapter)
+	assert.Nil(t, provider)
 }
 
-func TestNewMatchRuleProviderAdapter_ValidRepo(t *testing.T) {
+func TestProvider_MatchRuleRepo_Valid(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockMatchRuleRepository(ctrl)
-	adapter, err := newTestMatchRuleProviderAdapter(mockRepo)
+	provider, err := newTestProviderWithMatchRuleRepo(mockRepo)
 
 	require.NoError(t, err)
-	require.NotNil(t, adapter)
-	assert.Equal(t, mockRepo, adapter.provider.matchRuleRepo)
+	require.NotNil(t, provider)
+	assert.Equal(t, mockRepo, provider.matchRuleRepo)
 }
 
-func TestMatchRuleProviderAdapter_ListByContextID_NilAdapter(t *testing.T) {
+func TestProvider_ListByContextID_NilProvider(t *testing.T) {
 	t.Parallel()
 
-	var adapter *MatchRuleProviderAdapter
+	var provider *MatchingConfigurationProvider
 
-	ctx := context.Background()
-	contextID := uuid.New()
-
-	result, err := adapter.ListByContextID(ctx, contextID)
+	result, err := provider.ListByContextID(context.Background(), uuid.New())
 
 	require.Error(t, err)
 	assert.Nil(t, result)
 	require.ErrorIs(t, err, ErrMatchRuleRepositoryRequired)
 }
 
-func TestMatchRuleProviderAdapter_ListByContextID_Success(t *testing.T) {
+func TestProvider_ListByContextID_Success(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockMatchRuleRepository(ctrl)
-	adapter, err := newTestMatchRuleProviderAdapter(mockRepo)
+	provider, err := newTestProviderWithMatchRuleRepo(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -163,7 +175,7 @@ func TestMatchRuleProviderAdapter_ListByContextID_Success(t *testing.T) {
 		FindByContextID(ctx, contextID, "", maxInternalLimit).
 		Return(rules, libHTTP.CursorPagination{}, nil)
 
-	result, err := adapter.ListByContextID(ctx, contextID)
+	result, err := provider.ListByContextID(ctx, contextID)
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -171,14 +183,14 @@ func TestMatchRuleProviderAdapter_ListByContextID_Success(t *testing.T) {
 	assert.Equal(t, rules[1].ID, result[1].ID)
 }
 
-func TestMatchRuleProviderAdapter_ListByContextID_EmptyRules(t *testing.T) {
+func TestProvider_ListByContextID_EmptyRules(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockMatchRuleRepository(ctrl)
-	adapter, err := newTestMatchRuleProviderAdapter(mockRepo)
+	provider, err := newTestProviderWithMatchRuleRepo(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -188,20 +200,20 @@ func TestMatchRuleProviderAdapter_ListByContextID_EmptyRules(t *testing.T) {
 		FindByContextID(ctx, contextID, "", maxInternalLimit).
 		Return(configEntities.MatchRules{}, libHTTP.CursorPagination{}, nil)
 
-	result, err := adapter.ListByContextID(ctx, contextID)
+	result, err := provider.ListByContextID(ctx, contextID)
 
 	require.NoError(t, err)
 	assert.Empty(t, result)
 }
 
-func TestMatchRuleProviderAdapter_ListByContextID_PaginatesAllRules(t *testing.T) {
+func TestProvider_ListByContextID_PaginatesAllRules(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockMatchRuleRepository(ctrl)
-	adapter, err := newTestMatchRuleProviderAdapter(mockRepo)
+	provider, err := newTestProviderWithMatchRuleRepo(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -222,7 +234,7 @@ func TestMatchRuleProviderAdapter_ListByContextID_PaginatesAllRules(t *testing.T
 		FindByContextID(ctx, contextID, "cursor-2", maxInternalLimit).
 		Return(pageTwo, libHTTP.CursorPagination{}, nil)
 
-	result, err := adapter.ListByContextID(ctx, contextID)
+	result, err := provider.ListByContextID(ctx, contextID)
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -230,14 +242,14 @@ func TestMatchRuleProviderAdapter_ListByContextID_PaginatesAllRules(t *testing.T
 	assert.Equal(t, pageTwo[0].ID, result[1].ID)
 }
 
-func TestMatchRuleProviderAdapter_ListByContextID_Error(t *testing.T) {
+func TestProvider_ListByContextID_Error(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockMatchRuleRepository(ctrl)
-	adapter, err := newTestMatchRuleProviderAdapter(mockRepo)
+	provider, err := newTestProviderWithMatchRuleRepo(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -247,7 +259,7 @@ func TestMatchRuleProviderAdapter_ListByContextID_Error(t *testing.T) {
 		FindByContextID(ctx, contextID, "", maxInternalLimit).
 		Return(nil, libHTTP.CursorPagination{}, errTestRepo)
 
-	result, err := adapter.ListByContextID(ctx, contextID)
+	result, err := provider.ListByContextID(ctx, contextID)
 
 	require.Error(t, err)
 	assert.Nil(t, result)
@@ -255,38 +267,104 @@ func TestMatchRuleProviderAdapter_ListByContextID_Error(t *testing.T) {
 	require.ErrorIs(t, err, errTestRepo)
 }
 
-func TestNewContextProviderAdapter_NilRepo(t *testing.T) {
+func TestProvider_ListByContextID_SkipsNilRules(t *testing.T) {
 	t.Parallel()
 
-	adapter, err := newTestContextProviderAdapter(nil)
-	require.ErrorIs(t, err, ErrContextRepositoryRequired)
-	assert.Nil(t, adapter)
-}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-func TestContextProviderAdapter_FindByID_NilAdapter(t *testing.T) {
-	t.Parallel()
-
-	var adapter *ContextProviderAdapter
+	mockRepo := mocks.NewMockMatchRuleRepository(ctrl)
+	provider, err := newTestProviderWithMatchRuleRepo(mockRepo)
+	require.NoError(t, err)
 
 	ctx := context.Background()
-	tenantID := uuid.New()
 	contextID := uuid.New()
+	now := time.Now().UTC()
 
-	result, err := adapter.FindByID(ctx, tenantID, contextID)
+	rules := configEntities.MatchRules{
+		&shared.MatchRule{
+			ID:        uuid.New(),
+			ContextID: contextID,
+			Priority:  1,
+			Type:      shared.RuleTypeExact,
+			Config:    map[string]any{"field": "amount"},
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		nil,
+		&shared.MatchRule{
+			ID:        uuid.New(),
+			ContextID: contextID,
+			Priority:  2,
+			Type:      shared.RuleTypeTolerance,
+			Config:    map[string]any{"tolerance": 0.01},
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+	}
 
-	require.Error(t, err)
-	assert.Nil(t, result)
-	require.ErrorIs(t, err, ErrContextRepositoryRequired)
+	mockRepo.EXPECT().
+		FindByContextID(ctx, contextID, "", maxInternalLimit).
+		Return(rules, libHTTP.CursorPagination{}, nil)
+
+	result, err := provider.ListByContextID(ctx, contextID)
+
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	assert.Equal(t, rules[0].ID, result[0].ID)
+	assert.Equal(t, rules[2].ID, result[1].ID)
 }
 
-func TestContextProviderAdapter_FindByID_Success(t *testing.T) {
+// -----------------------------------------------------------------------------
+// ContextProvider satisfaction (provider implements port directly)
+// -----------------------------------------------------------------------------
+
+func TestProvider_ContextRepo_Nil(t *testing.T) {
+	t.Parallel()
+
+	provider, err := newTestProviderWithContextRepo(nil)
+	require.ErrorIs(t, err, ErrContextRepositoryRequired)
+	assert.Nil(t, provider)
+}
+
+func TestProvider_ContextRepo_Valid(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockContextRepository(ctrl)
-	adapter, err := newTestContextProviderAdapter(mockRepo)
+	provider, err := newTestProviderWithContextRepo(mockRepo)
+
+	require.NoError(t, err)
+	require.NotNil(t, provider)
+	assert.Equal(t, mockRepo, provider.contextRepo)
+}
+
+func TestProvider_FindByID_NilProvider(t *testing.T) {
+	t.Parallel()
+
+	var provider *MatchingConfigurationProvider
+
+	ctx := context.Background()
+	tenantID := uuid.New()
+	contextID := uuid.New()
+
+	result, err := provider.FindByID(ctx, tenantID, contextID)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	require.ErrorIs(t, err, ErrContextRepositoryRequired)
+}
+
+func TestProvider_FindByID_Success(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRepo := mocks.NewMockContextRepository(ctrl)
+	provider, err := newTestProviderWithContextRepo(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -299,7 +377,7 @@ func TestContextProviderAdapter_FindByID_Success(t *testing.T) {
 		ID:               contextID,
 		TenantID:         tenantID,
 		Name:             "Test Context",
-		Type:             value_objects.ContextTypeOneToOne,
+		Type:             shared.ContextTypeOneToOne,
 		Interval:         "daily",
 		Status:           value_objects.ContextStatusActive,
 		FeeToleranceAbs:  decimal.RequireFromString("0.10"),
@@ -313,7 +391,7 @@ func TestContextProviderAdapter_FindByID_Success(t *testing.T) {
 		FindByID(ctx, contextID).
 		Return(ctxEntity, nil)
 
-	result, err := adapter.FindByID(ctx, tenantID, contextID)
+	result, err := provider.FindByID(ctx, tenantID, contextID)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -326,14 +404,14 @@ func TestContextProviderAdapter_FindByID_Success(t *testing.T) {
 	assert.Equal(t, *ctxEntity.FeeNormalization, *result.FeeNormalization)
 }
 
-func TestContextProviderAdapter_FindByID_NilResult(t *testing.T) {
+func TestProvider_FindByID_NilResult(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockContextRepository(ctrl)
-	adapter, err := newTestContextProviderAdapter(mockRepo)
+	provider, err := newTestProviderWithContextRepo(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -344,111 +422,111 @@ func TestContextProviderAdapter_FindByID_NilResult(t *testing.T) {
 		FindByID(ctx, contextID).
 		Return(nil, nil)
 
-	result, err := adapter.FindByID(ctx, tenantID, contextID)
+	result, err := provider.FindByID(ctx, tenantID, contextID)
 
 	require.NoError(t, err)
 	assert.Nil(t, result)
 }
 
-func TestNewSourceProviderAdapter_NilRepo(t *testing.T) {
+func TestProvider_FindByID_Error(t *testing.T) {
 	t.Parallel()
 
-	adapter, err := NewSourceProviderAdapter(nil)
-	require.ErrorIs(t, err, ErrSourceRepositoryRequired)
-	assert.Nil(t, adapter)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRepo := mocks.NewMockContextRepository(ctrl)
+	provider, err := newTestProviderWithContextRepo(mockRepo)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	tenantID := uuid.New()
+	contextID := uuid.New()
+
+	mockRepo.EXPECT().
+		FindByID(ctx, contextID).
+		Return(nil, errTestRepo)
+
+	result, err := provider.FindByID(ctx, tenantID, contextID)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "find context by id")
+	require.ErrorIs(t, err, errTestRepo)
 }
 
-func TestNewSourceProviderAdapter_ValidRepo(t *testing.T) {
+func TestProvider_FindByID_ErrNoRows(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRepo := mocks.NewMockContextRepository(ctrl)
+	provider, err := newTestProviderWithContextRepo(mockRepo)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	tenantID := uuid.New()
+	contextID := uuid.New()
+
+	mockRepo.EXPECT().
+		FindByID(ctx, contextID).
+		Return(nil, sql.ErrNoRows)
+
+	result, err := provider.FindByID(ctx, tenantID, contextID)
+
+	require.NoError(t, err)
+	assert.Nil(t, result)
+}
+
+// -----------------------------------------------------------------------------
+// SourceProvider satisfaction (provider implements port directly)
+// -----------------------------------------------------------------------------
+
+func TestProvider_SourceRepo_Nil(t *testing.T) {
+	t.Parallel()
+
+	provider, err := newTestProviderWithSourceRepo(nil)
+	require.ErrorIs(t, err, ErrSourceRepositoryRequired)
+	assert.Nil(t, provider)
+}
+
+func TestProvider_SourceRepo_Valid(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockSourceRepository(ctrl)
-	adapter, err := NewSourceProviderAdapter(mockRepo)
+	provider, err := newTestProviderWithSourceRepo(mockRepo)
 
 	require.NoError(t, err)
-	require.NotNil(t, adapter)
-	assert.Equal(t, mockRepo, adapter.provider.sourceRepo)
+	require.NotNil(t, provider)
+	assert.Equal(t, mockRepo, provider.sourceRepo)
 }
 
-func TestNewFeeRuleProviderAdapter_NilRepo(t *testing.T) {
+func TestProvider_FindSourcesByContextID_NilProvider(t *testing.T) {
 	t.Parallel()
 
-	adapter, err := NewFeeRuleProviderAdapter(nil)
-	require.ErrorIs(t, err, ErrFeeRuleRepositoryRequired)
-	assert.Nil(t, adapter)
-}
-
-func TestFeeRuleProviderAdapter_FindByContextID_Success(t *testing.T) {
-	t.Parallel()
-
-	contextID := uuid.New()
-	rules := []*fee.FeeRule{{ID: uuid.New(), ContextID: contextID, Name: "fee-rule"}}
-	adapter, err := NewFeeRuleProviderAdapter(&feeRuleRepositoryStub{rules: rules})
-	require.NoError(t, err)
-
-	result, err := adapter.FindByContextID(context.Background(), contextID)
-	require.NoError(t, err)
-	assert.Len(t, result, 1)
-	assert.Equal(t, rules[0].ID, result[0].ID)
-}
-
-func TestFeeRuleProviderAdapter_FindByContextID_Empty(t *testing.T) {
-	t.Parallel()
-
-	adapter, err := NewFeeRuleProviderAdapter(&feeRuleRepositoryStub{rules: nil})
-	require.NoError(t, err)
-
-	result, err := adapter.FindByContextID(context.Background(), uuid.New())
-	require.NoError(t, err)
-	assert.Nil(t, result)
-}
-
-func TestFeeRuleProviderAdapter_FindByContextID_Error(t *testing.T) {
-	t.Parallel()
-
-	adapter, err := NewFeeRuleProviderAdapter(&feeRuleRepositoryStub{err: errTestRepo})
-	require.NoError(t, err)
-
-	result, err := adapter.FindByContextID(context.Background(), uuid.New())
-	require.ErrorIs(t, err, errTestRepo)
-	assert.Nil(t, result)
-}
-
-func TestFeeRuleProviderAdapter_FindByContextID_NilAdapter(t *testing.T) {
-	t.Parallel()
-
-	var adapter *FeeRuleProviderAdapter
-
-	result, err := adapter.FindByContextID(context.Background(), uuid.New())
-	require.ErrorIs(t, err, ErrFeeRuleRepositoryRequired)
-	assert.Nil(t, result)
-}
-
-func TestSourceProviderAdapter_FindByContextID_NilAdapter(t *testing.T) {
-	t.Parallel()
-
-	var adapter *SourceProviderAdapter
+	var provider *MatchingConfigurationProvider
 
 	ctx := context.Background()
 	contextID := uuid.New()
 
-	result, err := adapter.FindByContextID(ctx, contextID)
+	result, err := provider.FindByContextID(ctx, contextID)
 
 	require.Error(t, err)
 	assert.Nil(t, result)
 	require.ErrorIs(t, err, ErrSourceRepositoryRequired)
 }
 
-func TestSourceProviderAdapter_FindByContextID_Success(t *testing.T) {
+func TestProvider_FindSourcesByContextID_Success(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockSourceRepository(ctrl)
-	adapter, err := NewSourceProviderAdapter(mockRepo)
+	provider, err := newTestProviderWithSourceRepo(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -482,7 +560,7 @@ func TestSourceProviderAdapter_FindByContextID_Success(t *testing.T) {
 		FindByContextID(ctx, contextID, "", maxInternalLimit).
 		Return(sources, libHTTP.CursorPagination{}, nil)
 
-	result, err := adapter.FindByContextID(ctx, contextID)
+	result, err := provider.FindByContextID(ctx, contextID)
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -494,14 +572,14 @@ func TestSourceProviderAdapter_FindByContextID_Success(t *testing.T) {
 	assert.Equal(t, sources[1].Side, result[1].Side)
 }
 
-func TestSourceProviderAdapter_FindByContextID_PaginatesAllSources(t *testing.T) {
+func TestProvider_FindSourcesByContextID_PaginatesAllSources(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockSourceRepository(ctrl)
-	adapter, err := NewSourceProviderAdapter(mockRepo)
+	provider, err := newTestProviderWithSourceRepo(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -536,7 +614,7 @@ func TestSourceProviderAdapter_FindByContextID_PaginatesAllSources(t *testing.T)
 		FindByContextID(ctx, contextID, "cursor-2", maxInternalLimit).
 		Return(pageTwo, libHTTP.CursorPagination{}, nil)
 
-	result, err := adapter.FindByContextID(ctx, contextID)
+	result, err := provider.FindByContextID(ctx, contextID)
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -546,14 +624,14 @@ func TestSourceProviderAdapter_FindByContextID_PaginatesAllSources(t *testing.T)
 	assert.Equal(t, pageTwo[0].Side, result[1].Side)
 }
 
-func TestSourceProviderAdapter_FindByContextID_SkipsNilSources(t *testing.T) {
+func TestProvider_FindSourcesByContextID_SkipsNilSources(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockSourceRepository(ctrl)
-	adapter, err := NewSourceProviderAdapter(mockRepo)
+	provider, err := newTestProviderWithSourceRepo(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -586,7 +664,7 @@ func TestSourceProviderAdapter_FindByContextID_SkipsNilSources(t *testing.T) {
 		FindByContextID(ctx, contextID, "", maxInternalLimit).
 		Return(sources, libHTTP.CursorPagination{}, nil)
 
-	result, err := adapter.FindByContextID(ctx, contextID)
+	result, err := provider.FindByContextID(ctx, contextID)
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -594,14 +672,14 @@ func TestSourceProviderAdapter_FindByContextID_SkipsNilSources(t *testing.T) {
 	assert.Equal(t, sources[2].ID, result[1].ID)
 }
 
-func TestSourceProviderAdapter_FindByContextID_Error(t *testing.T) {
+func TestProvider_FindSourcesByContextID_Error(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockSourceRepository(ctrl)
-	adapter, err := NewSourceProviderAdapter(mockRepo)
+	provider, err := newTestProviderWithSourceRepo(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -611,7 +689,7 @@ func TestSourceProviderAdapter_FindByContextID_Error(t *testing.T) {
 		FindByContextID(ctx, contextID, "", maxInternalLimit).
 		Return(nil, libHTTP.CursorPagination{}, errTestRepo)
 
-	result, err := adapter.FindByContextID(ctx, contextID)
+	result, err := provider.FindByContextID(ctx, contextID)
 
 	require.Error(t, err)
 	assert.Nil(t, result)
@@ -619,14 +697,14 @@ func TestSourceProviderAdapter_FindByContextID_Error(t *testing.T) {
 	require.ErrorIs(t, err, errTestRepo)
 }
 
-func TestSourceProviderAdapter_FindByContextID_EmptySources(t *testing.T) {
+func TestProvider_FindSourcesByContextID_EmptySources(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockSourceRepository(ctrl)
-	adapter, err := NewSourceProviderAdapter(mockRepo)
+	provider, err := newTestProviderWithSourceRepo(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -636,120 +714,128 @@ func TestSourceProviderAdapter_FindByContextID_EmptySources(t *testing.T) {
 		FindByContextID(ctx, contextID, "", maxInternalLimit).
 		Return([]*configEntities.ReconciliationSource{}, libHTTP.CursorPagination{}, nil)
 
-	result, err := adapter.FindByContextID(ctx, contextID)
+	result, err := provider.FindByContextID(ctx, contextID)
 
 	require.NoError(t, err)
 	assert.Empty(t, result)
 }
 
-func TestContextProviderAdapter_FindByID_Error(t *testing.T) {
+// -----------------------------------------------------------------------------
+// FeeRuleProviderAdapter tests — this adapter is kept because its
+// FindByContextID collides method-name-wise with SourceProvider.FindByContextID
+// on a single receiver.
+// -----------------------------------------------------------------------------
+
+func TestFeeRuleProviderAdapter_NilRepo(t *testing.T) {
 	t.Parallel()
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRepo := mocks.NewMockContextRepository(ctrl)
-	adapter, err := newTestContextProviderAdapter(mockRepo)
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	tenantID := uuid.New()
-	contextID := uuid.New()
-
-	mockRepo.EXPECT().
-		FindByID(ctx, contextID).
-		Return(nil, errTestRepo)
-
-	result, err := adapter.FindByID(ctx, tenantID, contextID)
-
-	require.Error(t, err)
-	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "find context by id")
-	require.ErrorIs(t, err, errTestRepo)
+	adapter, err := newTestFeeRuleProviderAdapter(nil)
+	require.ErrorIs(t, err, ErrFeeRuleRepositoryRequired)
+	assert.Nil(t, adapter)
 }
 
-func TestContextProviderAdapter_FindByID_ErrNoRows(t *testing.T) {
+func TestFeeRuleProviderAdapter_ValidRepo(t *testing.T) {
 	t.Parallel()
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRepo := mocks.NewMockContextRepository(ctrl)
-	adapter, err := newTestContextProviderAdapter(mockRepo)
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	tenantID := uuid.New()
-	contextID := uuid.New()
-
-	mockRepo.EXPECT().
-		FindByID(ctx, contextID).
-		Return(nil, sql.ErrNoRows)
-
-	result, err := adapter.FindByID(ctx, tenantID, contextID)
-
-	require.NoError(t, err)
-	assert.Nil(t, result)
-}
-
-func TestNewContextProviderAdapter_ValidRepo(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRepo := mocks.NewMockContextRepository(ctrl)
-	adapter, err := newTestContextProviderAdapter(mockRepo)
+	repo := &feeRuleRepositoryStub{}
+	adapter, err := newTestFeeRuleProviderAdapter(repo)
 
 	require.NoError(t, err)
 	require.NotNil(t, adapter)
-	assert.Equal(t, mockRepo, adapter.provider.contextRepo)
+	assert.Equal(t, repo, adapter.provider.feeRuleRepo)
 }
 
-func TestMatchRuleProviderAdapter_ListByContextID_SkipsNilRules(t *testing.T) {
+func TestFeeRuleProviderAdapter_FindByContextID_Success(t *testing.T) {
 	t.Parallel()
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRepo := mocks.NewMockMatchRuleRepository(ctrl)
-	adapter, err := newTestMatchRuleProviderAdapter(mockRepo)
-	require.NoError(t, err)
-
-	ctx := context.Background()
 	contextID := uuid.New()
-	now := time.Now().UTC()
-
-	rules := configEntities.MatchRules{
-		&shared.MatchRule{
-			ID:        uuid.New(),
-			ContextID: contextID,
-			Priority:  1,
-			Type:      shared.RuleTypeExact,
-			Config:    map[string]any{"field": "amount"},
-			CreatedAt: now,
-			UpdatedAt: now,
-		},
-		nil,
-		&shared.MatchRule{
-			ID:        uuid.New(),
-			ContextID: contextID,
-			Priority:  2,
-			Type:      shared.RuleTypeTolerance,
-			Config:    map[string]any{"tolerance": 0.01},
-			CreatedAt: now,
-			UpdatedAt: now,
-		},
-	}
-
-	mockRepo.EXPECT().
-		FindByContextID(ctx, contextID, "", maxInternalLimit).
-		Return(rules, libHTTP.CursorPagination{}, nil)
-
-	result, err := adapter.ListByContextID(ctx, contextID)
-
+	rules := []*fee.FeeRule{{ID: uuid.New(), ContextID: contextID, Name: "fee-rule"}}
+	adapter, err := newTestFeeRuleProviderAdapter(&feeRuleRepositoryStub{rules: rules})
 	require.NoError(t, err)
-	require.Len(t, result, 2)
+
+	result, err := adapter.FindByContextID(context.Background(), contextID)
+	require.NoError(t, err)
+	assert.Len(t, result, 1)
 	assert.Equal(t, rules[0].ID, result[0].ID)
-	assert.Equal(t, rules[2].ID, result[1].ID)
+}
+
+func TestFeeRuleProviderAdapter_FindByContextID_Empty(t *testing.T) {
+	t.Parallel()
+
+	adapter, err := newTestFeeRuleProviderAdapter(&feeRuleRepositoryStub{rules: nil})
+	require.NoError(t, err)
+
+	result, err := adapter.FindByContextID(context.Background(), uuid.New())
+	require.NoError(t, err)
+	assert.Nil(t, result)
+}
+
+func TestFeeRuleProviderAdapter_FindByContextID_Error(t *testing.T) {
+	t.Parallel()
+
+	adapter, err := newTestFeeRuleProviderAdapter(&feeRuleRepositoryStub{err: errTestRepo})
+	require.NoError(t, err)
+
+	result, err := adapter.FindByContextID(context.Background(), uuid.New())
+	require.ErrorIs(t, err, errTestRepo)
+	assert.Nil(t, result)
+}
+
+func TestFeeRuleProviderAdapter_FindByContextID_NilAdapter(t *testing.T) {
+	t.Parallel()
+
+	var adapter *FeeRuleProviderAdapter
+
+	result, err := adapter.FindByContextID(context.Background(), uuid.New())
+	require.ErrorIs(t, err, ErrFeeRuleRepositoryRequired)
+	assert.Nil(t, result)
+}
+
+// -----------------------------------------------------------------------------
+// FeeRuleProvider accessor tests
+// -----------------------------------------------------------------------------
+
+func TestProvider_FeeRuleProvider_NilProvider(t *testing.T) {
+	t.Parallel()
+
+	var provider *MatchingConfigurationProvider
+
+	adapter := provider.FeeRuleProvider()
+	assert.Nil(t, adapter)
+}
+
+func TestProvider_FeeRuleProvider_ReturnsAdapter(t *testing.T) {
+	t.Parallel()
+
+	provider, err := NewMatchingConfigurationProvider(nil, nil, nil, &feeRuleRepositoryStub{})
+	require.NoError(t, err)
+
+	adapter := provider.FeeRuleProvider()
+	require.NotNil(t, adapter)
+	assert.Equal(t, provider, adapter.provider)
+}
+
+// -----------------------------------------------------------------------------
+// Port-interface satisfaction (compile-time checks are in production file; these
+// tests exercise the constructor path and confirm implicit satisfaction at
+// runtime through the port type assertions).
+// -----------------------------------------------------------------------------
+
+func TestProvider_SatisfiesPorts(t *testing.T) {
+	t.Parallel()
+
+	provider, err := NewMatchingConfigurationProvider(
+		mocks.NewMockContextRepository(gomock.NewController(t)),
+		mocks.NewMockSourceRepository(gomock.NewController(t)),
+		mocks.NewMockMatchRuleRepository(gomock.NewController(t)),
+		&feeRuleRepositoryStub{},
+	)
+	require.NoError(t, err)
+
+	var (
+		_ matchingPorts.ContextProvider   = provider
+		_ matchingPorts.SourceProvider    = provider
+		_ matchingPorts.MatchRuleProvider = provider
+		_ matchingPorts.FeeRuleProvider   = provider.FeeRuleProvider()
+	)
 }

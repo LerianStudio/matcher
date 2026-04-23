@@ -18,6 +18,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
+	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
@@ -39,7 +40,7 @@ type CleanupWorkerConfig struct {
 type CleanupWorker struct {
 	mu      sync.Mutex
 	jobRepo repositories.ExportJobRepository
-	storage sharedPorts.ObjectStorageClient
+	storage objectstorage.Backend
 	cfg     CleanupWorkerConfig
 	logger  libLog.Logger
 	tracer  trace.Tracer
@@ -69,7 +70,7 @@ func normalizeCleanupWorkerConfig(cfg CleanupWorkerConfig) CleanupWorkerConfig {
 // NewCleanupWorker creates a new cleanup worker.
 func NewCleanupWorker(
 	jobRepo repositories.ExportJobRepository,
-	storage sharedPorts.ObjectStorageClient,
+	storage objectstorage.Backend,
 	cfg CleanupWorkerConfig,
 	logger libLog.Logger,
 ) (*CleanupWorker, error) {

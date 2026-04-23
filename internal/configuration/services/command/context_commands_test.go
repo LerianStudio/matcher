@@ -22,6 +22,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	configPorts "github.com/LerianStudio/matcher/internal/configuration/ports"
 	portMocks "github.com/LerianStudio/matcher/internal/configuration/ports/mocks"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
@@ -89,7 +90,7 @@ func (stub *contextRepoStub) FindAll(
 	_ context.Context,
 	_ string,
 	_ int,
-	_ *value_objects.ContextType,
+	_ *shared.ContextType,
 	_ *value_objects.ContextStatus,
 ) ([]*entities.ReconciliationContext, libHTTP.CursorPagination, error) {
 	return nil, libHTTP.CursorPagination{}, errFindAllNotImplemented
@@ -196,17 +197,17 @@ func (stub *sourceRepoStub) Delete(ctx context.Context, contextID, identifier uu
 }
 
 type fieldMapRepoStub struct {
-	createFn         func(context.Context, *entities.FieldMap) (*entities.FieldMap, error)
-	findByIDFn       func(context.Context, uuid.UUID) (*entities.FieldMap, error)
-	findBySourceIDFn func(context.Context, uuid.UUID) (*entities.FieldMap, error)
-	updateFn         func(context.Context, *entities.FieldMap) (*entities.FieldMap, error)
+	createFn         func(context.Context, *shared.FieldMap) (*shared.FieldMap, error)
+	findByIDFn       func(context.Context, uuid.UUID) (*shared.FieldMap, error)
+	findBySourceIDFn func(context.Context, uuid.UUID) (*shared.FieldMap, error)
+	updateFn         func(context.Context, *shared.FieldMap) (*shared.FieldMap, error)
 	deleteFn         func(context.Context, uuid.UUID) error
 }
 
 func (stub *fieldMapRepoStub) Create(
 	ctx context.Context,
-	entity *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	entity *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	if stub.createFn != nil {
 		return stub.createFn(ctx, entity)
 	}
@@ -217,7 +218,7 @@ func (stub *fieldMapRepoStub) Create(
 func (stub *fieldMapRepoStub) FindByID(
 	ctx context.Context,
 	identifier uuid.UUID,
-) (*entities.FieldMap, error) {
+) (*shared.FieldMap, error) {
 	if stub.findByIDFn != nil {
 		return stub.findByIDFn(ctx, identifier)
 	}
@@ -228,7 +229,7 @@ func (stub *fieldMapRepoStub) FindByID(
 func (stub *fieldMapRepoStub) FindBySourceID(
 	ctx context.Context,
 	sourceID uuid.UUID,
-) (*entities.FieldMap, error) {
+) (*shared.FieldMap, error) {
 	if stub.findBySourceIDFn != nil {
 		return stub.findBySourceIDFn(ctx, sourceID)
 	}
@@ -238,8 +239,8 @@ func (stub *fieldMapRepoStub) FindBySourceID(
 
 func (stub *fieldMapRepoStub) Update(
 	ctx context.Context,
-	entity *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	entity *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	if stub.updateFn != nil {
 		return stub.updateFn(ctx, entity)
 	}
@@ -266,7 +267,7 @@ type matchRuleRepoStub struct {
 	createFn                 func(context.Context, *entities.MatchRule) (*entities.MatchRule, error)
 	findByIDFn               func(context.Context, uuid.UUID, uuid.UUID) (*entities.MatchRule, error)
 	findByContextIDFn        func(context.Context, uuid.UUID, string, int) (entities.MatchRules, libHTTP.CursorPagination, error)
-	findByContextIDAndTypeFn func(context.Context, uuid.UUID, value_objects.RuleType, string, int) (entities.MatchRules, libHTTP.CursorPagination, error)
+	findByContextIDAndTypeFn func(context.Context, uuid.UUID, shared.RuleType, string, int) (entities.MatchRules, libHTTP.CursorPagination, error)
 	findByPriorityFn         func(context.Context, uuid.UUID, int) (*entities.MatchRule, error)
 	updateFn                 func(context.Context, *entities.MatchRule) (*entities.MatchRule, error)
 	deleteFn                 func(context.Context, uuid.UUID, uuid.UUID) error
@@ -351,7 +352,7 @@ func (stub *matchRuleRepoStub) FindByContextID(
 func (stub *matchRuleRepoStub) FindByContextIDAndType(
 	ctx context.Context,
 	contextID uuid.UUID,
-	ruleType value_objects.RuleType,
+	ruleType shared.RuleType,
 	cursor string,
 	limit int,
 ) (entities.MatchRules, libHTTP.CursorPagination, error) {
@@ -454,14 +455,14 @@ func (stub *sourceRepoTxStub) CreateWithTx(
 
 type fieldMapRepoTxStub struct {
 	*fieldMapRepoStub
-	createWithTxFn func(context.Context, *sql.Tx, *entities.FieldMap) (*entities.FieldMap, error)
+	createWithTxFn func(context.Context, *sql.Tx, *shared.FieldMap) (*shared.FieldMap, error)
 }
 
 func (stub *fieldMapRepoTxStub) CreateWithTx(
 	ctx context.Context,
 	tx *sql.Tx,
-	entity *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	entity *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	if stub.createWithTxFn != nil {
 		return stub.createWithTxFn(ctx, tx, entity)
 	}
@@ -512,7 +513,7 @@ func TestCreateContext_Command(t *testing.T) {
 			tenantID: uuid.New(),
 			input: entities.CreateReconciliationContextInput{
 				Name:     "Ledger vs Bank",
-				Type:     value_objects.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "0 0 * * *",
 			},
 		},
@@ -521,7 +522,7 @@ func TestCreateContext_Command(t *testing.T) {
 			tenantID: uuid.New(),
 			input: entities.CreateReconciliationContextInput{
 				Name:     "",
-				Type:     value_objects.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "0 0 * * *",
 			},
 			wantErr: entities.ErrContextNameRequired,
@@ -531,7 +532,7 @@ func TestCreateContext_Command(t *testing.T) {
 			tenantID: uuid.New(),
 			input: entities.CreateReconciliationContextInput{
 				Name:     "Invalid",
-				Type:     value_objects.ContextType("INVALID"),
+				Type:     shared.ContextType("INVALID"),
 				Interval: "0 0 * * *",
 			},
 			wantErr: entities.ErrContextTypeInvalid,
@@ -541,7 +542,7 @@ func TestCreateContext_Command(t *testing.T) {
 			tenantID: uuid.New(),
 			input: entities.CreateReconciliationContextInput{
 				Name:     "No Interval",
-				Type:     value_objects.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "",
 			},
 			wantErr: entities.ErrContextIntervalRequired,
@@ -551,7 +552,7 @@ func TestCreateContext_Command(t *testing.T) {
 			tenantID: uuid.Nil,
 			input: entities.CreateReconciliationContextInput{
 				Name:     "Tenant Missing",
-				Type:     value_objects.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "0 0 * * *",
 			},
 			wantErr: entities.ErrContextTenantRequired,
@@ -561,7 +562,7 @@ func TestCreateContext_Command(t *testing.T) {
 			tenantID: uuid.New(),
 			input: entities.CreateReconciliationContextInput{
 				Name:     "Repo Error",
-				Type:     value_objects.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "0 0 * * *",
 			},
 			createErr: errCreateFailed,
@@ -627,7 +628,7 @@ func TestCreateContext_InlineCreateWithoutInfrastructureProvider(t *testing.T) {
 
 	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
 		Name:     "Inline Context",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 		Sources: []entities.CreateContextSourceInput{
 			{Name: "Bank", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft},
@@ -664,7 +665,7 @@ func TestCreateContext_WithInfrastructureProviderAndNoInlineResources_UsesRegula
 
 	created, err := useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
 		Name:     "Regular Create",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 	})
 	require.NoError(t, err)
@@ -708,7 +709,7 @@ func TestCreateContext_TransactionalInlineCreate_Success(t *testing.T) {
 
 	fmRepo := &fieldMapRepoTxStub{
 		fieldMapRepoStub: &fieldMapRepoStub{},
-		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.FieldMap) (*entities.FieldMap, error) {
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *shared.FieldMap) (*shared.FieldMap, error) {
 			fieldMapCreateWithTxCalls++
 			return entity, nil
 		},
@@ -733,7 +734,7 @@ func TestCreateContext_TransactionalInlineCreate_Success(t *testing.T) {
 
 	created, err := useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
 		Name:     "Transactional Context",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 		Sources: []entities.CreateContextSourceInput{
 			{
@@ -746,7 +747,7 @@ func TestCreateContext_TransactionalInlineCreate_Success(t *testing.T) {
 		Rules: []entities.CreateMatchRuleInput{
 			{
 				Priority: 1,
-				Type:     value_objects.RuleTypeExact,
+				Type:     shared.RuleTypeExact,
 				Config:   map[string]any{"matchAmount": true},
 			},
 		},
@@ -754,7 +755,7 @@ func TestCreateContext_TransactionalInlineCreate_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, created)
 	assert.Equal(t, "Transactional Context", created.Name)
-	assert.Equal(t, value_objects.ContextTypeOneToOne, created.Type)
+	assert.Equal(t, shared.ContextTypeOneToOne, created.Type)
 	assert.Equal(t, value_objects.ContextStatusDraft, created.Status)
 	assert.Equal(t, 1, contextCreateWithTxCalls)
 	assert.Equal(t, 1, sourceCreateWithTxCalls)
@@ -794,7 +795,7 @@ func TestCreateContext_TransactionalInlineCreate_EmptyMappingSkipsFieldMap(t *te
 
 	fmRepo := &fieldMapRepoTxStub{
 		fieldMapRepoStub: &fieldMapRepoStub{},
-		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.FieldMap) (*entities.FieldMap, error) {
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *shared.FieldMap) (*shared.FieldMap, error) {
 			fieldMapCreateWithTxCalls++
 			return entity, nil
 		},
@@ -815,7 +816,7 @@ func TestCreateContext_TransactionalInlineCreate_EmptyMappingSkipsFieldMap(t *te
 
 	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
 		Name:     "Empty Mapping Context",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 		Sources: []entities.CreateContextSourceInput{
 			{
@@ -862,11 +863,11 @@ func TestCreateContext_TransactionalInlineCreate_DuplicateRulePriority(t *testin
 
 	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
 		Name:     "Duplicate Priorities",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 		Rules: []entities.CreateMatchRuleInput{
-			{Priority: 1, Type: value_objects.RuleTypeExact, Config: map[string]any{"matchAmount": true}},
-			{Priority: 1, Type: value_objects.RuleTypeTolerance, Config: map[string]any{"absTolerance": 0.01}},
+			{Priority: 1, Type: shared.RuleTypeExact, Config: map[string]any{"matchAmount": true}},
+			{Priority: 1, Type: shared.RuleTypeTolerance, Config: map[string]any{"absTolerance": 0.01}},
 		},
 	})
 	require.ErrorIs(t, err, entities.ErrRulePriorityConflict)
@@ -911,7 +912,7 @@ func TestCreateContext_TransactionalInlineCreate_SourceCreateError(t *testing.T)
 
 	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
 		Name:     "Source Create Failure",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 		Sources: []entities.CreateContextSourceInput{{
 			Name: "Bank",
@@ -954,7 +955,7 @@ func TestCreateContext_TransactionalInlineCreate_FieldMapCreateError(t *testing.
 
 	fmRepo := &fieldMapRepoTxStub{
 		fieldMapRepoStub: &fieldMapRepoStub{},
-		createWithTxFn: func(_ context.Context, _ *sql.Tx, _ *entities.FieldMap) (*entities.FieldMap, error) {
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, _ *shared.FieldMap) (*shared.FieldMap, error) {
 			return nil, errCreateFailed
 		},
 	}
@@ -970,7 +971,7 @@ func TestCreateContext_TransactionalInlineCreate_FieldMapCreateError(t *testing.
 
 	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
 		Name:     "Field Map Create Failure",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 		Sources: []entities.CreateContextSourceInput{{
 			Name:    "Bank",
@@ -1023,11 +1024,11 @@ func TestCreateContext_TransactionalInlineCreate_RuleCreateError(t *testing.T) {
 
 	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
 		Name:     "Rule Create Failure",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 		Rules: []entities.CreateMatchRuleInput{{
 			Priority: 1,
-			Type:     value_objects.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config:   map[string]any{"matchAmount": true},
 		}},
 	})
@@ -1075,11 +1076,11 @@ func TestCreateContext_TransactionalInlineCreate_CommitError(t *testing.T) {
 
 	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
 		Name:     "Commit Failure",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 		Rules: []entities.CreateMatchRuleInput{{
 			Priority: 1,
-			Type:     value_objects.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config:   map[string]any{"matchAmount": true},
 		}},
 	})
@@ -1122,7 +1123,7 @@ func TestCreateContext_TransactionalInlineCreate_MixedMappings(t *testing.T) {
 
 	fmRepo := &fieldMapRepoTxStub{
 		fieldMapRepoStub: &fieldMapRepoStub{},
-		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.FieldMap) (*entities.FieldMap, error) {
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *shared.FieldMap) (*shared.FieldMap, error) {
 			fieldMapCreateWithTxCalls++
 			return entity, nil
 		},
@@ -1139,7 +1140,7 @@ func TestCreateContext_TransactionalInlineCreate_MixedMappings(t *testing.T) {
 
 	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
 		Name:     "Mixed Mapping Context",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 		Sources: []entities.CreateContextSourceInput{
 			{Name: "Bank A", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft, Mapping: map[string]any{"amount": "col_amount"}},
@@ -1183,7 +1184,7 @@ func TestCreateContext_TransactionalInlineCreate_ContextRepoReturnsNilEntity(t *
 
 	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
 		Name:     "Nil Context",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 		Sources:  []entities.CreateContextSourceInput{{Name: "Bank", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft}},
 	})
@@ -1229,7 +1230,7 @@ func TestCreateContext_TransactionalInlineCreate_SourceRepoReturnsNilEntity(t *t
 
 	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
 		Name:     "Nil Source",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 		Sources:  []entities.CreateContextSourceInput{{Name: "Bank", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft}},
 	})
@@ -1261,7 +1262,7 @@ func TestCreateContext_TransactionalInlineCreate_MissingTxSupport(t *testing.T) 
 
 	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
 		Name:     "Tx Unsupported",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 		Sources:  []entities.CreateContextSourceInput{{Name: "Bank", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft}},
 	})
@@ -1286,7 +1287,7 @@ func TestCreateContext_DatabaseUniqueViolationMapsToContextNameAlreadyExists(t *
 
 	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
 		Name:     "Race Context",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 	})
 	require.ErrorIs(t, err, ErrContextNameAlreadyExists)
@@ -1352,12 +1353,12 @@ func TestCreateContext_WithAuditPublisher_IncludesInlineCounts(t *testing.T) {
 
 	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
 		Name:     "Audited Context",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 		Sources:  []entities.CreateContextSourceInput{{Name: "Bank", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft}},
 		Rules: []entities.CreateMatchRuleInput{{
 			Priority: 1,
-			Type:     value_objects.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config:   map[string]any{"matchAmount": true},
 		}},
 	})
@@ -1375,7 +1376,7 @@ func TestUpdateContext_CommandValidation(t *testing.T) {
 		tenantID,
 		entities.CreateReconciliationContextInput{
 			Name:     "Context",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		},
 	)
@@ -1415,7 +1416,7 @@ func TestUpdateContext_CommandSuccess(t *testing.T) {
 		tenantID,
 		entities.CreateReconciliationContextInput{
 			Name:     "Original",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		},
 	)
@@ -1487,7 +1488,7 @@ func TestCreateContext_WithAuditPublisher_SimpleCreate(t *testing.T) {
 	tenantID := uuid.New()
 	input := entities.CreateReconciliationContextInput{
 		Name:     "Test Context",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 	}
 
@@ -1592,7 +1593,7 @@ func TestUpdateContext_RepositoryUpdateError(t *testing.T) {
 		tenantID,
 		entities.CreateReconciliationContextInput{
 			Name:     "Original",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		},
 	)
@@ -1642,7 +1643,7 @@ func TestUpdateContext_WithAuditPublisher(t *testing.T) {
 		tenantID,
 		entities.CreateReconciliationContextInput{
 			Name:     "Original",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		},
 	)
@@ -1746,7 +1747,7 @@ func TestDeleteContext_DeleteError(t *testing.T) {
 		tenantID,
 		entities.CreateReconciliationContextInput{
 			Name:     "To Delete",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		},
 	)
@@ -1795,7 +1796,7 @@ func TestDeleteContext_Success(t *testing.T) {
 		tenantID,
 		entities.CreateReconciliationContextInput{
 			Name:     "To Delete",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		},
 	)
@@ -1842,7 +1843,7 @@ func TestDeleteContext_WithAuditPublisher(t *testing.T) {
 		tenantID,
 		entities.CreateReconciliationContextInput{
 			Name:     "To Delete",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		},
 	)
@@ -1898,7 +1899,7 @@ func TestDeleteContext_BlockedBySources(t *testing.T) {
 		tenantID,
 		entities.CreateReconciliationContextInput{
 			Name:     "Has Sources",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		},
 	)
@@ -1936,7 +1937,7 @@ func TestDeleteContext_BlockedByMatchRules(t *testing.T) {
 		tenantID,
 		entities.CreateReconciliationContextInput{
 			Name:     "Has Rules",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		},
 	)
@@ -1978,7 +1979,7 @@ func TestDeleteContext_SourceCheckError(t *testing.T) {
 		tenantID,
 		entities.CreateReconciliationContextInput{
 			Name:     "Source Error",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		},
 	)
@@ -2062,7 +2063,7 @@ func TestCreateContext_DuplicateName(t *testing.T) {
 
 			result, err := useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
 				Name:     "Ledger vs Bank",
-				Type:     value_objects.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "0 0 * * *",
 			})
 
@@ -2095,7 +2096,7 @@ func TestUpdateContext_RenameToDuplicateName(t *testing.T) {
 		tenantID,
 		entities.CreateReconciliationContextInput{
 			Name:     "Original",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		},
 	)
@@ -2139,7 +2140,7 @@ func TestUpdateContext_RenameToSameName(t *testing.T) {
 		tenantID,
 		entities.CreateReconciliationContextInput{
 			Name:     "Original",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		},
 	)
@@ -2180,7 +2181,7 @@ func TestUpdateContext_NameUnchanged(t *testing.T) {
 		tenantID,
 		entities.CreateReconciliationContextInput{
 			Name:     "Original",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		},
 	)
@@ -2225,7 +2226,7 @@ func TestUpdateContext_FindByNameTransientError(t *testing.T) {
 		tenantID,
 		entities.CreateReconciliationContextInput{
 			Name:     "Original",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		},
 	)
@@ -2274,7 +2275,7 @@ func TestDeleteContext_BlockedBySchedules(t *testing.T) {
 		tenantID,
 		entities.CreateReconciliationContextInput{
 			Name:     "Has Schedules",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		},
 	)
@@ -2330,7 +2331,7 @@ func TestDeleteContext_BlockedByFeeRules(t *testing.T) {
 		tenantID,
 		entities.CreateReconciliationContextInput{
 			Name:     "Has Fee Rules",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		},
 	)
@@ -2383,7 +2384,7 @@ func TestDeleteContext_FeeRuleCheckError(t *testing.T) {
 		tenantID,
 		entities.CreateReconciliationContextInput{
 			Name:     "Fee Rule Error",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		},
 	)
@@ -2439,7 +2440,7 @@ func TestDeleteContext_ScheduleCheckError(t *testing.T) {
 		tenantID,
 		entities.CreateReconciliationContextInput{
 			Name:     "Schedule Error",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		},
 	)
@@ -2513,7 +2514,7 @@ func TestCreateContext_TransactionalInlineCreate_AllSourcesWithMappings(t *testi
 
 	fmRepo := &fieldMapRepoTxStub{
 		fieldMapRepoStub: &fieldMapRepoStub{},
-		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.FieldMap) (*entities.FieldMap, error) {
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *shared.FieldMap) (*shared.FieldMap, error) {
 			fieldMapCreateWithTxCalls++
 			return entity, nil
 		},
@@ -2530,7 +2531,7 @@ func TestCreateContext_TransactionalInlineCreate_AllSourcesWithMappings(t *testi
 
 	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
 		Name:     "All Mapped Context",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 		Sources: []entities.CreateContextSourceInput{
 			{Name: "Bank A", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft, Mapping: map[string]any{"amount": "col_amount"}},
@@ -2575,7 +2576,7 @@ func TestCreateContext_TransactionalInlineCreate_BeginTxError(t *testing.T) {
 
 	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
 		Name:     "Begin Tx Error Context",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 		Sources: []entities.CreateContextSourceInput{{
 			Name: "Bank",
@@ -2620,7 +2621,7 @@ func TestCreateContext_TransactionalInlineCreate_NilMappingSkipsFieldMap(t *test
 
 	fmRepo := &fieldMapRepoTxStub{
 		fieldMapRepoStub: &fieldMapRepoStub{},
-		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.FieldMap) (*entities.FieldMap, error) {
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *shared.FieldMap) (*shared.FieldMap, error) {
 			fieldMapCreateWithTxCalls++
 			return entity, nil
 		},
@@ -2641,7 +2642,7 @@ func TestCreateContext_TransactionalInlineCreate_NilMappingSkipsFieldMap(t *test
 
 	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
 		Name:     "Nil Mapping Context",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 		Sources: []entities.CreateContextSourceInput{
 			{
@@ -2701,7 +2702,7 @@ func TestCreateContext_TransactionalInlineCreate_SecondSourceCreateError(t *test
 
 	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
 		Name:     "Two Sources Second Fails",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 		Sources: []entities.CreateContextSourceInput{
 			{Name: "Bank A", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft},

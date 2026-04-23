@@ -347,8 +347,8 @@ func (repo *Repository) executeDelete(
 	result, err := tx.ExecContext(
 		ctx,
 		"DELETE FROM reconciliation_sources WHERE context_id = $1 AND id = $2",
-		contextID.String(),
-		id.String(),
+		contextID,
+		id,
 	)
 	if err != nil {
 		return false, err

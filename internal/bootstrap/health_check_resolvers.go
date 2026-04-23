@@ -7,7 +7,9 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"time"
 )
 
 func resolvePostgresCheck(deps *HealthDependencies) (HealthCheckFunc, bool) {
@@ -69,25 +71,25 @@ func resolvePostgresReplicaCheck(deps *HealthDependencies) (HealthCheckFunc, boo
 			return errNoReplicasConfigured
 		}
 
-		checked := false
-
-		for i, replica := range replicas {
+		// Probe ONLY the first non-nil replica. Iterating every replica under
+		// a single per-check timeout means one hanging replica burns the whole
+		// budget before reaching the next. Since callers get a load-balanced
+		// view via the resolver, checking one replica is representative — a
+		// degraded replica pool surfaces as probe failures over subsequent
+		// /readyz hits as the resolver rotates connections.
+		for _, replica := range replicas {
 			if replica == nil {
 				continue
 			}
 
 			if err := replica.PingContext(ctx); err != nil {
-				return fmt.Errorf("postgres replica health check: ping replica[%d] failed: %w", i, err)
+				return fmt.Errorf("postgres replica health check: ping replica failed: %w", err)
 			}
 
-			checked = true
+			return nil
 		}
 
-		if !checked {
-			return errNoNonNilReplicas
-		}
-
-		return nil
+		return errNoNonNilReplicas
 	}, true
 }
 
@@ -173,11 +175,18 @@ func resolveObjectStorageCheck(deps *HealthDependencies) (HealthCheckFunc, bool)
 	}, true
 }
 
+// rabbitMQHTTPClientTimeout is an outer belt-and-suspenders cap on the
+// shared RabbitMQ health-check client. Per-request deadlines still flow via
+// http.NewRequestWithContext; this only fires if a bug drops the request ctx.
+const rabbitMQHTTPClientTimeout = 10 * time.Second
+
 // rabbitMQHTTPClient is a reusable HTTP client for RabbitMQ health checks.
 // http.Client is safe for concurrent use, so a single package-level instance
-// avoids per-call allocations and connection pool churn. Per-check timeouts are
-// enforced by the request context from applyReadinessCheck.
-var rabbitMQHTTPClient = &http.Client{}
+// avoids per-call allocations and connection pool churn. Per-check timeouts
+// are enforced by the request context from applyReadinessCheckResult; the
+// client-level Timeout is belt-and-suspenders for bugs that lose the request
+// ctx.
+var rabbitMQHTTPClient = &http.Client{Timeout: rabbitMQHTTPClientTimeout}
 
 func checkRabbitMQHTTPHealth(ctx context.Context, healthURL string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, http.NoBody)
@@ -189,7 +198,13 @@ func checkRabbitMQHTTPHealth(ctx context.Context, healthURL string) error {
 	if err != nil {
 		return fmt.Errorf("rabbitmq health check: request failed: %w", err)
 	}
-	defer resp.Body.Close()
+
+	defer func() {
+		// Drain before close so the underlying TCP connection can be reused by
+		// the keep-alive pool.
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("%w: %d", errRabbitMQUnhealthy, resp.StatusCode)

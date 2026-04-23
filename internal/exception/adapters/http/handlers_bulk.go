@@ -51,7 +51,7 @@ func (handler *Handlers) BulkAssign(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid exception id", err)
 	}
 
-	result, err := handler.exceptionUC.BulkAssign(ctx, command.BulkAssignInput{
+	result, err := handler.commandUC.BulkAssign(ctx, command.BulkAssignInput{
 		ExceptionIDs: exceptionIDs,
 		Assignee:     req.Assignee,
 	})
@@ -97,7 +97,7 @@ func (handler *Handlers) BulkResolve(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid exception id", err)
 	}
 
-	result, err := handler.exceptionUC.BulkResolve(ctx, command.BulkResolveInput{
+	result, err := handler.commandUC.BulkResolve(ctx, command.BulkResolveInput{
 		ExceptionIDs: exceptionIDs,
 		Resolution:   req.Resolution,
 		Reason:       req.Reason,
@@ -144,7 +144,7 @@ func (handler *Handlers) BulkDispatch(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid exception id", err)
 	}
 
-	result, err := handler.dispatchUC.BulkDispatch(ctx, command.BulkDispatchInput{
+	result, err := handler.commandUC.BulkDispatch(ctx, command.BulkDispatchInput{
 		ExceptionIDs: exceptionIDs,
 		TargetSystem: req.TargetSystem,
 		Queue:        req.Queue,

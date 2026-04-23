@@ -3,8 +3,10 @@
 package command
 
 import (
+	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -22,7 +24,7 @@ func TestNewUseCase_Success(t *testing.T) {
 	actor := actorExtractor("analyst-1")
 	infra := &stubInfraProvider{}
 
-	uc, err := NewUseCase(repo, exec, audit, actor, infra)
+	uc, err := NewExceptionUseCase(repo, actor, audit, infra, WithResolutionExecutor(exec))
 
 	require.NoError(t, err)
 	require.NotNil(t, uc)
@@ -41,12 +43,17 @@ func TestNewUseCase_NilExceptionRepository(t *testing.T) {
 	actor := actorExtractor("analyst-1")
 	infra := &stubInfraProvider{}
 
-	uc, err := NewUseCase(nil, exec, audit, actor, infra)
+	uc, err := NewExceptionUseCase(nil, actor, audit, infra, WithResolutionExecutor(exec))
 
 	require.ErrorIs(t, err, ErrNilExceptionRepository)
 	assert.Nil(t, uc)
 }
 
+// TestNewUseCase_NilResolutionExecutor exercises the method-level
+// validation that now owns the optional-dependency check: the merged
+// constructor no longer rejects a nil executor (it is optional), so the
+// caller discovers the missing dependency when invoking a resolution
+// operation such as ForceMatch.
 func TestNewUseCase_NilResolutionExecutor(t *testing.T) {
 	t.Parallel()
 
@@ -55,10 +62,17 @@ func TestNewUseCase_NilResolutionExecutor(t *testing.T) {
 	actor := actorExtractor("analyst-1")
 	infra := &stubInfraProvider{}
 
-	uc, err := NewUseCase(repo, nil, audit, actor, infra)
+	uc, err := NewExceptionUseCase(repo, actor, audit, infra)
+	require.NoError(t, err)
+	require.NotNil(t, uc)
+
+	_, err = uc.ForceMatch(context.Background(), ForceMatchCommand{
+		ExceptionID:    uuid.New(),
+		OverrideReason: "POLICY_EXCEPTION",
+		Notes:          "test",
+	})
 
 	require.ErrorIs(t, err, ErrNilResolutionExecutor)
-	assert.Nil(t, uc)
 }
 
 func TestNewUseCase_NilAuditPublisher(t *testing.T) {
@@ -69,7 +83,7 @@ func TestNewUseCase_NilAuditPublisher(t *testing.T) {
 	actor := actorExtractor("analyst-1")
 	infra := &stubInfraProvider{}
 
-	uc, err := NewUseCase(repo, exec, nil, actor, infra)
+	uc, err := NewExceptionUseCase(repo, actor, nil, infra, WithResolutionExecutor(exec))
 
 	require.ErrorIs(t, err, ErrNilAuditPublisher)
 	assert.Nil(t, uc)
@@ -83,7 +97,7 @@ func TestNewUseCase_NilActorExtractor(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	infra := &stubInfraProvider{}
 
-	uc, err := NewUseCase(repo, exec, audit, nil, infra)
+	uc, err := NewExceptionUseCase(repo, nil, audit, infra, WithResolutionExecutor(exec))
 
 	require.ErrorIs(t, err, ErrNilActorExtractor)
 	assert.Nil(t, uc)
@@ -97,7 +111,7 @@ func TestNewUseCase_NilInfraProvider(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst-1")
 
-	uc, err := NewUseCase(repo, exec, audit, actor, nil)
+	uc, err := NewExceptionUseCase(repo, actor, audit, nil, WithResolutionExecutor(exec))
 
 	require.ErrorIs(t, err, ErrNilInfraProvider)
 	assert.Nil(t, uc)
@@ -106,19 +120,23 @@ func TestNewUseCase_NilInfraProvider(t *testing.T) {
 func TestNewUseCase_AllDependenciesNil(t *testing.T) {
 	t.Parallel()
 
-	uc, err := NewUseCase(nil, nil, nil, nil, nil)
+	uc, err := NewExceptionUseCase(nil, nil, nil, nil, WithResolutionExecutor(nil))
 
 	require.ErrorIs(t, err, ErrNilExceptionRepository)
 	assert.Nil(t, uc)
 }
 
+// TestNewUseCase_ValidationOrder verifies the merged constructor validates
+// its four required dependencies in the documented order (repo, actor,
+// audit, infra). The resolution executor is now an optional dependency
+// and its nil-check lives on the resolution operations themselves — see
+// TestNewUseCase_NilResolutionExecutor.
 func TestNewUseCase_ValidationOrder(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
 		name        string
 		repo        repositories.ExceptionRepository
-		exec        ports.ResolutionExecutor
 		audit       ports.AuditPublisher
 		actor       ports.ActorExtractor
 		infra       sharedPorts.InfrastructureProvider
@@ -127,43 +145,30 @@ func TestNewUseCase_ValidationOrder(t *testing.T) {
 		{
 			name:        "nil repo returns first",
 			repo:        nil,
-			exec:        &stubResolutionExecutor{},
 			audit:       &stubAuditPublisher{},
 			actor:       actorExtractor("a"),
 			infra:       &stubInfraProvider{},
 			expectedErr: ErrNilExceptionRepository,
 		},
 		{
-			name:        "nil executor returns second",
+			name:        "nil actor returns second",
 			repo:        &stubExceptionRepo{},
-			exec:        nil,
-			audit:       &stubAuditPublisher{},
-			actor:       actorExtractor("a"),
-			infra:       &stubInfraProvider{},
-			expectedErr: ErrNilResolutionExecutor,
-		},
-		{
-			name:        "nil audit returns third",
-			repo:        &stubExceptionRepo{},
-			exec:        &stubResolutionExecutor{},
-			audit:       nil,
-			actor:       actorExtractor("a"),
-			infra:       &stubInfraProvider{},
-			expectedErr: ErrNilAuditPublisher,
-		},
-		{
-			name:        "nil actor returns fourth",
-			repo:        &stubExceptionRepo{},
-			exec:        &stubResolutionExecutor{},
 			audit:       &stubAuditPublisher{},
 			actor:       nil,
 			infra:       &stubInfraProvider{},
 			expectedErr: ErrNilActorExtractor,
 		},
 		{
-			name:        "nil infra returns fifth",
+			name:        "nil audit returns third",
 			repo:        &stubExceptionRepo{},
-			exec:        &stubResolutionExecutor{},
+			audit:       nil,
+			actor:       actorExtractor("a"),
+			infra:       &stubInfraProvider{},
+			expectedErr: ErrNilAuditPublisher,
+		},
+		{
+			name:        "nil infra returns fourth",
+			repo:        &stubExceptionRepo{},
 			audit:       &stubAuditPublisher{},
 			actor:       actorExtractor("a"),
 			infra:       nil,
@@ -175,7 +180,7 @@ func TestNewUseCase_ValidationOrder(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			uc, err := NewUseCase(tc.repo, tc.exec, tc.audit, tc.actor, tc.infra)
+			uc, err := NewExceptionUseCase(tc.repo, tc.actor, tc.audit, tc.infra, WithResolutionExecutor(&stubResolutionExecutor{}))
 
 			require.ErrorIs(t, err, tc.expectedErr)
 			assert.Nil(t, uc)

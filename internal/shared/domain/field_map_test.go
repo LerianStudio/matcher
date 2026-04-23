@@ -151,7 +151,7 @@ func TestReconciliationSourceCreation(t *testing.T) {
 				ID:        uuid.MustParse("44444444-4444-4444-4444-444444444444"),
 				ContextID: uuid.MustParse("55555555-5555-5555-5555-555555555555"),
 				Name:      "Bank Statement Source",
-				Type:      "csv",
+				Type:      shared.SourceType("csv"),
 				Config:    map[string]any{"delimiter": ",", "encoding": "UTF-8"},
 				CreatedAt: time.Date(2024, 2, 20, 14, 0, 0, 0, time.UTC),
 				UpdatedAt: time.Date(2024, 2, 21, 15, 30, 0, 0, time.UTC),
@@ -161,7 +161,7 @@ func TestReconciliationSourceCreation(t *testing.T) {
 				assert.Equal(t, "44444444-4444-4444-4444-444444444444", rs.ID.String())
 				assert.Equal(t, "55555555-5555-5555-5555-555555555555", rs.ContextID.String())
 				assert.Equal(t, "Bank Statement Source", rs.Name)
-				assert.Equal(t, "csv", rs.Type)
+				assert.Equal(t, shared.SourceType("csv"), rs.Type)
 				assert.Equal(t, ",", rs.Config["delimiter"])
 				assert.Equal(t, "UTF-8", rs.Config["encoding"])
 				assert.Equal(t, 2024, rs.CreatedAt.Year())
@@ -186,14 +186,14 @@ func TestReconciliationSourceCreation(t *testing.T) {
 			source: shared.ReconciliationSource{
 				ID:     uuid.New(),
 				Name:   "Test Source",
-				Type:   "api",
+				Type:   shared.SourceType("api"),
 				Config: nil,
 			},
 			validate: func(t *testing.T, rs shared.ReconciliationSource) {
 				t.Helper()
 				assert.Nil(t, rs.Config)
 				assert.Equal(t, "Test Source", rs.Name)
-				assert.Equal(t, "api", rs.Type)
+				assert.Equal(t, shared.SourceType("api"), rs.Type)
 			},
 		},
 		{
@@ -212,7 +212,7 @@ func TestReconciliationSourceCreation(t *testing.T) {
 			source: shared.ReconciliationSource{
 				ID:   uuid.New(),
 				Name: "Complex Source",
-				Type: "webhook",
+				Type: shared.SourceType("webhook"),
 				Config: map[string]any{
 					"endpoint":    "https://api.example.com/webhook",
 					"timeout_ms":  30000,
@@ -314,7 +314,7 @@ func TestReconciliationSourceEquality(t *testing.T) {
 		ID:        id,
 		ContextID: contextID,
 		Name:      "Source A",
-		Type:      "csv",
+		Type:      shared.SourceType("csv"),
 		Config:    map[string]any{"key": "value"},
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -324,7 +324,7 @@ func TestReconciliationSourceEquality(t *testing.T) {
 		ID:        id,
 		ContextID: contextID,
 		Name:      "Source A",
-		Type:      "csv",
+		Type:      shared.SourceType("csv"),
 		Config:    map[string]any{"key": "value"},
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -341,7 +341,7 @@ func TestReconciliationSourceEquality(t *testing.T) {
 	rs3 := shared.ReconciliationSource{
 		ID:   uuid.New(),
 		Name: "Source B",
-		Type: "api",
+		Type: shared.SourceType("api"),
 	}
 	assert.NotEqual(t, rs1.ID, rs3.ID)
 	assert.NotEqual(t, rs1.Name, rs3.Name)
@@ -402,7 +402,7 @@ func TestReconciliationSourceJSONSerialization(t *testing.T) {
 		ID:        id,
 		ContextID: contextID,
 		Name:      "API Source",
-		Type:      "rest",
+		Type:      shared.SourceType("rest"),
 		Config: map[string]any{
 			"url":     "https://api.example.com",
 			"timeout": float64(5000),
@@ -459,13 +459,13 @@ func TestReconciliationSourceWithEmptyUUIDs(t *testing.T) {
 		ID:        uuid.Nil,
 		ContextID: uuid.Nil,
 		Name:      "Test",
-		Type:      "csv",
+		Type:      shared.SourceType("csv"),
 	}
 
 	assert.Equal(t, "00000000-0000-0000-0000-000000000000", rs.ID.String())
 	assert.Equal(t, "00000000-0000-0000-0000-000000000000", rs.ContextID.String())
 	assert.Equal(t, "Test", rs.Name)
-	assert.Equal(t, "csv", rs.Type)
+	assert.Equal(t, shared.SourceType("csv"), rs.Type)
 }
 
 func TestFieldMapWithZeroTime(t *testing.T) {

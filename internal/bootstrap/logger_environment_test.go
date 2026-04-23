@@ -75,6 +75,34 @@ func TestIsProductionEnvironment(t *testing.T) {
 	assert.False(t, IsProductionEnvironment("staging"))
 }
 
+func TestDeploymentMode(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		mode     string
+		expected string
+	}{
+		{name: "saas", mode: "saas", expected: deploymentModeSaaS},
+		{name: "byoc", mode: "byoc", expected: deploymentModeByoc},
+		{name: "local", mode: "local", expected: deploymentModeLocal},
+		{name: "mixed case", mode: "  SaAs  ", expected: deploymentModeSaaS},
+		{name: "empty defaults to local", mode: "", expected: deploymentModeLocal},
+		{name: "unknown defaults to local", mode: "dev", expected: deploymentModeLocal},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := AppConfig{Mode: tt.mode}
+			assert.Equal(t, tt.expected, cfg.DeploymentMode())
+		})
+	}
+}
+
 // TestIsDevelopmentOrTestEnvironment exhaustively covers the helper that
 // gates dev/test-only behavior. The function trims whitespace and lowercases
 // the input, matching exactly "development" or "test" — every other value

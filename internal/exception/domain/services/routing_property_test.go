@@ -10,7 +10,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 func TestProperty_RoutingDeterministic(t *testing.T) {
@@ -40,7 +40,7 @@ func TestProperty_RoutingDeterministic(t *testing.T) {
 		}
 
 		input := RoutingInput{
-			Severity:      value_objects.ExceptionSeverityHigh,
+			Severity:      sharedexception.ExceptionSeverityHigh,
 			AmountAbsBase: decimal.NewFromInt(amount),
 		}
 		first, err1 := EvaluateRouting(input, rules)
@@ -91,7 +91,7 @@ func TestProperty_RoutingPriorityOrder(t *testing.T) {
 		}
 
 		input := RoutingInput{
-			Severity:      value_objects.ExceptionSeverityLow,
+			Severity:      sharedexception.ExceptionSeverityLow,
 			AmountAbsBase: decimal.NewFromInt(100),
 		}
 
@@ -125,11 +125,11 @@ func TestProperty_Routing_TargetAlwaysValid(t *testing.T) {
 		RoutingTargetWebhook,
 	}
 
-	validSeverities := []value_objects.ExceptionSeverity{
-		value_objects.ExceptionSeverityLow,
-		value_objects.ExceptionSeverityMedium,
-		value_objects.ExceptionSeverityHigh,
-		value_objects.ExceptionSeverityCritical,
+	validSeverities := []sharedexception.ExceptionSeverity{
+		sharedexception.ExceptionSeverityLow,
+		sharedexception.ExceptionSeverityMedium,
+		sharedexception.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityCritical,
 	}
 
 	property := func(targetIndex, severityIndex uint8, amount int64) bool {
@@ -170,11 +170,11 @@ func TestProperty_Routing_MatchAllCatchesAll(t *testing.T) {
 		Rand:     rand.New(rand.NewSource(456)),
 	}
 
-	validSeverities := []value_objects.ExceptionSeverity{
-		value_objects.ExceptionSeverityLow,
-		value_objects.ExceptionSeverityMedium,
-		value_objects.ExceptionSeverityHigh,
-		value_objects.ExceptionSeverityCritical,
+	validSeverities := []sharedexception.ExceptionSeverity{
+		sharedexception.ExceptionSeverityLow,
+		sharedexception.ExceptionSeverityMedium,
+		sharedexception.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityCritical,
 	}
 
 	property := func(severityIndex uint8, amount int64, ageHours uint16) bool {
@@ -184,8 +184,8 @@ func TestProperty_Routing_MatchAllCatchesAll(t *testing.T) {
 			{
 				Name:     "specific-rule",
 				Priority: 1,
-				Severities: []value_objects.ExceptionSeverity{
-					value_objects.ExceptionSeverityCritical,
+				Severities: []sharedexception.ExceptionSeverity{
+					sharedexception.ExceptionSeverityCritical,
 				},
 				Target: RoutingTargetJira,
 				Queue:  "jira-queue",
@@ -210,7 +210,7 @@ func TestProperty_Routing_MatchAllCatchesAll(t *testing.T) {
 			return false
 		}
 
-		if severity == value_objects.ExceptionSeverityCritical {
+		if severity == sharedexception.ExceptionSeverityCritical {
 			return decision.RuleName == "specific-rule"
 		}
 

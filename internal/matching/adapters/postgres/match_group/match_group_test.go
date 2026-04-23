@@ -16,7 +16,6 @@ import (
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 )
 
-func ptrStr(s string) *string { return &s }
 
 func TestPostgreSQLModel_RoundTrip(t *testing.T) {
 	t.Parallel()
@@ -153,11 +152,11 @@ func TestNewPostgreSQLModel_Success(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, model)
-	assert.Equal(t, group.ID.String(), model.ID)
-	assert.Equal(t, group.ContextID.String(), model.ContextID)
-	assert.Equal(t, group.RunID.String(), model.RunID)
-	require.NotNil(t, model.RuleID)
-	assert.Equal(t, group.RuleID.String(), *model.RuleID)
+	assert.Equal(t, group.ID, model.ID)
+	assert.Equal(t, group.ContextID, model.ContextID)
+	assert.Equal(t, group.RunID, model.RunID)
+	require.True(t, model.RuleID.Valid)
+	assert.Equal(t, group.RuleID, model.RuleID.UUID)
 	assert.Equal(t, 85, model.Confidence)
 	assert.Equal(t, "PROPOSED", model.Status)
 	assert.Equal(t, now, model.CreatedAt)
@@ -177,88 +176,15 @@ func TestToEntity_NilModel(t *testing.T) {
 	require.ErrorIs(t, err, ErrMatchGroupModelNeeded)
 }
 
-func TestToEntity_InvalidID(t *testing.T) {
-	t.Parallel()
-
-	model := &PostgreSQLModel{
-		ID:        "not-a-uuid",
-		ContextID: uuid.New().String(),
-		RunID:     uuid.New().String(),
-		RuleID:    ptrStr(uuid.New().String()),
-		Status:    "PROPOSED",
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parse id")
-}
-
-func TestToEntity_InvalidContextID(t *testing.T) {
-	t.Parallel()
-
-	model := &PostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: "invalid",
-		RunID:     uuid.New().String(),
-		RuleID:    ptrStr(uuid.New().String()),
-		Status:    "PROPOSED",
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parse context id")
-}
-
-func TestToEntity_InvalidRunID(t *testing.T) {
-	t.Parallel()
-
-	model := &PostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
-		RunID:     "invalid",
-		RuleID:    ptrStr(uuid.New().String()),
-		Status:    "PROPOSED",
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parse run id")
-}
-
-func TestToEntity_InvalidRuleID(t *testing.T) {
-	t.Parallel()
-
-	invalidRule := "invalid"
-	model := &PostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
-		RunID:     uuid.New().String(),
-		RuleID:    &invalidRule,
-		Status:    "PROPOSED",
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parse rule id")
-}
-
 func TestToEntity_NilRuleID(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC()
 	model := &PostgreSQLModel{
-		ID:         uuid.New().String(),
-		ContextID:  uuid.New().String(),
-		RunID:      uuid.New().String(),
-		RuleID:     nil,
+		ID:         uuid.New(),
+		ContextID:  uuid.New(),
+		RunID:      uuid.New(),
+		RuleID:     uuid.NullUUID{},
 		Confidence: 80,
 		Status:     "CONFIRMED",
 		CreatedAt:  now,
@@ -276,10 +202,10 @@ func TestToEntity_InvalidConfidence(t *testing.T) {
 	t.Parallel()
 
 	model := &PostgreSQLModel{
-		ID:         uuid.New().String(),
-		ContextID:  uuid.New().String(),
-		RunID:      uuid.New().String(),
-		RuleID:     ptrStr(uuid.New().String()),
+		ID:         uuid.New(),
+		ContextID:  uuid.New(),
+		RunID:      uuid.New(),
+		RuleID:     uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		Confidence: 150,
 		Status:     "PENDING",
 	}
@@ -295,10 +221,10 @@ func TestToEntity_InvalidStatus(t *testing.T) {
 	t.Parallel()
 
 	model := &PostgreSQLModel{
-		ID:         uuid.New().String(),
-		ContextID:  uuid.New().String(),
-		RunID:      uuid.New().String(),
-		RuleID:     ptrStr(uuid.New().String()),
+		ID:         uuid.New(),
+		ContextID:  uuid.New(),
+		RunID:      uuid.New(),
+		RuleID:     uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		Confidence: 80,
 		Status:     "INVALID_STATUS",
 	}
@@ -317,10 +243,10 @@ func TestToEntity_SuccessWithOptionalFields(t *testing.T) {
 	reason := "not enough data"
 
 	model := &PostgreSQLModel{
-		ID:             uuid.New().String(),
-		ContextID:      uuid.New().String(),
-		RunID:          uuid.New().String(),
-		RuleID:         ptrStr(uuid.New().String()),
+		ID:             uuid.New(),
+		ContextID:      uuid.New(),
+		RunID:          uuid.New(),
+		RuleID:         uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		Confidence:     75,
 		Status:         "REJECTED",
 		RejectedReason: &reason,
@@ -347,10 +273,10 @@ func TestToEntity_SuccessWithConfirmedAt(t *testing.T) {
 	confirmedAt := now.Add(time.Hour)
 
 	model := &PostgreSQLModel{
-		ID:          uuid.New().String(),
-		ContextID:   uuid.New().String(),
-		RunID:       uuid.New().String(),
-		RuleID:      ptrStr(uuid.New().String()),
+		ID:          uuid.New(),
+		ContextID:   uuid.New(),
+		RunID:       uuid.New(),
+		RuleID:      uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		Confidence:  90,
 		Status:      "CONFIRMED",
 		ConfirmedAt: &confirmedAt,

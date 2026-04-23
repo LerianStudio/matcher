@@ -93,7 +93,7 @@ make migrate-up
 
 ```bash
 curl http://localhost:4018/health
-# {"status":"ok"}
+# Returns plain text "healthy" or HTTP 503
 ```
 
 The API is available at `http://localhost:4018`. Swagger UI is accessible at `http://localhost:4018/swagger/index.html` when running in non-production mode.
@@ -144,8 +144,7 @@ matcher/
 │   └── testutil/         # Shared test helpers
 ├── migrations/           # PostgreSQL schema migrations (21 migrations)
 ├── pkg/                  # Reusable library packages
-│   ├── chanutil/         # Safe channel utilities
-│   └── storageopt/       # Object storage functional options
+│   └── chanutil/         # Safe channel utilities
 ├── scripts/              # Dev and CI utility scripts
 ├── tests/                # Integration, E2E, chaos, and static analysis tests
 └── tools/                # Custom linters and dev tooling

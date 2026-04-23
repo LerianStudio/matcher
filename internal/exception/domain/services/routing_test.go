@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 func TestEvaluateRouting_FirstMatchWins(t *testing.T) {
@@ -18,7 +19,7 @@ func TestEvaluateRouting_FirstMatchWins(t *testing.T) {
 		{
 			Name:       "high",
 			Priority:   1,
-			Severities: []value_objects.ExceptionSeverity{value_objects.ExceptionSeverityHigh},
+			Severities: []sharedexception.ExceptionSeverity{sharedexception.ExceptionSeverityHigh},
 			Target:     RoutingTargetManual,
 			Queue:      "queue-high",
 		},
@@ -33,7 +34,7 @@ func TestEvaluateRouting_FirstMatchWins(t *testing.T) {
 
 	decision, err := EvaluateRouting(
 		RoutingInput{
-			Severity:      value_objects.ExceptionSeverityHigh,
+			Severity:      sharedexception.ExceptionSeverityHigh,
 			AmountAbsBase: decimal.NewFromInt(10),
 		},
 		rules,
@@ -46,7 +47,7 @@ func TestEvaluateRouting_FirstMatchWins(t *testing.T) {
 func TestEvaluateRouting_OverrideRequiresReason(t *testing.T) {
 	t.Parallel()
 
-	severity := value_objects.ExceptionSeverityCritical
+	severity := sharedexception.ExceptionSeverityCritical
 	rules := []RoutingRule{
 		{
 			Name:             "override",
@@ -59,7 +60,7 @@ func TestEvaluateRouting_OverrideRequiresReason(t *testing.T) {
 
 	_, err := EvaluateRouting(
 		RoutingInput{
-			Severity:      value_objects.ExceptionSeverityHigh,
+			Severity:      sharedexception.ExceptionSeverityHigh,
 			AmountAbsBase: decimal.NewFromInt(10),
 		},
 		rules,
@@ -81,7 +82,7 @@ func TestEvaluateRouting_InvalidTarget(t *testing.T) {
 
 	_, err := EvaluateRouting(
 		RoutingInput{
-			Severity:      value_objects.ExceptionSeverityLow,
+			Severity:      sharedexception.ExceptionSeverityLow,
 			AmountAbsBase: decimal.NewFromInt(10),
 		},
 		rules,
@@ -92,11 +93,11 @@ func TestEvaluateRouting_InvalidTarget(t *testing.T) {
 func TestEvaluateRouting_EmptyRules(t *testing.T) {
 	t.Parallel()
 
-	_, err := EvaluateRouting(RoutingInput{Severity: value_objects.ExceptionSeverityLow}, nil)
+	_, err := EvaluateRouting(RoutingInput{Severity: sharedexception.ExceptionSeverityLow}, nil)
 	require.ErrorIs(t, err, ErrEmptyRoutingRules)
 
 	_, err = EvaluateRouting(
-		RoutingInput{Severity: value_objects.ExceptionSeverityLow},
+		RoutingInput{Severity: sharedexception.ExceptionSeverityLow},
 		[]RoutingRule{},
 	)
 	require.ErrorIs(t, err, ErrEmptyRoutingRules)
@@ -124,7 +125,7 @@ func TestEvaluateRouting_PriorityOrdering(t *testing.T) {
 
 	decision, err := EvaluateRouting(
 		RoutingInput{
-			Severity:      value_objects.ExceptionSeverityLow,
+			Severity:      sharedexception.ExceptionSeverityLow,
 			AmountAbsBase: decimal.NewFromInt(10),
 		},
 		rules,
@@ -137,7 +138,7 @@ func TestEvaluateRouting_PriorityOrdering(t *testing.T) {
 func TestEvaluateRouting_OverrideSeverityWithReason(t *testing.T) {
 	t.Parallel()
 
-	severity := value_objects.ExceptionSeverityCritical
+	severity := sharedexception.ExceptionSeverityCritical
 	reason := value_objects.OverrideReasonPolicyException
 	rules := []RoutingRule{
 		{
@@ -152,14 +153,14 @@ func TestEvaluateRouting_OverrideSeverityWithReason(t *testing.T) {
 
 	decision, err := EvaluateRouting(
 		RoutingInput{
-			Severity:      value_objects.ExceptionSeverityHigh,
+			Severity:      sharedexception.ExceptionSeverityHigh,
 			AmountAbsBase: decimal.NewFromInt(10),
 		},
 		rules,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, decision.OverrideSeverity)
-	require.Equal(t, value_objects.ExceptionSeverityCritical, *decision.OverrideSeverity)
+	require.Equal(t, sharedexception.ExceptionSeverityCritical, *decision.OverrideSeverity)
 	require.NotNil(t, decision.OverrideReason)
 	require.Equal(t, value_objects.OverrideReasonPolicyException, *decision.OverrideReason)
 }
@@ -187,7 +188,7 @@ func TestEvaluateRouting_AmountThreshold(t *testing.T) {
 
 	decision, err := EvaluateRouting(
 		RoutingInput{
-			Severity:      value_objects.ExceptionSeverityLow,
+			Severity:      sharedexception.ExceptionSeverityLow,
 			AmountAbsBase: decimal.NewFromInt(500),
 		},
 		rules,
@@ -197,7 +198,7 @@ func TestEvaluateRouting_AmountThreshold(t *testing.T) {
 
 	decision, err = EvaluateRouting(
 		RoutingInput{
-			Severity:      value_objects.ExceptionSeverityLow,
+			Severity:      sharedexception.ExceptionSeverityLow,
 			AmountAbsBase: decimal.NewFromInt(2000),
 		},
 		rules,
@@ -226,14 +227,14 @@ func TestEvaluateRouting_SourceTypeFilter(t *testing.T) {
 	}
 
 	decision, err := EvaluateRouting(
-		RoutingInput{Severity: value_objects.ExceptionSeverityLow, SourceType: "regulatory"},
+		RoutingInput{Severity: sharedexception.ExceptionSeverityLow, SourceType: "regulatory"},
 		rules,
 	)
 	require.NoError(t, err)
 	require.Equal(t, "regulatory", decision.RuleName)
 
 	decision, err = EvaluateRouting(
-		RoutingInput{Severity: value_objects.ExceptionSeverityLow, SourceType: "other"},
+		RoutingInput{Severity: sharedexception.ExceptionSeverityLow, SourceType: "other"},
 		rules,
 	)
 	require.NoError(t, err)

@@ -50,70 +50,32 @@ import (
 	libZap "github.com/LerianStudio/lib-commons/v5/commons/zap"
 
 	"github.com/LerianStudio/matcher/internal/auth"
-	configAudit "github.com/LerianStudio/matcher/internal/configuration/adapters/audit"
-	configHTTP "github.com/LerianStudio/matcher/internal/configuration/adapters/http"
 	configContextRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/context"
 	configFeeRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/fee_rule"
 	configFieldMapRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/field_map"
 	configMatchRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/match_rule"
 	configScheduleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/schedule"
 	configSourceRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/source"
-	configCommand "github.com/LerianStudio/matcher/internal/configuration/services/command"
-	configQuery "github.com/LerianStudio/matcher/internal/configuration/services/query"
 	configWorker "github.com/LerianStudio/matcher/internal/configuration/services/worker"
 	discoveryExtractionRepo "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres/extraction"
 	discoveryWorker "github.com/LerianStudio/matcher/internal/discovery/services/worker"
-	exceptionAdapters "github.com/LerianStudio/matcher/internal/exception/adapters"
-	exceptionAudit "github.com/LerianStudio/matcher/internal/exception/adapters/audit"
-	exceptionHTTP "github.com/LerianStudio/matcher/internal/exception/adapters/http"
-	exceptionConnectors "github.com/LerianStudio/matcher/internal/exception/adapters/http/connectors"
-	exceptionCommentRepo "github.com/LerianStudio/matcher/internal/exception/adapters/postgres/comment"
-	exceptionDisputeRepo "github.com/LerianStudio/matcher/internal/exception/adapters/postgres/dispute"
-	exceptionExceptionRepo "github.com/LerianStudio/matcher/internal/exception/adapters/postgres/exception"
 	exceptionRedis "github.com/LerianStudio/matcher/internal/exception/adapters/redis"
-	exceptionResolution "github.com/LerianStudio/matcher/internal/exception/adapters/resolution"
-	exceptionCommand "github.com/LerianStudio/matcher/internal/exception/services/command"
-	exceptionQuery "github.com/LerianStudio/matcher/internal/exception/services/query"
 	governanceAudit "github.com/LerianStudio/matcher/internal/governance/adapters/audit"
-	governanceHTTP "github.com/LerianStudio/matcher/internal/governance/adapters/http"
 	governancePostgres "github.com/LerianStudio/matcher/internal/governance/adapters/postgres"
-	actorMappingRepoAdapter "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/actor_mapping"
-	governanceCommand "github.com/LerianStudio/matcher/internal/governance/services/command"
-	governanceQuery "github.com/LerianStudio/matcher/internal/governance/services/query"
 	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
-	ingestionHTTP "github.com/LerianStudio/matcher/internal/ingestion/adapters/http"
-	ingestionParser "github.com/LerianStudio/matcher/internal/ingestion/adapters/parsers"
 	ingestionJobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
 	ingestionTransactionRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/transaction"
 	ingestionRabbitmq "github.com/LerianStudio/matcher/internal/ingestion/adapters/rabbitmq"
-	ingestionRedis "github.com/LerianStudio/matcher/internal/ingestion/adapters/redis"
-	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
-	ingestionQuery "github.com/LerianStudio/matcher/internal/ingestion/services/query"
-	matchingHTTP "github.com/LerianStudio/matcher/internal/matching/adapters/http"
 	matchAdjustmentRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/adjustment"
-	matchExceptionRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/exception_creator"
 	matchFeeScheduleRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/fee_schedule"
-	matchFeeVarianceRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/fee_variance"
-	matchGroupRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_group"
-	matchItemRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_item"
-	matchRunRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_run"
 	matchingRabbitmq "github.com/LerianStudio/matcher/internal/matching/adapters/rabbitmq"
-	matchLockManager "github.com/LerianStudio/matcher/internal/matching/adapters/redis"
 	matchingCommand "github.com/LerianStudio/matcher/internal/matching/services/command"
-	matchingQuery "github.com/LerianStudio/matcher/internal/matching/services/query"
-	reportingHTTP "github.com/LerianStudio/matcher/internal/reporting/adapters/http"
-	reportDashboard "github.com/LerianStudio/matcher/internal/reporting/adapters/postgres/dashboard"
-	reportExportJob "github.com/LerianStudio/matcher/internal/reporting/adapters/postgres/export_job"
-	reportRepo "github.com/LerianStudio/matcher/internal/reporting/adapters/postgres/report"
-	reportingRedis "github.com/LerianStudio/matcher/internal/reporting/adapters/redis"
 	reportingStorage "github.com/LerianStudio/matcher/internal/reporting/adapters/storage"
-	reportingCommand "github.com/LerianStudio/matcher/internal/reporting/services/command"
-	reportingQuery "github.com/LerianStudio/matcher/internal/reporting/services/query"
 	reportingWorker "github.com/LerianStudio/matcher/internal/reporting/services/worker"
-	crossAdapters "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 	sharedRabbitmq "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
+	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -435,8 +397,6 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		return nil, fmt.Errorf("initialize logger: %w", err)
 	}
 
-	logger = NewSwappableLogger(logger)
-
 	done()
 
 	configDone := timer.track("config")
@@ -475,6 +435,22 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	warnOnMissingGOMEMLIMIT(ctx, logger, defaultMemoryLimitReader, os.Getenv("GOMEMLIMIT"))
 
 	configDone()
+
+	// Per-stack TLS enforcement. Runs BEFORE any connection opens so a stack
+	// flagged X_TLS_REQUIRED=true but configured without TLS cannot produce a
+	// silent insecure start. Stacks without the flag set are not enforced.
+	// See tls_enforcement.go for the full contract.
+	tlsRequiredDone := timer.track("tls_required_enforcement")
+
+	if err := ValidateRequiredTLS(cfg); err != nil {
+		// Close the span on the error path too; otherwise the phase record is
+		// never emitted and startup-latency telemetry misses the failure case.
+		tlsRequiredDone()
+
+		return nil, fmt.Errorf("bootstrap: tls_required enforcement: %w", err)
+	}
+
+	tlsRequiredDone()
 
 	done = timer.track("telemetry")
 
@@ -753,6 +729,17 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	infraStatus := buildInfraStatus(cfg, postgresConnection, redisConnection, rabbitMQConnection, modules, healthDeps, telemetry)
 	logStartupInfo(logger, cfg, infraStatus)
 	logStartupTiming(logger, timer)
+
+	// Startup self-probe. Flips selfProbeOK atomically after confirming every
+	// required dependency. A probe failure is logged but does NOT abort
+	// startup — the /health endpoint returns 503 until the flag flips, and
+	// the K8s livenessProbe restarts the pod if the condition persists.
+	// Keeping startup non-abortive preserves log collection for post-mortem.
+	selfProbeDone := timer.track("self_probe")
+
+	runStartupSelfProbe(ctx, healthDeps, logger, RunSelfProbe)
+
+	selfProbeDone()
 
 	// Register ConfigManager Stop() in cleanups so resources are torn down on shutdown.
 	if configManager != nil {
@@ -1171,6 +1158,7 @@ func newRabbitMQHealthCheck(
 }
 
 func attachBundleHealthChecks(
+	cfg *Config,
 	deps *HealthDependencies,
 	postgres *libPostgres.Client,
 	redis *libRedis.Client,
@@ -1180,7 +1168,16 @@ func attachBundleHealthChecks(
 	deps.RedisCheck = newRedisHealthCheck(redis)
 	// Preserve a DSN-based replica probe installed by assignReplicaHealthCheck.
 	// Overwriting would neutralise its dedicated connection + cleanup pair.
-	if deps.PostgresReplicaCheck == nil {
+	//
+	// Only install a primary-backed fallback when a DISTINCT replica is
+	// configured. Otherwise the fallback calls resolveReplicaDB on the primary
+	// client, which returns errNoReplicasConfigured → status=down on every
+	// /readyz hit — noisy dashboards for a legitimately absent dep. The
+	// evaluator's applyReadinessCheckResult treats an unresolved optional dep
+	// as "skipped, reason=postgres_replica not configured", which is the
+	// accurate story.
+	if deps.PostgresReplicaCheck == nil && cfg != nil &&
+		cfg.Postgres.ReplicaHost != "" && cfg.Postgres.ReplicaHost != cfg.Postgres.PrimaryHost {
 		deps.PostgresReplicaCheck = newPostgresReplicaHealthCheck(postgres)
 	}
 
@@ -1238,7 +1235,7 @@ func createHealthDependencies(
 	deps.RedisOptional = false
 
 	assignReplicaHealthCheck(ctx, cfg, logger, deps, cleanups)
-	attachBundleHealthChecks(deps, postgres, redis, rabbitmq)
+	attachBundleHealthChecks(cfg, deps, postgres, redis, rabbitmq)
 
 	if err := configureObjectStorageHealthChecks(ctx, cfg, deps, logger); err != nil {
 		return nil, err
@@ -2227,7 +2224,7 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
-	storage, err := createObjectStorage(ctx, cfg)
+	storageBackend, err := createObjectStorage(ctx, cfg)
 	if err != nil {
 		if reportingStorageRequired(cfg) {
 			return nil, fmt.Errorf("create object storage: %w", err)
@@ -2236,17 +2233,14 @@ func initModulesAndMessaging(
 		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("Object storage not available, reporting background workers disabled: %v", err))
 	}
 
-	// Wrap storage in a dynamic client that always exposes a non-nil interface,
+	// Wrap the startup-time backend in the hot-reloadable *objectstorage.Client
 	// so reporting handlers/workers can be constructed even when object storage
 	// is unconfigured (e.g. in tests with EXPORT_WORKER_ENABLED=false). Actual
 	// calls on an unconfigured client return ErrObjectStorageUnavailable at
-	// invocation time. The wrapper also re-resolves the concrete client from
-	// the runtime config on each call, so /system changes to object_storage.*
-	// propagate without a restart.
-	//
-	//nolint:contextcheck // Re-resolution runs on demand after startup ctx is
-	// cancelled; the getter intentionally uses context.TODO() internally, mirroring newRuntimeArchivalStorageClient.
-	storage = newRuntimeReportingStorageClient(cfg, configGetter, storage)
+	// invocation time. The Client's resolver re-reads object_storage.* config
+	// on each call, so /system changes propagate without a restart; the swap
+	// itself uses atomic.Pointer so in-flight operations never race.
+	storage := newRuntimeReportingStorageClient(cfg, configGetter, storageBackend)
 
 	//nolint:contextcheck // Reporting config accessors are not context-aware.
 	exportWorker, cleanupWorker, err := initReportingModule(
@@ -2613,9 +2607,8 @@ func createSchedulerWorker(
 
 	configScheduleRepository := configScheduleRepo.NewRepository(provider)
 
-	matchTrigger, err := crossAdapters.NewMatchTriggerAdapter(matchingUseCase)
-	if err != nil {
-		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("scheduler worker not started: match trigger adapter unavailable: %v", err))
+	if matchingUseCase == nil {
+		logger.Log(ctx, libLog.LevelWarn, "scheduler worker not started: matching use case unavailable")
 
 		return nil
 	}
@@ -2629,9 +2622,12 @@ func createSchedulerWorker(
 		Interval: schedulerInterval(cfg),
 	}
 
+	// T-004 (K-06a): matchingUseCase satisfies sharedPorts.MatchTrigger
+	// directly — no adapter layer. The ceremony wrapper was removed when
+	// TriggerMatchForContext moved onto the UseCase itself.
 	sw, err := configWorker.NewSchedulerWorker(
 		configScheduleRepository,
-		matchTrigger,
+		matchingUseCase,
 		lockManager,
 		workerCfg,
 		logger,
@@ -2695,7 +2691,7 @@ func createIdempotencyRepository(
 func createObjectStorage(
 	ctx context.Context,
 	cfg *Config,
-) (sharedPorts.ObjectStorageClient, error) {
+) (objectstorage.Backend, error) {
 	if !reportingStorageRequired(cfg) {
 		return nil, nil
 	}
@@ -2748,18 +2744,9 @@ func reportingStorageRequired(cfg *Config) bool {
 func newRuntimeReportingStorageClient(
 	initialCfg *Config,
 	configGetter func() *Config,
-	fallback sharedPorts.ObjectStorageClient,
-) sharedPorts.ObjectStorageClient {
-	var (
-		mu           sync.Mutex
-		activeClient sharedPorts.ObjectStorageClient
-		activeKey    string
-	)
-
-	activeClient = fallback
-	activeKey = reportingStorageCacheKey(initialCfg)
-
-	return newDynamicObjectStorageClient(func() sharedPorts.ObjectStorageClient {
+	fallback objectstorage.Backend,
+) *objectstorage.Client {
+	resolver := func(ctx context.Context) (objectstorage.Backend, string, error) {
 		cfg := initialCfg
 
 		if configGetter != nil {
@@ -2768,25 +2755,19 @@ func newRuntimeReportingStorageClient(
 			}
 		}
 
-		cacheKey := reportingStorageCacheKey(cfg)
-
-		mu.Lock()
-		defer mu.Unlock()
-
-		if activeClient != nil && cacheKey == activeKey {
-			return activeClient
+		backend, err := createObjectStorage(ctx, cfg)
+		if err != nil {
+			return nil, "", err
 		}
 
-		client, err := createObjectStorage(context.TODO(), cfg)
-		if err != nil || client == nil {
-			return activeClient
+		if backend == nil {
+			return nil, reportingStorageCacheKey(cfg), nil
 		}
 
-		activeClient = client
-		activeKey = cacheKey
+		return backend, reportingStorageCacheKey(cfg), nil
+	}
 
-		return activeClient
-	}, fallback)
+	return objectstorage.NewClientWithResolver(fallback, resolver)
 }
 
 func reportingStorageCacheKey(cfg *Config) string {
@@ -2797,731 +2778,4 @@ func reportingStorageCacheKey(cfg *Config) string {
 	secretHash := sha256.Sum256([]byte(cfg.ObjectStorage.SecretAccessKey))
 
 	return fmt.Sprintf("%s|%s|%s|%s|%x|%t|%t", cfg.ObjectStorage.Endpoint, cfg.ObjectStorage.Region, cfg.ObjectStorage.Bucket, cfg.ObjectStorage.AccessKeyID, secretHash[:8], cfg.ObjectStorage.UsePathStyle, allowInsecureObjectStorageEndpoint(cfg))
-}
-
-func initConfigurationModule(
-	routes *Routes,
-	provider sharedPorts.InfrastructureProvider,
-	outboxRepository sharedPorts.OutboxRepository,
-	repos *sharedRepositories,
-	production bool,
-) error {
-	// Create outbox-based audit publisher for configuration module
-	// This decouples configuration from governance via the outbox pattern
-	auditPublisher, err := configAudit.NewOutboxPublisher(outboxRepository)
-	if err != nil {
-		return fmt.Errorf("create config audit publisher: %w", err)
-	}
-
-	scheduleRepository := configScheduleRepo.NewRepository(provider)
-
-	configCommandUseCase, err := configCommand.NewUseCase(
-		repos.configContext,
-		repos.configSource,
-		repos.configFieldMap,
-		repos.configMatchRule,
-		configCommand.WithAuditPublisher(auditPublisher),
-		configCommand.WithFeeScheduleRepository(repos.feeSchedule),
-		configCommand.WithFeeRuleRepository(repos.configFeeRule),
-		configCommand.WithScheduleRepository(scheduleRepository),
-		configCommand.WithInfrastructureProvider(provider),
-	)
-	if err != nil {
-		return fmt.Errorf("create config command use case: %w", err)
-	}
-
-	configQueryUseCase, err := configQuery.NewUseCase(
-		repos.configContext,
-		repos.configSource,
-		repos.configFieldMap,
-		repos.configMatchRule,
-		configQuery.WithFeeScheduleRepository(repos.feeSchedule),
-		configQuery.WithFeeRuleRepository(repos.configFeeRule),
-		configQuery.WithScheduleRepository(scheduleRepository),
-	)
-	if err != nil {
-		return fmt.Errorf("create config query use case: %w", err)
-	}
-
-	configHandler, err := configHTTP.NewHandler(configCommandUseCase, configQueryUseCase, production)
-	if err != nil {
-		return fmt.Errorf("create config handler: %w", err)
-	}
-
-	if err := configHTTP.RegisterRoutes(routes.Protected, configHandler); err != nil {
-		return fmt.Errorf("register configuration routes: %w", err)
-	}
-
-	return nil
-}
-
-func initIngestionModule(
-	cfg *Config,
-	configGetter func() *Config,
-	settingsResolver *runtimeSettingsResolver,
-	routes *Routes,
-	provider sharedPorts.InfrastructureProvider,
-	outboxRepository sharedPorts.OutboxRepository,
-	publisher sharedPorts.IngestionEventPublisher,
-	matchingUseCase *matchingCommand.UseCase,
-	repos *sharedRepositories,
-	production bool,
-) (*ingestionCommand.UseCase, error) {
-	ingestionRegistry := ingestionParser.NewParserRegistry()
-	ingestionRegistry.Register(ingestionParser.NewCSVParser())
-	ingestionRegistry.Register(ingestionParser.NewJSONParser())
-	ingestionRegistry.Register(ingestionParser.NewXMLParser())
-
-	dedupeService := ingestionRedis.NewDedupeService(provider)
-
-	fieldMapAdapter, err := crossAdapters.NewFieldMapRepositoryAdapter(repos.configFieldMap)
-	if err != nil {
-		return nil, fmt.Errorf("create field map repository adapter: %w", err)
-	}
-
-	sourceAdapter, err := crossAdapters.NewSourceRepositoryAdapter(repos.configSource)
-	if err != nil {
-		return nil, fmt.Errorf("create source repository adapter: %w", err)
-	}
-
-	contextAdapter := crossAdapters.NewContextAccessProviderAdapter(repos.configContext)
-
-	// Auto-match on upload: create adapters to check context config and trigger matching
-	autoMatchContextProvider, err := crossAdapters.NewAutoMatchContextProviderAdapter(repos.configContext)
-	if err != nil {
-		return nil, fmt.Errorf("create auto-match context provider adapter: %w", err)
-	}
-
-	var matchTriggerAdapter *crossAdapters.MatchTriggerAdapter
-
-	if matchingUseCase != nil {
-		var triggerErr error
-
-		matchTriggerAdapter, triggerErr = crossAdapters.NewMatchTriggerAdapter(matchingUseCase)
-		if triggerErr != nil {
-			return nil, fmt.Errorf("create match trigger adapter: %w", triggerErr)
-		}
-	}
-
-	ingestionCommandUseCase, err := ingestionCommand.NewUseCase(ingestionCommand.UseCaseDeps{
-		JobRepo:         repos.ingestionJob,
-		TransactionRepo: repos.ingestionTx,
-		Dedupe:          dedupeService,
-		DedupeTTL:       cfg.DedupeTTL(),
-		DedupeTTLResolver: func(ctx context.Context) time.Duration {
-			return resolveDedupeTTL(ctx, cfg, configGetter, settingsResolver)
-		},
-		DedupeTTLGetter: func() time.Duration {
-			runtimeCfg := configGetter()
-			if runtimeCfg == nil {
-				return cfg.DedupeTTL()
-			}
-
-			return runtimeCfg.DedupeTTL()
-		},
-		Publisher:       publisher,
-		OutboxRepo:      outboxRepository,
-		Parsers:         ingestionRegistry,
-		FieldMapRepo:    fieldMapAdapter,
-		SourceRepo:      sourceAdapter,
-		MatchTrigger:    matchTriggerAdapter,
-		ContextProvider: autoMatchContextProvider,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create ingestion command use case: %w", err)
-	}
-
-	ingestionQueryUseCase, err := ingestionQuery.NewUseCase(
-		repos.ingestionJob,
-		repos.ingestionTx,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create ingestion query use case: %w", err)
-	}
-
-	ingestionHandler, err := ingestionHTTP.NewHandlers(
-		ingestionCommandUseCase,
-		ingestionQueryUseCase,
-		contextAdapter,
-		production,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create ingestion handler: %w", err)
-	}
-
-	if err := ingestionHTTP.RegisterRoutes(routes.Protected, ingestionHandler); err != nil {
-		return nil, fmt.Errorf("register ingestion routes: %w", err)
-	}
-
-	return ingestionCommandUseCase, nil
-}
-
-func initMatchingModule(
-	routes *Routes,
-	provider sharedPorts.InfrastructureProvider,
-	outboxRepo sharedPorts.OutboxRepository,
-	repos *sharedRepositories,
-	production bool,
-) (*matchingCommand.UseCase, error) {
-	configProvider, err := crossAdapters.NewMatchingConfigurationProvider(
-		repos.configContext,
-		repos.configSource,
-		repos.configMatchRule,
-		repos.configFeeRule,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create matching configuration provider: %w", err)
-	}
-
-	sourceAdapter, err := crossAdapters.NewSourceProviderAdapter(repos.configSource)
-	if err != nil {
-		return nil, fmt.Errorf("create source provider adapter for matching: %w", err)
-	}
-
-	feeRuleAdapter, err := crossAdapters.NewFeeRuleProviderAdapter(repos.configFeeRule)
-	if err != nil {
-		return nil, fmt.Errorf("create fee rule provider adapter for matching: %w", err)
-	}
-
-	transactionAdapter, err := crossAdapters.NewTransactionRepositoryAdapterFromRepo(
-		provider,
-		repos.ingestionTx,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create transaction adapter for matching: %w", err)
-	}
-
-	lockManager := matchLockManager.NewLockManager(provider)
-	matchRunRepository := matchRunRepo.NewRepository(provider)
-	matchGroupRepository := matchGroupRepo.NewRepository(provider)
-	matchItemRepository := matchItemRepo.NewRepository(provider)
-	exceptionCreator := matchExceptionRepo.NewRepository(provider)
-	feeVarianceRepository := matchFeeVarianceRepo.NewRepository(provider)
-
-	useCase, err := matchingCommand.New(matchingCommand.UseCaseDeps{
-		ContextProvider:  configProvider.ContextProvider(),
-		SourceProvider:   sourceAdapter,
-		RuleProvider:     configProvider.MatchRuleProvider(),
-		TxRepo:           transactionAdapter,
-		LockManager:      lockManager,
-		MatchRunRepo:     matchRunRepository,
-		MatchGroupRepo:   matchGroupRepository,
-		MatchItemRepo:    matchItemRepository,
-		ExceptionCreator: exceptionCreator,
-		OutboxRepo:       outboxRepo,
-		FeeVarianceRepo:  feeVarianceRepository,
-		AdjustmentRepo:   repos.adjustment,
-		InfraProvider:    provider,
-		AuditLogRepo:     repos.governanceAuditLog,
-		FeeScheduleRepo:  repos.feeSchedule,
-		FeeRuleProvider:  feeRuleAdapter,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create matching command use case: %w", err)
-	}
-
-	matchingQueryUseCase, err := matchingQuery.NewUseCase(matchRunRepository, matchGroupRepository, matchItemRepository)
-	if err != nil {
-		return nil, fmt.Errorf("create matching query use case: %w", err)
-	}
-
-	matchingHandler, err := matchingHTTP.NewHandler(
-		useCase,
-		matchingQueryUseCase,
-		configProvider.ContextProvider(),
-		production,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create matching handler: %w", err)
-	}
-
-	if err := matchingHTTP.RegisterRoutes(routes.Protected, matchingHandler); err != nil {
-		return nil, fmt.Errorf("register matching routes: %w", err)
-	}
-
-	return useCase, nil
-}
-
-func initReportingModule(
-	routes *Routes,
-	cfg *Config,
-	configGetter func() *Config,
-	settingsResolver *runtimeSettingsResolver,
-	provider sharedPorts.InfrastructureProvider,
-	storage sharedPorts.ObjectStorageClient,
-	rateLimiterGetter func() *ratelimit.RateLimiter,
-	logger libLog.Logger,
-	repos *sharedRepositories,
-	production bool,
-) (*reportingWorker.ExportWorker, *reportingWorker.CleanupWorker, error) {
-	contextAdapter := crossAdapters.NewContextAccessProviderAdapter(repos.configContext)
-
-	dashboardRepository := reportDashboard.NewRepository(provider)
-	reportRepository := reportRepo.NewRepository(provider)
-	exportJobRepository := reportExportJob.NewRepository(provider)
-	cacheService := reportingRedis.NewCacheService(provider, 0)
-
-	dashboardUseCase, err := reportingQuery.NewDashboardUseCase(dashboardRepository, cacheService)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create dashboard use case: %w", err)
-	}
-
-	exportUseCase, err := reportingQuery.NewUseCase(reportRepository)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create export use case: %w", err)
-	}
-
-	reportingHandler, err := reportingHTTP.NewHandlers(
-		dashboardUseCase,
-		contextAdapter,
-		exportUseCase,
-		production,
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create reporting handler: %w", err)
-	}
-
-	exportLimiter := NewExportRateLimit(rateLimiterGetter, cfg, configGetter, settingsResolver)
-
-	if err := reportingHTTP.RegisterRoutes(routes.Protected, reportingHandler, exportLimiter); err != nil {
-		return nil, nil, fmt.Errorf("register reporting routes: %w", err)
-	}
-
-	return initExportWorkers(
-		routes,
-		cfg,
-		configGetter,
-		settingsResolver,
-		exportJobRepository,
-		reportRepository,
-		storage,
-		contextAdapter,
-		exportLimiter,
-		logger,
-	)
-}
-
-func initExportWorkers(
-	routes *Routes,
-	cfg *Config,
-	configGetter func() *Config,
-	settingsResolver *runtimeSettingsResolver,
-	exportJobRepository *reportExportJob.Repository,
-	reportRepository *reportRepo.Repository,
-	storage sharedPorts.ObjectStorageClient,
-	contextAdapter sharedPorts.ContextAccessProvider,
-	exportLimiter fiber.Handler,
-	logger libLog.Logger,
-) (*reportingWorker.ExportWorker, *reportingWorker.CleanupWorker, error) {
-	exportJobUseCase, err := reportingCommand.NewExportJobUseCase(exportJobRepository)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create export job use case: %w", err)
-	}
-
-	exportJobQuerySvc, err := reportingQuery.NewExportJobQueryService(exportJobRepository)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create export job query service: %w", err)
-	}
-
-	exportJobHandler, err := reportingHTTP.NewExportJobHandlers(
-		exportJobUseCase,
-		exportJobQuerySvc,
-		storage,
-		contextAdapter,
-		configuredExportPresignExpiry(context.Background(), cfg),
-		IsProductionEnvironment(cfg.App.EnvName),
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create export job handler: %w", err)
-	}
-
-	exportJobHandler.SetRuntimeEnabled(cfg.ExportWorker.Enabled)
-
-	if configGetter != nil || settingsResolver != nil {
-		exportJobHandler.SetRuntimeConfigResolver(func(ctx context.Context) reportingHTTP.ExportJobRuntimeConfig {
-			runtimeCfg := runtimeConfigOrFallback(cfg, configGetter)
-
-			enabled := cfg.ExportWorker.Enabled
-			if runtimeCfg != nil {
-				enabled = runtimeCfg.ExportWorker.Enabled
-			}
-
-			return reportingHTTP.ExportJobRuntimeConfig{
-				Enabled:       &enabled,
-				PresignExpiry: resolveExportPresignExpiry(ctx, cfg, configGetter, settingsResolver),
-			}
-		})
-	}
-
-	if err := reportingHTTP.RegisterExportJobRoutes(routes.Protected, exportJobHandler, exportLimiter); err != nil {
-		return nil, nil, fmt.Errorf("register export job routes: %w", err)
-	}
-
-	workerCfg := reportingWorker.ExportWorkerConfig{
-		PollInterval: cfg.ExportWorkerPollInterval(),
-		PageSize:     cfg.ExportWorker.PageSize,
-	}
-
-	exportWorker, err := reportingWorker.NewExportWorker(
-		exportJobRepository,
-		reportRepository,
-		storage,
-		workerCfg,
-		logger,
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create export worker: %w", err)
-	}
-
-	cleanupCfg := reportingWorker.CleanupWorkerConfig{
-		Interval:              cfg.CleanupWorkerInterval(),
-		BatchSize:             cfg.CleanupWorkerBatchSize(),
-		FileDeleteGracePeriod: cfg.CleanupWorkerGracePeriod(),
-	}
-
-	cleanupWorker, err := reportingWorker.NewCleanupWorker(
-		exportJobRepository,
-		storage,
-		cleanupCfg,
-		logger,
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create cleanup worker: %w", err)
-	}
-
-	return exportWorker, cleanupWorker, nil
-}
-
-func initGovernanceModule(routes *Routes, repos *sharedRepositories, provider sharedPorts.InfrastructureProvider, production bool) error {
-	governanceHandler, err := governanceHTTP.NewHandler(repos.governanceAuditLog, production)
-	if err != nil {
-		return fmt.Errorf("create governance handler: %w", err)
-	}
-
-	if err := governanceHTTP.RegisterRoutes(routes.Protected, governanceHandler); err != nil {
-		return fmt.Errorf("register governance routes: %w", err)
-	}
-
-	// Actor mapping CRUD
-	actorMappingRepo := actorMappingRepoAdapter.NewRepository(provider)
-
-	actorMappingCommandUC, err := governanceCommand.NewActorMappingUseCase(actorMappingRepo)
-	if err != nil {
-		return fmt.Errorf("create actor mapping command use case: %w", err)
-	}
-
-	actorMappingQueryUC, err := governanceQuery.NewActorMappingQueryUseCase(actorMappingRepo)
-	if err != nil {
-		return fmt.Errorf("create actor mapping query use case: %w", err)
-	}
-
-	actorMappingHandler, err := governanceHTTP.NewActorMappingHandler(actorMappingCommandUC, actorMappingQueryUC, production)
-	if err != nil {
-		return fmt.Errorf("create actor mapping handler: %w", err)
-	}
-
-	if err := governanceHTTP.RegisterActorMappingRoutes(routes.Protected, actorMappingHandler); err != nil {
-		return fmt.Errorf("register actor mapping routes: %w", err)
-	}
-
-	return nil
-}
-
-func initExceptionModule(
-	ctx context.Context,
-	cfg *Config,
-	configGetter func() *Config,
-	settingsResolver *runtimeSettingsResolver,
-	routes *Routes,
-	provider sharedPorts.InfrastructureProvider,
-	outboxRepository sharedPorts.OutboxRepository,
-	dispatchLimiter fiber.Handler,
-	repos *sharedRepositories,
-	production bool,
-) error {
-	// Exception-specific repositories (not shared across modules)
-	exceptionRepository := exceptionExceptionRepo.NewRepository(provider)
-	disputeRepository := exceptionDisputeRepo.NewRepository(provider)
-	commentRepository := exceptionCommentRepo.NewRepository(provider)
-
-	deps, err := initExceptionDependencies(outboxRepository, exceptionRepository, repos)
-	if err != nil {
-		return err
-	}
-
-	useCases, err := initExceptionUseCases(
-		ctx,
-		cfg,
-		configGetter,
-		settingsResolver,
-		provider,
-		exceptionRepository,
-		disputeRepository,
-		commentRepository,
-		deps,
-		repos,
-	)
-	if err != nil {
-		return err
-	}
-
-	callbackUseCase, err := initExceptionCallbackUseCase(cfg, configGetter, settingsResolver, provider, exceptionRepository, deps)
-	if err != nil {
-		return err
-	}
-
-	// HTTP Handlers
-	exceptionHandlers, err := exceptionHTTP.NewHandlers(
-		useCases.exception,
-		useCases.dispute,
-		useCases.query,
-		useCases.dispatch,
-		useCases.comment,
-		useCases.commentQuery,
-		callbackUseCase,
-		exceptionRepository,
-		disputeRepository,
-		production,
-	)
-	if err != nil {
-		return fmt.Errorf("create exception handlers: %w", err)
-	}
-
-	if err := exceptionHTTP.RegisterRoutes(routes.Protected, exceptionHandlers, dispatchLimiter); err != nil {
-		return fmt.Errorf("register exception routes: %w", err)
-	}
-
-	return nil
-}
-
-// exceptionModuleDeps holds cross-cutting adapters used by exception use cases.
-type exceptionModuleDeps struct {
-	auditPublisher     *exceptionAudit.OutboxPublisher
-	actorExtractor     *exceptionAdapters.AuthActorExtractor
-	resolutionExecutor *exceptionResolution.Executor
-}
-
-// exceptionUseCases holds all exception use cases created during module initialization.
-type exceptionUseCases struct {
-	exception    *exceptionCommand.UseCase
-	dispute      *exceptionCommand.DisputeUseCase
-	query        *exceptionQuery.UseCase
-	dispatch     *exceptionCommand.DispatchUseCase
-	comment      *exceptionCommand.CommentUseCase
-	commentQuery *exceptionQuery.CommentQueryUseCase
-}
-
-// initExceptionDependencies creates the cross-cutting adapters for the exception module:
-// audit publisher, actor extractor, merged exception-matching bridge, and resolution executor.
-func initExceptionDependencies(
-	outboxRepository sharedPorts.OutboxRepository,
-	exceptionRepository *exceptionExceptionRepo.Repository,
-	repos *sharedRepositories,
-) (*exceptionModuleDeps, error) {
-	auditPublisher, err := exceptionAudit.NewOutboxPublisher(outboxRepository)
-	if err != nil {
-		return nil, fmt.Errorf("create audit publisher: %w", err)
-	}
-
-	actorExtractor := exceptionAdapters.NewAuthActorExtractor()
-
-	matchingGateway, err := crossAdapters.NewExceptionMatchingGateway(
-		repos.adjustment,
-		repos.ingestionTx,
-		repos.ingestionJob,
-		repos.configSource,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create matching gateway: %w", err)
-	}
-
-	resolutionExecutor, err := exceptionResolution.NewExecutor(
-		exceptionRepository,
-		matchingGateway,
-		actorExtractor,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create resolution executor: %w", err)
-	}
-
-	return &exceptionModuleDeps{
-		auditPublisher:     auditPublisher,
-		actorExtractor:     actorExtractor,
-		resolutionExecutor: resolutionExecutor,
-	}, nil
-}
-
-// initExceptionUseCases creates the core exception use cases (exception, dispute, query, dispatch, comment).
-func initExceptionUseCases(
-	ctx context.Context,
-	cfg *Config,
-	configGetter func() *Config,
-	settingsResolver *runtimeSettingsResolver,
-	provider sharedPorts.InfrastructureProvider,
-	exceptionRepository *exceptionExceptionRepo.Repository,
-	disputeRepository *exceptionDisputeRepo.Repository,
-	commentRepository *exceptionCommentRepo.Repository,
-	deps *exceptionModuleDeps,
-	repos *sharedRepositories,
-) (*exceptionUseCases, error) {
-	exceptionUseCase, err := exceptionCommand.NewUseCase(
-		exceptionRepository,
-		deps.resolutionExecutor,
-		deps.auditPublisher,
-		deps.actorExtractor,
-		provider,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create exception use case: %w", err)
-	}
-
-	disputeUseCase, err := exceptionCommand.NewDisputeUseCase(
-		disputeRepository,
-		exceptionRepository,
-		deps.auditPublisher,
-		deps.actorExtractor,
-		provider,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create dispute use case: %w", err)
-	}
-
-	queryUseCase, err := exceptionQuery.NewUseCase(
-		exceptionRepository,
-		disputeRepository,
-		repos.governanceAuditLog,
-		&tenantExtractorAdapter{},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create exception query use case: %w", err)
-	}
-
-	webhookDispatchTimeout := configuredWebhookTimeout(ctx, cfg)
-
-	// SEC-27: RequireSignedPayloads defaults to true in production so an
-	// unsigned webhook configuration fails validation at startup rather
-	// than silently dispatching unsigned payloads to downstream systems.
-	// Development and test environments retain the permissive default
-	// (false) so local tooling can exercise the dispatch path without a
-	// shared secret. Operators who deploy webhook dispatch to production
-	// without a signing secret must explicitly opt out in code; there is
-	// no runtime toggle because the whole point of the default is that
-	// misconfiguration is visible from the first run.
-	isProduction := IsProductionEnvironment(cfg.App.EnvName)
-
-	httpConnector, err := exceptionConnectors.NewHTTPConnector(
-		exceptionConnectors.ConnectorConfig{
-			Webhook: &exceptionConnectors.WebhookConnectorConfig{
-				BaseConnectorConfig: exceptionConnectors.BaseConnectorConfig{
-					Timeout: &webhookDispatchTimeout,
-				},
-				RequireSignedPayloads: isProduction,
-			},
-		},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create http connector: %w", err)
-	}
-
-	if configGetter != nil || settingsResolver != nil {
-		httpConnector.SetWebhookTimeoutResolver(func(ctx context.Context) time.Duration {
-			return resolveWebhookTimeout(ctx, cfg, configGetter, settingsResolver)
-		})
-	}
-
-	dispatchUseCase, err := exceptionCommand.NewDispatchUseCase(
-		exceptionRepository,
-		httpConnector,
-		deps.auditPublisher,
-		deps.actorExtractor,
-		provider,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create dispatch use case: %w", err)
-	}
-
-	commentUseCase, err := exceptionCommand.NewCommentUseCase(
-		commentRepository,
-		exceptionRepository,
-		deps.actorExtractor,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create comment use case: %w", err)
-	}
-
-	commentQueryUseCase, err := exceptionQuery.NewCommentQueryUseCase(commentRepository)
-	if err != nil {
-		return nil, fmt.Errorf("create comment query use case: %w", err)
-	}
-
-	return &exceptionUseCases{
-		exception:    exceptionUseCase,
-		dispute:      disputeUseCase,
-		query:        queryUseCase,
-		dispatch:     dispatchUseCase,
-		comment:      commentUseCase,
-		commentQuery: commentQueryUseCase,
-	}, nil
-}
-
-// initExceptionCallbackUseCase creates the callback use case for processing external system webhooks.
-func initExceptionCallbackUseCase(
-	cfg *Config,
-	configGetter func() *Config,
-	settingsResolver *runtimeSettingsResolver,
-	provider sharedPorts.InfrastructureProvider,
-	exceptionRepository *exceptionExceptionRepo.Repository,
-	deps *exceptionModuleDeps,
-) (*exceptionCommand.CallbackUseCase, error) {
-	callbackRateLimiter, err := exceptionRedis.NewCallbackRateLimiter(
-		provider,
-		cfg.CallbackRateLimitPerMinute(),
-		time.Minute,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create callback rate limiter: %w", err)
-	}
-
-	if configGetter != nil || settingsResolver != nil {
-		callbackRateLimiter.SetRuntimeLimitResolver(func(ctx context.Context) int {
-			return resolveCallbackRateLimit(ctx, cfg, configGetter, settingsResolver)
-		})
-	}
-
-	callbackIdempotencyRepo, err := exceptionRedis.NewIdempotencyRepositoryWithConfig(
-		provider,
-		cfg.IdempotencyRetryWindow(),
-		cfg.IdempotencySuccessTTL(),
-		cfg.Idempotency.HMACSecret,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create callback idempotency repository: %w", err)
-	}
-
-	if configGetter != nil || settingsResolver != nil {
-		callbackIdempotencyRepo.SetRuntimeConfigResolvers(
-			func(ctx context.Context) time.Duration {
-				return resolveIdempotencyRetryWindow(ctx, cfg, configGetter, settingsResolver)
-			},
-			func(ctx context.Context) time.Duration {
-				return resolveIdempotencySuccessTTL(ctx, cfg, configGetter, settingsResolver)
-			},
-			func(ctx context.Context) string {
-				return resolveIdempotencyHMACSecret(ctx, cfg, configGetter, settingsResolver)
-			},
-		)
-	}
-
-	callbackUseCase, err := exceptionCommand.NewCallbackUseCase(
-		callbackIdempotencyRepo,
-		exceptionRepository,
-		deps.auditPublisher,
-		provider,
-		callbackRateLimiter,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create callback use case: %w", err)
-	}
-
-	return callbackUseCase, nil
 }

@@ -13,7 +13,7 @@ import (
 	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 func TestMatchRuleRepositoryInterfaceCompiles(t *testing.T) {
@@ -74,7 +74,7 @@ func (m *mockMatchRuleRepository) FindByContextID(
 func (m *mockMatchRuleRepository) FindByContextIDAndType(
 	_ context.Context,
 	contextID uuid.UUID,
-	ruleType value_objects.RuleType,
+	ruleType shared.RuleType,
 	_ string,
 	limit int,
 ) (entities.MatchRules, libHTTP.CursorPagination, error) {
@@ -144,7 +144,7 @@ func TestMockMatchRuleRepositoryOperations(t *testing.T) {
 		rule := &entities.MatchRule{
 			ID:       ruleID,
 			Priority: 1,
-			Type:     value_objects.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 		}
 
 		created, err := repo.Create(context.Background(), rule)
@@ -163,7 +163,7 @@ func TestMockMatchRuleRepositoryOperations(t *testing.T) {
 			ID:        ruleID,
 			ContextID: contextID,
 			Priority:  1,
-			Type:      value_objects.RuleTypeExact,
+			Type:      shared.RuleTypeExact,
 		}
 
 		_, err := repo.Create(context.Background(), rule)
@@ -186,7 +186,7 @@ func TestMockMatchRuleRepositoryOperations(t *testing.T) {
 			ID:        ruleID,
 			ContextID: contextID,
 			Priority:  1,
-			Type:      value_objects.RuleTypeExact,
+			Type:      shared.RuleTypeExact,
 		}
 
 		_, err := repo.Create(context.Background(), rule)

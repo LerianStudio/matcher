@@ -16,8 +16,8 @@ import (
 
 // SourcePostgreSQLModel represents the database model for reconciliation sources.
 type SourcePostgreSQLModel struct {
-	ID        string
-	ContextID string
+	ID        uuid.UUID
+	ContextID uuid.UUID
 	Name      string
 	Type      string
 	Side      sql.NullString
@@ -61,8 +61,8 @@ func NewSourcePostgreSQLModel(
 	}
 
 	return &SourcePostgreSQLModel{
-		ID:        id.String(),
-		ContextID: entity.ContextID.String(),
+		ID:        id,
+		ContextID: entity.ContextID,
 		Name:      entity.Name,
 		Type:      entity.Type.String(),
 		Side:      sql.NullString{String: string(entity.Side), Valid: entity.Side != ""},
@@ -76,16 +76,6 @@ func NewSourcePostgreSQLModel(
 func (model *SourcePostgreSQLModel) ToEntity() (*entities.ReconciliationSource, error) {
 	if model == nil {
 		return nil, ErrSourceModelRequired
-	}
-
-	id, err := uuid.Parse(model.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse ID: %w", err)
-	}
-
-	contextID, err := uuid.Parse(model.ContextID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse context ID: %w", err)
 	}
 
 	sourceType, err := value_objects.ParseSourceType(model.Type)
@@ -110,8 +100,8 @@ func (model *SourcePostgreSQLModel) ToEntity() (*entities.ReconciliationSource, 
 	}
 
 	return &entities.ReconciliationSource{
-		ID:        id,
-		ContextID: contextID,
+		ID:        model.ID,
+		ContextID: model.ContextID,
 		Name:      model.Name,
 		Type:      sourceType,
 		Side:      sourceSide,

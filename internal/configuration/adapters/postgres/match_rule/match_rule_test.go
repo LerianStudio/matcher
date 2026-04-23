@@ -85,10 +85,7 @@ func TestNewMatchRulePostgreSQLModel_GeneratesIDWhenNil(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, model)
-	require.NotEmpty(t, model.ID)
-	parsedID, err := uuid.Parse(model.ID)
-	require.NoError(t, err)
-	require.NotEqual(t, uuid.Nil, parsedID)
+	require.NotEqual(t, uuid.Nil, model.ID)
 }
 
 func TestNewMatchRulePostgreSQLModel_NilContextID(t *testing.T) {
@@ -196,46 +193,12 @@ func TestToEntity_NilModel(t *testing.T) {
 	require.ErrorIs(t, err, ErrMatchRuleModelRequired)
 }
 
-func TestToEntity_InvalidID(t *testing.T) {
-	t.Parallel()
-
-	model := &MatchRulePostgreSQLModel{
-		ID:        "not-a-uuid",
-		ContextID: uuid.New().String(),
-		Type:      "EXACT",
-		Config:    []byte(`{}`),
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parse ID")
-}
-
-func TestToEntity_InvalidContextID(t *testing.T) {
-	t.Parallel()
-
-	model := &MatchRulePostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: "invalid",
-		Type:      "EXACT",
-		Config:    []byte(`{}`),
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	require.Contains(t, err.Error(), "parse context ID")
-}
-
 func TestToEntity_InvalidType(t *testing.T) {
 	t.Parallel()
 
 	model := &MatchRulePostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
 		Type:      "INVALID_TYPE",
 		Config:    []byte(`{}`),
 	}
@@ -251,8 +214,8 @@ func TestToEntity_InvalidConfigJSON(t *testing.T) {
 	t.Parallel()
 
 	model := &MatchRulePostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
 		Type:      "EXACT",
 		Config:    []byte(`{invalid json}`),
 	}
@@ -269,8 +232,8 @@ func TestToEntity_EmptyConfig(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &MatchRulePostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
 		Priority:  1,
 		Type:      "TOLERANCE",
 		Config:    []byte{},
@@ -291,8 +254,8 @@ func TestToEntity_NilConfig(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &MatchRulePostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
 		Priority:  2,
 		Type:      "DATE_LAG",
 		Config:    nil,
@@ -313,8 +276,8 @@ func TestToEntity_ValidWithComplexConfig(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &MatchRulePostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
 		Priority:  5,
 		Type:      "EXACT",
 		Config:    []byte(`{"tolerance":0.1,"strictMode":true,"fields":["amount","date"]}`),
@@ -352,8 +315,8 @@ func TestToEntity_AllRuleTypes(t *testing.T) {
 
 			now := time.Now().UTC()
 			model := &MatchRulePostgreSQLModel{
-				ID:        uuid.New().String(),
-				ContextID: uuid.New().String(),
+				ID:        uuid.New(),
+				ContextID: uuid.New(),
 				Priority:  1,
 				Type:      tt.typeStr,
 				Config:    []byte(`{}`),
@@ -457,8 +420,8 @@ func TestToEntity_ConfigWithNullValue(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &MatchRulePostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
 		Priority:  1,
 		Type:      "EXACT",
 		Config:    []byte(`{"key":null,"nested":{"value":null}}`),
@@ -515,8 +478,8 @@ func TestToEntity_PriorityZero(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &MatchRulePostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
 		Priority:  0,
 		Type:      "EXACT",
 		Config:    []byte(`{}`),
@@ -536,8 +499,8 @@ func TestToEntity_NegativePriority(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &MatchRulePostgreSQLModel{
-		ID:        uuid.New().String(),
-		ContextID: uuid.New().String(),
+		ID:        uuid.New(),
+		ContextID: uuid.New(),
 		Priority:  -5,
 		Type:      "TOLERANCE",
 		Config:    []byte(`{}`),

@@ -89,11 +89,11 @@ func FuzzFieldMapMappingJSON(f *testing.F) {
 			return
 		}
 
-		fieldMap, err := NewFieldMap(
+		fieldMap, err := shared.NewFieldMap(
 			ctx,
 			contextID,
 			sourceID,
-			CreateFieldMapInput{Mapping: mapping},
+			shared.CreateFieldMapInput{Mapping: mapping},
 		)
 		require.NoError(t, err)
 

@@ -1,6 +1,6 @@
 //go:build unit
 
-package repositories
+package repositories_test
 
 import (
 	"testing"
@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
+	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories/mocks"
 )
 
@@ -17,7 +18,7 @@ func TestActorMappingRepository_MockImplementsInterface(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	var _ ActorMappingRepository = mocks.NewMockActorMappingRepository(ctrl)
+	var _ repositories.ActorMappingRepository = mocks.NewMockActorMappingRepository(ctrl)
 }
 
 func TestActorMappingRepository_InterfaceNotNil(t *testing.T) {

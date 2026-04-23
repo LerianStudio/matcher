@@ -558,7 +558,7 @@ func scanDueSchedule(
 ) (*entities.ReconciliationSchedule, error) {
 	var model SchedulePostgreSQLModel
 
-	var tenantIDStr string
+	var tenantID uuid.UUID
 
 	if err := scanner.Scan(
 		&model.ID,
@@ -569,7 +569,7 @@ func scanDueSchedule(
 		&model.NextRunAt,
 		&model.CreatedAt,
 		&model.UpdatedAt,
-		&tenantIDStr,
+		&tenantID,
 	); err != nil {
 		return nil, err
 	}
@@ -577,11 +577,6 @@ func scanDueSchedule(
 	entity, err := model.ToEntity()
 	if err != nil {
 		return nil, err
-	}
-
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		return nil, fmt.Errorf("parsing TenantID: %w", err)
 	}
 
 	entity.TenantID = tenantID

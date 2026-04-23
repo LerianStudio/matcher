@@ -16,7 +16,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 
 	"github.com/LerianStudio/matcher/internal/auth"
-	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 func TestHandlers_UpdateFieldMapNotFound(t *testing.T) {
@@ -30,7 +30,7 @@ func TestHandlers_UpdateFieldMapNotFound(t *testing.T) {
 
 	app.Patch("/api/v1/field-maps/:fieldMapId", fixture.handler.UpdateFieldMap)
 
-	payload := mustJSON(t, entities.UpdateFieldMapInput{
+	payload := mustJSON(t, shared.UpdateFieldMapInput{
 		Mapping: map[string]any{"field": "updated"},
 	})
 
@@ -166,7 +166,7 @@ func TestHandlers_CreateFieldMapInvalidContextID(t *testing.T) {
 		fixture.handler.CreateFieldMap,
 	)
 
-	payload := mustJSON(t, entities.CreateFieldMapInput{
+	payload := mustJSON(t, shared.CreateFieldMapInput{
 		Mapping: map[string]any{"field": "value"},
 	})
 
@@ -200,7 +200,7 @@ func TestHandlers_CreateFieldMapSuccess(t *testing.T) {
 		fixture.handler.CreateFieldMap,
 	)
 
-	payload := mustJSON(t, entities.CreateFieldMapInput{
+	payload := mustJSON(t, shared.CreateFieldMapInput{
 		Mapping: map[string]any{"field": "value"},
 	})
 
@@ -295,7 +295,7 @@ func TestHandlers_UpdateFieldMapUnauthorized(t *testing.T) {
 
 	app.Patch("/api/v1/field-maps/:fieldMapId", fixture.handler.UpdateFieldMap)
 
-	payload := mustJSON(t, entities.UpdateFieldMapInput{
+	payload := mustJSON(t, shared.UpdateFieldMapInput{
 		Mapping: map[string]any{"field": "updated"},
 	})
 
@@ -354,7 +354,7 @@ func TestHandlers_CreateFieldMapInvalidSourceUUID(t *testing.T) {
 		fixture.handler.CreateFieldMap,
 	)
 
-	payload := mustJSON(t, entities.CreateFieldMapInput{
+	payload := mustJSON(t, shared.CreateFieldMapInput{
 		Mapping: map[string]any{"field": "value"},
 	})
 

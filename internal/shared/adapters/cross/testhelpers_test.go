@@ -4,6 +4,7 @@ package cross
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/google/uuid"
 
@@ -11,7 +12,43 @@ import (
 
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
+
+// mockInfraProvider is a minimal InfrastructureProvider stub used across
+// adapter tests that only need a non-nil provider to pass constructor guards.
+type mockInfraProvider struct {
+	beginTxErr error
+	beginTxFn  func(ctx context.Context) (*sql.Tx, error)
+}
+
+func (m *mockInfraProvider) GetRedisConnection(
+	_ context.Context,
+) (*sharedPorts.RedisConnectionLease, error) {
+	return nil, nil
+}
+
+func (m *mockInfraProvider) BeginTx(ctx context.Context) (*sharedPorts.TxLease, error) {
+	if m.beginTxFn != nil {
+		tx, err := m.beginTxFn(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		return sharedPorts.NewTxLease(tx, nil), nil
+	}
+
+	return nil, m.beginTxErr
+}
+
+func (m *mockInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.DBLease, error) {
+	return nil, nil
+}
+
+func (m *mockInfraProvider) GetPrimaryDB(_ context.Context) (*sharedPorts.DBLease, error) {
+	return nil, nil
+}
 
 // stubContextRepository implements configRepositories.ContextRepository
 // for adapter tests. Shared across ingestion and auto-match adapter tests
@@ -57,7 +94,7 @@ func (r *stubContextRepository) FindAll(
 	_ context.Context,
 	_ string,
 	_ int,
-	_ *configVO.ContextType,
+	_ *shared.ContextType,
 	_ *configVO.ContextStatus,
 ) ([]*configEntities.ReconciliationContext, libHTTP.CursorPagination, error) {
 	return nil, libHTTP.CursorPagination{}, nil

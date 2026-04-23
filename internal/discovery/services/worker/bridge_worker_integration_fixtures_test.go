@@ -353,8 +353,8 @@ func buildBridgeWorker(
 	})
 	require.NoError(t, err)
 
-	intakeAdapter, err := cross.NewFetcherBridgeIntakeAdapter(ingestionUC)
-	require.NoError(t, err)
+	// T-004 (K-06f): the ingestion UseCase satisfies sharedPorts.FetcherBridge
+	// Intake directly. No adapter wrapper needed.
 
 	linkWriter, err := cross.NewExtractionLifecycleLinkWriterAdapter(extractRepo)
 	require.NoError(t, err)
@@ -367,7 +367,7 @@ func buildBridgeWorker(
 		extractRepo,
 		verifiedOrchestr,
 		custody,
-		intakeAdapter,
+		ingestionUC,
 		linkWriter,
 		sourceResolver,
 		discoveryCommand.BridgeOrchestratorConfig{

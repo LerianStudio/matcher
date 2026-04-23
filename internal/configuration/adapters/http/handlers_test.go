@@ -31,6 +31,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
 	"github.com/LerianStudio/matcher/internal/configuration/services/query"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	"github.com/LerianStudio/matcher/internal/shared/testutil"
 	"github.com/LerianStudio/matcher/pkg/constant"
@@ -44,6 +45,7 @@ type handlerFixture struct {
 	matchRuleRepo   *matchRuleRepository
 	feeRuleRepo     *feeRuleRepository
 	feeScheduleRepo *feeScheduleRepository
+	scheduleRepo    *scheduleRepository
 }
 
 func newHandlerFixture(t *testing.T) *handlerFixture {
@@ -55,6 +57,7 @@ func newHandlerFixture(t *testing.T) *handlerFixture {
 	matchRuleRepo := newMatchRuleRepository()
 	feeRuleRepo := newFeeRuleRepository()
 	feeScheduleRepo := newFeeScheduleRepository()
+	scheduleRepo := newScheduleRepository()
 
 	commandUseCase, err := command.NewUseCase(
 		contextRepo,
@@ -71,12 +74,22 @@ func newHandlerFixture(t *testing.T) *handlerFixture {
 		sourceRepo,
 		fieldMapRepo,
 		matchRuleRepo,
-		query.WithFeeRuleRepository(feeRuleRepo),
-		query.WithFeeScheduleRepository(feeScheduleRepo),
+		query.WithScheduleRepository(scheduleRepo),
 	)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(commandUseCase, queryUseCase, false)
+	handler, err := NewHandler(
+		commandUseCase,
+		queryUseCase,
+		contextRepo,
+		sourceRepo,
+		matchRuleRepo,
+		fieldMapRepo,
+		feeRuleRepo,
+		feeScheduleRepo,
+		scheduleRepo,
+		false,
+	)
 	require.NoError(t, err)
 
 	return &handlerFixture{
@@ -87,6 +100,7 @@ func newHandlerFixture(t *testing.T) *handlerFixture {
 		matchRuleRepo:   matchRuleRepo,
 		feeRuleRepo:     feeRuleRepo,
 		feeScheduleRepo: feeScheduleRepo,
+		scheduleRepo:    scheduleRepo,
 	}
 }
 
@@ -98,7 +112,7 @@ func (fixture *handlerFixture) seedContext(
 
 	input := entities.CreateReconciliationContextInput{
 		Name:     "Test Context",
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "daily",
 	}
 	contextEntity, err := entities.NewReconciliationContext(context.Background(), tenantID, input)
@@ -133,14 +147,14 @@ func (fixture *handlerFixture) seedSource(
 func (fixture *handlerFixture) seedFieldMap(
 	t *testing.T,
 	contextID, sourceID uuid.UUID,
-) *entities.FieldMap {
+) *shared.FieldMap {
 	t.Helper()
 
 	ctx := context.Background()
-	input := entities.CreateFieldMapInput{
+	input := shared.CreateFieldMapInput{
 		Mapping: map[string]any{"field": "value"},
 	}
-	fieldMap, err := entities.NewFieldMap(ctx, contextID, sourceID, input)
+	fieldMap, err := shared.NewFieldMap(ctx, contextID, sourceID, input)
 	require.NoError(t, err)
 
 	stored, err := fixture.fieldMapRepo.Create(ctx, fieldMap)
@@ -201,7 +215,7 @@ func (fixture *handlerFixture) seedMatchRule(
 
 	input := entities.CreateMatchRuleInput{
 		Priority: priority,
-		Type:     value_objects.RuleTypeExact,
+		Type:     shared.RuleTypeExact,
 		Config:   map[string]any{"matchCurrency": true},
 	}
 	matchRule, err := entities.NewMatchRule(context.Background(), contextID, input)
@@ -640,7 +654,7 @@ func getContextHandlerTestCases(t *testing.T, tenantID uuid.UUID) []contextHandl
 			path:   "/v1/contexts",
 			payload: entities.CreateReconciliationContextInput{
 				Name:     "Context A",
-				Type:     value_objects.ContextTypeOneToOne,
+				Type:     shared.ContextTypeOneToOne,
 				Interval: "daily",
 			},
 			registerRoute: func(app *fiber.App, handler *Handler) {
@@ -910,7 +924,7 @@ func TestHandlers_ContextErrorPaths(t *testing.T) {
 
 		payload := mustJSON(t, entities.CreateReconciliationContextInput{
 			Name:     "Context A",
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "daily",
 		})
 
@@ -1375,7 +1389,7 @@ func TestHandlers_FieldMapHandlersTracing(t *testing.T) {
 			name:   "create field map",
 			method: http.MethodPost,
 			path:   "/api/v1/contexts/:contextId/sources/:sourceId/field-maps",
-			payload: entities.CreateFieldMapInput{
+			payload: shared.CreateFieldMapInput{
 				Mapping: map[string]any{"field": "value"},
 			},
 			registerRoute: func(app *fiber.App, handler *Handler) {
@@ -1393,7 +1407,7 @@ func TestHandlers_FieldMapHandlersTracing(t *testing.T) {
 			assertResponse: func(t *testing.T, response *http.Response) {
 				t.Helper()
 
-				var payload entities.FieldMap
+				var payload shared.FieldMap
 				require.NoError(t, json.NewDecoder(response.Body).Decode(&payload))
 				require.Equal(t, "value", payload.Mapping["field"])
 			},
@@ -1420,7 +1434,7 @@ func TestHandlers_FieldMapHandlersTracing(t *testing.T) {
 			assertResponse: func(t *testing.T, response *http.Response) {
 				t.Helper()
 
-				var payload entities.FieldMap
+				var payload shared.FieldMap
 				require.NoError(t, json.NewDecoder(response.Body).Decode(&payload))
 				require.Equal(t, "value", payload.Mapping["field"])
 			},
@@ -1431,7 +1445,7 @@ func TestHandlers_FieldMapHandlersTracing(t *testing.T) {
 			name:   "update field map",
 			method: http.MethodPatch,
 			path:   "/api/v1/field-maps/:fieldMapId",
-			payload: entities.UpdateFieldMapInput{
+			payload: shared.UpdateFieldMapInput{
 				Mapping: map[string]any{"field": "updated"},
 			},
 			registerRoute: func(app *fiber.App, handler *Handler) {
@@ -1447,7 +1461,7 @@ func TestHandlers_FieldMapHandlersTracing(t *testing.T) {
 			assertResponse: func(t *testing.T, response *http.Response) {
 				t.Helper()
 
-				var payload entities.FieldMap
+				var payload shared.FieldMap
 				require.NoError(t, json.NewDecoder(response.Body).Decode(&payload))
 				require.Equal(t, "updated", payload.Mapping["field"])
 			},
@@ -1587,7 +1601,7 @@ func TestHandlers_FieldMapErrorPaths(t *testing.T) {
 
 		payload := mustJSON(
 			t,
-			entities.UpdateFieldMapInput{Mapping: map[string]any{"field": "updated"}},
+			shared.UpdateFieldMapInput{Mapping: map[string]any{"field": "updated"}},
 		)
 
 		resp := performRequest(
@@ -1614,7 +1628,7 @@ func makeCreateMatchRuleTestCase(t *testing.T, tenantID uuid.UUID) matchRuleHand
 		path:   "/api/v1/contexts/:contextId/rules",
 		payload: entities.CreateMatchRuleInput{
 			Priority: 1,
-			Type:     value_objects.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config:   map[string]any{"matchCurrency": true},
 		},
 		registerRoute: func(app *fiber.App, handler *Handler) {
@@ -1978,7 +1992,7 @@ func TestHandlers_CreateMatchRuleConflict(t *testing.T) {
 
 	payload := entities.CreateMatchRuleInput{
 		Priority: 1,
-		Type:     value_objects.RuleTypeExact,
+		Type:     shared.RuleTypeExact,
 		Config:   map[string]any{"matchCurrency": true},
 	}
 
@@ -2064,7 +2078,7 @@ func (repo *contextRepository) FindAll(
 	_ context.Context,
 	cursor string,
 	_ int,
-	contextType *value_objects.ContextType,
+	contextType *shared.ContextType,
 	status *value_objects.ContextStatus,
 ) ([]*entities.ReconciliationContext, libHTTP.CursorPagination, error) {
 	if cursor != "" {
@@ -2220,21 +2234,21 @@ func (repo *sourceRepository) Delete(_ context.Context, contextID, identifier uu
 }
 
 type fieldMapRepository struct {
-	items    map[uuid.UUID]*entities.FieldMap
+	items    map[uuid.UUID]*shared.FieldMap
 	bySource map[uuid.UUID]uuid.UUID
 }
 
 func newFieldMapRepository() *fieldMapRepository {
 	return &fieldMapRepository{
-		items:    make(map[uuid.UUID]*entities.FieldMap),
+		items:    make(map[uuid.UUID]*shared.FieldMap),
 		bySource: make(map[uuid.UUID]uuid.UUID),
 	}
 }
 
 func (repo *fieldMapRepository) Create(
 	_ context.Context,
-	entity *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	entity *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	repo.items[entity.ID] = entity
 	repo.bySource[entity.SourceID] = entity.ID
 
@@ -2244,7 +2258,7 @@ func (repo *fieldMapRepository) Create(
 func (repo *fieldMapRepository) FindByID(
 	_ context.Context,
 	identifier uuid.UUID,
-) (*entities.FieldMap, error) {
+) (*shared.FieldMap, error) {
 	fieldMapEntity, ok := repo.items[identifier]
 	if !ok {
 		return nil, sql.ErrNoRows
@@ -2256,7 +2270,7 @@ func (repo *fieldMapRepository) FindByID(
 func (repo *fieldMapRepository) FindBySourceID(
 	_ context.Context,
 	sourceID uuid.UUID,
-) (*entities.FieldMap, error) {
+) (*shared.FieldMap, error) {
 	fieldMapID, ok := repo.bySource[sourceID]
 	if !ok {
 		return nil, sql.ErrNoRows
@@ -2267,8 +2281,8 @@ func (repo *fieldMapRepository) FindBySourceID(
 
 func (repo *fieldMapRepository) Update(
 	_ context.Context,
-	entity *entities.FieldMap,
-) (*entities.FieldMap, error) {
+	entity *shared.FieldMap,
+) (*shared.FieldMap, error) {
 	if _, ok := repo.items[entity.ID]; !ok {
 		return nil, sql.ErrNoRows
 	}
@@ -2359,7 +2373,7 @@ func (repo *matchRuleRepository) FindByContextID(
 func (repo *matchRuleRepository) FindByContextIDAndType(
 	_ context.Context,
 	contextID uuid.UUID,
-	ruleType value_objects.RuleType,
+	ruleType shared.RuleType,
 	cursor string,
 	_ int,
 ) (entities.MatchRules, libHTTP.CursorPagination, error) {

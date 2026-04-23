@@ -15,8 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/exception/adapters/http/connectors"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/exception/domain/services"
-	exceptionVO "github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -192,7 +192,7 @@ func TestIntegrationExternalPushCallback_IdempotencyGuarantee(t *testing.T) {
 		idempotencyRepo := wireIdempotencyRepo(t, h)
 
 		keyStr := "callback-" + uuid.New().String()
-		key, err := exceptionVO.ParseIdempotencyKey(keyStr)
+		key, err := shared.ParseIdempotencyKey(keyStr)
 		require.NoError(t, err)
 
 		acquired1, err := idempotencyRepo.TryAcquire(ctx, key)

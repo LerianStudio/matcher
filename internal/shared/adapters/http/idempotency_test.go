@@ -159,7 +159,7 @@ func TestIdempotencyMiddleware_SkipsPaths(t *testing.T) {
 
 	app.Use(NewIdempotencyMiddleware(IdempotencyMiddlewareConfig{
 		Repository: repo,
-		SkipPaths:  []string{"/health", "/ready"},
+		SkipPaths:  []string{"/health", "/readyz"},
 	}))
 
 	app.Post("/health", func(c *fiber.Ctx) error {

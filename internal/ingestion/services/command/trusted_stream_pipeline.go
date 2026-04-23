@@ -13,6 +13,7 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // runTrustedStreamPipeline executes the shared prepare → process → complete
@@ -22,7 +23,7 @@ import (
 func (uc *UseCase) runTrustedStreamPipeline(
 	ctx context.Context,
 	span trace.Span,
-	input IngestFromTrustedStreamInput,
+	input sharedPorts.TrustedContentInput,
 	fileName string,
 ) (*entities.IngestionJob, int, error) {
 	// Polish Fix 4: extract the canonical extraction id (if any) from

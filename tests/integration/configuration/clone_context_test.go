@@ -19,6 +19,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	configCommand "github.com/LerianStudio/matcher/internal/configuration/services/command"
 	feeScheduleRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/fee_schedule"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
@@ -61,7 +62,7 @@ func setupSourceContextWithChildren(t *testing.T, h *integration.TestHarness, uc
 	// --- context ---
 	created, err := uc.CreateContext(ctx, h.Seed.TenantID, entities.CreateReconciliationContextInput{
 		Name:     "Source Context " + uuid.New().String()[:8],
-		Type:     value_objects.ContextTypeOneToOne,
+		Type:     shared.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 	})
 	require.NoError(t, err)
@@ -89,7 +90,7 @@ func setupSourceContextWithChildren(t *testing.T, h *integration.TestHarness, uc
 	// --- field map ---
 	fmRepo := fieldMapRepo.NewRepository(provider)
 
-	fm, err := entities.NewFieldMap(ctx, created.ID, createdSrc.ID, entities.CreateFieldMapInput{
+	fm, err := shared.NewFieldMap(ctx, created.ID, createdSrc.ID, shared.CreateFieldMapInput{
 		Mapping: map[string]any{
 			"external_id": "id",
 			"amount":      "amount",
@@ -107,7 +108,7 @@ func setupSourceContextWithChildren(t *testing.T, h *integration.TestHarness, uc
 
 	rule, err := entities.NewMatchRule(ctx, created.ID, entities.CreateMatchRuleInput{
 		Priority: 1,
-		Type:     value_objects.RuleTypeExact,
+		Type:     shared.RuleTypeExact,
 		Config:   map[string]any{"matchAmount": true, "matchCurrency": true},
 	})
 	require.NoError(t, err)
@@ -311,7 +312,7 @@ func TestCloneContext_SourceSidePreservation(t *testing.T) {
 		// --- Build a context with TWO sources: one LEFT, one RIGHT ---
 		created, err := uc.CreateContext(ctx, h.Seed.TenantID, entities.CreateReconciliationContextInput{
 			Name:     "Side Preservation " + uuid.New().String()[:8],
-			Type:     value_objects.ContextTypeOneToOne,
+			Type:     shared.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 		})
 		require.NoError(t, err)
@@ -348,14 +349,14 @@ func TestCloneContext_SourceSidePreservation(t *testing.T) {
 		// Also add a field map so clone actually carries sources.
 		fmRepo := fieldMapRepo.NewRepository(provider)
 
-		fmLeft, err := entities.NewFieldMap(ctx, created.ID, createdLeft.ID, entities.CreateFieldMapInput{
+		fmLeft, err := shared.NewFieldMap(ctx, created.ID, createdLeft.ID, shared.CreateFieldMapInput{
 			Mapping: map[string]any{"amount": "amount"},
 		})
 		require.NoError(t, err)
 		_, err = fmRepo.Create(ctx, fmLeft)
 		require.NoError(t, err)
 
-		fmRight, err := entities.NewFieldMap(ctx, created.ID, createdRight.ID, entities.CreateFieldMapInput{
+		fmRight, err := shared.NewFieldMap(ctx, created.ID, createdRight.ID, shared.CreateFieldMapInput{
 			Mapping: map[string]any{"amount": "amt"},
 		})
 		require.NoError(t, err)

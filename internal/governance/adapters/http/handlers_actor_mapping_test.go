@@ -21,7 +21,6 @@ import (
 	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
-	"github.com/LerianStudio/matcher/internal/governance/services/query"
 )
 
 var errTestActorMappingRepoFailed = errors.New("actor mapping repo failed")
@@ -35,10 +34,7 @@ func newTestActorMappingHandler(
 	cmdUC, err := command.NewActorMappingUseCase(repo)
 	require.NoError(t, err)
 
-	queryUC, err := query.NewActorMappingQueryUseCase(repo)
-	require.NoError(t, err)
-
-	handler, err := NewActorMappingHandler(cmdUC, queryUC, false)
+	handler, err := NewActorMappingHandler(cmdUC, repo, false)
 	require.NoError(t, err)
 
 	return handler
@@ -63,15 +59,12 @@ func TestNewActorMappingHandler(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		repo := mocks.NewMockActorMappingRepository(ctrl)
 
-		queryUC, err := query.NewActorMappingQueryUseCase(repo)
-		require.NoError(t, err)
-
-		handler, err := NewActorMappingHandler(nil, queryUC, false)
+		handler, err := NewActorMappingHandler(nil, repo, false)
 		require.ErrorIs(t, err, ErrActorMappingCommandUCRequired)
 		require.Nil(t, handler)
 	})
 
-	t.Run("nil query use case", func(t *testing.T) {
+	t.Run("nil repository", func(t *testing.T) {
 		t.Parallel()
 
 		ctrl := gomock.NewController(t)
@@ -81,7 +74,7 @@ func TestNewActorMappingHandler(t *testing.T) {
 		require.NoError(t, err)
 
 		handler, err := NewActorMappingHandler(cmdUC, nil, false)
-		require.ErrorIs(t, err, ErrActorMappingQueryUCRequired)
+		require.ErrorIs(t, err, ErrActorMappingRepoRequired)
 		require.Nil(t, handler)
 	})
 }
@@ -439,10 +432,10 @@ func TestActorMappingSentinelErrors(t *testing.T) {
 		message string
 	}{
 		{"ErrActorMappingCommandUCRequired", ErrActorMappingCommandUCRequired, "actor mapping command use case is required"},
-		{"ErrActorMappingQueryUCRequired", ErrActorMappingQueryUCRequired, "actor mapping query use case is required"},
+		{"ErrActorMappingRepoRequired", ErrActorMappingRepoRequired, "actor mapping repository is required"},
 		{"ErrMissingActorID", ErrMissingActorID, "actor id path parameter is required"},
 		{"ErrActorMappingHandlerRequired", ErrActorMappingHandlerRequired, "actor mapping handler is required"},
-		{"ErrAtLeastOneFieldRequired", ErrAtLeastOneFieldRequired, "at least one of display_name or email must be provided"},
+		{"ErrAtLeastOneFieldRequired", ErrAtLeastOneFieldRequired, "at least one of displayName or email must be provided"},
 	}
 
 	for _, tt := range tests {

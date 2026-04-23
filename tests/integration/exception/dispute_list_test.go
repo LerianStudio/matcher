@@ -15,10 +15,10 @@ import (
 	disputeRepoAdapter "github.com/LerianStudio/matcher/internal/exception/adapters/postgres/dispute"
 	disputeEntity "github.com/LerianStudio/matcher/internal/exception/domain/dispute"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
-	exceptionVO "github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	ingestionJobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
 	ingestionTxRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/transaction"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -55,7 +55,7 @@ func createDisputeFixture(
 			decimal.NewFromFloat(100.0), "USD")
 
 		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-			exceptionVO.ExceptionSeverityHigh, fmt.Sprintf("dispute list test %d", i))
+			sharedexception.ExceptionSeverityHigh, fmt.Sprintf("dispute list test %d", i))
 
 		excIDs = append(excIDs, exc.ID)
 	}

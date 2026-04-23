@@ -15,6 +15,8 @@ import (
 	"testing"
 	"testing/quick"
 
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -51,11 +53,11 @@ func (propInput) Generate(rand *rand.Rand, _ int) reflect.Value {
 	})
 }
 
-// buildInput assembles a concrete IngestFromTrustedStreamInput from the
+// buildInput assembles a concrete sharedPorts.TrustedContentInput from the
 // generated abstract shape. Keeping this separate from Generate means the
 // reproduction payload visible in shrink output is the cheap four-field
-// struct, not a heavyweight IngestFromTrustedStreamInput with a reader.
-func buildInput(g propInput) IngestFromTrustedStreamInput {
+// struct, not a heavyweight sharedPorts.TrustedContentInput with a reader.
+func buildInput(g propInput) sharedPorts.TrustedContentInput {
 	var content io.Reader
 	if g.HasContent {
 		content = strings.NewReader("trusted-stream-body")
@@ -71,7 +73,7 @@ func buildInput(g propInput) IngestFromTrustedStreamInput {
 		srcID = uuid.Nil
 	}
 
-	return IngestFromTrustedStreamInput{
+	return sharedPorts.TrustedContentInput{
 		ContextID: ctxID,
 		SourceID:  srcID,
 		Format:    g.Format,

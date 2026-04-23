@@ -33,6 +33,7 @@ import (
 	crossAdapters "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 // Handlers provides HTTP handlers for exception operations.
@@ -44,13 +45,15 @@ import (
 // constructed a handler, regardless of the production flag each test
 // wanted to exercise.
 type Handlers struct {
-	exceptionUC       *command.UseCase
-	disputeUC         *command.DisputeUseCase
+	// commandUC hosts every write operation on the exception bounded
+	// context (resolution, disputes, dispatch, comments, callbacks).
+	// The previously split use-case fields (exceptionUC, disputeUC,
+	// dispatchUC, commentUC, callbackUC) have been merged into a single
+	// grouped use case; handlers call the relevant method directly on
+	// commandUC.
+	commandUC         *command.ExceptionUseCase
 	queryUC           *query.UseCase
-	dispatchUC        *command.DispatchUseCase
-	commentUC         *command.CommentUseCase
-	commentQueryUC    *query.CommentQueryUseCase
-	callbackUC        *command.CallbackUseCase
+	commentRepo       repositories.CommentRepository
 	exceptionVerifier libHTTP.ResourceOwnershipVerifier
 	disputeVerifier   libHTTP.ResourceOwnershipVerifier
 	productionMode    bool
@@ -58,43 +61,23 @@ type Handlers struct {
 
 // NewHandlers creates a new Handlers instance with the given use cases and verifiers.
 func NewHandlers(
-	exceptionUC *command.UseCase,
-	disputeUC *command.DisputeUseCase,
+	commandUC *command.ExceptionUseCase,
 	queryUC *query.UseCase,
-	dispatchUC *command.DispatchUseCase,
-	commentUC *command.CommentUseCase,
-	commentQueryUC *query.CommentQueryUseCase,
-	callbackUC *command.CallbackUseCase,
+	commentRepo repositories.CommentRepository,
 	exceptionProvider exceptionProvider,
 	disputeProvider disputeProvider,
 	production bool,
 ) (*Handlers, error) {
-	if exceptionUC == nil {
+	if commandUC == nil {
 		return nil, ErrNilExceptionUseCase
-	}
-
-	if disputeUC == nil {
-		return nil, ErrNilDisputeUseCase
 	}
 
 	if queryUC == nil {
 		return nil, ErrNilQueryUseCase
 	}
 
-	if dispatchUC == nil {
-		return nil, ErrNilDispatchUseCase
-	}
-
-	if commentUC == nil {
-		return nil, ErrNilCommentUseCase
-	}
-
-	if commentQueryUC == nil {
-		return nil, ErrNilCommentQueryUseCase
-	}
-
-	if callbackUC == nil {
-		return nil, ErrNilCallbackUseCase
+	if commentRepo == nil {
+		return nil, ErrNilCommentRepository
 	}
 
 	if exceptionProvider == nil {
@@ -106,13 +89,9 @@ func NewHandlers(
 	}
 
 	return &Handlers{
-		exceptionUC:       exceptionUC,
-		disputeUC:         disputeUC,
+		commandUC:         commandUC,
 		queryUC:           queryUC,
-		dispatchUC:        dispatchUC,
-		commentUC:         commentUC,
-		commentQueryUC:    commentQueryUC,
-		callbackUC:        callbackUC,
+		commentRepo:       commentRepo,
 		exceptionVerifier: NewExceptionOwnershipVerifier(exceptionProvider),
 		disputeVerifier:   NewDisputeOwnershipVerifier(disputeProvider),
 		productionMode:    production,
@@ -470,7 +449,7 @@ func (handler *Handlers) ForceMatch(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
 	}
 
-	result, err := handler.exceptionUC.ForceMatch(ctx, command.ForceMatchCommand{
+	result, err := handler.commandUC.ForceMatch(ctx, command.ForceMatchCommand{
 		ExceptionID:    exceptionID,
 		OverrideReason: req.OverrideReason,
 		Notes:          req.Notes,
@@ -533,7 +512,7 @@ func (handler *Handlers) AdjustEntry(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
 	}
 
-	result, err := handler.exceptionUC.AdjustEntry(ctx, command.AdjustEntryCommand{
+	result, err := handler.commandUC.AdjustEntry(ctx, command.AdjustEntryCommand{
 		ExceptionID: exceptionID,
 		ReasonCode:  req.ReasonCode,
 		Notes:       req.Notes,
@@ -598,7 +577,7 @@ func (handler *Handlers) OpenDispute(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
 	}
 
-	result, err := handler.disputeUC.OpenDispute(ctx, command.OpenDisputeCommand{
+	result, err := handler.commandUC.OpenDispute(ctx, command.OpenDisputeCommand{
 		ExceptionID: exceptionID,
 		Category:    req.Category,
 		Description: req.Description,
@@ -661,7 +640,7 @@ func (handler *Handlers) CloseDispute(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
 	}
 
-	result, err := handler.disputeUC.CloseDispute(ctx, command.CloseDisputeCommand{
+	result, err := handler.commandUC.CloseDispute(ctx, command.CloseDisputeCommand{
 		DisputeID:  disputeID,
 		Resolution: req.Resolution,
 		Won:        req.Won,
@@ -724,7 +703,7 @@ func (handler *Handlers) SubmitEvidence(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
 	}
 
-	result, err := handler.disputeUC.SubmitEvidence(ctx, command.SubmitEvidenceCommand{
+	result, err := handler.commandUC.SubmitEvidence(ctx, command.SubmitEvidenceCommand{
 		DisputeID: disputeID,
 		Comment:   req.Comment,
 		FileURL:   req.FileURL,
@@ -1006,7 +985,7 @@ func parseExceptionFilter(fiberCtx *fiber.Ctx) (repositories.ExceptionFilter, er
 	}
 
 	if severity := fiberCtx.Query("severity"); severity != "" {
-		parsed, err := value_objects.ParseExceptionSeverity(severity)
+		parsed, err := sharedexception.ParseExceptionSeverity(severity)
 		if err != nil {
 			return filter, fmt.Errorf("invalid severity: %w", err)
 		}
@@ -1181,7 +1160,7 @@ func (handler *Handlers) DispatchToExternal(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
 	}
 
-	result, err := handler.dispatchUC.Dispatch(ctx, command.DispatchCommand{
+	result, err := handler.commandUC.Dispatch(ctx, command.DispatchCommand{
 		ExceptionID:  exceptionID,
 		TargetSystem: req.TargetSystem,
 		Queue:        req.Queue,

@@ -24,12 +24,12 @@ import (
 
 // TestCHAOS04_RedisDisappears_ServiceDegraded verifies that when Redis disappears,
 // the service correctly reports degraded readiness (503). This was previously a
-// security gap where /ready returned 200 even with Redis down, silently disabling
+// security gap where /readyz returned 200 even with Redis down, silently disabling
 // rate limiting. The fix ensures Redis health is reflected in readiness checks.
 //
-// Target: Rate limiting, idempotency, /ready endpoint.
+// Target: Rate limiting, idempotency, /readyz endpoint.
 // Injection: Disable Redis proxy entirely.
-// Expected: /ready returns 503 (degraded), /health returns 200 (process alive).
+// Expected: /readyz returns 503 (degraded), /health returns 200 (process alive).
 func TestCHAOS04_RedisDisappears_ServiceDegraded(t *testing.T) {
 	h := GetSharedChaos()
 	require.NotNil(t, h, "chaos harness not initialized")
@@ -49,7 +49,7 @@ func TestCHAOS04_RedisDisappears_ServiceDegraded(t *testing.T) {
 		_ = app.Shutdown()
 	})
 
-	// Baseline: /ready should be OK and /health should be OK.
+	// Baseline: /readyz should be OK and /health should be OK.
 	assertHealthEndpoint(t, app, "/health", http.StatusOK)
 	assertReadyEndpoint(t, app, http.StatusOK)
 
@@ -72,7 +72,7 @@ func TestCHAOS04_RedisDisappears_ServiceDegraded(t *testing.T) {
 	// /health should still return 200 (liveness = process alive).
 	assertHealthEndpoint(t, app, "/health", http.StatusOK)
 
-	// /ready — Redis is now reflected in readiness checks.
+	// /readyz — Redis is now reflected in readiness checks.
 	// The service correctly reports degraded (503) when Redis is down,
 	// preventing load balancers from routing traffic to an instance
 	// that cannot enforce rate limiting or idempotency.
@@ -182,7 +182,7 @@ func assertReadyEndpoint(t *testing.T, app interface {
 ) {
 	t.Helper()
 
-	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 
 	resp, err := app.Test(req, 10000)
 	require.NoError(t, err, "readiness request")
@@ -192,9 +192,9 @@ func assertReadyEndpoint(t *testing.T, app interface {
 
 		body, _ := io.ReadAll(resp.Body)
 
-		t.Logf("/ready response [%d]: %s", resp.StatusCode, string(body))
+		t.Logf("/readyz response [%d]: %s", resp.StatusCode, string(body))
 	}
 
 	assert.Equal(t, expectedStatus, resp.StatusCode,
-		"GET /ready: expected %d, got %d", expectedStatus, resp.StatusCode)
+		"GET /readyz: expected %d, got %d", expectedStatus, resp.StatusCode)
 }

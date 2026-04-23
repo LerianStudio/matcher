@@ -16,83 +16,24 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	discoveryRepositories "github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
-	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
-// Compile-time interface satisfaction checks for the Fetcher-bridge adapters.
-var (
-	_ sharedPorts.FetcherBridgeIntake           = (*FetcherBridgeIntakeAdapter)(nil)
-	_ sharedPorts.ExtractionLifecycleLinkWriter = (*ExtractionLifecycleLinkWriterAdapter)(nil)
-)
-
-// FetcherBridgeIntakeAdapter translates the shared-kernel TrustedContentInput
-// into the ingestion UseCase's IngestFromTrustedStreamInput, calls the
-// underlying ingestion pipeline, and translates the outcome back into the
-// shared TrustedContentOutcome. It exists so the discovery context can ingest
-// Fetcher content without importing ingestion directly (preserving AC-T1).
-type FetcherBridgeIntakeAdapter struct {
-	uc *ingestionCommand.UseCase
-}
-
-// NewFetcherBridgeIntakeAdapter wraps the given ingestion UseCase. The
-// ingestion UseCase must be non-nil; otherwise the bridge has no pipeline to
-// hand content to and the adapter would silently become a no-op.
-func NewFetcherBridgeIntakeAdapter(
-	uc *ingestionCommand.UseCase,
-) (*FetcherBridgeIntakeAdapter, error) {
-	if uc == nil {
-		return nil, sharedPorts.ErrNilFetcherBridgeIntake
-	}
-
-	return &FetcherBridgeIntakeAdapter{uc: uc}, nil
-}
-
-// IngestTrustedContent hands the trusted bridge's content to the ingestion
-// command use case and surfaces the persisted ingestion job id.
-func (adapter *FetcherBridgeIntakeAdapter) IngestTrustedContent(
-	ctx context.Context,
-	input sharedPorts.TrustedContentInput,
-) (sharedPorts.TrustedContentOutcome, error) {
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "cross.fetcher_bridge_intake")
-	defer span.End()
-
-	if adapter == nil || adapter.uc == nil {
-		err := sharedPorts.ErrNilFetcherBridgeIntake
-		libOpentelemetry.HandleSpanError(span, "fetcher bridge intake adapter is not initialised", err)
-
-		return sharedPorts.TrustedContentOutcome{}, err
-	}
-
-	output, err := adapter.uc.IngestFromTrustedStream(ctx, ingestionCommand.IngestFromTrustedStreamInput{
-		ContextID:      input.ContextID,
-		SourceID:       input.SourceID,
-		Format:         input.Format,
-		Content:        input.Content,
-		SourceMetadata: input.SourceMetadata,
-	})
-	if err != nil {
-		wrappedErr := fmt.Errorf("fetcher bridge intake: %w", err)
-		libOpentelemetry.HandleSpanError(span, "ingestion from trusted stream failed", wrappedErr)
-
-		if logger != nil {
-			logger.With(
-				libLog.String("context_id", input.ContextID.String()),
-				libLog.String("source_id", input.SourceID.String()),
-				libLog.String("error", wrappedErr.Error()),
-			).Log(ctx, libLog.LevelError, "fetcher bridge intake failed")
-		}
-
-		return sharedPorts.TrustedContentOutcome{}, wrappedErr
-	}
-
-	return sharedPorts.TrustedContentOutcome{
-		IngestionJobID:   output.IngestionJobID,
-		TransactionCount: output.TransactionCount,
-	}, nil
-}
+// Compile-time interface satisfaction check for the remaining Fetcher-bridge
+// adapter.
+//
+// T-004 (K-06f) removed FetcherBridgeIntakeAdapter: the ingestion UseCase
+// now implements sharedPorts.FetcherBridgeIntake directly via
+// IngestTrustedContent (see internal/ingestion/services/command/
+// trusted_stream_commands.go). The former adapter did only span creation
+// and a shape-identical struct projection, and both responsibilities moved
+// into the UseCase's direct port-satisfaction method.
+//
+// The link writer adapter stays: it consumes
+// discoveryRepositories.ExtractionRepository (a port interface) and
+// performs real state-machine validation + atomic SQL before writing. No
+// other code path can supply that behavior.
+var _ sharedPorts.ExtractionLifecycleLinkWriter = (*ExtractionLifecycleLinkWriterAdapter)(nil)
 
 // ExtractionLifecycleLinkWriterAdapter persists the linkage between an
 // extraction lifecycle and the downstream ingestion job id it produced. The

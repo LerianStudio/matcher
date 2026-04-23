@@ -26,6 +26,27 @@
 # forces rate limiting). Values: development, staging, production.
 ENV_NAME=development
 
+# Deployment mode — informational only. Surfaces in the /readyz response
+# envelope's "deployment_mode" field and seeds logger configuration defaults.
+# Does NOT gate TLS enforcement. Values: local, byoc, saas.
+DEPLOYMENT_MODE=local
+
+# ── TLS Enforcement (per-stack, opt-in) ─────────────────────────────────────
+# Each infra stack has an independent TLS_REQUIRED boolean flag. When true,
+# bootstrap verifies the stack's connection configuration declares TLS BEFORE
+# any infrastructure connection opens — otherwise it aborts with a clear
+# error naming the offending stack. When false (default), the stack is
+# unenforced regardless of its configured posture.
+#
+# Stacks are orthogonal: enforce only what you need. Recommended production
+# posture is to enforce every stack (uncomment and set all five to true).
+#
+# POSTGRES_TLS_REQUIRED=false           # require POSTGRES_SSLMODE != "disable"
+# POSTGRES_REPLICA_TLS_REQUIRED=false   # require POSTGRES_REPLICA_SSLMODE != "disable" (only when a distinct replica is configured)
+# REDIS_TLS_REQUIRED=false              # require REDIS_TLS=true
+# RABBITMQ_TLS_REQUIRED=false           # require RABBITMQ_URI=amqps
+# OBJECT_STORAGE_TLS_REQUIRED=false     # require OBJECT_STORAGE_ENDPOINT to be https:// (empty = AWS default HTTPS, accepted)
+
 # Log level. BOOTSTRAP-ONLY — runtime swapping is NOT implemented; changing
 # this requires a process restart. Values: debug, info, warn, error.
 LOG_LEVEL=info
@@ -93,6 +114,11 @@ MIGRATIONS_PATH=migrations
 # ── Infrastructure ───────────────────────────────────────────────────────────
 # Startup timeout for connecting to Postgres, Redis, RabbitMQ, and S3.
 INFRA_CONNECT_TIMEOUT_SEC=30
+
+# Per-check /readyz probe timeout in milliseconds. Default 800ms keeps
+# the handler wall-clock below kubelet's default timeoutSeconds=1. Prefer
+# this over the deprecated HEALTH_CHECK_TIMEOUT_SEC (5s legacy default).
+# HEALTH_CHECK_TIMEOUT_MS=800
 
 # ── Idempotency ──────────────────────────────────────────────────────────────
 # Optional HMAC secret for signing idempotency keys before storing them.

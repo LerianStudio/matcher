@@ -380,6 +380,38 @@ func (scanner *mockScanner) Scan(dest ...any) error {
 
 	for i, val := range scanner.values {
 		switch typedDest := dest[i].(type) {
+		case *uuid.UUID:
+			switch v := val.(type) {
+			case uuid.UUID:
+				*typedDest = v
+			case string:
+				parsed, err := uuid.Parse(v)
+				if err != nil {
+					return err
+				}
+
+				*typedDest = parsed
+			}
+		case *uuid.NullUUID:
+			switch v := val.(type) {
+			case uuid.NullUUID:
+				*typedDest = v
+			case uuid.UUID:
+				*typedDest = uuid.NullUUID{UUID: v, Valid: true}
+			case string:
+				if v == "" {
+					*typedDest = uuid.NullUUID{}
+				} else {
+					parsed, err := uuid.Parse(v)
+					if err != nil {
+						return err
+					}
+
+					*typedDest = uuid.NullUUID{UUID: parsed, Valid: true}
+				}
+			case nil:
+				*typedDest = uuid.NullUUID{}
+			}
 		case *string:
 			if v, ok := val.(string); ok {
 				*typedDest = v
@@ -482,7 +514,7 @@ func TestScan_InvalidID(t *testing.T) {
 
 	assert.Nil(t, entity)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parse id")
+	assert.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestScan_InvalidContextID(t *testing.T) {
@@ -509,7 +541,7 @@ func TestScan_InvalidContextID(t *testing.T) {
 
 	assert.Nil(t, entity)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parse context id")
+	assert.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestScan_InvalidRunID(t *testing.T) {
@@ -536,7 +568,7 @@ func TestScan_InvalidRunID(t *testing.T) {
 
 	assert.Nil(t, entity)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parse run id")
+	assert.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestScan_InvalidRuleID(t *testing.T) {
@@ -563,7 +595,7 @@ func TestScan_InvalidRuleID(t *testing.T) {
 
 	assert.Nil(t, entity)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parse rule id")
+	assert.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestScan_InvalidConfidence(t *testing.T) {
@@ -944,10 +976,10 @@ func TestPostgreSQLModel_ToEntity_Success(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &PostgreSQLModel{
-		ID:         uuid.New().String(),
-		ContextID:  uuid.New().String(),
-		RunID:      uuid.New().String(),
-		RuleID:     ptrStr(uuid.New().String()),
+		ID:         uuid.New(),
+		ContextID:  uuid.New(),
+		RunID:      uuid.New(),
+		RuleID:     uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		Confidence: 85,
 		Status:     "PROPOSED",
 		CreatedAt:  now,
@@ -968,10 +1000,10 @@ func TestPostgreSQLModel_ToEntity_WithOptionalFields(t *testing.T) {
 	now := time.Now().UTC()
 	reason := "rejected for testing"
 	model := &PostgreSQLModel{
-		ID:             uuid.New().String(),
-		ContextID:      uuid.New().String(),
-		RunID:          uuid.New().String(),
-		RuleID:         ptrStr(uuid.New().String()),
+		ID:             uuid.New(),
+		ContextID:      uuid.New(),
+		RunID:          uuid.New(),
+		RuleID:         uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		Confidence:     50,
 		Status:         "REJECTED",
 		RejectedReason: &reason,
@@ -999,11 +1031,11 @@ func TestNewPostgreSQLModel_SuccessWithMock(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, model)
-	assert.Equal(t, group.ID.String(), model.ID)
-	assert.Equal(t, group.ContextID.String(), model.ContextID)
-	assert.Equal(t, group.RunID.String(), model.RunID)
-	require.NotNil(t, model.RuleID)
-	assert.Equal(t, group.RuleID.String(), *model.RuleID)
+	assert.Equal(t, group.ID, model.ID)
+	assert.Equal(t, group.ContextID, model.ContextID)
+	assert.Equal(t, group.RunID, model.RunID)
+	require.True(t, model.RuleID.Valid)
+	assert.Equal(t, group.RuleID, model.RuleID.UUID)
 	assert.Equal(t, group.Confidence.Value(), model.Confidence)
 }
 
@@ -1466,5 +1498,5 @@ func TestFindByID_ScanError(t *testing.T) {
 
 	require.Error(t, err)
 	require.Nil(t, result)
-	assert.Contains(t, err.Error(), "parse id")
+	assert.Contains(t, err.Error(), "invalid UUID")
 }

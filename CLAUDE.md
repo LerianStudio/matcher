@@ -392,7 +392,7 @@ Split into `handlers_{feature}.go` when a context has 3+ distinct feature areas.
 
 11. **Workers vs Dispatcher** — Background workers in `services/worker/`. The outbox dispatcher is provided by `lib-commons/v5/commons/outbox` and wired in `internal/bootstrap/outbox_wiring.go`; matcher registers one handler per event type rather than owning its own dispatcher package.
 
-12. **Migration naming** — Sequential: `000001_descriptive_name.up.sql` / `.down.sql`. Currently 21 migrations. Always provide rollback. Validate with `make check-migrations`.
+12. **Migration naming** — Sequential: `000001_descriptive_name.up.sql` / `.down.sql`. Currently 32 migrations. Always provide rollback. Validate with `make check-migrations`.
 
 ## Configuration
 
@@ -432,7 +432,7 @@ See [`config/.config-map.example`](config/.config-map.example) for all bootstrap
 - **lib-auth/v3** (`v3.0.0-20260415175119-1568b252d48a`): JWT extraction, RBAC authorization, tenant schema application. This is a pre-release pseudo-version pending upstream tag — see the `lib-auth/v3 Pseudo-version Tracking` appendix below for action items.
   - `auth.GetTenantID(ctx)`, `auth.GetTenantSlug(ctx)`, `auth.ApplyTenantSchema(ctx, tx)`
 
-- **lib-commons/v5** (`v5.0.0`): Common utilities, telemetry, infrastructure
+- **lib-commons/v5** (`v5.0.2`): Common utilities, telemetry, infrastructure
   - Tracking: `libCommons.NewTrackingFromContext(ctx)` → logger, tracer, headerID
   - OpenTelemetry: `libOpentelemetry.HandleSpanError(span, "msg", err)`
   - Database: `libPostgres.New()` / `libPostgres.NewPrimaryReplica()`
@@ -456,7 +456,6 @@ See [`config/.config-map.example`](config/.config-map.example) for all bootstrap
 ### Internal Packages (`pkg/`)
 
 - **pkg/chanutil** — Safe channel utilities for goroutine communication
-- **pkg/storageopt** — Functional options for object storage operations
 
 ## Linting & Security
 
@@ -608,4 +607,4 @@ migration window.
 
 **Last Updated**: April 2026
 **Go Version**: module `go 1.26.0`
-**Migrations**: 21 (000001 through 000021)
+**Migrations**: 32 (000001 through 000032)

@@ -124,49 +124,46 @@ func TestCustomErrorHandler_ReturnsBadRequestMessage(t *testing.T) {
 	assert.Equal(t, constant.CodeInvalidRequest, body["code"])
 }
 
-func TestReadinessHandler_ProductionHidesChecks(t *testing.T) {
-	t.Parallel()
+// Readiness handler tests under the canonical /readyz contract:
+//   - top-level status is "healthy" / "unhealthy" (not "ok" / "degraded")
+//   - checks is map[string]CheckResult with snake_case keys
+//     (postgres, postgres_replica, redis, rabbitmq, object_storage)
+//   - version and deployment_mode are always present
+//   - a required dep with no check func fails closed (status="down")
+//   - optional-dep down stays "down" in the response but agg is "healthy"
 
-	app := fiber.New()
-	cfg := &Config{App: AppConfig{EnvName: "production"}}
-	app.Get("/ready", readinessHandler(cfg, nil, nil, nil, &libLog.NopLogger{}))
-
-	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/ready", http.NoBody))
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, resp.Body.Close()) })
-	require.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
-
-	var body map[string]any
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	assert.Equal(t, "degraded", body["status"])
-	_, hasChecks := body["checks"]
-	assert.False(t, hasChecks)
-}
-
-func TestReadinessHandler_NonProductionIncludesChecks(t *testing.T) {
+func TestReadinessHandler_NoDepsFailsClosed(t *testing.T) {
 	t.Parallel()
 
 	app := fiber.New()
 	cfg := &Config{App: AppConfig{EnvName: "development"}}
-	app.Get("/ready", readinessHandler(cfg, nil, nil, nil, &libLog.NopLogger{}))
+	app.Get("/readyz", readinessHandler(cfg, nil, nil, nil, &libLog.NopLogger{}))
 
-	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/ready", http.NoBody))
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, resp.Body.Close()) })
-	require.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+	require.Equal(t, http.StatusServiceUnavailable, resp.StatusCode,
+		"required deps unresolved ⇒ fail closed ⇒ HTTP 503")
 
 	var body map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, "unhealthy", body["status"])
+
 	checks, ok := body["checks"].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, "unknown", checks["database"])
-	assert.Equal(t, "unknown", checks["databaseReplica"])
-	assert.Equal(t, "unknown", checks["redis"])
-	assert.Equal(t, "unknown", checks["rabbitmq"])
-	assert.Equal(t, "unknown", checks["objectStorage"])
+
+	for _, name := range []string{"postgres", "postgres_replica", "redis", "rabbitmq", "object_storage"} {
+		entry, ok := checks[name].(map[string]any)
+		require.True(t, ok, "expected checks[%s] to be a map", name)
+		assert.Equal(t, "down", entry["status"], "dep %s should fail closed when unresolved", name)
+		assert.Equal(t, "check not configured", entry["error"], "dep %s should expose bounded unresolved-check error", name)
+	}
+
+	assert.NotEmpty(t, body["version"])
+	assert.NotEmpty(t, body["deployment_mode"])
 }
 
-func TestReadinessHandler_UsesCheckHooks(t *testing.T) {
+func TestReadinessHandler_RequiredDepDownYieldsUnhealthy(t *testing.T) {
 	t.Parallel()
 
 	app := fiber.New()
@@ -179,20 +176,27 @@ func TestReadinessHandler_UsesCheckHooks(t *testing.T) {
 		PostgresReplicaOptional: true,
 		ObjectStorageOptional:   true,
 	}
-	app.Get("/ready", readinessHandler(cfg, nil, nil, deps, &libLog.NopLogger{}))
+	app.Get("/readyz", readinessHandler(cfg, nil, nil, deps, &libLog.NopLogger{}))
 
-	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/ready", http.NoBody))
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, resp.Body.Close()) })
 	require.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 
 	var body map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	checks, ok := body["checks"].(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "down", checks["database"])
-	assert.Equal(t, "down", checks["redis"])
-	assert.Equal(t, "ok", checks["rabbitmq"])
+	assert.Equal(t, "unhealthy", body["status"])
+
+	checks := body["checks"].(map[string]any)
+	pg := checks["postgres"].(map[string]any)
+	assert.Equal(t, "down", pg["status"])
+	assert.NotEmpty(t, pg["error"], "down status must carry an error field")
+
+	redis := checks["redis"].(map[string]any)
+	assert.Equal(t, "down", redis["status"], "optional dep surfaces as down honestly")
+
+	rabbit := checks["rabbitmq"].(map[string]any)
+	assert.Equal(t, "up", rabbit["status"])
 }
 
 func TestReadinessHandler_AllChecksPass(t *testing.T) {
@@ -207,19 +211,19 @@ func TestReadinessHandler_AllChecksPass(t *testing.T) {
 		PostgresReplicaOptional: true,
 		ObjectStorageOptional:   true,
 	}
-	app.Get("/ready", readinessHandler(cfg, nil, nil, deps, &libLog.NopLogger{}))
+	app.Get("/readyz", readinessHandler(cfg, nil, nil, deps, &libLog.NopLogger{}))
 
-	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/ready", http.NoBody))
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, resp.Body.Close()) })
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var body map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	assert.Equal(t, "ok", body["status"])
+	assert.Equal(t, "healthy", body["status"])
 }
 
-func TestReadinessHandler_OptionalDependencyDoesNotDegrade(t *testing.T) {
+func TestReadinessHandler_OptionalDependencyDownStaysHealthy(t *testing.T) {
 	t.Parallel()
 
 	app := fiber.New()
@@ -232,21 +236,23 @@ func TestReadinessHandler_OptionalDependencyDoesNotDegrade(t *testing.T) {
 		PostgresReplicaOptional: true,
 		ObjectStorageOptional:   true,
 	}
-	app.Get("/ready", readinessHandler(cfg, nil, nil, deps, &libLog.NopLogger{}))
+	app.Get("/readyz", readinessHandler(cfg, nil, nil, deps, &libLog.NopLogger{}))
 
-	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/ready", http.NoBody))
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, resp.Body.Close()) })
-	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, http.StatusOK, resp.StatusCode,
+		"optional dep down must not flip top-level to unhealthy")
 
 	var body map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	assert.Equal(t, "ok", body["status"])
-	checks, ok := body["checks"].(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "ok", checks["database"])
-	assert.Equal(t, "down", checks["redis"])
-	assert.Equal(t, "ok", checks["rabbitmq"])
+	assert.Equal(t, "healthy", body["status"])
+
+	checks := body["checks"].(map[string]any)
+	assert.Equal(t, "up", checks["postgres"].(map[string]any)["status"])
+	assert.Equal(t, "down", checks["redis"].(map[string]any)["status"],
+		"optional dep stays visibly down in the response")
+	assert.Equal(t, "up", checks["rabbitmq"].(map[string]any)["status"])
 }
 
 func TestSanitizeHeaderID(t *testing.T) {
@@ -288,54 +294,51 @@ func TestTelemetryMiddlewareSetsRequestID(t *testing.T) {
 	require.NotEmpty(t, resp.Header.Get("X-Request-ID"))
 }
 
-func TestApplyReadinessCheckUnknownOptional(t *testing.T) {
+// applyReadinessCheckResult is the single readiness-probe entry point: it
+// returns a structured CheckResult plus an aggregation bool. Tests assert on
+// CheckResult.Status directly (canonical vocabulary: "up", "down", "skipped").
+
+func TestApplyReadinessCheckSkippedOptional(t *testing.T) {
 	t.Parallel()
 
-	checks := fiber.Map{}
-	ok := applyReadinessCheck(
+	result, ok := applyReadinessCheckResult(
 		context.Background(),
 		"redis",
-		checks,
 		nil,
 		false,
 		true,
+		nil,
+		func(*Config) (*bool, string) { return nil, "" },
 		&libLog.NopLogger{},
 		0,
 	)
 	require.True(t, ok)
-	require.Equal(t, "unknown", checks["redis"])
+	require.Equal(t, checkStatusSkipped, result.Status)
 }
 
 func TestApplyReadinessCheckDownRequired(t *testing.T) {
 	t.Parallel()
 
-	checks := fiber.Map{}
-	ok := applyReadinessCheck(
+	result, ok := applyReadinessCheckResult(
 		context.Background(),
 		"database",
-		checks,
 		func(_ context.Context) error {
 			return errBoom
 		},
 		true,
 		false,
+		nil,
+		func(*Config) (*bool, string) { return nil, "" },
 		&libLog.NopLogger{},
 		0,
 	)
 	require.False(t, ok)
-	require.Equal(t, "down", checks["database"])
+	require.Equal(t, checkStatusDown, result.Status)
 }
 
-func TestShouldIncludeReadinessDetails(t *testing.T) {
-	t.Parallel()
-
-	require.False(t, shouldIncludeReadinessDetails(nil))
-	require.False(t, shouldIncludeReadinessDetails(&Config{App: AppConfig{EnvName: envProduction}}))
-	require.False(t, shouldIncludeReadinessDetails(&Config{App: AppConfig{EnvName: " PrOdUcTiOn "}}))
-	require.True(t, shouldIncludeReadinessDetails(&Config{App: AppConfig{EnvName: "development"}}))
-	require.True(t, shouldIncludeReadinessDetails(&Config{App: AppConfig{EnvName: "test"}}))
-	require.False(t, shouldIncludeReadinessDetails(&Config{App: AppConfig{EnvName: "staging"}}))
-}
+// shouldIncludeReadinessDetails was removed in the canonical /readyz rewrite:
+// checks are ALWAYS included in the response (dev-readyz skill — no env
+// gating). The obsolete test for that helper was deleted with it.
 
 func TestNewFiberAppDefaults(t *testing.T) {
 	t.Parallel()
@@ -710,13 +713,32 @@ func TestResolveRabbitMQCheck(t *testing.T) {
 }
 
 func TestLivenessHandler(t *testing.T) {
-	t.Parallel()
+	// No t.Parallel(): mutates the package-level selfProbeOK flag via
+	// RunSelfProbe, must not race with readiness tests reading it.
+	t.Cleanup(resetSelfProbeStateForTest)
+	resetSelfProbeStateForTest()
 
 	app := fiber.New()
 	app.Get("/health", livenessHandler)
 
-	req := httptest.NewRequest(http.MethodGet, "/health", http.NoBody)
-	resp, err := app.Test(req)
+	// Before the self-probe flag is flipped, /health returns 503 so K8s does
+	// not route traffic to a partially-initialised pod.
+	resp0, err := app.Test(httptest.NewRequest(http.MethodGet, "/health", http.NoBody))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = resp0.Body.Close() })
+	require.Equal(t, http.StatusServiceUnavailable, resp0.StatusCode)
+
+	// After a successful self-probe, /health returns 200 with "healthy".
+	require.NoError(t, RunSelfProbe(context.Background(), &HealthDependencies{
+		PostgresCheck:           func(context.Context) error { return nil },
+		RedisCheck:              func(context.Context) error { return nil },
+		RabbitMQCheck:           func(context.Context) error { return nil },
+		RedisOptional:           true,
+		PostgresReplicaOptional: true,
+		ObjectStorageOptional:   true,
+	}, &libLog.NopLogger{}))
+
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/health", http.NoBody))
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -984,25 +1006,25 @@ func TestCustomErrorHandler_ProductionHidesDetails(t *testing.T) {
 	assert.False(t, hasDetail, "production should not expose error details")
 }
 
-func TestApplyReadinessCheckOKScenario(t *testing.T) {
+func TestApplyReadinessCheckUpScenario(t *testing.T) {
 	t.Parallel()
 
-	checks := fiber.Map{}
-	ok := applyReadinessCheck(
+	result, ok := applyReadinessCheckResult(
 		context.Background(),
 		"database",
-		checks,
 		func(_ context.Context) error {
 			return nil
 		},
 		true,
 		false,
+		nil,
+		func(*Config) (*bool, string) { return nil, "" },
 		&libLog.NopLogger{},
 		0,
 	)
 
 	require.True(t, ok)
-	require.Equal(t, "ok", checks["database"])
+	require.Equal(t, checkStatusUp, result.Status)
 }
 
 func TestApplyReadinessCheckFailureScenario(t *testing.T) {
@@ -1011,57 +1033,55 @@ func TestApplyReadinessCheckFailureScenario(t *testing.T) {
 	t.Run("required dependency failure returns false", func(t *testing.T) {
 		t.Parallel()
 
-		checks := fiber.Map{}
-		ok := applyReadinessCheck(
+		result, ok := applyReadinessCheckResult(
 			context.Background(),
 			"database",
-			checks,
 			func(_ context.Context) error {
 				return errBoom
 			},
 			true,
 			false,
+			nil,
+			func(*Config) (*bool, string) { return nil, "" },
 			&libLog.NopLogger{},
 			0,
 		)
 
 		require.False(t, ok)
-		require.Equal(t, "down", checks["database"])
+		require.Equal(t, checkStatusDown, result.Status)
 	})
 
 	t.Run("optional dependency failure returns true", func(t *testing.T) {
 		t.Parallel()
 
-		checks := fiber.Map{}
-		ok := applyReadinessCheck(
+		result, ok := applyReadinessCheckResult(
 			context.Background(),
 			"redis",
-			checks,
 			func(_ context.Context) error {
 				return errBoom
 			},
 			true,
 			true,
+			nil,
+			func(*Config) (*bool, string) { return nil, "" },
 			&libLog.NopLogger{},
 			0,
 		)
 
 		require.True(t, ok)
-		require.Equal(t, "down", checks["redis"])
+		require.Equal(t, checkStatusDown, result.Status)
 	})
 
 	t.Run("hung dependency obeys context timeout", func(t *testing.T) {
 		t.Parallel()
 
-		checks := fiber.Map{}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 		defer cancel()
 
 		start := time.Now()
-		ok := applyReadinessCheck(
+		result, ok := applyReadinessCheckResult(
 			ctx,
 			"rabbitmq",
-			checks,
 			func(checkCtx context.Context) error {
 				<-checkCtx.Done()
 
@@ -1069,6 +1089,8 @@ func TestApplyReadinessCheckFailureScenario(t *testing.T) {
 			},
 			true,
 			false,
+			nil,
+			func(*Config) (*bool, string) { return nil, "" },
 			&libLog.NopLogger{},
 			0,
 		)
@@ -1076,27 +1098,27 @@ func TestApplyReadinessCheckFailureScenario(t *testing.T) {
 		elapsed := time.Since(start)
 
 		require.False(t, ok)
-		require.Equal(t, "down", checks["rabbitmq"])
+		require.Equal(t, checkStatusDown, result.Status)
 		assert.Less(t, elapsed, time.Second)
 	})
 
-	t.Run("nil check function marks as unknown", func(t *testing.T) {
+	t.Run("nil check function marks as skipped", func(t *testing.T) {
 		t.Parallel()
 
-		checks := fiber.Map{}
-		ok := applyReadinessCheck(
+		result, ok := applyReadinessCheckResult(
 			context.Background(),
 			"storage",
-			checks,
 			nil,
 			false,
 			true,
+			nil,
+			func(*Config) (*bool, string) { return nil, "" },
 			&libLog.NopLogger{},
 			0,
 		)
 
 		require.True(t, ok)
-		require.Equal(t, "unknown", checks["storage"])
+		require.Equal(t, checkStatusSkipped, result.Status)
 	})
 }
 
@@ -1371,7 +1393,7 @@ func TestSanitizeHeaderID_EdgeCases(t *testing.T) {
 	})
 }
 
-func TestEvaluateReadinessChecks_AllOptionalDependencies(t *testing.T) {
+func TestEvaluateReadinessChecks_AllRequiredUp(t *testing.T) {
 	t.Parallel()
 
 	deps := &HealthDependencies{
@@ -1383,18 +1405,19 @@ func TestEvaluateReadinessChecks_AllOptionalDependencies(t *testing.T) {
 		ObjectStorageOptional:   true,
 	}
 
-	status, readyStatus, checks := evaluateReadinessChecksWithTimeout(
+	status, checks, healthy := evaluateReadinessChecks(
 		context.Background(),
+		nil,
 		deps,
 		&libLog.NopLogger{},
 		0,
 	)
 
 	assert.Equal(t, fiber.StatusOK, status)
-	assert.Equal(t, "ok", readyStatus)
-	assert.Equal(t, "ok", checks["database"])
-	assert.Equal(t, "ok", checks["redis"])
-	assert.Equal(t, "ok", checks["rabbitmq"])
+	assert.True(t, healthy)
+	assert.Equal(t, "up", checks["postgres"].Status)
+	assert.Equal(t, "up", checks["redis"].Status)
+	assert.Equal(t, "up", checks["rabbitmq"].Status)
 }
 
 func TestSanitizeErrorForLogging(t *testing.T) {
@@ -1616,56 +1639,10 @@ func TestIsSafeHeaderChar(t *testing.T) {
 	}
 }
 
-func TestChecksToString_EdgeCases(t *testing.T) {
-	t.Parallel()
-
-	t.Run("nil checks returns unknown", func(t *testing.T) {
-		t.Parallel()
-
-		result := checksToString(nil, "database", &libLog.NopLogger{})
-		assert.Equal(t, statusUnknown, result)
-	})
-
-	t.Run("missing key returns unknown", func(t *testing.T) {
-		t.Parallel()
-
-		checks := fiber.Map{"redis": "ok"}
-		result := checksToString(checks, "database", &libLog.NopLogger{})
-		assert.Equal(t, statusUnknown, result)
-	})
-
-	t.Run("non-string value returns unknown", func(t *testing.T) {
-		t.Parallel()
-
-		checks := fiber.Map{"database": 42}
-		result := checksToString(checks, "database", &libLog.NopLogger{})
-		assert.Equal(t, statusUnknown, result)
-	})
-
-	t.Run("non-string value with nil logger returns unknown", func(t *testing.T) {
-		t.Parallel()
-
-		checks := fiber.Map{"database": true}
-		result := checksToString(checks, "database", nil)
-		assert.Equal(t, statusUnknown, result)
-	})
-
-	t.Run("valid string value returns it", func(t *testing.T) {
-		t.Parallel()
-
-		checks := fiber.Map{"database": "ok"}
-		result := checksToString(checks, "database", &libLog.NopLogger{})
-		assert.Equal(t, "ok", result)
-	})
-
-	t.Run("down value returns down", func(t *testing.T) {
-		t.Parallel()
-
-		checks := fiber.Map{"database": "down"}
-		result := checksToString(checks, "database", &libLog.NopLogger{})
-		assert.Equal(t, "down", result)
-	})
-}
+// checksToString was removed in the canonical /readyz rewrite — the response
+// now uses map[string]CheckResult directly, so the indirection through a
+// fiber.Map and the "unknown" fallback string are gone. The old edge-case
+// test for that helper was deleted with it.
 
 func TestSanitizeHeaderID_WithUnsafeCharsUnderLimit(t *testing.T) {
 	t.Parallel()
@@ -1888,19 +1865,22 @@ func TestStructuredRequestLogger(t *testing.T) {
 	})
 }
 
-func TestEvaluateReadinessChecks_NilDeps(t *testing.T) {
+func TestEvaluateReadinessChecks_NilDepsFailClosed(t *testing.T) {
 	t.Parallel()
 
-	status, readyStatus, checks := evaluateReadinessChecksWithTimeout(
+	status, checks, healthy := evaluateReadinessChecks(
 		context.Background(),
+		nil,
 		nil,
 		&libLog.NopLogger{},
 		0,
 	)
 
+	// nil deps ⇒ required deps unresolved ⇒ fail closed.
 	assert.Equal(t, fiber.StatusServiceUnavailable, status)
-	assert.Equal(t, "degraded", readyStatus)
-	assert.NotNil(t, checks)
+	assert.False(t, healthy)
+	require.NotNil(t, checks)
+	assert.Equal(t, "down", checks["postgres"].Status)
 }
 
 func TestEvaluateReadinessChecks_AllRequiredDown(t *testing.T) {
@@ -1915,18 +1895,19 @@ func TestEvaluateReadinessChecks_AllRequiredDown(t *testing.T) {
 		RabbitMQOptional: false,
 	}
 
-	status, readyStatus, checks := evaluateReadinessChecksWithTimeout(
+	status, checks, healthy := evaluateReadinessChecks(
 		context.Background(),
+		nil,
 		deps,
 		&libLog.NopLogger{},
 		0,
 	)
 
 	assert.Equal(t, fiber.StatusServiceUnavailable, status)
-	assert.Equal(t, "degraded", readyStatus)
-	assert.Equal(t, "down", checks["database"])
-	assert.Equal(t, "down", checks["redis"])
-	assert.Equal(t, "down", checks["rabbitmq"])
+	assert.False(t, healthy)
+	assert.Equal(t, "down", checks["postgres"].Status)
+	assert.Equal(t, "down", checks["redis"].Status)
+	assert.Equal(t, "down", checks["rabbitmq"].Status)
 }
 
 func TestCustomErrorHandler_NilLogger(t *testing.T) {
@@ -2047,7 +2028,7 @@ func TestResolvePostgresReplicaCheck_WithConnection_PingError(t *testing.T) {
 
 	err = checkFunc(context.Background())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "ping replica[0] failed")
+	assert.Contains(t, err.Error(), "ping replica failed")
 }
 
 func TestResolvePostgresReplicaCheck_WithConnection_NoReplicasConfigured(t *testing.T) {
@@ -2217,9 +2198,9 @@ func TestReadinessHandler_NilContext(t *testing.T) {
 		PostgresReplicaOptional: true,
 		ObjectStorageOptional:   true,
 	}
-	app.Get("/ready", readinessHandler(cfg, nil, nil, deps, &libLog.NopLogger{}))
+	app.Get("/readyz", readinessHandler(cfg, nil, nil, deps, &libLog.NopLogger{}))
 
-	req := httptest.NewRequest(http.MethodGet, "/ready", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody)
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()

@@ -7,6 +7,7 @@
 package bootstrap
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -444,7 +445,9 @@ func TestRegisterRoutes_Success(t *testing.T) {
 }
 
 func TestRegisterRoutes_HealthEndpoints(t *testing.T) {
-	t.Parallel()
+	// No t.Parallel(): this test mutates the package-level selfProbeOK flag
+	// and must not race with other tests reading it (e.g., parallel readiness
+	// tests that assume the flag's default state).
 
 	app := fiber.New()
 	cfg := &Config{App: AppConfig{EnvName: "development"}}
@@ -462,22 +465,53 @@ func TestRegisterRoutes_HealthEndpoints(t *testing.T) {
 	_, err = RegisterRoutes(app, cfg, nil, nil, nil, nil, &libLog.NopLogger{}, client, extractor, nil, nil, nil)
 	require.NoError(t, err)
 
-	t.Run("health endpoint is accessible", func(t *testing.T) {
+	t.Run("health endpoint gated by self-probe", func(t *testing.T) {
+		// /health returns 503 until RunSelfProbe has confirmed dependencies;
+		// it returns 200 once the flag is flipped. Exercise both branches so
+		// the gate is exercised and the happy path still works.
+		t.Cleanup(resetSelfProbeStateForTest)
+		resetSelfProbeStateForTest()
+
 		req := httptest.NewRequest(http.MethodGet, "/health", http.NoBody)
 		resp, err := app.Test(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode,
+			"/health is 503 before self-probe flips the flag")
+
+		// Simulate a successful self-probe and re-check.
+		require.NoError(t, RunSelfProbe(context.Background(), &HealthDependencies{
+			PostgresCheck:           func(context.Context) error { return nil },
+			RedisCheck:              func(context.Context) error { return nil },
+			RabbitMQCheck:           func(context.Context) error { return nil },
+			RedisOptional:           true,
+			PostgresReplicaOptional: true,
+			ObjectStorageOptional:   true,
+		}, &libLog.NopLogger{}))
+
+		req2 := httptest.NewRequest(http.MethodGet, "/health", http.NoBody)
+		resp2, err := app.Test(req2)
+		require.NoError(t, err)
+		defer resp2.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp2.StatusCode,
+			"/health returns 200 once self-probe succeeds")
 	})
 
-	t.Run("ready endpoint is accessible", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/ready", http.NoBody)
+	t.Run("readyz endpoint is accessible pre-auth", func(t *testing.T) {
+		// /readyz must mount BEFORE the auth chain — K8s readiness probes
+		// are unauthenticated. Hitting it with no headers must yield 200
+		// or 503, never 401.
+		req := httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody)
 		resp, err := app.Test(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 
-		assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+		assert.NotEqual(t, http.StatusUnauthorized, resp.StatusCode,
+			"/readyz must mount before auth middleware")
+		assert.Contains(t, []int{http.StatusOK, http.StatusServiceUnavailable}, resp.StatusCode,
+			"/readyz responds with 200 or 503 only")
 	})
 
 	t.Run("version endpoint is accessible", func(t *testing.T) {

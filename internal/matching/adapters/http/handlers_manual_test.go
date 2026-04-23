@@ -46,7 +46,7 @@ func TestCreateManualMatchHandlerRouting(t *testing.T) {
 	}
 	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
+	handler, err := newTestHandler(t, uc, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/manual", handler.CreateManualMatch)
@@ -93,7 +93,7 @@ func TestCreateManualMatchTooFewTransactions(t *testing.T) {
 	}
 	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
+	handler, err := newTestHandler(t, uc, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/manual", handler.CreateManualMatch)
@@ -144,7 +144,7 @@ func TestCreateManualMatchInvalidTransactionUUID(t *testing.T) {
 	}
 	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
+	handler, err := newTestHandler(t, uc, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/manual", handler.CreateManualMatch)
@@ -195,7 +195,7 @@ func TestCreateManualMatchDuplicateTransactionIDs(t *testing.T) {
 	}
 	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
+	handler, err := newTestHandler(t, uc, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/manual", handler.CreateManualMatch)
@@ -244,12 +244,7 @@ func TestCreateManualMatchContextNotFound(t *testing.T) {
 
 	// Context provider returns nil (not found)
 	ctxProv := &stubContextProvider{info: nil}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/manual", handler.CreateManualMatch)
@@ -298,7 +293,7 @@ func TestCreateManualMatchInvalidPayload(t *testing.T) {
 	}
 	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
+	handler, err := newTestHandler(t, uc, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/manual", handler.CreateManualMatch)
@@ -340,7 +335,7 @@ func TestCreateManualMatchEmptyTransactionIDs(t *testing.T) {
 	}
 	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
+	handler, err := newTestHandler(t, uc, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/manual", handler.CreateManualMatch)
@@ -385,12 +380,7 @@ func TestCreateManualMatchMissingContextID(t *testing.T) {
 	app := newFiberTestApp(ctx)
 
 	ctxProv := &stubContextProvider{info: nil}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/manual", handler.CreateManualMatch)
@@ -435,12 +425,7 @@ func TestCreateManualMatchContextNotActive(t *testing.T) {
 	ctxProv := &stubContextProvider{
 		info: &ports.ReconciliationContextInfo{ID: contextID, Active: false},
 	}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/manual", handler.CreateManualMatch)
@@ -510,7 +495,7 @@ func TestCreateManualMatchSameSourceTransactions(t *testing.T) {
 	}
 	uc := newRunMatchUseCase(t, ctxProv, transactions, nil)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
+	handler, err := newTestHandler(t, uc, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/manual", handler.CreateManualMatch)
@@ -576,7 +561,7 @@ func TestCreateManualMatchServiceError(t *testing.T) {
 	}
 	uc := newRunMatchUseCase(t, ctxProv, transactions, errTestDatabaseError)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
+	handler, err := newTestHandler(t, uc, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/manual", handler.CreateManualMatch)

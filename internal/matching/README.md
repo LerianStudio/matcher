@@ -43,7 +43,7 @@ internal/matching/
 │   │                        #   date lag evaluator, deterministic sort, exact/tolerance evaluators,
 │   │                        #   rule config decode, rule definition types
 │   └── value_objects/       # ConfidenceScore, FxRate, MatchGroupStatus, MatchRunMode/Status
-├── ports/                   # ContextProvider, EventPublisher, ExceptionCreator, FxSource,
+├── ports/                   # ContextProvider, EventPublisher, ExceptionCreator,
 │                            #   LockManager, MatchRuleProvider, SourceProvider, TransactionRepository
 └── services/
     ├── command/             # RunMatch, ManualMatch, Unmatch, Adjustment, rule execution commands

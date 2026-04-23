@@ -64,8 +64,8 @@ func TestNewSchedulePostgreSQLModel_ValidEntity(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, model)
-	assert.Equal(t, id.String(), model.ID)
-	assert.Equal(t, contextID.String(), model.ContextID)
+	assert.Equal(t, id, model.ID)
+	assert.Equal(t, contextID, model.ContextID)
 	assert.Equal(t, "0 6 * * *", model.CronExpression)
 	assert.True(t, model.Enabled)
 	require.NotNil(t, model.LastRunAt)
@@ -94,9 +94,7 @@ func TestNewSchedulePostgreSQLModel_GeneratesIDWhenNil(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, model)
 
-	parsedID, parseErr := uuid.Parse(model.ID)
-	require.NoError(t, parseErr)
-	assert.NotEqual(t, uuid.Nil, parsedID, "generated ID should not be uuid.Nil")
+	assert.NotEqual(t, uuid.Nil, model.ID, "generated ID should not be uuid.Nil")
 }
 
 func TestNewSchedulePostgreSQLModel_DefaultsTimestamps(t *testing.T) {
@@ -168,44 +166,6 @@ func TestScheduleModel_ToEntity_NilModel(t *testing.T) {
 	require.ErrorIs(t, err, ErrScheduleModelRequired)
 }
 
-func TestScheduleModel_ToEntity_InvalidID(t *testing.T) {
-	t.Parallel()
-
-	model := &SchedulePostgreSQLModel{
-		ID:             "not-a-valid-uuid",
-		ContextID:      uuid.New().String(),
-		CronExpression: "0 0 * * *",
-		Enabled:        true,
-		CreatedAt:      time.Now().UTC(),
-		UpdatedAt:      time.Now().UTC(),
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	assert.Contains(t, err.Error(), "parsing ID")
-}
-
-func TestScheduleModel_ToEntity_InvalidContextID(t *testing.T) {
-	t.Parallel()
-
-	model := &SchedulePostgreSQLModel{
-		ID:             uuid.New().String(),
-		ContextID:      "invalid-context-id",
-		CronExpression: "0 0 * * *",
-		Enabled:        true,
-		CreatedAt:      time.Now().UTC(),
-		UpdatedAt:      time.Now().UTC(),
-	}
-
-	entity, err := model.ToEntity()
-
-	require.Error(t, err)
-	require.Nil(t, entity)
-	assert.Contains(t, err.Error(), "parsing ContextID")
-}
-
 func TestScheduleModel_ToEntity_ValidModel(t *testing.T) {
 	t.Parallel()
 
@@ -251,8 +211,8 @@ func TestScheduleModel_ToEntity_WithNilOptionalFields(t *testing.T) {
 
 	now := time.Now().UTC()
 	model := &SchedulePostgreSQLModel{
-		ID:             uuid.New().String(),
-		ContextID:      uuid.New().String(),
+		ID:             uuid.New(),
+		ContextID:      uuid.New(),
 		CronExpression: "0 0 * * *",
 		Enabled:        false,
 		LastRunAt:      nil,

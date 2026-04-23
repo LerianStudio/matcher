@@ -80,9 +80,9 @@ func TestErrorSentinels_HaveMessages(t *testing.T) {
 			contains: "dispatch use case is required",
 		},
 		{
-			name:     "ErrNilCommentQueryUseCase",
-			err:      ErrNilCommentQueryUseCase,
-			contains: "comment query use case is required",
+			name:     "ErrNilCommentRepository",
+			err:      ErrNilCommentRepository,
+			contains: "comment repository is required",
 		},
 		{
 			name:     "ErrNilCallbackUseCase",

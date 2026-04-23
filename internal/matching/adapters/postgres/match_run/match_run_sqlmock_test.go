@@ -406,7 +406,7 @@ func TestScan_InvalidData(t *testing.T) {
 
 	assert.Nil(t, entity)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parse id")
+	assert.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestScan_InvalidContextID(t *testing.T) {
@@ -445,7 +445,7 @@ func TestScan_InvalidContextID(t *testing.T) {
 
 	assert.Nil(t, entity)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parse context id")
+	assert.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestScan_InvalidMode(t *testing.T) {
@@ -860,8 +860,8 @@ func TestNewPostgreSQLModel_Success(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, model)
-	assert.Equal(t, run.ID.String(), model.ID)
-	assert.Equal(t, run.ContextID.String(), model.ContextID)
+	assert.Equal(t, run.ID, model.ID)
+	assert.Equal(t, run.ContextID, model.ContextID)
 	assert.Equal(t, run.Mode.String(), model.Mode)
 	assert.Equal(t, run.Status.String(), model.Status)
 }

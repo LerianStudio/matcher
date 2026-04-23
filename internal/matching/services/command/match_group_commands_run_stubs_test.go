@@ -15,6 +15,7 @@ import (
 
 	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
+	governanceRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	matching "github.com/LerianStudio/matcher/internal/matching/domain/services"
@@ -271,8 +272,9 @@ func (stub *stubTxRepo) FindByContextAndIDs(
 	return result, nil
 }
 
-func (stub *stubTxRepo) MarkMatched(
+func (stub *stubTxRepo) MarkMatchedWithTx(
 	_ context.Context,
+	_ matchingRepositories.Tx,
 	_ uuid.UUID,
 	transactionIDs []uuid.UUID,
 ) error {
@@ -292,17 +294,9 @@ func (stub *stubTxRepo) MarkMatched(
 	return nil
 }
 
-func (stub *stubTxRepo) MarkMatchedWithTx(
-	ctx context.Context,
-	_ matchingRepositories.Tx,
-	contextID uuid.UUID,
-	transactionIDs []uuid.UUID,
-) error {
-	return stub.MarkMatched(ctx, contextID, transactionIDs)
-}
-
-func (stub *stubTxRepo) MarkPendingReview(
+func (stub *stubTxRepo) MarkPendingReviewWithTx(
 	_ context.Context,
+	_ matchingRepositories.Tx,
 	_ uuid.UUID,
 	transactionIDs []uuid.UUID,
 ) error {
@@ -319,19 +313,6 @@ func (stub *stubTxRepo) MarkPendingReview(
 	copiedIDs := append([]uuid.UUID{}, transactionIDs...)
 	stub.pendingIDs = append(stub.pendingIDs, copiedIDs...)
 
-	return nil
-}
-
-func (stub *stubTxRepo) MarkPendingReviewWithTx(
-	ctx context.Context,
-	_ matchingRepositories.Tx,
-	contextID uuid.UUID,
-	transactionIDs []uuid.UUID,
-) error {
-	return stub.MarkPendingReview(ctx, contextID, transactionIDs)
-}
-
-func (stub *stubTxRepo) MarkUnmatched(_ context.Context, _ uuid.UUID, _ []uuid.UUID) error {
 	return nil
 }
 
@@ -781,7 +762,7 @@ func (s *stubInfraProviderForRun) GetPrimaryDB(_ context.Context) (*sharedPorts.
 	return nil, nil
 }
 
-// stubAuditLogRepoForRun implements sharedPorts.AuditLogRepository for testing.
+// stubAuditLogRepoForRun implements governanceRepositories.AuditLogRepository for testing.
 type stubAuditLogRepoForRun struct {
 	createErr error
 }
@@ -858,5 +839,5 @@ var (
 	_ matchingRepositories.FeeVarianceRepository = (*stubFeeVarianceRepo)(nil)
 	_ matchingRepositories.AdjustmentRepository  = (*stubAdjustmentRepo)(nil)
 	_ sharedPorts.InfrastructureProvider         = (*stubInfraProviderForRun)(nil)
-	_ sharedPorts.AuditLogRepository             = (*stubAuditLogRepoForRun)(nil)
+	_ governanceRepositories.AuditLogRepository  = (*stubAuditLogRepoForRun)(nil)
 )

@@ -16,6 +16,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/matching/adapters/http/dto"
+	matchingRepos "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	"github.com/LerianStudio/matcher/internal/matching/services/command"
 	matchingQuery "github.com/LerianStudio/matcher/internal/matching/services/query"
@@ -36,9 +37,15 @@ const (
 // state coupled every test in the package to whichever test last
 // constructed a handler, regardless of the production flag each test
 // wanted to exercise.
+//
+// The matchRunRepo and matchGroupRepo fields back the GetMatchRun and
+// ListMatchRuns handlers directly — the corresponding query UseCase
+// methods were span-only wrappers around FindByID/ListByContextID.
 type Handler struct {
 	command                 *command.UseCase
 	query                   *matchingQuery.UseCase
+	matchRunRepo            matchingRepos.MatchRunRepository
+	matchGroupRepo          matchingRepos.MatchGroupRepository
 	contextProvider         contextProvider
 	contextVerifier         libHTTP.TenantOwnershipVerifier
 	resourceContextVerifier libHTTP.ResourceOwnershipVerifier
@@ -60,6 +67,12 @@ var ErrNilQueryUseCase = errors.New("query use case is required")
 
 // ErrNilContextProvider indicates a missing context provider.
 var ErrNilContextProvider = errors.New("context provider is required")
+
+// ErrNilMatchRunRepository indicates a missing match run repository.
+var ErrNilMatchRunRepository = errors.New("match run repository is required")
+
+// ErrNilMatchGroupRepository indicates a missing match group repository.
+var ErrNilMatchGroupRepository = errors.New("match group repository is required")
 
 var (
 	// ErrMatchRunResponseNil indicates a missing match run response.
@@ -122,6 +135,8 @@ var ErrReasonRequired = errors.New("reason is required")
 func NewHandler(
 	commandUseCase *command.UseCase,
 	queryUseCase *matchingQuery.UseCase,
+	matchRunRepo matchingRepos.MatchRunRepository,
+	matchGroupRepo matchingRepos.MatchGroupRepository,
 	ctxProvider contextProvider,
 	production bool,
 ) (*Handler, error) {
@@ -131,6 +146,14 @@ func NewHandler(
 
 	if queryUseCase == nil {
 		return nil, ErrNilQueryUseCase
+	}
+
+	if matchRunRepo == nil {
+		return nil, ErrNilMatchRunRepository
+	}
+
+	if matchGroupRepo == nil {
+		return nil, ErrNilMatchGroupRepository
 	}
 
 	if ctxProvider == nil {
@@ -143,6 +166,8 @@ func NewHandler(
 	return &Handler{
 		command:                 commandUseCase,
 		query:                   queryUseCase,
+		matchRunRepo:            matchRunRepo,
+		matchGroupRepo:          matchGroupRepo,
 		contextProvider:         ctxProvider,
 		contextVerifier:         verifier,
 		resourceContextVerifier: resourceVerifier,

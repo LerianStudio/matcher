@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
@@ -43,12 +43,12 @@ func setupMock(t *testing.T) (*Repository, sqlmock.Sqlmock, func()) {
 	return repo, mock, finish
 }
 
-func createTestFieldMap(t *testing.T) *entities.FieldMap {
+func createTestFieldMap(t *testing.T) *shared.FieldMap {
 	t.Helper()
 
 	now := time.Now().UTC()
 
-	return &entities.FieldMap{
+	return &shared.FieldMap{
 		ID:        uuid.New(),
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
@@ -87,7 +87,7 @@ func TestRepository_Create_NilChecks(t *testing.T) {
 
 	ctx := context.Background()
 	now := time.Now().UTC()
-	validEntity := &entities.FieldMap{
+	validEntity := &shared.FieldMap{
 		ID:        uuid.New(),
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
@@ -137,7 +137,7 @@ func TestRepository_CreateWithTx_NilChecks(t *testing.T) {
 
 	ctx := context.Background()
 	now := time.Now().UTC()
-	validEntity := &entities.FieldMap{
+	validEntity := &shared.FieldMap{
 		ID:        uuid.New(),
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
@@ -257,7 +257,7 @@ func TestRepository_Update_NilChecks(t *testing.T) {
 
 	ctx := context.Background()
 	now := time.Now().UTC()
-	validEntity := &entities.FieldMap{
+	validEntity := &shared.FieldMap{
 		ID:        uuid.New(),
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
@@ -307,7 +307,7 @@ func TestRepository_UpdateWithTx_NilChecks(t *testing.T) {
 
 	ctx := context.Background()
 	now := time.Now().UTC()
-	validEntity := &entities.FieldMap{
+	validEntity := &shared.FieldMap{
 		ID:        uuid.New(),
 		ContextID: uuid.New(),
 		SourceID:  uuid.New(),
@@ -525,7 +525,7 @@ func TestModelConversion_EdgeCases(t *testing.T) {
 		t.Parallel()
 
 		now := time.Now().UTC()
-		entity := &entities.FieldMap{
+		entity := &shared.FieldMap{
 			ID:        uuid.New(),
 			ContextID: uuid.New(),
 			SourceID:  uuid.New(),
@@ -548,7 +548,7 @@ func TestModelConversion_EdgeCases(t *testing.T) {
 		t.Parallel()
 
 		now := time.Now().UTC()
-		entity := &entities.FieldMap{
+		entity := &shared.FieldMap{
 			ID:        uuid.New(),
 			ContextID: uuid.New(),
 			SourceID:  uuid.New(),
@@ -583,7 +583,7 @@ func TestModelConversion_EdgeCases(t *testing.T) {
 
 		now := time.Now().UTC()
 		for _, version := range []int{1, 5, 10, 100} {
-			entity := &entities.FieldMap{
+			entity := &shared.FieldMap{
 				ID:        uuid.New(),
 				ContextID: uuid.New(),
 				SourceID:  uuid.New(),
@@ -607,7 +607,7 @@ func TestModelConversion_EdgeCases(t *testing.T) {
 
 		createdAt := time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC)
 		updatedAt := time.Date(2024, 6, 20, 14, 45, 0, 0, time.UTC)
-		entity := &entities.FieldMap{
+		entity := &shared.FieldMap{
 			ID:        uuid.New(),
 			ContextID: uuid.New(),
 			SourceID:  uuid.New(),
@@ -630,7 +630,7 @@ func TestModelConversion_EdgeCases(t *testing.T) {
 		t.Parallel()
 
 		now := time.Now().UTC()
-		entity := &entities.FieldMap{
+		entity := &shared.FieldMap{
 			ID:        uuid.New(),
 			ContextID: uuid.New(),
 			SourceID:  uuid.New(),
@@ -666,7 +666,7 @@ func TestMappingEdgeCases(t *testing.T) {
 		t.Parallel()
 
 		now := time.Now().UTC()
-		entity := &entities.FieldMap{
+		entity := &shared.FieldMap{
 			ID:        uuid.New(),
 			ContextID: uuid.New(),
 			SourceID:  uuid.New(),
@@ -696,7 +696,7 @@ func TestMappingEdgeCases(t *testing.T) {
 		t.Parallel()
 
 		now := time.Now().UTC()
-		entity := &entities.FieldMap{
+		entity := &shared.FieldMap{
 			ID:        uuid.New(),
 			ContextID: uuid.New(),
 			SourceID:  uuid.New(),
@@ -1196,7 +1196,7 @@ func TestScanFieldMap_InvalidUUID(t *testing.T) {
 
 	require.Error(t, err)
 	require.Nil(t, result)
-	assert.Contains(t, err.Error(), "parsing ID")
+	assert.Contains(t, err.Error(), "invalid UUID")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -1383,5 +1383,5 @@ func TestExistsBySourceIDsBatch_ScanError(t *testing.T) {
 
 	require.Error(t, err)
 	require.Nil(t, result)
-	assert.Contains(t, err.Error(), "parse source ID")
+	assert.Contains(t, err.Error(), "invalid UUID")
 }

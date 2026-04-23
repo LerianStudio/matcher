@@ -24,9 +24,9 @@ import (
 	exceptionRepositories "github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
 	"github.com/LerianStudio/matcher/internal/exception/services/query"
+	governanceRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	crossAdapters "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 	govEntities "github.com/LerianStudio/matcher/internal/shared/domain"
-	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // ---------------------------------------------------------------------------
@@ -137,7 +137,7 @@ func newHandlersWithQueryOptions(
 	t *testing.T,
 	exRepo *stubExceptionRepo,
 	dRepo exceptionRepositories.DisputeRepository,
-	auditRepo sharedPorts.AuditLogRepository,
+	auditRepo governanceRepositories.AuditLogRepository,
 	tenantExtractor query.TenantExtractor,
 ) *Handlers {
 	t.Helper()
@@ -148,18 +148,7 @@ func newHandlersWithQueryOptions(
 	exceptionProvider := &stubExceptionProvider{exists: true}
 	disputeProvider := &stubDisputeProvider{exists: true}
 
-	handlers, err := NewHandlers(
-		&command.UseCase{},
-		&command.DisputeUseCase{},
-		queryUC,
-		&command.DispatchUseCase{},
-		&command.CommentUseCase{},
-		&query.CommentQueryUseCase{},
-		&command.CallbackUseCase{},
-		exceptionProvider,
-		disputeProvider,
-		false,
-	)
+	handlers, err := NewHandlers(&command.ExceptionUseCase{}, queryUC, &stubCommentRepo{}, exceptionProvider, disputeProvider, false)
 	require.NoError(t, err)
 
 	return handlers
@@ -169,28 +158,13 @@ func newHandlersWithQueryOptions(
 // NewHandlers missing nil check
 // ---------------------------------------------------------------------------
 
+// TestNewHandlers_NilCommentUseCase is retained as a documentation marker
+// that the previously separate CommentUseCase has been merged into the
+// single ExceptionUseCase. NilCommentUseCase is no longer a valid
+// constructor error — Handlers only accept the merged command use case.
 func TestNewHandlers_NilCommentUseCase(t *testing.T) {
 	t.Parallel()
-
-	exceptionProvider := &stubExceptionProvider{exists: true}
-	disputeProvider := &stubDisputeProvider{exists: true}
-
-	handlers, err := NewHandlers(
-		&command.UseCase{},
-		&command.DisputeUseCase{},
-		&query.UseCase{},
-		&command.DispatchUseCase{},
-		nil,
-		&query.CommentQueryUseCase{},
-		&command.CallbackUseCase{},
-		exceptionProvider,
-		disputeProvider,
-		false,
-	)
-
-	assert.Nil(t, handlers)
-	require.Error(t, err)
-	require.ErrorIs(t, err, ErrNilCommentUseCase)
+	t.Skip("merged into single ExceptionUseCase; no separate comment UC argument")
 }
 
 // ---------------------------------------------------------------------------
@@ -978,7 +952,7 @@ func TestBulkAssign_NilUUIDs(t *testing.T) {
 	app.Post("/v1/exceptions/bulk/assign", handlers.BulkAssign)
 
 	// Nil UUID passes DTO validation but is caught by parseUUIDs
-	body := strings.NewReader(`{"exception_ids":["00000000-0000-0000-0000-000000000000"],"assignee":"user@example.com"}`)
+	body := strings.NewReader(`{"exceptionIds":["00000000-0000-0000-0000-000000000000"],"assignee":"user@example.com"}`)
 	request := httptest.NewRequest(http.MethodPost, "/v1/exceptions/bulk/assign", body)
 	request.Header.Set("Content-Type", "application/json")
 
@@ -1004,7 +978,7 @@ func TestBulkAssign_ValidationFailure(t *testing.T) {
 	app.Post("/v1/exceptions/bulk/assign", handlers.BulkAssign)
 
 	// Non-UUID strings fail DTO validation
-	body := strings.NewReader(`{"exception_ids":["not-a-uuid"],"assignee":"user@example.com"}`)
+	body := strings.NewReader(`{"exceptionIds":["not-a-uuid"],"assignee":"user@example.com"}`)
 	request := httptest.NewRequest(http.MethodPost, "/v1/exceptions/bulk/assign", body)
 	request.Header.Set("Content-Type", "application/json")
 
@@ -1054,7 +1028,7 @@ func TestBulkResolve_NilUUIDs(t *testing.T) {
 	handlers := newExceptionHandlers(t, &stubExceptionRepo{})
 	app.Post("/v1/exceptions/bulk/resolve", handlers.BulkResolve)
 
-	body := strings.NewReader(`{"exception_ids":["00000000-0000-0000-0000-000000000000"],"resolution":"fixed"}`)
+	body := strings.NewReader(`{"exceptionIds":["00000000-0000-0000-0000-000000000000"],"resolution":"fixed"}`)
 	request := httptest.NewRequest(http.MethodPost, "/v1/exceptions/bulk/resolve", body)
 	request.Header.Set("Content-Type", "application/json")
 
@@ -1104,7 +1078,7 @@ func TestBulkDispatch_NilUUIDs(t *testing.T) {
 	handlers := newExceptionHandlers(t, &stubExceptionRepo{})
 	app.Post("/v1/exceptions/bulk/dispatch", handlers.BulkDispatch)
 
-	body := strings.NewReader(`{"exception_ids":["00000000-0000-0000-0000-000000000000"],"target_system":"JIRA"}`)
+	body := strings.NewReader(`{"exceptionIds":["00000000-0000-0000-0000-000000000000"],"targetSystem":"JIRA"}`)
 	request := httptest.NewRequest(http.MethodPost, "/v1/exceptions/bulk/dispatch", body)
 	request.Header.Set("Content-Type", "application/json")
 
@@ -1130,7 +1104,7 @@ func TestBulkDispatch_EmptyTargetSystem(t *testing.T) {
 	app.Post("/v1/exceptions/bulk/dispatch", handlers.BulkDispatch)
 
 	id := uuid.New().String()
-	body := strings.NewReader(`{"exception_ids":["` + id + `"],"target_system":"   "}`)
+	body := strings.NewReader(`{"exceptionIds":["` + id + `"],"targetSystem":"   "}`)
 	request := httptest.NewRequest(http.MethodPost, "/v1/exceptions/bulk/dispatch", body)
 	request.Header.Set("Content-Type", "application/json")
 

@@ -10,7 +10,6 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
-	"github.com/LerianStudio/matcher/internal/exception/services/query"
 )
 
 func TestHandleCommentError_ExceptionNotFound(t *testing.T) {
@@ -133,20 +132,10 @@ func TestHandleCommentError_CommentAuthorRequired(t *testing.T) {
 	)
 }
 
-func TestHandleCommentError_CommentExceptionIDRequired(t *testing.T) {
-	t.Parallel()
-
-	resp := executeErrorHandler(t, (&Handlers{}).handleCommentError, query.ErrCommentExceptionIDRequired)
-
-	requireErrorResponse(
-		t,
-		resp,
-		fiber.StatusBadRequest,
-		400,
-		"invalid_request",
-		query.ErrCommentExceptionIDRequired.Error(),
-	)
-}
+// TestHandleCommentError_CommentExceptionIDRequired removed after K-18 collapse:
+// the CommentQueryUseCase was span-only and has been inlined into the handler.
+// Exception ID validation now happens at libHTTP.ParseAndVerifyResourceScopedID,
+// before any repo call — so ErrCommentExceptionIDRequired no longer exists.
 
 func TestHandleCommentError_UnknownError(t *testing.T) {
 	t.Parallel()

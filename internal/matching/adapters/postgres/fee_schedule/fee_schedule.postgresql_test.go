@@ -10,12 +10,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	matchingRepos "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // Compile-time interface conformance check.
-var _ matchingRepos.FeeScheduleRepository = (*Repository)(nil)
+var _ sharedPorts.FeeScheduleRepository = (*Repository)(nil)
 
 func TestNewRepository(t *testing.T) {
 	t.Parallel()

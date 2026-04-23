@@ -12,7 +12,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/dispute"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
-	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 func TestOpenDispute_Success(t *testing.T) {
@@ -21,7 +21,7 @@ func TestOpenDispute_Success(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -36,13 +36,7 @@ func TestOpenDispute_Success(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewDisputeUseCase(
-		disputeRepo,
-		exceptionRepo,
-		audit,
-		actorExtractor("analyst-1"),
-		infra,
-	)
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
 	require.NoError(t, err)
 
 	result, err := uc.OpenDispute(ctx, OpenDisputeCommand{
@@ -68,7 +62,7 @@ func TestOpenDispute_ValidationErrors(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -77,13 +71,7 @@ func TestOpenDispute_ValidationErrors(t *testing.T) {
 	disputeRepo := &stubDisputeRepo{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewDisputeUseCase(
-		disputeRepo,
-		exceptionRepo,
-		audit,
-		actorExtractor("analyst-1"),
-		&stubInfraProvider{},
-	)
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -165,7 +153,7 @@ func TestOpenDispute_ActorRequired(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -175,13 +163,7 @@ func TestOpenDispute_ActorRequired(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	emptyActor := actorExtractor("")
 
-	uc, err := NewDisputeUseCase(
-		disputeRepo,
-		exceptionRepo,
-		audit,
-		emptyActor,
-		&stubInfraProvider{},
-	)
+	uc, err := NewExceptionUseCase(exceptionRepo, emptyActor, audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
 	require.NoError(t, err)
 
 	_, err = uc.OpenDispute(context.Background(), OpenDisputeCommand{
@@ -192,13 +174,7 @@ func TestOpenDispute_ActorRequired(t *testing.T) {
 	require.ErrorIs(t, err, ErrActorRequired)
 
 	whitespaceActor := actorExtractor("  ")
-	uc2, err := NewDisputeUseCase(
-		disputeRepo,
-		exceptionRepo,
-		audit,
-		whitespaceActor,
-		&stubInfraProvider{},
-	)
+	uc2, err := NewExceptionUseCase(exceptionRepo, whitespaceActor, audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
 	require.NoError(t, err)
 
 	_, err = uc2.OpenDispute(context.Background(), OpenDisputeCommand{
@@ -215,7 +191,7 @@ func TestOpenDispute_ExceptionNotFound(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -224,13 +200,7 @@ func TestOpenDispute_ExceptionNotFound(t *testing.T) {
 	disputeRepo := &stubDisputeRepo{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewDisputeUseCase(
-		disputeRepo,
-		exceptionRepo,
-		audit,
-		actorExtractor("analyst-1"),
-		&stubInfraProvider{},
-	)
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -248,7 +218,7 @@ func TestOpenDispute_RepositoryCreateError(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -257,13 +227,7 @@ func TestOpenDispute_RepositoryCreateError(t *testing.T) {
 	disputeRepo := &stubDisputeRepo{createErr: errTestDisputeCreate}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewDisputeUseCase(
-		disputeRepo,
-		exceptionRepo,
-		audit,
-		actorExtractor("analyst-1"),
-		&stubInfraProvider{},
-	)
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -281,7 +245,7 @@ func TestOpenDispute_AuditPublishError(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -290,13 +254,7 @@ func TestOpenDispute_AuditPublishError(t *testing.T) {
 	disputeRepo := &stubDisputeRepo{}
 	audit := &stubAuditPublisher{err: errTestAudit}
 
-	uc, err := NewDisputeUseCase(
-		disputeRepo,
-		exceptionRepo,
-		audit,
-		actorExtractor("analyst-1"),
-		&stubInfraProvider{},
-	)
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -343,7 +301,7 @@ func TestOpenDispute_AllCategories(t *testing.T) {
 			exception, err := entities.NewException(
 				context.Background(),
 				uuid.New(),
-				value_objects.ExceptionSeverityHigh,
+				sharedexception.ExceptionSeverityHigh,
 				nil,
 			)
 			require.NoError(t, err)
@@ -358,13 +316,7 @@ func TestOpenDispute_AllCategories(t *testing.T) {
 
 			infra := &stubInfraProvider{tx: tx}
 
-			uc, err := NewDisputeUseCase(
-				disputeRepo,
-				exceptionRepo,
-				audit,
-				actorExtractor("analyst-1"),
-				infra,
-			)
+			uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
 			require.NoError(t, err)
 
 			result, err := uc.OpenDispute(ctx, OpenDisputeCommand{

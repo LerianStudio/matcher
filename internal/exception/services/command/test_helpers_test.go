@@ -405,3 +405,62 @@ type mockExceptionRepository = stubExceptionRepo
 
 // mockActorExtractor wraps stubActorExtractor for naming consistency.
 type mockActorExtractor = stubActorExtractor
+
+// finderAsRepo adapts a ports.ExceptionFinder (narrow interface used by
+// dispatch tests) to the full repositories.ExceptionRepository surface the
+// merged ExceptionUseCase constructor requires. Dispatch operations only
+// invoke FindByID, so the other methods panic to surface any unintended
+// call path during tests.
+type finderAsRepo struct {
+	finder ports.ExceptionFinder
+}
+
+// wrapFinder returns an ExceptionRepository implementation around a narrow
+// ExceptionFinder. When finder is nil we return a nil ExceptionRepository
+// interface (untyped nil) so the constructor's `repo == nil` check still
+// triggers — returning a typed nil pointer would produce a non-nil
+// interface value with a nil dynamic value, silently masking the error.
+func wrapFinder(finder ports.ExceptionFinder) repositories.ExceptionRepository {
+	if finder == nil {
+		return nil
+	}
+
+	return &finderAsRepo{finder: finder}
+}
+
+func (f *finderAsRepo) FindByID(
+	ctx context.Context,
+	id uuid.UUID,
+) (*entities.Exception, error) {
+	return f.finder.FindByID(ctx, id)
+}
+
+func (f *finderAsRepo) FindByIDs(
+	_ context.Context,
+	_ []uuid.UUID,
+) ([]*entities.Exception, error) {
+	panic("finderAsRepo.FindByIDs: dispatch path should not call this")
+}
+
+func (f *finderAsRepo) List(
+	_ context.Context,
+	_ repositories.ExceptionFilter,
+	_ repositories.CursorFilter,
+) ([]*entities.Exception, libHTTP.CursorPagination, error) {
+	panic("finderAsRepo.List: dispatch path should not call this")
+}
+
+func (f *finderAsRepo) Update(
+	_ context.Context,
+	_ *entities.Exception,
+) (*entities.Exception, error) {
+	panic("finderAsRepo.Update: dispatch path should not call this")
+}
+
+func (f *finderAsRepo) UpdateWithTx(
+	_ context.Context,
+	_ repositories.Tx,
+	_ *entities.Exception,
+) (*entities.Exception, error) {
+	panic("finderAsRepo.UpdateWithTx: dispatch path should not call this")
+}

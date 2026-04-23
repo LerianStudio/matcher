@@ -28,7 +28,7 @@ func TestBulkResolveRequest_JSONTags(t *testing.T) {
 	var raw map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(data, &raw))
 
-	assert.Contains(t, raw, "exception_ids")
+	assert.Contains(t, raw, "exceptionIds")
 	assert.Contains(t, raw, "resolution")
 	assert.Contains(t, raw, "reason")
 
@@ -52,7 +52,7 @@ func TestBulkAssignRequest_JSONTags(t *testing.T) {
 	var raw map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(data, &raw))
 
-	assert.Contains(t, raw, "exception_ids")
+	assert.Contains(t, raw, "exceptionIds")
 	assert.Contains(t, raw, "assignee")
 
 	var decoded BulkAssignRequest
@@ -76,8 +76,8 @@ func TestBulkDispatchRequest_JSONTags(t *testing.T) {
 	var raw map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(data, &raw))
 
-	assert.Contains(t, raw, "exception_ids")
-	assert.Contains(t, raw, "target_system")
+	assert.Contains(t, raw, "exceptionIds")
+	assert.Contains(t, raw, "targetSystem")
 	assert.Contains(t, raw, "queue")
 
 	var decoded BulkDispatchRequest
@@ -127,7 +127,7 @@ func TestBulkFailure_JSONTags(t *testing.T) {
 	var raw map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(data, &raw))
 
-	assert.Contains(t, raw, "exception_id")
+	assert.Contains(t, raw, "exceptionId")
 	assert.Contains(t, raw, "error")
 
 	var decoded BulkFailure

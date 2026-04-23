@@ -24,6 +24,7 @@ import (
 	ingestionRedis "github.com/LerianStudio/matcher/internal/ingestion/adapters/redis"
 	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
 	sharedCross "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/tests/integration"
@@ -140,7 +141,7 @@ func seedAutoMatchConfig(
 		h.Seed.TenantID,
 		configEntities.CreateReconciliationContextInput{
 			Name:              "Auto Match Test " + uuid.New().String()[:8],
-			Type:              configVO.ContextTypeOneToOne,
+			Type:              shared.ContextTypeOneToOne,
 			Interval:          "0 0 * * *",
 			AutoMatchOnUpload: &autoMatchEnabled,
 		},
@@ -192,21 +193,21 @@ func seedAutoMatchConfig(
 		"description": "description",
 	}
 
-	ledgerFM, err := configEntities.NewFieldMap(
+	ledgerFM, err := shared.NewFieldMap(
 		ctx,
 		createdCtx.ID,
 		createdLedger.ID,
-		configEntities.CreateFieldMapInput{Mapping: mapping},
+		shared.CreateFieldMapInput{Mapping: mapping},
 	)
 	require.NoError(t, err)
 	_, err = fmRepo.Create(ctx, ledgerFM)
 	require.NoError(t, err)
 
-	bankFM, err := configEntities.NewFieldMap(
+	bankFM, err := shared.NewFieldMap(
 		ctx,
 		createdCtx.ID,
 		createdBank.ID,
-		configEntities.CreateFieldMapInput{Mapping: mapping},
+		shared.CreateFieldMapInput{Mapping: mapping},
 	)
 	require.NoError(t, err)
 	_, err = fmRepo.Create(ctx, bankFM)
@@ -218,7 +219,7 @@ func seedAutoMatchConfig(
 		createdCtx.ID,
 		configEntities.CreateMatchRuleInput{
 			Priority: 1,
-			Type:     configVO.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config: map[string]any{
 				"matchAmount":     true,
 				"matchCurrency":   true,

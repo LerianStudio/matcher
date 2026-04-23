@@ -84,7 +84,7 @@
     "paths": {
         "/health": {
             "get": {
-                "description": "Returns a simple health check response to indicate the service is alive.\nUsed by Kubernetes liveness probes to detect if the service needs to be restarted.",
+                "description": "Returns HTTP 200 with \"healthy\" once the startup self-probe\nhas confirmed every required dependency. Returns 503 before\nthat gate is cleared so Kubernetes does not route traffic\nto a partially-initialised pod. Separate from /readyz, which\nprobes on every request.",
                 "produces": [
                     "text/plain"
                 ],
@@ -99,13 +99,19 @@
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    "503": {
+                        "description": "self-probe failed",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             }
         },
-        "/ready": {
+        "/readyz": {
             "get": {
-                "description": "Checks if the service is ready to accept traffic by verifying all required dependencies.\nUsed by Kubernetes readiness probes to control traffic routing.\nReturns 200 OK when all required dependencies are healthy, 503 Service Unavailable otherwise.\nDependency check details are only included in development/test environments.",
+                "description": "Canonical Kubernetes readiness probe. Per-check status\nvocabulary: up, down, degraded, skipped, n/a. Top-level\n\"healthy\" iff every required dep is in {up, skipped, n/a};\nanything else yields \"unhealthy\" and HTTP 503.",
                 "produces": [
                     "application/json"
                 ],
@@ -113,16 +119,16 @@
                     "Health"
                 ],
                 "summary": "Readiness check",
-                "operationId": "getReady",
+                "operationId": "getReadyz",
                 "responses": {
                     "200": {
-                        "description": "Service is ready to accept traffic",
+                        "description": "Service is ready",
                         "schema": {
                             "$ref": "#/definitions/internal_bootstrap.ReadinessResponse"
                         }
                     },
                     "503": {
-                        "description": "Service is not ready (degraded state)",
+                        "description": "Service is not ready",
                         "schema": {
                             "$ref": "#/definitions/internal_bootstrap.ReadinessResponse"
                         }
@@ -10049,7 +10055,7 @@
         },
         "/version": {
             "get": {
-                "description": "Returns the service version from the VERSION environment variable (defaults to \"0.0.0\").",
+                "description": "Returns the service version from the VERSION environment\nvariable (defaults to \"0.0.0\").",
                 "produces": [
                     "application/json"
                 ],
@@ -11672,7 +11678,7 @@
             "type": "object",
             "required": [
                 "assignee",
-                "exception_ids"
+                "exceptionIds"
             ],
             "properties": {
                 "assignee": {
@@ -11681,7 +11687,7 @@
                     "maxLength": 255,
                     "example": "user@example.com"
                 },
-                "exception_ids": {
+                "exceptionIds": {
                     "description": "Exception IDs to assign",
                     "type": "array",
                     "maxItems": 100,
@@ -11696,11 +11702,11 @@
             "description": "Bulk dispatch request payload",
             "type": "object",
             "required": [
-                "exception_ids",
-                "target_system"
+                "exceptionIds",
+                "targetSystem"
             ],
             "properties": {
-                "exception_ids": {
+                "exceptionIds": {
                     "description": "Exception IDs to dispatch",
                     "type": "array",
                     "maxItems": 100,
@@ -11715,7 +11721,7 @@
                     "maxLength": 255,
                     "example": "RECON-TEAM"
                 },
-                "target_system": {
+                "targetSystem": {
                     "description": "Target system to dispatch to",
                     "type": "string",
                     "maxLength": 255,
@@ -11732,7 +11738,7 @@
                     "type": "string",
                     "example": "exception not found"
                 },
-                "exception_id": {
+                "exceptionId": {
                     "description": "Exception ID that failed",
                     "type": "string",
                     "example": "550e8400-e29b-41d4-a716-446655440000"
@@ -11743,11 +11749,11 @@
             "description": "Bulk resolve request payload",
             "type": "object",
             "required": [
-                "exception_ids",
+                "exceptionIds",
                 "resolution"
             ],
             "properties": {
-                "exception_ids": {
+                "exceptionIds": {
                     "description": "Exception IDs to resolve",
                     "type": "array",
                     "maxItems": 100,
@@ -12355,17 +12361,17 @@
             "description": "Actor mapping entry linking an opaque actor ID to PII",
             "type": "object",
             "properties": {
-                "actor_id": {
+                "actorId": {
                     "description": "Opaque actor identifier",
                     "type": "string",
                     "example": "user:550e8400-e29b-41d4-a716-446655440000"
                 },
-                "created_at": {
+                "createdAt": {
                     "description": "Timestamp when the mapping was created (RFC3339)",
                     "type": "string",
                     "example": "2026-01-15T10:30:00Z"
                 },
-                "display_name": {
+                "displayName": {
                     "description": "Human-readable display name",
                     "type": "string",
                     "example": "John Doe"
@@ -12375,7 +12381,7 @@
                     "type": "string",
                     "example": "john.doe@example.com"
                 },
-                "updated_at": {
+                "updatedAt": {
                     "description": "Timestamp when the mapping was last updated (RFC3339)",
                     "type": "string",
                     "example": "2026-01-15T10:30:00Z"
@@ -12386,22 +12392,22 @@
             "description": "Completed audit log archive metadata",
             "type": "object",
             "properties": {
-                "archived_at": {
+                "archivedAt": {
                     "description": "Timestamp when archival completed (RFC3339)",
                     "type": "string",
                     "example": "2024-04-01T02:30:00Z"
                 },
-                "compressed_size_bytes": {
+                "compressedSizeBytes": {
                     "description": "Compressed file size in bytes",
                     "type": "integer",
                     "example": 10485760
                 },
-                "date_range_end": {
+                "dateRangeEnd": {
                     "description": "End of the archived date range (RFC3339)",
                     "type": "string",
                     "example": "2024-03-31T23:59:59Z"
                 },
-                "date_range_start": {
+                "dateRangeStart": {
                     "description": "Start of the archived date range (RFC3339)",
                     "type": "string",
                     "example": "2024-01-01T00:00:00Z"
@@ -12411,12 +12417,12 @@
                     "type": "string",
                     "example": "550e8400-e29b-41d4-a716-446655440000"
                 },
-                "partition_name": {
+                "partitionName": {
                     "description": "Name of the database partition that was archived",
                     "type": "string",
                     "example": "audit_logs_2024_q1"
                 },
-                "row_count": {
+                "rowCount": {
                     "description": "Number of rows archived",
                     "type": "integer",
                     "example": 150000
@@ -12429,7 +12435,7 @@
                     ],
                     "example": "COMPLETE"
                 },
-                "storage_class": {
+                "storageClass": {
                     "description": "Object storage class",
                     "type": "string",
                     "enum": [
@@ -12536,7 +12542,7 @@
             "description": "Request body for upserting an actor mapping",
             "type": "object",
             "properties": {
-                "display_name": {
+                "displayName": {
                     "description": "Human-readable display name for the actor",
                     "type": "string",
                     "example": "John Doe"
@@ -13769,82 +13775,66 @@
                 }
             }
         },
-        "internal_bootstrap.DependencyChecks": {
-            "description": "Individual dependency health status",
+        "internal_bootstrap.CheckResult": {
             "type": "object",
             "properties": {
-                "database": {
-                    "description": "Database check status: ok, down, or unknown",
-                    "type": "string",
-                    "enum": [
-                        "ok",
-                        "down",
-                        "unknown"
-                    ],
-                    "example": "ok"
+                "error": {
+                    "type": "string"
                 },
-                "databaseReplica": {
-                    "description": "DatabaseReplica check status: ok, down, or unknown",
-                    "type": "string",
-                    "enum": [
-                        "ok",
-                        "down",
-                        "unknown"
-                    ],
-                    "example": "ok"
+                "latency_ms": {
+                    "type": "integer",
+                    "example": 2
                 },
-                "objectStorage": {
-                    "description": "ObjectStorage check status: ok, down, or unknown",
-                    "type": "string",
-                    "enum": [
-                        "ok",
-                        "down",
-                        "unknown"
-                    ],
-                    "example": "ok"
+                "reason": {
+                    "type": "string"
                 },
-                "rabbitmq": {
-                    "description": "RabbitMQ check status: ok, down, or unknown",
+                "status": {
                     "type": "string",
                     "enum": [
-                        "ok",
+                        "up",
                         "down",
-                        "unknown"
+                        "degraded",
+                        "skipped",
+                        "n/a"
                     ],
-                    "example": "ok"
+                    "example": "up"
                 },
-                "redis": {
-                    "description": "Redis check status: ok, down, or unknown",
-                    "type": "string",
-                    "enum": [
-                        "ok",
-                        "down",
-                        "unknown"
-                    ],
-                    "example": "ok"
+                "tls": {
+                    "description": "TLS is a pointer so json omitempty drops it for deps that have no TLS\nconcept (e.g., in-process cache). For deps that do have TLS posture,\nfalse and true are both meaningful and must serialise.",
+                    "type": "boolean"
                 }
             }
         },
         "internal_bootstrap.ReadinessResponse": {
-            "description": "Service readiness status with optional dependency checks",
+            "description": "Kubernetes readiness probe response in the canonical contract shape (dev-readyz skill). Top-level \"status\" is \"healthy\" iff every check is in {up, skipped, n/a}; any \"down\" or \"degraded\" in a required dep yields \"unhealthy\" and HTTP 503.",
             "type": "object",
             "properties": {
                 "checks": {
-                    "description": "Checks contains individual dependency status (only in development/test environments)",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/internal_bootstrap.DependencyChecks"
-                        }
-                    ]
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/internal_bootstrap.CheckResult"
+                    }
                 },
-                "status": {
-                    "description": "Status is \"ok\" when all required dependencies are available, \"degraded\" otherwise",
+                "deployment_mode": {
                     "type": "string",
                     "enum": [
-                        "ok",
-                        "degraded"
+                        "saas",
+                        "byoc",
+                        "local"
                     ],
-                    "example": "ok"
+                    "example": "local"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "healthy",
+                        "unhealthy"
+                    ],
+                    "example": "healthy"
+                },
+                "version": {
+                    "type": "string",
+                    "example": "1.3.0"
                 }
             }
         },

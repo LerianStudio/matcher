@@ -15,8 +15,8 @@ import (
 	"github.com/LerianStudio/matcher/internal/governance/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
+	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
-	"github.com/LerianStudio/matcher/internal/governance/services/query"
 	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
 
@@ -25,9 +25,9 @@ var _ = sharedhttp.ErrorResponse{}
 // Sentinel errors for actor mapping handler validation.
 var (
 	ErrActorMappingCommandUCRequired = errors.New("actor mapping command use case is required")
-	ErrActorMappingQueryUCRequired   = errors.New("actor mapping query use case is required")
+	ErrActorMappingRepoRequired      = errors.New("actor mapping repository is required")
 	ErrMissingActorID                = errors.New("actor id path parameter is required")
-	ErrAtLeastOneFieldRequired       = errors.New("at least one of display_name or email must be provided")
+	ErrAtLeastOneFieldRequired       = errors.New("at least one of displayName or email must be provided")
 	ErrNilActorMappingResponse       = errors.New("nil mapping after successful upsert")
 )
 
@@ -39,27 +39,27 @@ var (
 // global state.
 type ActorMappingHandler struct {
 	commandUC      *command.ActorMappingUseCase
-	queryUC        *query.ActorMappingQueryUseCase
+	repo           repositories.ActorMappingRepository
 	productionMode bool
 }
 
 // NewActorMappingHandler creates a new actor mapping HTTP handler.
 func NewActorMappingHandler(
 	commandUC *command.ActorMappingUseCase,
-	queryUC *query.ActorMappingQueryUseCase,
+	repo repositories.ActorMappingRepository,
 	production bool,
 ) (*ActorMappingHandler, error) {
 	if commandUC == nil {
 		return nil, ErrActorMappingCommandUCRequired
 	}
 
-	if queryUC == nil {
-		return nil, ErrActorMappingQueryUCRequired
+	if repo == nil {
+		return nil, ErrActorMappingRepoRequired
 	}
 
 	return &ActorMappingHandler{
 		commandUC:      commandUC,
-		queryUC:        queryUC,
+		repo:           repo,
 		productionMode: production,
 	}, nil
 }
@@ -149,7 +149,7 @@ func (ha *ActorMappingHandler) GetActorMapping(fiberCtx *fiber.Ctx) error {
 		return ha.badRequest(ctx, fiberCtx, span, logger, "actor id is required", ErrMissingActorID)
 	}
 
-	mapping, err := ha.queryUC.GetActorMapping(ctx, actorID)
+	mapping, err := ha.repo.GetByActorID(ctx, actorID)
 	if err != nil {
 		if errors.Is(err, governanceErrors.ErrActorMappingNotFound) {
 			return ha.writeNotFound(ctx, fiberCtx, span, logger, err)

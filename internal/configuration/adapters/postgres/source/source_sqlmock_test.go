@@ -1185,7 +1185,7 @@ func TestScanSource_InvalidID(t *testing.T) {
 	result, err := scanSource(sqlRows)
 	require.Error(t, err)
 	require.Nil(t, result)
-	require.Contains(t, err.Error(), "parse ID")
+	require.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestScanSource_InvalidContextID(t *testing.T) {
@@ -1217,7 +1217,7 @@ func TestScanSource_InvalidContextID(t *testing.T) {
 	result, err := scanSource(sqlRows)
 	require.Error(t, err)
 	require.Nil(t, result)
-	require.Contains(t, err.Error(), "parse context ID")
+	require.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestScanSource_InvalidType(t *testing.T) {
@@ -1411,8 +1411,8 @@ func TestModelCreation_ValidEntity(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, model)
-	require.Equal(t, entity.ID.String(), model.ID)
-	require.Equal(t, entity.ContextID.String(), model.ContextID)
+	require.Equal(t, entity.ID, model.ID)
+	require.Equal(t, entity.ContextID, model.ContextID)
 	require.Equal(t, entity.Name, model.Name)
 	require.Equal(t, entity.Type.String(), model.Type)
 }

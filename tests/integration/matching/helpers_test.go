@@ -139,21 +139,21 @@ func seedE4T9Config(t *testing.T, h *integration.TestHarness) e4t9Seed {
 		"description": "description",
 	}
 
-	ledgerFM, err := configEntities.NewFieldMap(
+	ledgerFM, err := shared.NewFieldMap(
 		ctx,
 		h.Seed.ContextID,
 		ledgerSourceID,
-		configEntities.CreateFieldMapInput{Mapping: mapping},
+		shared.CreateFieldMapInput{Mapping: mapping},
 	)
 	require.NoError(t, err)
 	_, err = fmRepo.Create(ctx, ledgerFM)
 	require.NoError(t, err)
 
-	bankFM, err := configEntities.NewFieldMap(
+	bankFM, err := shared.NewFieldMap(
 		ctx,
 		h.Seed.ContextID,
 		createdBankSrc.ID,
-		configEntities.CreateFieldMapInput{Mapping: mapping},
+		shared.CreateFieldMapInput{Mapping: mapping},
 	)
 	require.NoError(t, err)
 	_, err = fmRepo.Create(ctx, bankFM)
@@ -164,7 +164,7 @@ func seedE4T9Config(t *testing.T, h *integration.TestHarness) e4t9Seed {
 		h.Seed.ContextID,
 		configEntities.CreateMatchRuleInput{
 			Priority: 1,
-			Type:     configVO.RuleTypeExact,
+			Type:     shared.RuleTypeExact,
 			Config: map[string]any{
 				"matchAmount":     true,
 				"matchCurrency":   true,
@@ -245,8 +245,6 @@ func wireE4T9UseCases(t *testing.T, h *integration.TestHarness) e4t9Wired {
 		configFeeRuleRepo.NewRepository(provider),
 	)
 	require.NoError(t, err)
-	srcProvider, err := sharedCross.NewSourceProviderAdapter(cfgSourceRepo)
-	require.NoError(t, err)
 
 	txAdapter, err := sharedCross.NewTransactionRepositoryAdapterFromRepo(provider, txRepo)
 	require.NoError(t, err)
@@ -261,13 +259,12 @@ func wireE4T9UseCases(t *testing.T, h *integration.TestHarness) e4t9Wired {
 	adjustment := adjustmentRepo.NewRepository(provider, auditLogRepo)
 	feeSchedule := feeScheduleRepo.NewRepository(provider)
 
-	feeRuleProvider, err := sharedCross.NewFeeRuleProviderAdapter(configFeeRuleRepo.NewRepository(provider))
-	require.NoError(t, err)
+	feeRuleProvider := configProvider.FeeRuleProvider()
 
 	matchingUC, err := matchingCommand.New(matchingCommand.UseCaseDeps{
-		ContextProvider:  configProvider.ContextProvider(),
-		SourceProvider:   srcProvider,
-		RuleProvider:     configProvider.MatchRuleProvider(),
+		ContextProvider:  configProvider,
+		SourceProvider:   configProvider,
+		RuleProvider:     configProvider,
 		TxRepo:           txAdapter,
 		LockManager:      lockManager,
 		MatchRunRepo:     matchRun,

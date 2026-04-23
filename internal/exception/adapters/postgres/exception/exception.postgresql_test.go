@@ -23,6 +23,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
@@ -233,7 +234,7 @@ func TestRepository_Update_NotFound(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -321,7 +322,7 @@ func TestRepository_NilConnection(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityHigh,
+			sharedexception.ExceptionSeverityHigh,
 			nil,
 		)
 		require.NoError(t, err)
@@ -336,7 +337,7 @@ func TestRepository_NilConnection(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityHigh,
+			sharedexception.ExceptionSeverityHigh,
 			nil,
 		)
 		require.NoError(t, err)
@@ -400,7 +401,7 @@ func TestRepository_UpdateWithTx_NilTransaction(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -585,7 +586,7 @@ func TestBuildListQuery(t *testing.T) {
 	t.Run("query with severity filter", func(t *testing.T) {
 		t.Parallel()
 
-		severity := value_objects.ExceptionSeverityHigh
+		severity := sharedexception.ExceptionSeverityHigh
 		filter := repositories.ExceptionFilter{Severity: &severity}
 		params := listQueryParams{
 			limit:          20,
@@ -668,7 +669,7 @@ func TestBuildListQuery(t *testing.T) {
 		t.Parallel()
 
 		status := value_objects.ExceptionStatusAssigned
-		severity := value_objects.ExceptionSeverityCritical
+		severity := sharedexception.ExceptionSeverityCritical
 		assignedTo := "admin@example.com"
 		externalSystem := "ServiceNow"
 		now := time.Now().UTC()
@@ -725,7 +726,7 @@ func TestCalculatePagination(t *testing.T) {
 		exception, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityLow,
+			sharedexception.ExceptionSeverityLow,
 			nil,
 		)
 		require.NoError(t, err)
@@ -751,7 +752,7 @@ func TestCalculatePagination(t *testing.T) {
 		exception1, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityLow,
+			sharedexception.ExceptionSeverityLow,
 			nil,
 		)
 		require.NoError(t, err)
@@ -759,7 +760,7 @@ func TestCalculatePagination(t *testing.T) {
 		exception2, err := entities.NewException(
 			ctx,
 			uuid.New(),
-			value_objects.ExceptionSeverityHigh,
+			sharedexception.ExceptionSeverityHigh,
 			nil,
 		)
 		require.NoError(t, err)
@@ -868,7 +869,7 @@ func TestRepository_Update_ConcurrentModification(t *testing.T) {
 	exception, err := entities.NewException(
 		ctx,
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -997,7 +998,7 @@ func TestRepository_FindByID_Success(t *testing.T) {
 	require.NotNil(t, result)
 	require.Equal(t, exceptionID, result.ID)
 	require.Equal(t, transactionID, result.TransactionID)
-	require.Equal(t, value_objects.ExceptionSeverityHigh, result.Severity)
+	require.Equal(t, sharedexception.ExceptionSeverityHigh, result.Severity)
 	require.Equal(t, value_objects.ExceptionStatusOpen, result.Status)
 	require.NotNil(t, result.ExternalSystem)
 	require.Equal(t, externalSystem, *result.ExternalSystem)
@@ -1203,7 +1204,7 @@ func TestRepository_Update_Success(t *testing.T) {
 	exception := &entities.Exception{
 		ID:            exceptionID,
 		TransactionID: transactionID,
-		Severity:      value_objects.ExceptionSeverityHigh,
+		Severity:      sharedexception.ExceptionSeverityHigh,
 		Status:        value_objects.ExceptionStatusOpen,
 		Version:       1,
 		CreatedAt:     now,
@@ -1293,7 +1294,7 @@ func TestRepository_UpdateWithTx_Success(t *testing.T) {
 	exception := &entities.Exception{
 		ID:            exceptionID,
 		TransactionID: transactionID,
-		Severity:      value_objects.ExceptionSeverityHigh,
+		Severity:      sharedexception.ExceptionSeverityHigh,
 		Status:        value_objects.ExceptionStatusOpen,
 		Version:       1,
 		CreatedAt:     now,
@@ -1698,7 +1699,7 @@ func TestRepository_FindByID_InvalidExceptionID(t *testing.T) {
 	result, err := repo.FindByID(ctx, exceptionID)
 	require.Error(t, err)
 	require.Nil(t, result)
-	require.Contains(t, err.Error(), "parse exception id")
+	require.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestRepository_FindByID_InvalidTransactionID(t *testing.T) {
@@ -1746,7 +1747,7 @@ func TestRepository_FindByID_InvalidTransactionID(t *testing.T) {
 	result, err := repo.FindByID(ctx, exceptionID)
 	require.Error(t, err)
 	require.Nil(t, result)
-	require.Contains(t, err.Error(), "parse transaction id")
+	require.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestRepository_List_RowsError(t *testing.T) {

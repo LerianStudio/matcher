@@ -13,7 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	entities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	uuid "github.com/google/uuid"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -43,10 +43,10 @@ func (m *MockFieldMapRepository) EXPECT() *MockFieldMapRepositoryMockRecorder {
 }
 
 // Create mocks base method.
-func (m *MockFieldMapRepository) Create(ctx context.Context, entity *entities.FieldMap) (*entities.FieldMap, error) {
+func (m *MockFieldMapRepository) Create(ctx context.Context, entity *shared.FieldMap) (*shared.FieldMap, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Create", ctx, entity)
-	ret0, _ := ret[0].(*entities.FieldMap)
+	ret0, _ := ret[0].(*shared.FieldMap)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -87,10 +87,10 @@ func (mr *MockFieldMapRepositoryMockRecorder) ExistsBySourceIDs(ctx, sourceIDs a
 }
 
 // FindByID mocks base method.
-func (m *MockFieldMapRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.FieldMap, error) {
+func (m *MockFieldMapRepository) FindByID(ctx context.Context, id uuid.UUID) (*shared.FieldMap, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindByID", ctx, id)
-	ret0, _ := ret[0].(*entities.FieldMap)
+	ret0, _ := ret[0].(*shared.FieldMap)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -102,10 +102,10 @@ func (mr *MockFieldMapRepositoryMockRecorder) FindByID(ctx, id any) *gomock.Call
 }
 
 // FindBySourceID mocks base method.
-func (m *MockFieldMapRepository) FindBySourceID(ctx context.Context, sourceID uuid.UUID) (*entities.FieldMap, error) {
+func (m *MockFieldMapRepository) FindBySourceID(ctx context.Context, sourceID uuid.UUID) (*shared.FieldMap, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindBySourceID", ctx, sourceID)
-	ret0, _ := ret[0].(*entities.FieldMap)
+	ret0, _ := ret[0].(*shared.FieldMap)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -117,10 +117,10 @@ func (mr *MockFieldMapRepositoryMockRecorder) FindBySourceID(ctx, sourceID any) 
 }
 
 // Update mocks base method.
-func (m *MockFieldMapRepository) Update(ctx context.Context, entity *entities.FieldMap) (*entities.FieldMap, error) {
+func (m *MockFieldMapRepository) Update(ctx context.Context, entity *shared.FieldMap) (*shared.FieldMap, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Update", ctx, entity)
-	ret0, _ := ret[0].(*entities.FieldMap)
+	ret0, _ := ret[0].(*shared.FieldMap)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

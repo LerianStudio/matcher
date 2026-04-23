@@ -433,6 +433,8 @@ type ingestionHandlerFixture struct {
 	jobs            *ingestionRepoMock.MockJobRepository
 	txs             *ingestionRepoMock.MockTransactionRepository
 	outbox          *outboxMocks.MockOutboxRepository
+	jobAdapter      *jobRepoAdapter
+	txAdapter       *transactionRepoAdapter
 }
 
 func newIngestionHandlerFixture(t *testing.T) *ingestionHandlerFixture {
@@ -475,7 +477,28 @@ func newIngestionHandlerFixture(t *testing.T) *ingestionHandlerFixture {
 		jobs:            jobs,
 		txs:             txs,
 		outbox:          outbox,
+		jobAdapter:      jobAdapter,
+		txAdapter:       txAdapter,
 	}
+}
+
+// newHandlersFromFixture builds Handlers with the fixture's adapters. The jobRepo
+// and transactionRepo params replace the span-only ListJobsByContext /
+// ListTransactionsByJobContext / SearchTransactions query methods.
+func (f *ingestionHandlerFixture) newHandlers(t *testing.T) *Handlers {
+	t.Helper()
+
+	handlers, err := NewHandlers(
+		f.commandUC,
+		f.queryUC,
+		f.jobAdapter,
+		f.txAdapter,
+		f.contextProvider,
+		false,
+	)
+	require.NoError(t, err)
+
+	return handlers
 }
 
 func newFiberTestApp(ctx context.Context) *fiber.App {
@@ -607,14 +630,20 @@ func TestNewHandlersValidation(t *testing.T) {
 
 	ctxProv := &stubContextProvider{info: &ReconciliationContextInfo{ID: uuid.New()}}
 
-	_, err := NewHandlers(nil, nil, ctxProv, false)
+	_, err := NewHandlers(nil, nil, nil, nil, ctxProv, false)
 	require.ErrorIs(t, err, ErrNilCommandUseCase)
 
 	fixture := newIngestionHandlerFixture(t)
-	_, err = NewHandlers(fixture.commandUC, nil, ctxProv, false)
+	_, err = NewHandlers(fixture.commandUC, nil, fixture.jobAdapter, fixture.txAdapter, ctxProv, false)
 	require.ErrorIs(t, err, ErrNilQueryUseCase)
 
-	_, err = NewHandlers(fixture.commandUC, fixture.queryUC, nil, false)
+	_, err = NewHandlers(fixture.commandUC, fixture.queryUC, nil, fixture.txAdapter, ctxProv, false)
+	require.ErrorIs(t, err, ErrNilJobRepository)
+
+	_, err = NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, nil, ctxProv, false)
+	require.ErrorIs(t, err, ErrNilTransactionRepository)
+
+	_, err = NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, nil, false)
 	require.ErrorIs(t, err, ErrNilContextProvider)
 }
 
@@ -630,7 +659,7 @@ func TestUploadFileValidatesInput(t *testing.T) {
 		t.Parallel()
 
 		fixture := newIngestionHandlerFixture(t)
-		handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+		handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 		require.NoError(t, err)
 
 		app := newFiberTestApp(ctx)
@@ -660,7 +689,7 @@ func TestUploadFileValidatesInput(t *testing.T) {
 		// Set up the context provider to return the correct contextID for ownership verification
 		fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-		handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+		handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 		require.NoError(t, err)
 
 		app := newFiberTestApp(ctx)
@@ -697,7 +726,7 @@ func TestUploadFileValidatesInput(t *testing.T) {
 		// Set up the context provider to return the correct contextID for ownership verification
 		fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-		handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+		handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 		require.NoError(t, err)
 
 		app := newFiberTestApp(ctx)
@@ -765,7 +794,7 @@ func TestUploadFileSuccess(t *testing.T) {
 		CreateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&shared.OutboxEvent{}, nil)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	app := newFiberTestApp(ctx)
@@ -798,7 +827,7 @@ func TestGetJobResponses(t *testing.T) {
 	job := &entities.IngestionJob{ID: jobID, ContextID: contextID, Status: "COMPLETED"}
 	fixture.jobs.EXPECT().FindByID(gomock.Any(), jobID).Return(job, nil)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -831,7 +860,7 @@ func TestListJobsByContextBadSortOrder(t *testing.T) {
 	// Set up the context provider to return the correct contextID for ownership verification
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -874,7 +903,7 @@ func TestGetJobNotFound(t *testing.T) {
 
 	fixture.jobs.EXPECT().FindByID(gomock.Any(), jobID).Return(nil, sql.ErrNoRows)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -912,7 +941,7 @@ func TestListJobsByContextSuccess(t *testing.T) {
 		FindByContextID(gomock.Any(), contextID, gomock.Any()).
 		Return([]*entities.IngestionJob{job}, libHTTP.CursorPagination{}, nil)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -960,7 +989,7 @@ func TestListTransactionsByJobBadSortOrder(t *testing.T) {
 	// Set up the context provider to return the correct contextID for ownership verification
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1021,7 +1050,7 @@ func TestListTransactionsByJobSuccess(t *testing.T) {
 			},
 		}, libHTTP.CursorPagination{}, nil)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1070,7 +1099,7 @@ func TestListJobsByContextContextNotActive(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: false}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1110,7 +1139,7 @@ func TestListJobsByContextContextNotFound(t *testing.T) {
 	fixture.contextProvider.info = nil
 	fixture.contextProvider.err = nil
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1146,7 +1175,7 @@ func TestGetJobForbiddenCrossTenantAccess(t *testing.T) {
 	fixture.contextProvider.info = nil
 	fixture.contextProvider.err = libHTTP.ErrContextNotOwned
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1182,7 +1211,7 @@ func TestUploadFileForbiddenCrossTenantAccess(t *testing.T) {
 	fixture.contextProvider.info = nil
 	fixture.contextProvider.err = libHTTP.ErrContextNotOwned
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1217,7 +1246,7 @@ func TestListJobsByContextForbiddenCrossTenantAccess(t *testing.T) {
 	fixture.contextProvider.info = nil
 	fixture.contextProvider.err = libHTTP.ErrContextNotOwned
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1253,7 +1282,7 @@ func TestListJobsByContextInternalError(t *testing.T) {
 		FindByContextID(gomock.Any(), contextID, gomock.Any()).
 		Return(nil, libHTTP.CursorPagination{}, errTestDatabaseConnectionFailed)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1297,7 +1326,7 @@ func TestListTransactionsByJobInternalError(t *testing.T) {
 		FindByJobAndContextID(gomock.Any(), jobID, contextID, gomock.Any()).
 		Return(nil, libHTTP.CursorPagination{}, errTestDatabaseTimeout)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1339,7 +1368,7 @@ func TestListTransactionsByJobNotFound(t *testing.T) {
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 	fixture.jobs.EXPECT().FindByID(gomock.Any(), jobID).Return(nil, sql.ErrNoRows)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1380,7 +1409,7 @@ func TestListTransactionsByJobInvalidJobID(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1422,7 +1451,7 @@ func TestGetJobInternalError(t *testing.T) {
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 	fixture.jobs.EXPECT().FindByID(gomock.Any(), jobID).Return(nil, errTestInternalDBError)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1454,7 +1483,7 @@ func TestGetJobInvalidJobID(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1504,9 +1533,12 @@ func TestConcurrentUploads(t *testing.T) {
 	// Use a stub context provider that returns not found to test concurrency at validation level
 	stubProvider := &stubContextProvider{info: nil, err: nil} // Context not found
 
+	fixture := newIngestionHandlerFixture(t)
 	handlers, err := NewHandlers(
 		&command.UseCase{},
 		&query.UseCase{},
+		fixture.jobAdapter,
+		fixture.txAdapter,
 		stubProvider,
 		false,
 	)
@@ -1562,7 +1594,7 @@ func TestUploadFileInvalidSourceID(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1595,7 +1627,7 @@ func TestUploadFileInvalidContextID(t *testing.T) {
 
 	fixture := newIngestionHandlerFixture(t)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1628,7 +1660,7 @@ func TestIgnoreTransactionHandler_InvalidTransactionID(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1670,7 +1702,7 @@ func TestIgnoreTransactionHandler_InvalidRequestBody(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1711,7 +1743,7 @@ func TestIgnoreTransactionHandler_TransactionNotFound(t *testing.T) {
 	// Mock the transaction repository to return not found
 	fixture.txs.EXPECT().FindByID(gomock.Any(), txID).Return(nil, sql.ErrNoRows)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1756,7 +1788,7 @@ func TestIgnoreTransactionHandler_TransactionNotIgnorable(t *testing.T) {
 		Status: shared.TransactionStatusMatched,
 	}, nil)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1799,7 +1831,7 @@ func TestIgnoreTransactionHandler_ReasonRequired(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1860,7 +1892,7 @@ func TestIgnoreTransactionHandler_Success(t *testing.T) {
 			Currency: "USD",
 		}, nil)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1912,7 +1944,7 @@ func TestHandleIngestionError_SourceNotFound(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	handlers, err := NewHandlers(commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -1962,7 +1994,7 @@ func TestHandleIngestionError_FieldMapNotFound(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	handlers, err := NewHandlers(commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -2088,7 +2120,7 @@ func TestUploadFileHandler_InvalidContentType(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -2136,7 +2168,7 @@ func TestUploadFileHandler_ValidContentType(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	handlers, err := NewHandlers(commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(
@@ -2184,7 +2216,7 @@ func TestUploadFileHandler_EmptyContentTypePassesValidation(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	handlers, err := NewHandlers(commandUC, fixture.queryUC, fixture.contextProvider, false)
+	handlers, err := NewHandlers(commandUC, fixture.queryUC, fixture.jobAdapter, fixture.txAdapter, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := libCommons.ContextWithTracer(

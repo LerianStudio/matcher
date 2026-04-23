@@ -14,9 +14,20 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
-	discoveryPorts "github.com/LerianStudio/matcher/internal/discovery/ports"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
+
+// SchemaCache is the narrow subset of the schemacache.Cache surface the
+// syncer depends on. Defining it here lets tests substitute a stub
+// without importing the concrete package, and documents the exact
+// methods this package actually exercises.
+//
+// The concrete SchemaCache satisfies this interface by method
+// match; no explicit assertion is required.
+type SchemaCache interface {
+	SetSchema(ctx context.Context, connectionID string, schema *sharedPorts.FetcherSchema, ttl time.Duration) error
+	InvalidateSchema(ctx context.Context, connectionID string) error
+}
 
 // Sentinel errors for the connection syncer.
 var (
@@ -36,7 +47,7 @@ type SchemaFetcher func(ctx context.Context, connectionID string) (*sharedPorts.
 type ConnectionSyncer struct {
 	connRepo    repositories.ConnectionRepository
 	schemaRepo  repositories.SchemaRepository
-	schemaCache discoveryPorts.SchemaCache
+	schemaCache SchemaCache
 	cacheTTL    time.Duration
 }
 
@@ -59,7 +70,7 @@ func NewConnectionSyncer(
 
 // WithSchemaCache wires an optional schema cache into the syncer so successful
 // refreshes immediately replace stale cached schemas.
-func (cs *ConnectionSyncer) WithSchemaCache(cache discoveryPorts.SchemaCache, ttl time.Duration) {
+func (cs *ConnectionSyncer) WithSchemaCache(cache SchemaCache, ttl time.Duration) {
 	if cs == nil {
 		return
 	}

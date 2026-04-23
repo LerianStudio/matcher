@@ -18,10 +18,12 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
+	reportingRepos "github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/reporting/services/command"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query"
 	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -35,6 +37,8 @@ var (
 	ErrNilExportJobUseCase = errors.New("export job use case is required")
 	// ErrNilExportJobQueryService indicates export job query service is nil.
 	ErrNilExportJobQueryService = errors.New("export job query service is required")
+	// ErrNilExportJobRepository indicates export job repository is nil.
+	ErrNilExportJobRepository = errors.New("export job repository is required")
 	// ErrNilStorageClientHandler indicates storage client is nil.
 	ErrNilStorageClientHandler = errors.New("storage client is required")
 	// ErrInvalidJobID indicates job ID is invalid.
@@ -75,7 +79,8 @@ type ExportJobRuntimeConfig struct {
 type ExportJobHandlers struct {
 	exportJobUC           *command.ExportJobUseCase
 	querySvc              *query.ExportJobQueryService
-	storage               sharedPorts.ObjectStorageClient
+	exportJobRepo         reportingRepos.ExportJobRepository
+	storage               objectstorage.Backend
 	contextVerifier       libHTTP.TenantOwnershipVerifier
 	enabled               bool
 	presignExpiry         time.Duration
@@ -160,7 +165,8 @@ func (handler *ExportJobHandlers) handleContextVerificationError(
 func NewExportJobHandlers(
 	exportJobUC *command.ExportJobUseCase,
 	querySvc *query.ExportJobQueryService,
-	storage sharedPorts.ObjectStorageClient,
+	exportJobRepo reportingRepos.ExportJobRepository,
+	storage objectstorage.Backend,
 	ctxProvider contextProvider,
 	presignExpiry time.Duration,
 	production bool,
@@ -171,6 +177,10 @@ func NewExportJobHandlers(
 
 	if querySvc == nil {
 		return nil, ErrNilExportJobQueryService
+	}
+
+	if exportJobRepo == nil {
+		return nil, ErrNilExportJobRepository
 	}
 
 	if sharedPorts.IsNilValue(storage) {
@@ -190,6 +200,7 @@ func NewExportJobHandlers(
 	return &ExportJobHandlers{
 		exportJobUC:     exportJobUC,
 		querySvc:        querySvc,
+		exportJobRepo:   exportJobRepo,
 		storage:         storage,
 		contextVerifier: verifier,
 		enabled:         true,
@@ -613,11 +624,7 @@ func (handler *ExportJobHandlers) ListExportJobs(fiberCtx *fiber.Ctx) error {
 		status = pointers.String(s)
 	}
 
-	jobs, pagination, err := handler.querySvc.List(ctx, query.ListExportJobsInput{
-		Status: status,
-		Cursor: cursor,
-		Limit:  limit,
-	})
+	jobs, pagination, err := handler.exportJobRepo.List(ctx, status, cursor, limit)
 	if err != nil {
 		handler.logSpanError(ctx, span, logger, "failed to list export jobs", err)
 
@@ -885,11 +892,7 @@ func (handler *ExportJobHandlers) ListExportJobsByContext(fiberCtx *fiber.Ctx) e
 		return handler.badRequestBiz(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 	}
 
-	jobs, pagination, err := handler.querySvc.ListByContext(ctx, query.ListByContextInput{
-		ContextID: contextID,
-		Cursor:    cursor,
-		Limit:     limit,
-	})
+	jobs, pagination, err := handler.exportJobRepo.ListByContext(ctx, contextID, cursor, limit)
 	if err != nil {
 		handler.logSpanError(ctx, span, logger, "failed to list export jobs by context", err)
 

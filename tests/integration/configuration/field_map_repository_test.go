@@ -13,6 +13,7 @@ import (
 	sourceRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/source"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
@@ -22,11 +23,11 @@ func TestFieldMapRepository_CreateAndFindByID(t *testing.T) {
 		repo := fieldMapRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
 
-		entity, err := entities.NewFieldMap(
+		entity, err := shared.NewFieldMap(
 			ctx,
 			h.Seed.ContextID,
 			h.Seed.SourceID,
-			entities.CreateFieldMapInput{
+			shared.CreateFieldMapInput{
 				Mapping: map[string]any{
 					"amount":      "transaction_amount",
 					"currency":    "currency_code",
@@ -72,11 +73,11 @@ func TestFieldMapRepository_FindBySourceID(t *testing.T) {
 		createdSource, err := srcRepo.Create(ctx, source)
 		require.NoError(t, err)
 
-		fieldMap, err := entities.NewFieldMap(
+		fieldMap, err := shared.NewFieldMap(
 			ctx,
 			h.Seed.ContextID,
 			createdSource.ID,
-			entities.CreateFieldMapInput{
+			shared.CreateFieldMapInput{
 				Mapping: map[string]any{"amount": "amt"},
 			},
 		)
@@ -96,11 +97,11 @@ func TestFieldMapRepository_Update(t *testing.T) {
 		repo := fieldMapRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
 
-		entity, err := entities.NewFieldMap(
+		entity, err := shared.NewFieldMap(
 			ctx,
 			h.Seed.ContextID,
 			h.Seed.SourceID,
-			entities.CreateFieldMapInput{
+			shared.CreateFieldMapInput{
 				Mapping: map[string]any{"amount": "old_amount"},
 			},
 		)
@@ -145,11 +146,11 @@ func TestFieldMapRepository_Delete(t *testing.T) {
 		createdSource, err := srcRepo.Create(ctx, source)
 		require.NoError(t, err)
 
-		fieldMap, err := entities.NewFieldMap(
+		fieldMap, err := shared.NewFieldMap(
 			ctx,
 			h.Seed.ContextID,
 			createdSource.ID,
-			entities.CreateFieldMapInput{
+			shared.CreateFieldMapInput{
 				Mapping: map[string]any{"amount": "amt"},
 			},
 		)

@@ -2,7 +2,6 @@
 package adjustment
 
 import (
-	"database/sql"
 	"fmt"
 	"time"
 
@@ -14,10 +13,10 @@ import (
 
 // PostgreSQLModel represents the adjustments table mapping.
 type PostgreSQLModel struct {
-	ID            string
-	ContextID     string
-	MatchGroupID  sql.NullString
-	TransactionID sql.NullString
+	ID            uuid.UUID
+	ContextID     uuid.UUID
+	MatchGroupID  uuid.NullUUID
+	TransactionID uuid.NullUUID
 	Type          string
 	Direction     string
 	Amount        decimal.Decimal
@@ -36,8 +35,8 @@ func NewPostgreSQLModel(entity *matchingEntities.Adjustment) (*PostgreSQLModel, 
 	}
 
 	model := &PostgreSQLModel{
-		ID:          entity.ID.String(),
-		ContextID:   entity.ContextID.String(),
+		ID:          entity.ID,
+		ContextID:   entity.ContextID,
 		Type:        string(entity.Type),
 		Direction:   string(entity.Direction),
 		Amount:      entity.Amount,
@@ -50,11 +49,11 @@ func NewPostgreSQLModel(entity *matchingEntities.Adjustment) (*PostgreSQLModel, 
 	}
 
 	if entity.MatchGroupID != nil {
-		model.MatchGroupID = sql.NullString{String: entity.MatchGroupID.String(), Valid: true}
+		model.MatchGroupID = uuid.NullUUID{UUID: *entity.MatchGroupID, Valid: true}
 	}
 
 	if entity.TransactionID != nil {
-		model.TransactionID = sql.NullString{String: entity.TransactionID.String(), Valid: true}
+		model.TransactionID = uuid.NullUUID{UUID: *entity.TransactionID, Valid: true}
 	}
 
 	return model, nil
@@ -64,16 +63,6 @@ func NewPostgreSQLModel(entity *matchingEntities.Adjustment) (*PostgreSQLModel, 
 func (model *PostgreSQLModel) ToEntity() (*matchingEntities.Adjustment, error) {
 	if model == nil {
 		return nil, ErrAdjustmentModelNeeded
-	}
-
-	id, err := uuid.Parse(model.ID)
-	if err != nil {
-		return nil, fmt.Errorf("parse id: %w", err)
-	}
-
-	contextID, err := uuid.Parse(model.ContextID)
-	if err != nil {
-		return nil, fmt.Errorf("parse context id: %w", err)
 	}
 
 	adjType := matchingEntities.AdjustmentType(model.Type)
@@ -87,8 +76,8 @@ func (model *PostgreSQLModel) ToEntity() (*matchingEntities.Adjustment, error) {
 	}
 
 	entity := &matchingEntities.Adjustment{
-		ID:          id,
-		ContextID:   contextID,
+		ID:          model.ID,
+		ContextID:   model.ContextID,
 		Type:        adjType,
 		Direction:   adjDirection,
 		Amount:      model.Amount,
@@ -101,20 +90,12 @@ func (model *PostgreSQLModel) ToEntity() (*matchingEntities.Adjustment, error) {
 	}
 
 	if model.MatchGroupID.Valid {
-		matchGroupID, parseErr := uuid.Parse(model.MatchGroupID.String)
-		if parseErr != nil {
-			return nil, fmt.Errorf("parse match group id: %w", parseErr)
-		}
-
+		matchGroupID := model.MatchGroupID.UUID
 		entity.MatchGroupID = &matchGroupID
 	}
 
 	if model.TransactionID.Valid {
-		transactionID, parseErr := uuid.Parse(model.TransactionID.String)
-		if parseErr != nil {
-			return nil, fmt.Errorf("parse transaction id: %w", parseErr)
-		}
-
+		transactionID := model.TransactionID.UUID
 		entity.TransactionID = &transactionID
 	}
 

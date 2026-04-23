@@ -12,6 +12,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	"github.com/LerianStudio/matcher/internal/shared/utils"
 )
 
@@ -46,7 +47,7 @@ var (
 type Exception struct {
 	ID               uuid.UUID
 	TransactionID    uuid.UUID
-	Severity         value_objects.ExceptionSeverity
+	Severity         sharedexception.ExceptionSeverity
 	Status           value_objects.ExceptionStatus
 	ExternalSystem   *string
 	ExternalIssueID  *string
@@ -87,7 +88,7 @@ func WithResolutionReason(r string) ResolveOption {
 func NewException(
 	ctx context.Context,
 	transactionID uuid.UUID,
-	severity value_objects.ExceptionSeverity,
+	severity sharedexception.ExceptionSeverity,
 	reason *string,
 ) (*Exception, error) {
 	asserter := assert.New(ctx, nil, constants.ApplicationName, "exception.exception.new")

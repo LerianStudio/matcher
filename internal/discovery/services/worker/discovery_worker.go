@@ -22,7 +22,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
-	discoveryPorts "github.com/LerianStudio/matcher/internal/discovery/ports"
+	"github.com/LerianStudio/matcher/internal/discovery/schemacache"
 	"github.com/LerianStudio/matcher/internal/discovery/services/syncer"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
@@ -181,7 +181,7 @@ func (dw *DiscoveryWorker) Done() <-chan struct{} {
 
 // WithSchemaCache wires an optional cache into the shared syncer so successful
 // discovery cycles replace stale cached schemas immediately.
-func (dw *DiscoveryWorker) WithSchemaCache(cache discoveryPorts.SchemaCache, ttl time.Duration) {
+func (dw *DiscoveryWorker) WithSchemaCache(cache *schemacache.Cache, ttl time.Duration) {
 	if dw == nil || dw.syncer == nil {
 		return
 	}

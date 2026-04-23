@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 func TestHandlers_UpdateMatchRulePriorityConflict(t *testing.T) {
@@ -162,7 +162,7 @@ func TestHandlers_ListMatchRulesFilterByType(t *testing.T) {
 		t,
 		app,
 		http.MethodGet,
-		requestPath+"?type="+string(value_objects.RuleTypeExact),
+		requestPath+"?type="+string(shared.RuleTypeExact),
 		nil,
 	)
 	defer resp.Body.Close()
@@ -268,7 +268,7 @@ func TestHandlers_CreateMatchRuleInvalidContextID(t *testing.T) {
 
 	payload := mustJSON(t, entities.CreateMatchRuleInput{
 		Priority: 1,
-		Type:     value_objects.RuleTypeExact,
+		Type:     shared.RuleTypeExact,
 		Config:   map[string]any{"matchCurrency": true},
 	})
 

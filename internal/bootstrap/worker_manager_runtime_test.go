@@ -19,7 +19,7 @@ import (
 	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
 	reportingStorage "github.com/LerianStudio/matcher/internal/reporting/adapters/storage"
 	reportingWorker "github.com/LerianStudio/matcher/internal/reporting/services/worker"
-	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 )
 
 // --- Test doubles for cleanup, archival, and scheduler workers ---
@@ -56,7 +56,7 @@ type runtimeAwareArchivalWorker struct {
 	mockWorker
 	mu             sync.Mutex
 	updates        []governanceWorker.ArchivalWorkerConfig
-	storageUpdates []sharedPorts.ObjectStorageClient
+	storageUpdates []objectstorage.Backend
 }
 
 func (w *runtimeAwareArchivalWorker) UpdateRuntimeConfig(cfg governanceWorker.ArchivalWorkerConfig) error {
@@ -81,7 +81,7 @@ func (w *runtimeAwareArchivalWorker) lastUpdate() *governanceWorker.ArchivalWork
 	return &u
 }
 
-func (w *runtimeAwareArchivalWorker) UpdateRuntimeStorage(storage sharedPorts.ObjectStorageClient) error {
+func (w *runtimeAwareArchivalWorker) UpdateRuntimeStorage(storage objectstorage.Backend) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -90,7 +90,7 @@ func (w *runtimeAwareArchivalWorker) UpdateRuntimeStorage(storage sharedPorts.Ob
 	return nil
 }
 
-func (w *runtimeAwareArchivalWorker) lastStorageUpdate() sharedPorts.ObjectStorageClient {
+func (w *runtimeAwareArchivalWorker) lastStorageUpdate() objectstorage.Backend {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 

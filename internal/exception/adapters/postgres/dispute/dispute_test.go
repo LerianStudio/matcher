@@ -32,6 +32,18 @@ func (m *mockScanner) Scan(dest ...any) error {
 		}
 
 		switch ptr := d.(type) {
+		case *uuid.UUID:
+			switch v := m.values[i].(type) {
+			case uuid.UUID:
+				*ptr = v
+			case string:
+				parsed, err := uuid.Parse(v)
+				if err != nil {
+					return err
+				}
+
+				*ptr = parsed
+			}
 		case *string:
 			if v, ok := m.values[i].(string); ok {
 				*ptr = v
@@ -110,7 +122,6 @@ func TestScanDisputeInto_InvalidDisputeID(t *testing.T) {
 	result, err := scanDisputeInto(ms)
 	require.Error(t, err)
 	require.Nil(t, result)
-	assert.Contains(t, err.Error(), "parse dispute id")
 }
 
 func TestScanDisputeInto_InvalidExceptionID(t *testing.T) {
@@ -123,7 +134,6 @@ func TestScanDisputeInto_InvalidExceptionID(t *testing.T) {
 	result, err := scanDisputeInto(ms)
 	require.Error(t, err)
 	require.Nil(t, result)
-	assert.Contains(t, err.Error(), "parse exception id")
 }
 
 func TestScanDisputeInto_InvalidCategory(t *testing.T) {

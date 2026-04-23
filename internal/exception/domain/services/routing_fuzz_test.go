@@ -9,7 +9,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 func FuzzEvaluateRouting_NoPanic(f *testing.F) {
@@ -33,7 +33,7 @@ func FuzzEvaluateRouting_NoPanic(f *testing.F) {
 		}
 
 		input := RoutingInput{
-			Severity:      value_objects.ExceptionSeverityLow,
+			Severity:      sharedexception.ExceptionSeverityLow,
 			AmountAbsBase: decimal.NewFromInt(amount),
 		}
 

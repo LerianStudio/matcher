@@ -679,21 +679,21 @@ type ExportCountResponse struct {
 
 // BulkAssignRequest is the payload for bulk assigning exceptions.
 type BulkAssignRequest struct {
-	ExceptionIDs []string `json:"exception_ids"`
+	ExceptionIDs []string `json:"exceptionIds"`
 	Assignee     string   `json:"assignee"`
 }
 
 // BulkResolveRequest is the payload for bulk resolving exceptions.
 type BulkResolveRequest struct {
-	ExceptionIDs []string `json:"exception_ids"`
+	ExceptionIDs []string `json:"exceptionIds"`
 	Resolution   string   `json:"resolution"`
 	Reason       string   `json:"reason,omitempty"`
 }
 
 // BulkDispatchRequest is the payload for bulk dispatching exceptions.
 type BulkDispatchRequest struct {
-	ExceptionIDs []string `json:"exception_ids"`
-	TargetSystem string   `json:"target_system"`
+	ExceptionIDs []string `json:"exceptionIds"`
+	TargetSystem string   `json:"targetSystem"`
 	Queue        string   `json:"queue,omitempty"`
 }
 
@@ -707,7 +707,7 @@ type BulkActionResponse struct {
 // BulkFailure represents a domain-level bulk-operation failure entry.
 // It intentionally keeps the upstream `error` field and is unrelated to ErrorResponse.
 type BulkFailure struct {
-	ExceptionID string `json:"exception_id"`
+	ExceptionID string `json:"exceptionId"`
 	Error       string `json:"error"`
 }
 
@@ -807,16 +807,16 @@ type PaginatedVarianceReport struct {
 
 // ActorMappingResponse represents an actor mapping in API responses.
 type ActorMappingResponse struct {
-	ActorID     string  `json:"actor_id"`
-	DisplayName *string `json:"display_name,omitempty"`
+	ActorID     string  `json:"actorId"`
+	DisplayName *string `json:"displayName,omitempty"`
 	Email       *string `json:"email,omitempty"`
-	CreatedAt   string  `json:"created_at"`
-	UpdatedAt   string  `json:"updated_at"`
+	CreatedAt   string  `json:"createdAt"`
+	UpdatedAt   string  `json:"updatedAt"`
 }
 
 // UpsertActorMappingRequest is the payload for creating/updating an actor mapping.
 type UpsertActorMappingRequest struct {
-	DisplayName *string `json:"display_name"`
+	DisplayName *string `json:"displayName"`
 	Email       *string `json:"email"`
 }
 

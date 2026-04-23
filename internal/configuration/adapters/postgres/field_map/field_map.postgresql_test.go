@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/testutil"
 )
 
@@ -21,7 +21,7 @@ func TestRepository_NilConnection(t *testing.T) {
 	repo := NewRepository(nil)
 	ctx := context.Background()
 
-	_, err := repo.Create(ctx, &entities.FieldMap{})
+	_, err := repo.Create(ctx, &shared.FieldMap{})
 	require.ErrorIs(t, err, ErrRepoNotInitialized)
 
 	_, err = repo.FindByID(ctx, uuid.New())
@@ -30,7 +30,7 @@ func TestRepository_NilConnection(t *testing.T) {
 	_, err = repo.FindBySourceID(ctx, uuid.New())
 	require.ErrorIs(t, err, ErrRepoNotInitialized)
 
-	_, err = repo.Update(ctx, &entities.FieldMap{})
+	_, err = repo.Update(ctx, &shared.FieldMap{})
 	require.ErrorIs(t, err, ErrRepoNotInitialized)
 
 	err = repo.Delete(ctx, uuid.New())

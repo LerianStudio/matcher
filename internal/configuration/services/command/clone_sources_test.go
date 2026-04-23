@@ -16,6 +16,7 @@ import (
 	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // ---------------------------------------------------------------------------
@@ -72,7 +73,7 @@ func (stub *fieldMapRepoTxExistsStub) ExistsBySourceIDsWithTx(
 
 type fieldMapRepoTxFinderStub struct {
 	*fieldMapRepoTxStub
-	findBySourceIDWithTxFn func(context.Context, *sql.Tx, uuid.UUID) (*entities.FieldMap, error)
+	findBySourceIDWithTxFn func(context.Context, *sql.Tx, uuid.UUID) (*shared.FieldMap, error)
 }
 
 var _ fieldMapTxFinder = (*fieldMapRepoTxFinderStub)(nil)
@@ -81,7 +82,7 @@ func (stub *fieldMapRepoTxFinderStub) FindBySourceIDWithTx(
 	ctx context.Context,
 	tx *sql.Tx,
 	sourceID uuid.UUID,
-) (*entities.FieldMap, error) {
+) (*shared.FieldMap, error) {
 	if stub.findBySourceIDWithTxFn != nil {
 		return stub.findBySourceIDWithTxFn(ctx, tx, sourceID)
 	}
@@ -177,9 +178,9 @@ func TestCloneSourcesAndFieldMaps_SourcesWithFieldMaps(t *testing.T) {
 
 	fmCreateCalled := false
 	fmRepo := &fieldMapRepoStub{
-		findBySourceIDFn: func(_ context.Context, sourceID uuid.UUID) (*entities.FieldMap, error) {
+		findBySourceIDFn: func(_ context.Context, sourceID uuid.UUID) (*shared.FieldMap, error) {
 			if sourceID == srcID {
-				return &entities.FieldMap{
+				return &shared.FieldMap{
 					ID:        uuid.New(),
 					ContextID: sourceCtxID,
 					SourceID:  srcID,
@@ -190,7 +191,7 @@ func TestCloneSourcesAndFieldMaps_SourcesWithFieldMaps(t *testing.T) {
 
 			return nil, sql.ErrNoRows
 		},
-		createFn: func(_ context.Context, entity *entities.FieldMap) (*entities.FieldMap, error) {
+		createFn: func(_ context.Context, entity *shared.FieldMap) (*shared.FieldMap, error) {
 			fmCreateCalled = true
 			assert.Equal(t, newCtxID, entity.ContextID)
 			assert.NotEqual(t, srcID, entity.SourceID) // New source ID
@@ -262,9 +263,9 @@ func TestCloneSourcesAndFieldMaps_SourcesWithFieldMaps(t *testing.T) {
 
 	fmRepoOverride := &fieldMapRepoExistsStub{
 		fieldMapRepoStub: &fieldMapRepoStub{
-			findBySourceIDFn: func(_ context.Context, sourceID uuid.UUID) (*entities.FieldMap, error) {
+			findBySourceIDFn: func(_ context.Context, sourceID uuid.UUID) (*shared.FieldMap, error) {
 				if sourceID == srcID {
-					return &entities.FieldMap{
+					return &shared.FieldMap{
 						ID:        uuid.New(),
 						ContextID: sourceCtxID,
 						SourceID:  srcID,
@@ -275,7 +276,7 @@ func TestCloneSourcesAndFieldMaps_SourcesWithFieldMaps(t *testing.T) {
 
 				return nil, sql.ErrNoRows
 			},
-			createFn: func(_ context.Context, entity *entities.FieldMap) (*entities.FieldMap, error) {
+			createFn: func(_ context.Context, entity *shared.FieldMap) (*shared.FieldMap, error) {
 				fmCreateCalled = true
 				assert.Equal(t, newCtxID, entity.ContextID)
 				assert.Equal(t, 1, entity.Version)
@@ -427,13 +428,13 @@ func TestCloneSourcesAndFieldMaps_FieldMapCloneError(t *testing.T) {
 
 	fmRepo := &fieldMapRepoExistsStub{
 		fieldMapRepoStub: &fieldMapRepoStub{
-			findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*entities.FieldMap, error) {
-				return &entities.FieldMap{
+			findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*shared.FieldMap, error) {
+				return &shared.FieldMap{
 					ID:      uuid.New(),
 					Mapping: map[string]any{"a": "b"},
 				}, nil
 			},
-			createFn: func(_ context.Context, _ *entities.FieldMap) (*entities.FieldMap, error) {
+			createFn: func(_ context.Context, _ *shared.FieldMap) (*shared.FieldMap, error) {
 				return nil, errFMCreate
 			},
 		},
@@ -560,7 +561,7 @@ func TestCloneFieldMap_NilFieldMapReturnsFalse(t *testing.T) {
 	t.Parallel()
 
 	fmRepo := &fieldMapRepoStub{
-		findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*entities.FieldMap, error) {
+		findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*shared.FieldMap, error) {
 			return nil, nil
 		},
 	}
@@ -577,7 +578,7 @@ func TestCloneFieldMap_ErrNoRowsReturnsFalse(t *testing.T) {
 	t.Parallel()
 
 	fmRepo := &fieldMapRepoStub{
-		findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*entities.FieldMap, error) {
+		findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*shared.FieldMap, error) {
 			return nil, sql.ErrNoRows
 		},
 	}
@@ -596,7 +597,7 @@ func TestCloneFieldMap_FindError_Propagated(t *testing.T) {
 	errFind := errors.New("field map lookup failed")
 
 	fmRepo := &fieldMapRepoStub{
-		findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*entities.FieldMap, error) {
+		findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*shared.FieldMap, error) {
 			return nil, errFind
 		},
 	}
@@ -619,8 +620,8 @@ func TestCloneFieldMap_NonTxCreateSuccess(t *testing.T) {
 	now := time.Now().UTC()
 
 	fmRepo := &fieldMapRepoStub{
-		findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*entities.FieldMap, error) {
-			return &entities.FieldMap{
+		findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*shared.FieldMap, error) {
+			return &shared.FieldMap{
 				ID:        uuid.New(),
 				ContextID: uuid.New(),
 				SourceID:  oldSourceID,
@@ -628,7 +629,7 @@ func TestCloneFieldMap_NonTxCreateSuccess(t *testing.T) {
 				Version:   7,
 			}, nil
 		},
-		createFn: func(_ context.Context, entity *entities.FieldMap) (*entities.FieldMap, error) {
+		createFn: func(_ context.Context, entity *shared.FieldMap) (*shared.FieldMap, error) {
 			assert.Equal(t, newCtxID, entity.ContextID)
 			assert.Equal(t, newSourceID, entity.SourceID)
 			assert.Equal(t, 1, entity.Version)
@@ -651,10 +652,10 @@ func TestCloneFieldMap_NonTxCreateError(t *testing.T) {
 	errCreate := errors.New("field map create failed")
 
 	fmRepo := &fieldMapRepoStub{
-		findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*entities.FieldMap, error) {
-			return &entities.FieldMap{ID: uuid.New(), Mapping: map[string]any{}}, nil
+		findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*shared.FieldMap, error) {
+			return &shared.FieldMap{ID: uuid.New(), Mapping: map[string]any{}}, nil
 		},
-		createFn: func(_ context.Context, _ *entities.FieldMap) (*entities.FieldMap, error) {
+		createFn: func(_ context.Context, _ *shared.FieldMap) (*shared.FieldMap, error) {
 			return nil, errCreate
 		},
 	}
@@ -674,11 +675,11 @@ func TestCloneFieldMap_TxCreateSuccess(t *testing.T) {
 	txCreateCalled := false
 	fmRepo := &fieldMapRepoTxStub{
 		fieldMapRepoStub: &fieldMapRepoStub{
-			findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*entities.FieldMap, error) {
-				return &entities.FieldMap{ID: uuid.New(), Mapping: map[string]any{"x": "y"}}, nil
+			findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*shared.FieldMap, error) {
+				return &shared.FieldMap{ID: uuid.New(), Mapping: map[string]any{"x": "y"}}, nil
 			},
 		},
-		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.FieldMap) (*entities.FieldMap, error) {
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *shared.FieldMap) (*shared.FieldMap, error) {
 			txCreateCalled = true
 			return entity, nil
 		},
@@ -699,8 +700,8 @@ func TestCloneFieldMap_TxRepoDoesNotSupportTxCreate(t *testing.T) {
 
 	// fieldMapRepoStub does NOT implement fieldMapTxCreator.
 	fmRepo := &fieldMapRepoStub{
-		findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*entities.FieldMap, error) {
-			return &entities.FieldMap{ID: uuid.New(), Mapping: map[string]any{}}, nil
+		findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*shared.FieldMap, error) {
+			return &shared.FieldMap{ID: uuid.New(), Mapping: map[string]any{}}, nil
 		},
 	}
 
@@ -721,11 +722,11 @@ func TestCloneFieldMap_TxCreateError(t *testing.T) {
 
 	fmRepo := &fieldMapRepoTxStub{
 		fieldMapRepoStub: &fieldMapRepoStub{
-			findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*entities.FieldMap, error) {
-				return &entities.FieldMap{ID: uuid.New(), Mapping: map[string]any{}}, nil
+			findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*shared.FieldMap, error) {
+				return &shared.FieldMap{ID: uuid.New(), Mapping: map[string]any{}}, nil
 			},
 		},
-		createWithTxFn: func(_ context.Context, _ *sql.Tx, _ *entities.FieldMap) (*entities.FieldMap, error) {
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, _ *shared.FieldMap) (*shared.FieldMap, error) {
 			return nil, errTxCreate
 		},
 	}
@@ -972,7 +973,7 @@ func TestFindBySourceIDWithOptionalTx_NilTxFallsBack(t *testing.T) {
 
 	called := false
 	fmRepo := &fieldMapRepoStub{
-		findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*entities.FieldMap, error) {
+		findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*shared.FieldMap, error) {
 			called = true
 			return nil, nil
 		},
@@ -994,9 +995,9 @@ func TestFindBySourceIDWithOptionalTx_TxFinderUsed(t *testing.T) {
 		fieldMapRepoTxStub: &fieldMapRepoTxStub{
 			fieldMapRepoStub: &fieldMapRepoStub{},
 		},
-		findBySourceIDWithTxFn: func(_ context.Context, _ *sql.Tx, _ uuid.UUID) (*entities.FieldMap, error) {
+		findBySourceIDWithTxFn: func(_ context.Context, _ *sql.Tx, _ uuid.UUID) (*shared.FieldMap, error) {
 			txCalled = true
-			return &entities.FieldMap{}, nil
+			return &shared.FieldMap{}, nil
 		},
 	}
 
@@ -1014,7 +1015,7 @@ func TestFindBySourceIDWithOptionalTx_TxWithoutFinderFallsBack(t *testing.T) {
 
 	fallbackCalled := false
 	fmRepo := &fieldMapRepoStub{
-		findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*entities.FieldMap, error) {
+		findBySourceIDFn: func(_ context.Context, _ uuid.UUID) (*shared.FieldMap, error) {
 			fallbackCalled = true
 			return nil, nil
 		},

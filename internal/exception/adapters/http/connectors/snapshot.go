@@ -8,13 +8,14 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/services"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 // ExceptionSnapshot is a projection of exception data for external dispatch.
 type ExceptionSnapshot struct {
 	ID            uuid.UUID
 	TransactionID uuid.UUID
-	Severity      value_objects.ExceptionSeverity
+	Severity      sharedexception.ExceptionSeverity
 	Status        value_objects.ExceptionStatus
 	Amount        decimal.Decimal
 	Currency      string

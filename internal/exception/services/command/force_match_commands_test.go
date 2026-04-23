@@ -17,6 +17,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
 	portMocks "github.com/LerianStudio/matcher/internal/exception/ports/mocks"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 func TestForceMatch_Success(t *testing.T) {
@@ -27,7 +28,7 @@ func TestForceMatch_Success(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -62,7 +63,7 @@ func TestForceMatch_Success(t *testing.T) {
 			return nil
 		})
 
-	uc, err := NewUseCase(repo, exec, audit, actor, infra)
+	uc, err := NewExceptionUseCase(repo, actor, audit, infra, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	result, err := uc.ForceMatch(ctx, ForceMatchCommand{
@@ -85,7 +86,7 @@ func TestForceMatch_ValidationErrors(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -95,7 +96,7 @@ func TestForceMatch_ValidationErrors(t *testing.T) {
 	audit := portMocks.NewMockAuditPublisher(ctrl)
 	actor := actorExtractor("analyst-1")
 
-	uc, err := NewUseCase(repo, exec, audit, actor, &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -131,7 +132,7 @@ func TestForceMatch_ActorRequired(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -141,7 +142,7 @@ func TestForceMatch_ActorRequired(t *testing.T) {
 	audit := portMocks.NewMockAuditPublisher(ctrl)
 	emptyActor := actorExtractor("")
 
-	uc, err := NewUseCase(repo, exec, audit, emptyActor, &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(repo, emptyActor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	_, err = uc.ForceMatch(context.Background(), ForceMatchCommand{
@@ -152,7 +153,7 @@ func TestForceMatch_ActorRequired(t *testing.T) {
 	require.ErrorIs(t, err, ErrActorRequired)
 
 	whitespaceActor := actorExtractor("  ")
-	uc2, err := NewUseCase(repo, exec, audit, whitespaceActor, &stubInfraProvider{})
+	uc2, err := NewExceptionUseCase(repo, whitespaceActor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	_, err = uc2.ForceMatch(context.Background(), ForceMatchCommand{
@@ -171,7 +172,7 @@ func TestForceMatch_DependencyErrors(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -203,7 +204,7 @@ func TestForceMatch_DependencyErrors(t *testing.T) {
 			return exc, nil
 		})
 
-	uc, err := NewUseCase(repo, exec, audit, actor, &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -249,7 +250,7 @@ func TestForceMatch_AuditError(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -278,7 +279,7 @@ func TestForceMatch_AuditError(t *testing.T) {
 			return errTestAudit
 		})
 
-	uc, err := NewUseCase(repo, exec, audit, actor, &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	_, err = uc.ForceMatch(
@@ -302,7 +303,7 @@ func TestForceMatch_AssignedExceptionResolvesFromPending(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -336,7 +337,7 @@ func TestForceMatch_AssignedExceptionResolvesFromPending(t *testing.T) {
 		})
 	audit.EXPECT().PublishExceptionEventWithTx(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 
-	uc, err := NewUseCase(repo, exec, audit, actor, infra)
+	uc, err := NewExceptionUseCase(repo, actor, audit, infra, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	result, err := uc.ForceMatch(ctx, ForceMatchCommand{
@@ -363,31 +364,29 @@ func TestNewUseCase_Validations(t *testing.T) {
 	exec := portMocks.NewMockResolutionExecutor(ctrl)
 	audit := portMocks.NewMockAuditPublisher(ctrl)
 
-	_, err := NewUseCase(nil, exec, audit, actor, infra)
+	_, err := NewExceptionUseCase(nil, actor, audit, infra, WithResolutionExecutor(exec))
 	require.ErrorIs(t, err, ErrNilExceptionRepository)
 
-	_, err = NewUseCase(repo, nil, audit, actor, infra)
+	// The resolution executor is optional at construction time; its
+	// absence now surfaces when a resolution operation (ForceMatch) is
+	// called without having wired the executor via the option.
+	ucWithoutExec, err := NewExceptionUseCase(repo, actor, audit, infra)
+	require.NoError(t, err)
+
+	_, err = ucWithoutExec.ForceMatch(context.Background(), ForceMatchCommand{
+		ExceptionID:    uuid.New(),
+		OverrideReason: "POLICY_EXCEPTION",
+		Notes:          "test",
+	})
 	require.ErrorIs(t, err, ErrNilResolutionExecutor)
 
-	_, err = NewUseCase(repo, exec, nil, actor, infra)
+	_, err = NewExceptionUseCase(repo, actor, nil, infra, WithResolutionExecutor(exec))
 	require.ErrorIs(t, err, ErrNilAuditPublisher)
 
-	_, err = NewUseCase(
-		repo,
-		exec,
-		audit,
-		nil,
-		infra,
-	)
+	_, err = NewExceptionUseCase(repo, nil, audit, infra, WithResolutionExecutor(exec))
 	require.ErrorIs(t, err, ErrNilActorExtractor)
 
-	_, err = NewUseCase(
-		repo,
-		exec,
-		audit,
-		actor,
-		nil,
-	)
+	_, err = NewExceptionUseCase(repo, actor, audit, nil, WithResolutionExecutor(exec))
 	require.ErrorIs(t, err, ErrNilInfraProvider)
 }
 
@@ -415,7 +414,7 @@ func TestForceMatch_AllOverrideReasons(t *testing.T) {
 			exception, err := entities.NewException(
 				context.Background(),
 				uuid.New(),
-				value_objects.ExceptionSeverityHigh,
+				sharedexception.ExceptionSeverityHigh,
 				nil,
 			)
 			require.NoError(t, err)
@@ -444,7 +443,7 @@ func TestForceMatch_AllOverrideReasons(t *testing.T) {
 					return nil
 				})
 
-			uc, err := NewUseCase(repo, exec, audit, actor, &stubInfraProvider{})
+			uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 			require.NoError(t, err)
 
 			result, err := uc.ForceMatch(context.Background(), ForceMatchCommand{
@@ -468,7 +467,7 @@ func TestForceMatch_PendingResolutionRejected(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -486,7 +485,7 @@ func TestForceMatch_PendingResolutionRejected(t *testing.T) {
 	repo.EXPECT().FindByID(gomock.Any(), exception.ID).Return(exception, nil)
 	// StartResolution should fail, so no executor call, no update, no audit.
 
-	uc, err := NewUseCase(repo, exec, audit, actor, &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	_, err = uc.ForceMatch(context.Background(), ForceMatchCommand{
@@ -505,7 +504,7 @@ func TestForceMatch_GatewayFailureRevertsStatus(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -536,7 +535,7 @@ func TestForceMatch_GatewayFailureRevertsStatus(t *testing.T) {
 			return exc, nil
 		})
 
-	uc, err := NewUseCase(repo, exec, audit, actor, &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	_, err = uc.ForceMatch(context.Background(), ForceMatchCommand{
@@ -556,7 +555,7 @@ func TestForceMatch_GatewayFailureRevertsAssignedStatus(t *testing.T) {
 	exception, err := entities.NewException(
 		context.Background(),
 		uuid.New(),
-		value_objects.ExceptionSeverityHigh,
+		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
@@ -587,7 +586,7 @@ func TestForceMatch_GatewayFailureRevertsAssignedStatus(t *testing.T) {
 			return exc, nil
 		})
 
-	uc, err := NewUseCase(repo, exec, audit, actor, &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 	require.NoError(t, err)
 
 	_, err = uc.ForceMatch(context.Background(), ForceMatchCommand{
@@ -612,7 +611,7 @@ func TestForceMatch_ConcurrentOperations(t *testing.T) {
 			newException, innerErr := entities.NewException(
 				ctx,
 				uuid.New(),
-				value_objects.ExceptionSeverityHigh,
+				sharedexception.ExceptionSeverityHigh,
 				nil,
 			)
 			if innerErr != nil {
@@ -640,7 +639,7 @@ func TestForceMatch_ConcurrentOperations(t *testing.T) {
 				})
 			audit.EXPECT().PublishExceptionEventWithTx(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 
-			localUC, innerErr := NewUseCase(repo, exec, audit, actor, &stubInfraProvider{})
+			localUC, innerErr := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
 			if innerErr != nil {
 				errChan <- innerErr
 				return

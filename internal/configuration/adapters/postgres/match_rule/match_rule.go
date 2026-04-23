@@ -9,13 +9,13 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // MatchRulePostgreSQLModel represents the database model for match rules.
 type MatchRulePostgreSQLModel struct {
-	ID        string
-	ContextID string
+	ID        uuid.UUID
+	ContextID uuid.UUID
 	Priority  int
 	Type      string
 	Config    []byte
@@ -54,8 +54,8 @@ func NewMatchRulePostgreSQLModel(entity *entities.MatchRule) (*MatchRulePostgreS
 	}
 
 	return &MatchRulePostgreSQLModel{
-		ID:        id.String(),
-		ContextID: entity.ContextID.String(),
+		ID:        id,
+		ContextID: entity.ContextID,
 		Priority:  entity.Priority,
 		Type:      entity.Type.String(),
 		Config:    configJSON,
@@ -70,17 +70,7 @@ func (model *MatchRulePostgreSQLModel) ToEntity() (*entities.MatchRule, error) {
 		return nil, ErrMatchRuleModelRequired
 	}
 
-	id, err := uuid.Parse(model.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse ID: %w", err)
-	}
-
-	contextID, err := uuid.Parse(model.ContextID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse context ID: %w", err)
-	}
-
-	ruleType, err := value_objects.ParseRuleType(model.Type)
+	ruleType, err := shared.ParseRuleType(model.Type)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse rule type: %w", err)
 	}
@@ -97,8 +87,8 @@ func (model *MatchRulePostgreSQLModel) ToEntity() (*entities.MatchRule, error) {
 	}
 
 	return &entities.MatchRule{
-		ID:        id,
-		ContextID: contextID,
+		ID:        model.ID,
+		ContextID: model.ContextID,
 		Priority:  model.Priority,
 		Type:      ruleType,
 		Config:    config,

@@ -19,9 +19,9 @@ import (
 	"github.com/LerianStudio/lib-commons/v5/commons/pointers"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
-	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -40,55 +40,9 @@ type ProcessCallbackCommand struct {
 	Payload         map[string]any
 }
 
-// CallbackUseCase handles callback processing with idempotency and rate limiting.
-type CallbackUseCase struct {
-	idempotencyRepo sharedPorts.IdempotencyRepository
-	exceptionRepo   repositories.ExceptionRepository
-	auditPublisher  ports.AuditPublisher
-	infraProvider   sharedPorts.InfrastructureProvider
-	rateLimiter     ports.CallbackRateLimiter
-}
-
-// NewCallbackUseCase creates a new CallbackUseCase with the required dependencies.
-func NewCallbackUseCase(
-	idempotencyRepo sharedPorts.IdempotencyRepository,
-	exceptionRepo repositories.ExceptionRepository,
-	auditPublisher ports.AuditPublisher,
-	infraProvider sharedPorts.InfrastructureProvider,
-	rateLimiter ports.CallbackRateLimiter,
-) (*CallbackUseCase, error) {
-	if sharedPorts.IsNilValue(idempotencyRepo) {
-		return nil, ErrNilIdempotencyRepository
-	}
-
-	if sharedPorts.IsNilValue(exceptionRepo) {
-		return nil, ErrNilExceptionRepository
-	}
-
-	if sharedPorts.IsNilValue(auditPublisher) {
-		return nil, ErrNilAuditPublisher
-	}
-
-	if sharedPorts.IsNilValue(infraProvider) {
-		return nil, ErrNilInfraProvider
-	}
-
-	if sharedPorts.IsNilValue(rateLimiter) {
-		return nil, ErrNilCallbackRateLimiter
-	}
-
-	return &CallbackUseCase{
-		idempotencyRepo: idempotencyRepo,
-		exceptionRepo:   exceptionRepo,
-		auditPublisher:  auditPublisher,
-		infraProvider:   infraProvider,
-		rateLimiter:     rateLimiter,
-	}, nil
-}
-
 type callbackParams struct {
-	idempotencyKey  value_objects.IdempotencyKey
-	dedupeKey       value_objects.IdempotencyKey
+	idempotencyKey  shared.IdempotencyKey
+	dedupeKey       shared.IdempotencyKey
 	externalSystem  string
 	externalIssueID string
 	status          value_objects.ExceptionStatus
@@ -98,14 +52,41 @@ type callbackParams struct {
 	updatedAt       *time.Time
 }
 
-func idempotencyKeyHash(key value_objects.IdempotencyKey) string {
+func idempotencyKeyHash(key shared.IdempotencyKey) string {
 	hash := sha256.Sum256([]byte(key.String()))
 
 	return hex.EncodeToString(hash[:])
 }
 
-func (uc *CallbackUseCase) validateCallback(cmd ProcessCallbackCommand) (*callbackParams, error) {
-	if err := uc.validateDependencies(); err != nil {
+// validateCallbackDeps checks the dependencies required by ProcessCallback.
+// Safe on a nil receiver — returns ErrNilIdempotencyRepository so
+// nil-UseCase callers get a deterministic error rather than a panic.
+func (uc *ExceptionUseCase) validateCallbackDeps() error {
+	if uc == nil || sharedPorts.IsNilValue(uc.idempotencyRepo) {
+		return ErrNilIdempotencyRepository
+	}
+
+	if sharedPorts.IsNilValue(uc.exceptionRepo) {
+		return ErrNilExceptionRepository
+	}
+
+	if sharedPorts.IsNilValue(uc.auditPublisher) {
+		return ErrNilAuditPublisher
+	}
+
+	if sharedPorts.IsNilValue(uc.infraProvider) {
+		return ErrNilInfraProvider
+	}
+
+	if sharedPorts.IsNilValue(uc.rateLimiter) {
+		return ErrNilCallbackRateLimiter
+	}
+
+	return nil
+}
+
+func (uc *ExceptionUseCase) validateCallback(cmd ProcessCallbackCommand) (*callbackParams, error) {
+	if err := uc.validateCallbackDeps(); err != nil {
 		return nil, err
 	}
 
@@ -162,7 +143,7 @@ func (uc *CallbackUseCase) validateCallback(cmd ProcessCallbackCommand) (*callba
 // Rate limiting is checked first (before idempotency) to reject flooding attacks early.
 // The rate limit key is tenant-scoped and external-system-scoped so each integration
 // gets an isolated budget per tenant.
-func (uc *CallbackUseCase) ProcessCallback(ctx context.Context, cmd ProcessCallbackCommand) error {
+func (uc *ExceptionUseCase) ProcessCallback(ctx context.Context, cmd ProcessCallbackCommand) error {
 	params, err := uc.validateCallback(cmd)
 	if err != nil {
 		return err
@@ -201,7 +182,7 @@ func (uc *CallbackUseCase) ProcessCallback(ctx context.Context, cmd ProcessCallb
 }
 
 // checkRateLimit verifies the callback is within the configured rate limit.
-func (uc *CallbackUseCase) checkRateLimit(
+func (uc *ExceptionUseCase) checkRateLimit(
 	ctx context.Context,
 	rateLimitKey string,
 	span trace.Span,
@@ -220,13 +201,13 @@ func (uc *CallbackUseCase) checkRateLimit(
 	return nil
 }
 
-func (uc *CallbackUseCase) handleExistingCallback(
+func (uc *ExceptionUseCase) handleExistingCallback(
 	ctx context.Context,
 	cmd ProcessCallbackCommand,
 	params *callbackParams,
 	logger libLog.Logger,
 	span trace.Span,
-	cachedResult *value_objects.IdempotencyResult,
+	cachedResult *shared.IdempotencyResult,
 ) error {
 	if cachedResult == nil {
 		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "idempotency state missing", ErrCallbackRetryable)
@@ -234,12 +215,12 @@ func (uc *CallbackUseCase) handleExistingCallback(
 	}
 
 	switch cachedResult.Status {
-	case value_objects.IdempotencyStatusComplete:
+	case shared.IdempotencyStatusComplete:
 		return uc.handleDuplicateCallback(ctx, cmd, params, logger, span)
-	case value_objects.IdempotencyStatusPending:
+	case shared.IdempotencyStatusPending:
 		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "callback is still processing", ErrCallbackInProgress)
 		return ErrCallbackInProgress
-	case value_objects.IdempotencyStatusFailed:
+	case shared.IdempotencyStatusFailed:
 		reacquired, err := uc.idempotencyRepo.TryReacquireFromFailed(ctx, params.dedupeKey)
 		if err != nil {
 			libOpentelemetry.HandleSpanError(span, "failed to reacquire failed idempotency key", err)
@@ -253,7 +234,7 @@ func (uc *CallbackUseCase) handleExistingCallback(
 		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "callback is still processing", ErrCallbackInProgress)
 
 		return ErrCallbackInProgress
-	case value_objects.IdempotencyStatusUnknown:
+	case shared.IdempotencyStatusUnknown:
 		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "callback requires retry", ErrCallbackRetryable)
 		return ErrCallbackRetryable
 	default:
@@ -263,17 +244,17 @@ func (uc *CallbackUseCase) handleExistingCallback(
 }
 
 func scopeCallbackIdempotencyKey(
-	clientKey value_objects.IdempotencyKey,
+	clientKey shared.IdempotencyKey,
 	exceptionID uuid.UUID,
 	externalSystem string,
-) value_objects.IdempotencyKey {
+) shared.IdempotencyKey {
 	base := strings.ToUpper(strings.TrimSpace(externalSystem)) + ":" + exceptionID.String() + ":" + clientKey.String()
 	hash := sha256.Sum256([]byte(base))
 
-	return value_objects.IdempotencyKey("cb_" + hex.EncodeToString(hash[:]))
+	return shared.IdempotencyKey("cb_" + hex.EncodeToString(hash[:]))
 }
 
-func (uc *CallbackUseCase) applyCallback(
+func (uc *ExceptionUseCase) applyCallback(
 	ctx context.Context,
 	exception *entities.Exception,
 	params *callbackParams,
@@ -361,9 +342,9 @@ func applyCallbackStatusTransition(
 	}
 }
 
-func (uc *CallbackUseCase) markIdempotencyFailed(
+func (uc *ExceptionUseCase) markIdempotencyFailed(
 	ctx context.Context,
-	key value_objects.IdempotencyKey,
+	key shared.IdempotencyKey,
 ) {
 	if err := uc.idempotencyRepo.MarkFailed(ctx, key); err != nil {
 		logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
@@ -371,39 +352,15 @@ func (uc *CallbackUseCase) markIdempotencyFailed(
 	}
 }
 
-func (uc *CallbackUseCase) validateDependencies() error {
-	if uc == nil || sharedPorts.IsNilValue(uc.idempotencyRepo) {
-		return ErrNilIdempotencyRepository
-	}
-
-	if sharedPorts.IsNilValue(uc.exceptionRepo) {
-		return ErrNilExceptionRepository
-	}
-
-	if sharedPorts.IsNilValue(uc.auditPublisher) {
-		return ErrNilAuditPublisher
-	}
-
-	if sharedPorts.IsNilValue(uc.infraProvider) {
-		return ErrNilInfraProvider
-	}
-
-	if sharedPorts.IsNilValue(uc.rateLimiter) {
-		return ErrNilCallbackRateLimiter
-	}
-
-	return nil
-}
-
-func parseIdempotencyKey(key string) (value_objects.IdempotencyKey, error) {
-	parsedKey, err := value_objects.ParseIdempotencyKey(key)
+func parseIdempotencyKey(key string) (shared.IdempotencyKey, error) {
+	parsedKey, err := shared.ParseIdempotencyKey(key)
 	if err != nil {
-		if errors.Is(err, value_objects.ErrEmptyIdempotencyKey) {
-			return "", value_objects.ErrEmptyIdempotencyKey
+		if errors.Is(err, shared.ErrEmptyIdempotencyKey) {
+			return "", shared.ErrEmptyIdempotencyKey
 		}
 
-		if errors.Is(err, value_objects.ErrInvalidIdempotencyKey) {
-			return "", value_objects.ErrInvalidIdempotencyKey
+		if errors.Is(err, shared.ErrInvalidIdempotencyKey) {
+			return "", shared.ErrInvalidIdempotencyKey
 		}
 
 		return "", fmt.Errorf("parse callback idempotency key: %w", err)
@@ -506,7 +463,7 @@ func resolveUpdatedAt(cmd ProcessCallbackCommand) (*time.Time, error) {
 	return parsedUpdatedAt, nil
 }
 
-func (uc *CallbackUseCase) handleDuplicateCallback(
+func (uc *ExceptionUseCase) handleDuplicateCallback(
 	ctx context.Context,
 	cmd ProcessCallbackCommand,
 	params *callbackParams,
@@ -535,7 +492,7 @@ func (uc *CallbackUseCase) handleDuplicateCallback(
 	return nil
 }
 
-func (uc *CallbackUseCase) processCallback(
+func (uc *ExceptionUseCase) processCallback(
 	ctx context.Context,
 	cmd ProcessCallbackCommand,
 	params *callbackParams,
@@ -608,7 +565,7 @@ func (uc *CallbackUseCase) processCallback(
 	return nil
 }
 
-func (uc *CallbackUseCase) publishCallbackAudit(
+func (uc *ExceptionUseCase) publishCallbackAudit(
 	ctx context.Context,
 	tx *sql.Tx,
 	cmd ProcessCallbackCommand,

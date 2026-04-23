@@ -2,7 +2,6 @@
 package fee_variance
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,12 +12,12 @@ import (
 
 // PostgreSQLModel represents the match_fee_variances table mapping.
 type PostgreSQLModel struct {
-	ID                      string
-	ContextID               string
-	RunID                   string
-	MatchGroupID            string
-	TransactionID           string
-	FeeScheduleID           string
+	ID                      uuid.UUID
+	ContextID               uuid.UUID
+	RunID                   uuid.UUID
+	MatchGroupID            uuid.UUID
+	TransactionID           uuid.UUID
+	FeeScheduleID           uuid.UUID
 	FeeScheduleNameSnapshot string
 	Currency                string
 	ExpectedFee             decimal.Decimal
@@ -38,12 +37,12 @@ func NewPostgreSQLModel(entity *matchingEntities.FeeVariance) (*PostgreSQLModel,
 	}
 
 	return &PostgreSQLModel{
-		ID:                      entity.ID.String(),
-		ContextID:               entity.ContextID.String(),
-		RunID:                   entity.RunID.String(),
-		MatchGroupID:            entity.MatchGroupID.String(),
-		TransactionID:           entity.TransactionID.String(),
-		FeeScheduleID:           entity.FeeScheduleID.String(),
+		ID:                      entity.ID,
+		ContextID:               entity.ContextID,
+		RunID:                   entity.RunID,
+		MatchGroupID:            entity.MatchGroupID,
+		TransactionID:           entity.TransactionID,
+		FeeScheduleID:           entity.FeeScheduleID,
 		FeeScheduleNameSnapshot: entity.FeeScheduleNameSnapshot,
 		Currency:                entity.Currency,
 		ExpectedFee:             entity.ExpectedFee,
@@ -63,43 +62,13 @@ func (model *PostgreSQLModel) ToEntity() (*matchingEntities.FeeVariance, error) 
 		return nil, ErrFeeVarianceModelNeeded
 	}
 
-	id, err := uuid.Parse(model.ID)
-	if err != nil {
-		return nil, fmt.Errorf("parse id: %w", err)
-	}
-
-	contextID, err := uuid.Parse(model.ContextID)
-	if err != nil {
-		return nil, fmt.Errorf("parse context id: %w", err)
-	}
-
-	runID, err := uuid.Parse(model.RunID)
-	if err != nil {
-		return nil, fmt.Errorf("parse run id: %w", err)
-	}
-
-	matchGroupID, err := uuid.Parse(model.MatchGroupID)
-	if err != nil {
-		return nil, fmt.Errorf("parse match group id: %w", err)
-	}
-
-	transactionID, err := uuid.Parse(model.TransactionID)
-	if err != nil {
-		return nil, fmt.Errorf("parse transaction id: %w", err)
-	}
-
-	feeScheduleID, err := uuid.Parse(model.FeeScheduleID)
-	if err != nil {
-		return nil, fmt.Errorf("parse fee schedule id: %w", err)
-	}
-
 	return &matchingEntities.FeeVariance{
-		ID:                      id,
-		ContextID:               contextID,
-		RunID:                   runID,
-		MatchGroupID:            matchGroupID,
-		TransactionID:           transactionID,
-		FeeScheduleID:           feeScheduleID,
+		ID:                      model.ID,
+		ContextID:               model.ContextID,
+		RunID:                   model.RunID,
+		MatchGroupID:            model.MatchGroupID,
+		TransactionID:           model.TransactionID,
+		FeeScheduleID:           model.FeeScheduleID,
 		FeeScheduleNameSnapshot: model.FeeScheduleNameSnapshot,
 		Currency:                model.Currency,
 		ExpectedFee:             model.ExpectedFee,

@@ -127,42 +127,6 @@ func TestTransactionRepository_ListUnmatchedByContext_Error(t *testing.T) {
 	require.Nil(t, txs)
 }
 
-func TestTransactionRepository_MarkMatched(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	mock := mocks.NewMockTransactionRepository(ctrl)
-
-	ctx := context.Background()
-	contextID := uuid.New()
-	transactionIDs := []uuid.UUID{uuid.New(), uuid.New()}
-
-	mock.EXPECT().
-		MarkMatched(ctx, contextID, transactionIDs).
-		Return(nil)
-
-	err := mock.MarkMatched(ctx, contextID, transactionIDs)
-	require.NoError(t, err)
-}
-
-func TestTransactionRepository_MarkMatched_Error(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	mock := mocks.NewMockTransactionRepository(ctrl)
-
-	ctx := context.Background()
-	contextID := uuid.New()
-	transactionIDs := []uuid.UUID{uuid.New()}
-
-	mock.EXPECT().
-		MarkMatched(ctx, contextID, transactionIDs).
-		Return(context.DeadlineExceeded)
-
-	err := mock.MarkMatched(ctx, contextID, transactionIDs)
-	require.ErrorIs(t, err, context.DeadlineExceeded)
-}
-
 func TestTransactionRepository_MarkMatchedWithTx(t *testing.T) {
 	t.Parallel()
 
@@ -179,42 +143,6 @@ func TestTransactionRepository_MarkMatchedWithTx(t *testing.T) {
 
 	err := mock.MarkMatchedWithTx(ctx, nil, contextID, transactionIDs)
 	require.NoError(t, err)
-}
-
-func TestTransactionRepository_MarkPendingReview(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	mock := mocks.NewMockTransactionRepository(ctrl)
-
-	ctx := context.Background()
-	contextID := uuid.New()
-	transactionIDs := []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}
-
-	mock.EXPECT().
-		MarkPendingReview(ctx, contextID, transactionIDs).
-		Return(nil)
-
-	err := mock.MarkPendingReview(ctx, contextID, transactionIDs)
-	require.NoError(t, err)
-}
-
-func TestTransactionRepository_MarkPendingReview_Error(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	mock := mocks.NewMockTransactionRepository(ctrl)
-
-	ctx := context.Background()
-	contextID := uuid.New()
-	transactionIDs := []uuid.UUID{uuid.New()}
-
-	mock.EXPECT().
-		MarkPendingReview(ctx, contextID, transactionIDs).
-		Return(context.Canceled)
-
-	err := mock.MarkPendingReview(ctx, contextID, transactionIDs)
-	require.ErrorIs(t, err, context.Canceled)
 }
 
 func TestTransactionRepository_MarkPendingReviewWithTx(t *testing.T) {

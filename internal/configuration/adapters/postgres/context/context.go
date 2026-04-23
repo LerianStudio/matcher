@@ -10,13 +10,14 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 // ContextPostgreSQLModel represents the database model for reconciliation contexts.
 type ContextPostgreSQLModel struct {
-	ID                string
-	TenantID          string
+	ID                uuid.UUID
+	TenantID          uuid.UUID
 	Name              string
 	Type              string
 	Interval          string
@@ -57,8 +58,8 @@ func NewContextPostgreSQLModel(
 	}
 
 	return &ContextPostgreSQLModel{
-		ID:                id.String(),
-		TenantID:          entity.TenantID.String(),
+		ID:                id,
+		TenantID:          entity.TenantID,
 		Name:              entity.Name,
 		Type:              entity.Type.String(),
 		Interval:          entity.Interval,
@@ -78,17 +79,7 @@ func (model *ContextPostgreSQLModel) ToEntity() (*entities.ReconciliationContext
 		return nil, ErrContextModelRequired
 	}
 
-	id, err := uuid.Parse(model.ID)
-	if err != nil {
-		return nil, fmt.Errorf("parsing ID: %w", err)
-	}
-
-	tenantID, err := uuid.Parse(model.TenantID)
-	if err != nil {
-		return nil, fmt.Errorf("parsing TenantID: %w", err)
-	}
-
-	contextType, err := value_objects.ParseContextType(model.Type)
+	contextType, err := shared.ParseContextType(model.Type)
 	if err != nil {
 		return nil, fmt.Errorf("parsing Type '%s': %w", model.Type, err)
 	}
@@ -116,8 +107,8 @@ func (model *ContextPostgreSQLModel) ToEntity() (*entities.ReconciliationContext
 	}
 
 	return &entities.ReconciliationContext{
-		ID:                id,
-		TenantID:          tenantID,
+		ID:                model.ID,
+		TenantID:          model.TenantID,
 		Name:              model.Name,
 		Type:              contextType,
 		Interval:          model.Interval,

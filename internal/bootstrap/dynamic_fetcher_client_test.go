@@ -3,16 +3,13 @@
 package bootstrap
 
 import (
-	"context"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
-	discoveryWorker "github.com/LerianStudio/matcher/internal/discovery/services/worker"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -51,11 +48,3 @@ func TestDynamicFetcherClient_Current_ReusesUntilConfigChanges(t *testing.T) {
 	assert.NotSame(t, first, third)
 }
 
-func TestDynamicExtractionPoller_ReportsFailureWhenDelegateCannotBeBuilt(t *testing.T) {
-	t.Parallel()
-
-	poller := newDynamicExtractionPoller(nil, nil, func() discoveryWorker.ExtractionPollerConfig { return discoveryWorker.ExtractionPollerConfig{} }, nil)
-	failed := false
-	poller.PollUntilComplete(context.Background(), uuid.UUID{}, nil, func(context.Context, string) { failed = true })
-	assert.True(t, failed)
-}

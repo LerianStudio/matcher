@@ -16,9 +16,9 @@ import (
 	configMatchRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/match_rule"
 	configSourceRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/source"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	configCommand "github.com/LerianStudio/matcher/internal/configuration/services/command"
 	configQuery "github.com/LerianStudio/matcher/internal/configuration/services/query"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -56,7 +56,7 @@ func TestMatchRuleOrdering_CreateAndReorder(t *testing.T) {
 			h.Seed.TenantID,
 			entities.CreateReconciliationContextInput{
 				Name:     "Ordering Context",
-				Type:     value_objects.ContextTypeOneToMany,
+				Type:     shared.ContextTypeOneToMany,
 				Interval: "0 1 * * *",
 			},
 		)
@@ -67,7 +67,7 @@ func TestMatchRuleOrdering_CreateAndReorder(t *testing.T) {
 			contextEntity.ID,
 			entities.CreateMatchRuleInput{
 				Priority: 1,
-				Type:     value_objects.RuleTypeExact,
+				Type:     shared.RuleTypeExact,
 				Config:   map[string]any{"matchCurrency": true},
 			},
 		)
@@ -78,7 +78,7 @@ func TestMatchRuleOrdering_CreateAndReorder(t *testing.T) {
 			contextEntity.ID,
 			entities.CreateMatchRuleInput{
 				Priority: 2,
-				Type:     value_objects.RuleTypeTolerance,
+				Type:     shared.RuleTypeTolerance,
 				Config:   map[string]any{"absTolerance": "1.00"},
 			},
 		)
@@ -89,7 +89,7 @@ func TestMatchRuleOrdering_CreateAndReorder(t *testing.T) {
 			contextEntity.ID,
 			entities.CreateMatchRuleInput{
 				Priority: 3,
-				Type:     value_objects.RuleTypeDateLag,
+				Type:     shared.RuleTypeDateLag,
 				Config:   map[string]any{"minDays": 1, "maxDays": 1, "direction": "ABS"},
 			},
 		)

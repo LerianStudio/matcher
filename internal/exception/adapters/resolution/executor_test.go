@@ -19,6 +19,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 // Static errors for testing (err113 compliance).
@@ -116,7 +117,7 @@ func createTestException(t *testing.T) *entities.Exception {
 	return &entities.Exception{
 		ID:            uuid.New(),
 		TransactionID: uuid.New(),
-		Severity:      value_objects.ExceptionSeverityMedium,
+		Severity:      sharedexception.ExceptionSeverityMedium,
 		Status:        value_objects.ExceptionStatusOpen,
 		CreatedAt:     time.Now().UTC(),
 		UpdatedAt:     time.Now().UTC(),

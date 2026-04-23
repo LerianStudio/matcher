@@ -20,6 +20,7 @@ import (
 	ingestionJobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
 	ingestionTxRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/transaction"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -43,13 +44,13 @@ func setupMultipleExceptions(t *testing.T, h *integration.TestHarness, count int
 			fmt.Sprintf("HTTP-EXC-TX-%d-%s", i, uuid.New().String()[:8]),
 			decimal.NewFromFloat(float64(100+i*50)), "USD")
 
-		severity := exceptionVO.ExceptionSeverityMedium
+		severity := sharedexception.ExceptionSeverityMedium
 		if i%3 == 0 {
-			severity = exceptionVO.ExceptionSeverityCritical
+			severity = sharedexception.ExceptionSeverityCritical
 		}
 
 		if i%3 == 1 {
-			severity = exceptionVO.ExceptionSeverityHigh
+			severity = sharedexception.ExceptionSeverityHigh
 		}
 
 		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID, severity,
@@ -97,7 +98,7 @@ func TestExceptionList_FilterBySeverity(t *testing.T) {
 		ctx := testCtx(t, h)
 		repo := exceptionRepoAdapter.NewRepository(h.Provider())
 
-		severity := exceptionVO.ExceptionSeverityCritical
+		severity := sharedexception.ExceptionSeverityCritical
 		filter := exceptionRepositories.ExceptionFilter{Severity: &severity}
 
 		exceptions, _, err := repo.List(ctx, filter,
@@ -107,7 +108,7 @@ func TestExceptionList_FilterBySeverity(t *testing.T) {
 		require.NotEmpty(t, exceptions, "should find at least one CRITICAL exception")
 
 		for _, exc := range exceptions {
-			require.Equal(t, exceptionVO.ExceptionSeverityCritical, exc.Severity,
+			require.Equal(t, sharedexception.ExceptionSeverityCritical, exc.Severity,
 				"all returned exceptions must be CRITICAL, got %s for id %s",
 				exc.Severity.String(), exc.ID)
 		}
@@ -226,7 +227,7 @@ func TestExceptionGetByID(t *testing.T) {
 			decimal.NewFromFloat(777.77), "GBP")
 
 		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-			exceptionVO.ExceptionSeverityHigh, "amount discrepancy")
+			sharedexception.ExceptionSeverityHigh, "amount discrepancy")
 
 		repo := exceptionRepoAdapter.NewRepository(provider)
 
@@ -236,7 +237,7 @@ func TestExceptionGetByID(t *testing.T) {
 
 		require.Equal(t, exc.ID, found.ID)
 		require.Equal(t, exc.TransactionID, found.TransactionID)
-		require.Equal(t, exceptionVO.ExceptionSeverityHigh, found.Severity)
+		require.Equal(t, sharedexception.ExceptionSeverityHigh, found.Severity)
 		require.Equal(t, exceptionVO.ExceptionStatusOpen, found.Status)
 		require.NotNil(t, found.Reason)
 		require.Equal(t, "amount discrepancy", *found.Reason)
@@ -278,7 +279,7 @@ func TestExceptionForceMatch_FullFlow(t *testing.T) {
 			decimal.NewFromFloat(420.00), "USD")
 
 		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-			exceptionVO.ExceptionSeverityMedium, "UNMATCHED: no counterparty")
+			sharedexception.ExceptionSeverityMedium, "UNMATCHED: no counterparty")
 
 		require.Equal(t, exceptionVO.ExceptionStatusOpen, exc.Status,
 			"precondition: exception must start as OPEN")
@@ -333,7 +334,7 @@ func TestExceptionAdjustEntry_FullFlow(t *testing.T) {
 			decimal.NewFromFloat(1250.00), "EUR")
 
 		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
-			exceptionVO.ExceptionSeverityHigh, "UNMATCHED: amount discrepancy")
+			sharedexception.ExceptionSeverityHigh, "UNMATCHED: amount discrepancy")
 
 		require.Equal(t, exceptionVO.ExceptionStatusOpen, exc.Status,
 			"precondition: exception must start as OPEN")

@@ -15,32 +15,6 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 )
 
-// GetSource retrieves a reconciliation source by ID.
-func (uc *UseCase) GetSource(
-	ctx context.Context,
-	contextID, sourceID uuid.UUID,
-) (*entities.ReconciliationSource, error) {
-	if uc.sourceRepo == nil {
-		return nil, ErrNilSourceRepository
-	}
-
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "query.get_reconciliation_source")
-	defer span.End()
-
-	result, err := uc.sourceRepo.FindByID(ctx, contextID, sourceID)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get reconciliation source", err)
-
-		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to get reconciliation source")
-
-		return nil, fmt.Errorf("finding reconciliation source: %w", err)
-	}
-
-	return result, nil
-}
-
 // ListSources retrieves all reconciliation sources with optional type filter using cursor-based pagination.
 func (uc *UseCase) ListSources(
 	ctx context.Context,

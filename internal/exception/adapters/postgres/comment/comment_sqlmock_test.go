@@ -519,7 +519,7 @@ func TestScanCommentInto_InvalidID_Sqlmock(t *testing.T) {
 
 	require.Error(t, err)
 	require.Nil(t, result)
-	assert.Contains(t, err.Error(), "parse comment id")
+	assert.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestScanCommentInto_InvalidExceptionID_Sqlmock(t *testing.T) {
@@ -545,7 +545,7 @@ func TestScanCommentInto_InvalidExceptionID_Sqlmock(t *testing.T) {
 
 	require.Error(t, err)
 	require.Nil(t, result)
-	assert.Contains(t, err.Error(), "parse exception id")
+	assert.Contains(t, err.Error(), "invalid UUID")
 }
 
 func TestScanCommentInto_Success_Sqlmock(t *testing.T) {

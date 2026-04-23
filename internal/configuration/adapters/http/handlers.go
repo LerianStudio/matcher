@@ -15,9 +15,13 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
+	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories"
+	configPorts "github.com/LerianStudio/matcher/internal/configuration/ports"
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
 	"github.com/LerianStudio/matcher/internal/configuration/services/query"
 	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // Configuration handler errors.
@@ -26,6 +30,20 @@ var (
 	ErrNilCommandUseCase = errors.New("command use case is required")
 	// ErrNilQueryUseCase is returned when the query use case is nil.
 	ErrNilQueryUseCase = errors.New("query use case is required")
+	// ErrNilContextRepository is returned when the context repository is nil.
+	ErrNilContextRepository = errors.New("context repository is required")
+	// ErrNilSourceRepository is returned when the source repository is nil.
+	ErrNilSourceRepository = errors.New("source repository is required")
+	// ErrNilMatchRuleRepository is returned when the match rule repository is nil.
+	ErrNilMatchRuleRepository = errors.New("match rule repository is required")
+	// ErrNilFieldMapRepository is returned when the field map repository is nil.
+	ErrNilFieldMapRepository = errors.New("field map repository is required")
+	// ErrNilFeeRuleRepository is returned when the fee rule repository is nil.
+	ErrNilFeeRuleRepository = errors.New("fee rule repository is required")
+	// ErrNilFeeScheduleRepository is returned when the fee schedule repository is nil.
+	ErrNilFeeScheduleRepository = errors.New("fee schedule repository is required")
+	// ErrNilScheduleRepository is returned when the schedule repository is nil.
+	ErrNilScheduleRepository = errors.New("schedule repository is required")
 	// ErrRuleIDsRequired is returned when rule IDs are not provided.
 	ErrRuleIDsRequired = errors.New("rule IDs are required")
 )
@@ -38,9 +56,22 @@ var (
 // state coupled every test in the package to whichever test last
 // constructed a handler, regardless of the production flag each test
 // wanted to exercise.
+//
+// The seven repository fields back single-aggregate GET handlers, list/count
+// handlers, and the tenant ownership verifier directly. They bypass the query
+// UseCase because the corresponding query methods were span-only wrappers
+// around the repo; calling the repositories here removes a redundant layer
+// without losing observability (the postgres adapter still emits its own span).
 type Handler struct {
 	command         *command.UseCase
 	query           *query.UseCase
+	contextRepo     repositories.ContextRepository
+	sourceRepo      repositories.SourceRepository
+	matchRuleRepo   repositories.MatchRuleRepository
+	fieldMapRepo    repositories.FieldMapRepository
+	feeRuleRepo     repositories.FeeRuleRepository
+	feeScheduleRepo sharedPorts.FeeScheduleRepository
+	scheduleRepo    configPorts.ScheduleRepository
 	contextVerifier libHTTP.TenantOwnershipVerifier
 	productionMode  bool
 }
@@ -121,7 +152,7 @@ func (handler *Handler) ensureSourceAccess(
 	logger libLog.Logger,
 	contextID, sourceID uuid.UUID,
 ) error {
-	_, err := handler.query.GetSource(ctx, contextID, sourceID)
+	_, err := handler.sourceRepo.FindByID(ctx, contextID, sourceID)
 	if err != nil {
 		handler.logSpanError(ctx, span, logger, "failed to load source", err)
 
@@ -165,7 +196,23 @@ func (handler *Handler) handleOwnershipVerificationError(
 }
 
 // NewHandler creates a new configuration handler.
-func NewHandler(commandUseCase *command.UseCase, queryUseCase *query.UseCase, production bool) (*Handler, error) {
+//
+// The seven repositories are required in addition to the command/query UseCases
+// because the tenant ownership verifier, the single-aggregate GET handlers,
+// and the list/count handlers read through the repositories directly. See the
+// Handler doc comment for the rationale.
+func NewHandler(
+	commandUseCase *command.UseCase,
+	queryUseCase *query.UseCase,
+	contextRepo repositories.ContextRepository,
+	sourceRepo repositories.SourceRepository,
+	matchRuleRepo repositories.MatchRuleRepository,
+	fieldMapRepo repositories.FieldMapRepository,
+	feeRuleRepo repositories.FeeRuleRepository,
+	feeScheduleRepo sharedPorts.FeeScheduleRepository,
+	scheduleRepo configPorts.ScheduleRepository,
+	production bool,
+) (*Handler, error) {
 	if commandUseCase == nil {
 		return nil, ErrNilCommandUseCase
 	}
@@ -174,10 +221,45 @@ func NewHandler(commandUseCase *command.UseCase, queryUseCase *query.UseCase, pr
 		return nil, ErrNilQueryUseCase
 	}
 
+	if contextRepo == nil {
+		return nil, ErrNilContextRepository
+	}
+
+	if sourceRepo == nil {
+		return nil, ErrNilSourceRepository
+	}
+
+	if matchRuleRepo == nil {
+		return nil, ErrNilMatchRuleRepository
+	}
+
+	if fieldMapRepo == nil {
+		return nil, ErrNilFieldMapRepository
+	}
+
+	if feeRuleRepo == nil {
+		return nil, ErrNilFeeRuleRepository
+	}
+
+	if feeScheduleRepo == nil {
+		return nil, ErrNilFeeScheduleRepository
+	}
+
+	if scheduleRepo == nil {
+		return nil, ErrNilScheduleRepository
+	}
+
 	return &Handler{
 		command:         commandUseCase,
 		query:           queryUseCase,
-		contextVerifier: NewTenantOwnershipVerifier(queryUseCase),
+		contextRepo:     contextRepo,
+		sourceRepo:      sourceRepo,
+		matchRuleRepo:   matchRuleRepo,
+		fieldMapRepo:    fieldMapRepo,
+		feeRuleRepo:     feeRuleRepo,
+		feeScheduleRepo: feeScheduleRepo,
+		scheduleRepo:    scheduleRepo,
+		contextVerifier: NewTenantOwnershipVerifier(contextRepo),
 		productionMode:  production,
 	}, nil
 }
@@ -235,11 +317,11 @@ func isClientSafeError(err error) bool {
 		entities.ErrSourceContextRequired,
 		entities.ErrSourceSideRequired,
 		entities.ErrSourceSideInvalid,
-		entities.ErrFieldMapNil,
-		entities.ErrFieldMapContextRequired,
-		entities.ErrFieldMapSourceRequired,
-		entities.ErrFieldMapMappingRequired,
-		entities.ErrFieldMapMappingValueEmpty,
+		shared.ErrFieldMapNil,
+		shared.ErrFieldMapContextRequired,
+		shared.ErrFieldMapSourceRequired,
+		shared.ErrFieldMapMappingRequired,
+		shared.ErrFieldMapMappingValueEmpty,
 		entities.ErrMatchRuleNil,
 		entities.ErrRuleContextRequired,
 		entities.ErrRulePriorityInvalid,

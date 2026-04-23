@@ -16,6 +16,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	govEntities "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 )
 
 // Test GetException with adapter-specific not found error.
@@ -40,7 +41,7 @@ func TestListExceptions_CapturesFilterAndCursor(t *testing.T) {
 	t.Parallel()
 
 	status := value_objects.ExceptionStatusAssigned
-	severity := value_objects.ExceptionSeverityCritical
+	severity := sharedexception.ExceptionSeverityCritical
 	assignee := "analyst-1"
 	externalSystem := "JIRA"
 	dateFrom := time.Now().Add(-24 * time.Hour)

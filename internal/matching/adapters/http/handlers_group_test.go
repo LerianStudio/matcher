@@ -39,12 +39,7 @@ func TestUnmatchHandler_InvalidMatchGroupID(t *testing.T) {
 	ctxProv := &stubContextProvider{
 		info: &ports.ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Delete("/v1/matching/groups/:matchGroupId", handler.Unmatch)
@@ -84,12 +79,7 @@ func TestUnmatchHandler_MissingContextID(t *testing.T) {
 	app := newFiberTestApp(ctx)
 
 	ctxProv := &stubContextProvider{info: nil}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Delete("/v1/matching/groups/:matchGroupId", handler.Unmatch)
@@ -128,12 +118,7 @@ func TestUnmatchHandler_InvalidPayload(t *testing.T) {
 	ctxProv := &stubContextProvider{
 		info: &ports.ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Delete("/v1/matching/groups/:matchGroupId", handler.Unmatch)
@@ -172,12 +157,7 @@ func TestUnmatchHandler_MissingReason(t *testing.T) {
 	ctxProv := &stubContextProvider{
 		info: &ports.ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Delete("/v1/matching/groups/:matchGroupId", handler.Unmatch)
@@ -219,12 +199,7 @@ func TestUnmatchHandler_ContextNotFound(t *testing.T) {
 	app := newFiberTestApp(ctx)
 
 	ctxProv := &stubContextProvider{info: nil}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Delete("/v1/matching/groups/:matchGroupId", handler.Unmatch)
@@ -263,12 +238,7 @@ func TestUnmatchHandler_ContextNotActive(t *testing.T) {
 	ctxProv := &stubContextProvider{
 		info: &ports.ReconciliationContextInfo{ID: contextID, Active: false},
 	}
-	handler, err := NewHandler(
-		&command.UseCase{},
-		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
-		ctxProv,
-		false,
-	)
+	handler, err := newTestHandler(t, &command.UseCase{}, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Delete("/v1/matching/groups/:matchGroupId", handler.Unmatch)
@@ -313,7 +283,7 @@ func TestUnmatchHandler_MatchGroupNotFound(t *testing.T) {
 	}
 	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
+	handler, err := newTestHandler(t, uc, &stubMatchRunRepo{}, &stubMatchGroupRepo{}, ctxProv, false)
 	require.NoError(t, err)
 
 	app.Delete("/v1/matching/groups/:matchGroupId", handler.Unmatch)
