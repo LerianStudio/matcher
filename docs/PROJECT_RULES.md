@@ -4,7 +4,7 @@ Architectural constraints and design decisions for the Matcher codebase. This pr
 
 ## 1. Architecture
 
-- Modular monolith with bounded contexts under `internal/{context}` (configuration, discovery, ingestion, matching, exception, governance, reporting, outbox).
+- Modular monolith with 7 bounded contexts under `internal/{context}` (configuration, discovery, ingestion, matching, exception, governance, reporting). Outbox is NOT a bounded context; it is a cross-cutting infrastructure concern wired in `internal/bootstrap/outbox_wiring.go` via the lib-commons v5 canonical dispatcher (see §1 Shared Kernel and `internal/shared/ports/outbox.go`).
 - Hexagonal Architecture per context:
   - `adapters/`: infrastructure and transports (HTTP, DB, MQ).
   - `domain/`: pure business logic and entities.
