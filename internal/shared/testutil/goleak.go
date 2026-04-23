@@ -52,3 +52,31 @@ func LeakOptionsWithSystemplane() []goleak.Option {
 		goleak.IgnoreAnyFunction("github.com/LerianStudio/lib-commons/v5/commons/systemplane.(*Client).Close.func2"),
 	)
 }
+
+// LeakOptionsBootstrap extends LeakOptionsWithSystemplane with additional
+// process-lifetime ignores for goroutines that the bootstrap wiring starts
+// transitively. These are owned by third-party infrastructure libraries,
+// not by Matcher code, and are meant to live for the full process
+// lifetime:
+//
+//   - tenant-manager InMemoryCache cleanup loop (lib-commons).
+//   - redis maintnotifications circuit-breaker cleanup loop.
+//   - gRPC callback serializer worker.
+//   - fasthttp server-date updater.
+//   - OTel periodic metric reader + log batch processor.
+//
+// This is intentionally more permissive than LeakOptions so bootstrap
+// tests remain signal-rich without drowning in third-party noise.
+// Non-bootstrap packages should NOT import this list — they should use
+// LeakOptions or LeakOptionsWithSystemplane.
+func LeakOptionsBootstrap() []goleak.Option {
+	return append(LeakOptionsWithSystemplane(),
+		goleak.IgnoreAnyFunction("github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/cache.(*InMemoryCache).cleanupLoop"),
+		goleak.IgnoreAnyFunction("github.com/redis/go-redis/v9/maintnotifications.(*CircuitBreakerManager).cleanupLoop"),
+		goleak.IgnoreAnyFunction("google.golang.org/grpc/internal/grpcsync.(*CallbackSerializer).run"),
+		goleak.IgnoreAnyFunction("github.com/valyala/fasthttp.updateServerDate.func1"),
+		goleak.IgnoreAnyFunction("go.opentelemetry.io/otel/sdk/metric.(*PeriodicReader).run"),
+		goleak.IgnoreAnyFunction("go.opentelemetry.io/otel/sdk/log.(*BatchProcessor).poll.func1"),
+		goleak.IgnoreAnyFunction("go.opentelemetry.io/otel/sdk/log.exportSync.func1"),
+	)
+}
