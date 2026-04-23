@@ -175,8 +175,8 @@ func (worker *CleanupWorker) Done() <-chan struct{} {
 }
 
 func (worker *CleanupWorker) run(ctx context.Context) {
-	defer close(worker.doneCh)
 	defer runtime.RecoverAndLogWithContext(ctx, worker.logger, "cleanup_worker", "run")
+	defer close(worker.doneCh)
 
 	worker.cleanupExpired(ctx)
 

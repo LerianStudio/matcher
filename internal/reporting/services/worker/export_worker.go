@@ -247,8 +247,8 @@ func (worker *ExportWorker) Stop() error {
 }
 
 func (worker *ExportWorker) run(ctx context.Context) {
-	defer close(worker.doneCh)
 	defer runtime.RecoverAndLogWithContext(ctx, worker.logger, "export_worker", "run")
+	defer close(worker.doneCh)
 
 	ticker := time.NewTicker(worker.cfg.PollInterval)
 	defer ticker.Stop()

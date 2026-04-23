@@ -261,8 +261,8 @@ func (aw *ArchivalWorker) Done() <-chan struct{} {
 }
 
 func (aw *ArchivalWorker) run(ctx context.Context) {
-	defer close(aw.doneCh)
 	defer runtime.RecoverAndLogWithContext(ctx, aw.logger, "governance", "archival_worker.run")
+	defer close(aw.doneCh)
 
 	// Run one cycle immediately on start.
 	aw.archiveCycle(ctx)
