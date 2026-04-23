@@ -38,7 +38,15 @@ func (uc *UseCase) TriggerMatchForContext(ctx context.Context, tenantID, context
 		return
 	}
 
-	logger, _, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled // only logger needed
+	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+
+	// The span covers only the synchronous trigger request — it records that
+	// the caller invoked the auto-match path, not whether RunMatch ultimately
+	// succeeded. The goroutine spawned below creates its own root span via
+	// RunMatch, deliberately detached from this one so the background job's
+	// latency does not show up on the caller's trace.
+	ctx, span := tracer.Start(ctx, "matching.trigger_match_for_context")
+	defer span.End()
 
 	runtime.SafeGoWithContextAndComponent(
 		ctx,

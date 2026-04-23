@@ -283,10 +283,14 @@ func (uc *UseCase) StartIngestion(
 		return nil, ErrNilUseCase
 	}
 
-	ctx, span := uc.startIngestionSpan(ctx, contextID, sourceID)
-	if span != nil {
-		defer span.End()
-	}
+	//nolint:dogsled // only tracer needed at this boundary — logger is
+	// pulled again deeper when the first error condition fires.
+	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+
+	ctx, span := tracer.Start(ctx, "command.ingestion.start_ingestion")
+	defer span.End()
+
+	uc.annotateIngestionSpan(span, contextID, sourceID)
 
 	input := StartIngestionInput{
 		ContextID: contextID,
@@ -324,31 +328,31 @@ func (uc *UseCase) StartIngestion(
 	return completedJob, nil
 }
 
-// startIngestionSpan creates a tracing span for ingestion.
-func (uc *UseCase) startIngestionSpan(
-	ctx context.Context,
+// annotateIngestionSpan records context/source attributes on an existing
+// ingestion span. Extracted so StartIngestion's span lifecycle
+// (NewTrackingFromContext → tracer.Start → defer span.End) stays inline at
+// the method boundary, which both improves readability and lets the
+// observability linter verify the pattern structurally.
+func (uc *UseCase) annotateIngestionSpan(
+	span trace.Span,
 	contextID, sourceID uuid.UUID,
-) (context.Context, trace.Span) {
-	//nolint:dogsled // only tracer needed for span management
-	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-	ctx, span := tracer.Start(ctx, "command.ingestion.start_ingestion")
-
-	if span != nil {
-		_ = libOpentelemetry.SetSpanAttributesFromValue(
-			span,
-			"ingestion",
-			struct {
-				ContextID string `json:"contextId"`
-				SourceID  string `json:"sourceId"`
-			}{
-				ContextID: contextID.String(),
-				SourceID:  sourceID.String(),
-			},
-			nil,
-		)
+) {
+	if span == nil {
+		return
 	}
 
-	return ctx, span
+	_ = libOpentelemetry.SetSpanAttributesFromValue(
+		span,
+		"ingestion",
+		struct {
+			ContextID string `json:"contextId"`
+			SourceID  string `json:"sourceId"`
+		}{
+			ContextID: contextID.String(),
+			SourceID:  sourceID.String(),
+		},
+		nil,
+	)
 }
 
 // prepareIngestion validates input and loads dependencies for ingestion.

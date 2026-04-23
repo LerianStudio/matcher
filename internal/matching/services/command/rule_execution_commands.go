@@ -34,11 +34,19 @@ type ExecuteRulesInput struct {
 	FeeNormalization fee.NormalizationMode
 }
 
-// ExecuteRules executes match rules for the given input transactions.
+// ExecuteRules executes match rules for the given input transactions. The
+// public entry point creates its own span so the simplified-result call path
+// is visible in traces distinct from ExecuteRulesDetailed's full-result
+// path. ExecuteRulesDetailed's span nests under this one.
 func (uc *UseCase) ExecuteRules(
 	ctx context.Context,
 	in ExecuteRulesInput,
 ) ([]matching.MatchProposal, error) {
+	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled // only tracer needed here; ExecuteRulesDetailed re-extracts logger
+
+	ctx, span := tracer.Start(ctx, "command.matching.execute_rules_summary")
+	defer span.End()
+
 	result, err := uc.ExecuteRulesDetailed(ctx, in)
 	if err != nil {
 		return nil, err

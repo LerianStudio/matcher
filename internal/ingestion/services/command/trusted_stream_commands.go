@@ -94,6 +94,11 @@ var _ sharedPorts.FetcherBridgeIntake = (*UseCase)(nil)
 // are shape-identical; this is a zero-cost projection that exists so a
 // caller holding a *UseCase can hand it to any dependency that takes a
 // sharedPorts.FetcherBridgeIntake.
+//
+// The span created here marks the port-boundary crossing (bridge callers →
+// intake). IngestFromTrustedStream's inner spans nest under this one, so
+// operators can distinguish bridge-driven ingestion from direct ingestion
+// without changing the inner implementation.
 func (uc *UseCase) IngestTrustedContent(
 	ctx context.Context,
 	input sharedPorts.TrustedContentInput,
@@ -101,6 +106,11 @@ func (uc *UseCase) IngestTrustedContent(
 	if uc == nil {
 		return sharedPorts.TrustedContentOutcome{}, ErrNilUseCase
 	}
+
+	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled // only tracer needed at the port boundary; inner path re-extracts logger
+
+	ctx, span := tracer.Start(ctx, "ingestion.ingest_trusted_content")
+	defer span.End()
 
 	output, err := uc.IngestFromTrustedStream(ctx, input)
 	if err != nil {
