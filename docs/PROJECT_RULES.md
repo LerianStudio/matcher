@@ -34,8 +34,8 @@ Architectural constraints and design decisions for the Matcher codebase. This pr
   - `internal/shared/ports/` for cross-context abstractions (OutboxRepository, AuditLogRepository, InfrastructureProvider, MatchTrigger, TenantLister, FetcherClient, M2MProvider, IdempotencyRepository).
 - **Domain subdirectory variations**: `domain/value_objects/` (configuration, exception, ingestion, matching), `domain/enums/` (matching), `domain/errors/` (governance only).
 - **Type-alias pattern**: When a type migrates to `shared/domain/`, the original package re-exports via type alias for backward compatibility.
-- **Worker directories**: `services/worker/` for background jobs (configuration scheduler, governance archival, reporting export/cleanup, discovery poller/worker).
-- **Syncer directories**: `services/syncer/` for data synchronization (discovery syncer).
+- **Worker directories**: `services/worker/` for ticker-based background jobs (configuration scheduler, governance archival, reporting export/cleanup, discovery bridge/custody/poller workers). Workers own a lifecycle (Start/Stop + Redis distributed lock) and are wired in `internal/bootstrap/` alongside use cases.
+- **Syncer directories**: `services/syncer/` for on-demand domain synchronization helpers imported by both commands and workers. Currently used only by discovery (`services/syncer/syncer.go` — connection schema cache synchronization). Distinct from `services/worker/` because a syncer is a callable helper, not a background lifecycle. Do not introduce a syncer in a context where a single worker or use case suffices.
 - **Outbox dispatcher**: Provided by `lib-commons/v5/commons/outbox`. Wired in `internal/bootstrap/outbox_wiring.go`; matcher registers one handler per event type on the canonical HandlerRegistry instead of hosting its own dispatcher package.
 - **Cross-context communication**: Via shared ports, outbox events, and cross adapters in `internal/shared/adapters/cross/`. Current cross adapters: auto_match, configuration, exception_context_lookup, exception_matching_gateway, ingestion, matching, transaction_repository.
 
