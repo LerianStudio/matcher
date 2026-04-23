@@ -148,6 +148,7 @@ help:
 	@echo "  make test-e2e-dashboard          - Run 5k tx dashboard stresser (data preserved)"
 	@echo "  make test-all                    - Run all tests (unit + int + e2e) with merged coverage"
 	@echo "  make test-chaos                  - Run chaos/resilience tests"
+	@echo "  make test-leak                   - Run goroutine-leak tests (unit+leak build tags)"
 	@echo ""
 	@echo ""
 	@echo "Coverage Commands:"
@@ -258,9 +259,11 @@ lint-custom-strict:
 	$(call print_title,Running custom Matcher linters - STRICT MODE)
 	@mkdir -p $(BIN_DIR)
 	@cd tools && go build -o ../$(BIN_DIR)/matcherlint ./linters/matcherlint/...
-	@go vet -vettool=$(BIN_DIR)/matcherlint ./internal/.../domain/entities/...
-	@go vet -vettool=$(BIN_DIR)/matcherlint ./internal/.../services/...
-	@go vet -vettool=$(BIN_DIR)/matcherlint ./internal/.../adapters/postgres/...
+	@MATCHER_GOLEAK_LINTER=1 go vet -vettool=$(BIN_DIR)/matcherlint ./internal/.../domain/entities/...
+	@MATCHER_GOLEAK_LINTER=1 go vet -vettool=$(BIN_DIR)/matcherlint ./internal/.../services/...
+	@MATCHER_GOLEAK_LINTER=1 go vet -vettool=$(BIN_DIR)/matcherlint ./internal/.../adapters/postgres/...
+	@echo "Running goroutine-leak coverage checks..."
+	@MATCHER_GOLEAK_LINTER=1 go vet -vettool=$(BIN_DIR)/matcherlint ./internal/...
 	@echo "[ok] Custom linting passed (strict mode)"
 
 format:
@@ -326,7 +329,7 @@ check-coverage: test
 # Test Commands
 #-------------------------------------------------------
 
-.PHONY: test test-unit coverage-unit test-int test-e2e test-e2e-discovery test-e2e-dashboard test-chaos test-all cover
+.PHONY: test test-unit coverage-unit test-int test-e2e test-e2e-discovery test-e2e-dashboard test-chaos test-leak test-all cover
 
 test: test-unit
 
@@ -387,6 +390,11 @@ test-chaos:
 	@TESTCONTAINERS_RYUK_DISABLED=$${TESTCONTAINERS_RYUK_DISABLED:-true} $(TEST_RUNNER) -tags=chaos -timeout=15m -v -count=1 -p 1 -race ./tests/chaos/...
 	@echo "[ok] Chaos tests passed"
 
+test-leak:
+	$(call print_title,Running goroutine-leak tests)
+	@$(CLEAN_ENV) $(TEST_RUNNER) -tags="unit leak" -timeout=120s -count=1 $(GO_CI_PACKAGES)
+	@echo "[ok] Goroutine-leak tests passed"
+
 test-all:
 	$(call print_title,Running all tests - unit + integration + e2e)
 	@$(MAKE) test-unit
@@ -421,6 +429,7 @@ ci:
 	@$(MAKE) generate-casdoor
 	@$(MAKE) lint
 	@$(MAKE) test
+	@$(MAKE) test-leak
 	@$(MAKE) test-int
 	@$(MAKE) check-tests
 	@$(MAKE) check-test-tags
