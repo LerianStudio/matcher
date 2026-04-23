@@ -28,6 +28,9 @@ import "go.uber.org/goleak"
 //   - OTel batch span processor — started by bootstrap, drains on Shutdown.
 //   - database/sql connection opener/resetter — owned by the pool.
 //   - OpenCensus stats worker — pulled in transitively by gRPC/OTel exporters.
+//   - redis/go-redis maintnotifications circuit-breaker cleanup loop —
+//     started when a go-redis client is constructed (e.g., miniredis-backed
+//     tests) and only terminates on client Close.
 //
 // If a specific package has goroutines that MUST terminate, do not extend
 // this list — let goleak fail the test so the leak is visible.
@@ -37,6 +40,7 @@ func LeakOptions() []goleak.Option {
 		goleak.IgnoreTopFunction("database/sql.(*DB).connectionOpener"),
 		goleak.IgnoreTopFunction("database/sql.(*DB).connectionResetter"),
 		goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"),
+		goleak.IgnoreAnyFunction("github.com/redis/go-redis/v9/maintnotifications.(*CircuitBreakerManager).cleanupLoop"),
 	}
 }
 
