@@ -10,11 +10,17 @@ import (
 	governanceHTTP "github.com/LerianStudio/matcher/internal/governance/adapters/http"
 	actorMappingRepoAdapter "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/actor_mapping"
 	governanceCommand "github.com/LerianStudio/matcher/internal/governance/services/command"
+	governanceQuery "github.com/LerianStudio/matcher/internal/governance/services/query"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 func initGovernanceModule(routes *Routes, repos *sharedRepositories, provider sharedPorts.InfrastructureProvider, production bool) error {
-	governanceHandler, err := governanceHTTP.NewHandler(repos.governanceAuditLog, production)
+	governanceQueryUC, err := governanceQuery.NewUseCase(repos.governanceAuditLog)
+	if err != nil {
+		return fmt.Errorf("create governance query use case: %w", err)
+	}
+
+	governanceHandler, err := governanceHTTP.NewHandler(governanceQueryUC, production)
 	if err != nil {
 		return fmt.Errorf("create governance handler: %w", err)
 	}

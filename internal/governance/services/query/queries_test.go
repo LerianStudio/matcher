@@ -1,0 +1,37 @@
+//go:build unit
+
+package query
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
+	"github.com/LerianStudio/matcher/internal/governance/domain/repositories/mocks"
+)
+
+func TestNewUseCase(t *testing.T) {
+	t.Parallel()
+
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		repo := mocks.NewMockAuditLogRepository(ctrl)
+
+		uc, err := NewUseCase(repo)
+
+		require.NoError(t, err)
+		require.NotNil(t, uc)
+	})
+
+	t.Run("nil repository", func(t *testing.T) {
+		t.Parallel()
+
+		uc, err := NewUseCase(nil)
+
+		require.ErrorIs(t, err, ErrQueryRepoRequired)
+		require.Nil(t, uc)
+	})
+}
