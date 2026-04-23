@@ -1,3 +1,15 @@
+## [1.4.0](https://github.com/LerianStudio/matcher/compare/v1.3.0...v1.4.0) (2026-04-23)
+
+
+### Features
+
+* **bootstrap:** production-grade /readyz endpoint with startup probe and TLS posture ([c9a830b](https://github.com/LerianStudio/matcher/commit/c9a830bb0ae2a6ab378a5e4ae6d5124f59bb728d))
+
+
+### Bug Fixes
+
+* **tests:** resolve make ci gaps from simplify wave ([bd00bed](https://github.com/LerianStudio/matcher/commit/bd00bed66ab73f2a7b8a7d4bd4c32946cfb5e85a))
+
 # Matcher Changelog
 
 ## [1.3.0](https://github.com/LerianStudio/matcher/releases/tag/v1.3.0)
@@ -885,4 +897,3 @@ Contributors: @bedatty, @dependabot[bot], @ferr3ira-gabriel, @ferr3ira.gabriel, 
 * **e2e:** resolve dashboard stresser flakiness with unique names ([7e93cfc](https://github.com/LerianStudio/matcher/commit/7e93cfcc13d9d074eceebe09b39e9f8b7f7f42ed))
 
 ## 1.0.0 (2026-02-19)
-
