@@ -1,3 +1,10 @@
+## [1.4.0-beta.5](https://github.com/LerianStudio/matcher/compare/v1.4.0-beta.4...v1.4.0-beta.5) (2026-04-23)
+
+
+### Bug Fixes
+
+* **discovery:** use ProductName instead of ConfigName for extraction metadata.source ([2061098](https://github.com/LerianStudio/matcher/commit/2061098d953f25832a18ad47e91977cf7e5c3ea9))
+
 # Matcher Changelog
 
 ## [1.3.0](https://github.com/LerianStudio/matcher/releases/tag/v1.3.0)
@@ -885,4 +892,3 @@ Contributors: @bedatty, @dependabot[bot], @ferr3ira-gabriel, @ferr3ira.gabriel, 
 * **e2e:** resolve dashboard stresser flakiness with unique names ([7e93cfc](https://github.com/LerianStudio/matcher/commit/7e93cfcc13d9d074eceebe09b39e9f8b7f7f42ed))
 
 ## 1.0.0 (2026-02-19)
-
