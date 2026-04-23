@@ -197,8 +197,21 @@ func convertFetcherSchemaToEntities(ctx context.Context, connectionID uuid.UUID,
 	return result
 }
 
-// cacheSchemas stores schemas in the cache asynchronously.
+// cacheSchemaDeadline bounds the execution of cacheSchemas so the detached
+// goroutine cannot hang indefinitely on a slow cache backend. The parent
+// request context is stripped via context.WithoutCancel before this
+// function is invoked, so without an internal deadline a stuck SetSchema
+// call would leak the goroutine forever.
+const cacheSchemaDeadline = 10 * time.Second
+
+// cacheSchemas stores schemas in the cache asynchronously. It applies an
+// internal deadline (cacheSchemaDeadline) because the caller detaches the
+// request context via context.WithoutCancel — without a local timeout, a
+// hung cache backend would leak this goroutine.
 func (uc *UseCase) cacheSchemas(ctx context.Context, connectionID uuid.UUID, schemas []*entities.DiscoveredSchema) {
+	ctx, cancel := context.WithTimeout(ctx, cacheSchemaDeadline)
+	defer cancel()
+
 	// Convert domain entities to FetcherSchema for caching.
 	tables := make([]sharedPorts.FetcherTableSchema, 0, len(schemas))
 	discoveredAt := time.Time{}
