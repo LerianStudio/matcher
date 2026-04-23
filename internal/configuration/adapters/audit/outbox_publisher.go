@@ -12,6 +12,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/ports"
+	"github.com/LerianStudio/matcher/internal/shared/adapters/outboxtelemetry"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -149,7 +150,7 @@ func marshalOrTruncate(
 
 	originalSize := len(payload)
 
-	sharedDomain.RecordOutboxTruncation(
+	outboxtelemetry.RecordAuditChangesTruncated(
 		ctx,
 		auditConfigEntityType,
 		event.EntityID,

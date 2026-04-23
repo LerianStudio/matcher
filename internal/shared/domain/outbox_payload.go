@@ -2,13 +2,8 @@
 package shared
 
 import (
-	"context"
-
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
-	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
-	"github.com/LerianStudio/lib-commons/v5/commons/opentelemetry/metrics"
 	"github.com/LerianStudio/lib-commons/v5/commons/outbox"
 )
 
@@ -47,21 +42,6 @@ const (
 // outbox cap.
 const TruncationNoteAuditDiff = "audit diff exceeded outbox payload cap; original not persisted"
 
-// truncationNoteIDList is the log-line message emitted when a
-// cross-context ID-list event's TransactionIDs field had to be trimmed to
-// fit the broker cap. The marker itself lives on the typed event struct
-// via TruncatedIDCount, not inside a map.
-const truncationNoteIDList = "id list exceeded outbox cap; event published with truncated ids"
-
-// outboxPayloadTruncatedMetric is the OTel counter that records truncation
-// events across all publishers so operators can alert on silent-but-lossy
-// outbox paths. Labels: entity_type.
-var outboxPayloadTruncatedMetric = metrics.Metric{
-	Name:        "outbox_payload_truncated_total",
-	Unit:        "{event}",
-	Description: "Outbox events whose payload exceeded the broker cap and was truncated before publishing.",
-}
-
 // BuildAuditChangesTruncationMarker returns the canonical marker map that
 // replaces an audit event's Changes when its serialized envelope exceeded
 // the outbox cap. originalSize is the byte length of the oversize payload;
@@ -69,11 +49,11 @@ var outboxPayloadTruncatedMetric = metrics.Metric{
 // through the outbox so the governance DTO layer can surface them as
 // first-class fields.
 //
-// This constructor is kept side-effect free: emission of the truncation
-// log line and metric is the caller's responsibility via
-// RecordOutboxTruncation. Separating the constructor from the effects
-// makes it easy to build a marker at test time without a full tracking
-// context.
+// This constructor is pure: emission of the WARN log line and truncation
+// metric is the caller's responsibility via the outboxtelemetry adapter.
+// Separating the constructor from the effects keeps this package inside
+// the depguard domain-no-logging rule and makes it easy to build a marker
+// at test time without a full tracking context.
 func BuildAuditChangesTruncationMarker(originalSize, maxAllowed int) map[string]any {
 	return map[string]any{
 		TruncatedMarkerKey:       true,
@@ -83,55 +63,22 @@ func BuildAuditChangesTruncationMarker(originalSize, maxAllowed int) map[string]
 	}
 }
 
-// RecordOutboxTruncation writes the audit truncation WARN line and
-// increments the outbox_payload_truncated_total counter tagged with
-// entityType. Publishers call this after swapping Changes for the
-// truncation marker so the event is visible to operators even when the
-// downstream consumer is still healthy.
-//
-// entityType SHOULD identify the producer (e.g. "audit_config",
-// "audit_exception", "match_confirmed", "match_unmatched") so alerts can
-// group by publisher rather than by business entity.
-func RecordOutboxTruncation(
-	ctx context.Context,
-	entityType string,
-	entityID uuid.UUID,
-	originalBytes, maxAllowedBytes int,
-) {
-	logger, _, _, metricFactory := libCommons.NewTrackingFromContext(ctx)
-	if logger == nil {
-		logger = &libLog.NopLogger{}
-	}
-
-	logger.Log(ctx, libLog.LevelWarn,
-		"outbox payload truncated due to broker cap",
-		libLog.String("entity_type", entityType),
-		libLog.String("entity_id", entityID.String()),
-		libLog.Int("original_size_bytes", originalBytes),
-		libLog.Int("max_allowed_bytes", maxAllowedBytes),
-	)
-
-	emitTruncationCounter(ctx, metricFactory, entityType)
-}
-
 // TruncateIDListIfTooLarge trims a UUID slice so the surrounding event
 // envelope stays under maxBytes. maxBytes SHOULD be
 // DefaultOutboxMaxPayloadBytes minus a safety margin for the non-ID
 // fields of the event (tenant id, context id, timestamps, reason, etc).
 //
-// When truncation is applied the function emits a WARN log line and
-// increments outbox_payload_truncated_total{entity_type=entityType}.
-// The caller is responsible for persisting the original count on the
-// event (via TruncatedIDCount) so downstream consumers can detect data
-// loss without re-measuring.
+// The function is pure: it returns (truncated, originalCount) without
+// logging or emitting metrics. Callers that need an operator-visible
+// trail detect truncation via `len(truncated) != originalCount` and
+// invoke outboxtelemetry.RecordIDListTruncated. Caller responsibility is
+// persisting the original count on the event (via TruncatedIDCount) so
+// downstream consumers can detect data loss without re-measuring.
 //
 // UUID JSON encoding is fixed-width (36 chars plus quotes) so the
 // serialized size is a closed-form function of the slice length. We use
 // a binary search on that function rather than re-marshaling per trial.
 func TruncateIDListIfTooLarge(
-	ctx context.Context,
-	entityType string,
-	entityID uuid.UUID,
 	ids []uuid.UUID,
 	maxBytes int,
 ) (truncated []uuid.UUID, originalCount int) {
@@ -161,25 +108,7 @@ func TruncateIDListIfTooLarge(
 		}
 	}
 
-	truncated = ids[:low]
-
-	logger, _, _, metricFactory := libCommons.NewTrackingFromContext(ctx)
-	if logger == nil {
-		logger = &libLog.NopLogger{}
-	}
-
-	logger.Log(ctx, libLog.LevelWarn,
-		truncationNoteIDList,
-		libLog.String("entity_type", entityType),
-		libLog.String("entity_id", entityID.String()),
-		libLog.Int("original_count", originalCount),
-		libLog.Int("truncated_count", len(truncated)),
-		libLog.Int("max_allowed_bytes", maxBytes),
-	)
-
-	emitTruncationCounter(ctx, metricFactory, entityType)
-
-	return truncated, originalCount
+	return ids[:low], originalCount
 }
 
 // UUID JSON encoding constants for idListSerializedSize. Canonical UUIDs
@@ -204,24 +133,4 @@ func idListSerializedSize(idCount int) int {
 	}
 
 	return bracketPairBytes + idCount*uuidJSONBytes + (idCount-1)*separatorBytes
-}
-
-func emitTruncationCounter(
-	ctx context.Context,
-	factory *metrics.MetricsFactory,
-	entityType string,
-) {
-	if factory == nil {
-		return
-	}
-
-	counter, err := factory.Counter(outboxPayloadTruncatedMetric)
-	if err != nil || counter == nil {
-		return
-	}
-
-	// Best-effort emission — on failure the WARN log above still captures
-	// the event. Surfacing a secondary error would conflate broker-cap
-	// truncation (the real signal) with telemetry-pipeline failures.
-	_ = counter.WithLabels(map[string]string{"entity_type": entityType}).AddOne(ctx)
 }

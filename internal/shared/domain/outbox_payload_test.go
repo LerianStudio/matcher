@@ -3,7 +3,6 @@
 package shared
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 
@@ -54,13 +53,7 @@ func TestTruncateIDListIfTooLarge_FitsUnderCap(t *testing.T) {
 		ids[i] = uuid.New()
 	}
 
-	out, original := TruncateIDListIfTooLarge(
-		context.Background(),
-		"test_event",
-		uuid.New(),
-		ids,
-		1024*1024,
-	)
+	out, original := TruncateIDListIfTooLarge(ids, 1024*1024)
 	assert.Equal(t, 100, len(out))
 	assert.Equal(t, 100, original)
 	// Same slice reference — no copy when no truncation.
@@ -78,13 +71,7 @@ func TestTruncateIDListIfTooLarge_TrimsToFit(t *testing.T) {
 		ids[i] = uuid.New()
 	}
 
-	out, original := TruncateIDListIfTooLarge(
-		context.Background(),
-		"test_event",
-		uuid.New(),
-		ids,
-		400,
-	)
+	out, original := TruncateIDListIfTooLarge(ids, 400)
 	assert.Equal(t, 100, original)
 	assert.Equal(t, 10, len(out))
 	// Serialized size of the result must fit under the cap.
@@ -96,13 +83,7 @@ func TestTruncateIDListIfTooLarge_TrimsToFit(t *testing.T) {
 func TestTruncateIDListIfTooLarge_EmptyList(t *testing.T) {
 	t.Parallel()
 
-	out, original := TruncateIDListIfTooLarge(
-		context.Background(),
-		"test_event",
-		uuid.New(),
-		nil,
-		1024,
-	)
+	out, original := TruncateIDListIfTooLarge(nil, 1024)
 	assert.Nil(t, out)
 	assert.Equal(t, 0, original)
 }
@@ -112,13 +93,7 @@ func TestTruncateIDListIfTooLarge_ZeroCap(t *testing.T) {
 
 	ids := []uuid.UUID{uuid.New(), uuid.New()}
 	// maxBytes=0 short-circuits: nothing to check, return input.
-	out, original := TruncateIDListIfTooLarge(
-		context.Background(),
-		"test_event",
-		uuid.New(),
-		ids,
-		0,
-	)
+	out, original := TruncateIDListIfTooLarge(ids, 0)
 	assert.Equal(t, ids, out)
 	assert.Equal(t, 2, original)
 }
@@ -129,13 +104,7 @@ func TestTruncateIDListIfTooLarge_CapBelowSingleUUID(t *testing.T) {
 	// A cap of 20 bytes cannot fit even one UUID (40-byte minimum
 	// serialized size). Binary search must terminate at zero.
 	ids := []uuid.UUID{uuid.New(), uuid.New()}
-	out, original := TruncateIDListIfTooLarge(
-		context.Background(),
-		"test_event",
-		uuid.New(),
-		ids,
-		20,
-	)
+	out, original := TruncateIDListIfTooLarge(ids, 20)
 	assert.Empty(t, out)
 	assert.Equal(t, 2, original)
 }
