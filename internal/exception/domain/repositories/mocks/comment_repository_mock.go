@@ -11,6 +11,7 @@ package mocks
 
 import (
 	context "context"
+	sql "database/sql"
 	reflect "reflect"
 
 	entities "github.com/LerianStudio/matcher/internal/exception/domain/entities"
@@ -69,6 +70,20 @@ func (m *MockCommentRepository) DeleteByExceptionAndID(ctx context.Context, exce
 func (mr *MockCommentRepositoryMockRecorder) DeleteByExceptionAndID(ctx, exceptionID, commentID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteByExceptionAndID", reflect.TypeOf((*MockCommentRepository)(nil).DeleteByExceptionAndID), ctx, exceptionID, commentID)
+}
+
+// DeleteByExceptionAndIDWithTx mocks base method.
+func (m *MockCommentRepository) DeleteByExceptionAndIDWithTx(ctx context.Context, tx *sql.Tx, exceptionID, commentID uuid.UUID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteByExceptionAndIDWithTx", ctx, tx, exceptionID, commentID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteByExceptionAndIDWithTx indicates an expected call of DeleteByExceptionAndIDWithTx.
+func (mr *MockCommentRepositoryMockRecorder) DeleteByExceptionAndIDWithTx(ctx, tx, exceptionID, commentID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteByExceptionAndIDWithTx", reflect.TypeOf((*MockCommentRepository)(nil).DeleteByExceptionAndIDWithTx), ctx, tx, exceptionID, commentID)
 }
 
 // FindByExceptionID mocks base method.

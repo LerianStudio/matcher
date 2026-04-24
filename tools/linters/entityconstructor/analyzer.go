@@ -74,6 +74,16 @@ func run(pass *analysis.Pass) (any, error) {
 			return
 		}
 
+		// Skip value-object constructors. A value object is returned by value
+		// (not pointer) and matches the expected type name — e.g. Money returned
+		// as (Money, error). Value objects are immutable, equality-by-value
+		// types that do not require the ctx-first / pointer-return ceremony
+		// entities use to enforce invariants. Entity constructors still return
+		// a pointer and stay subject to the checks below.
+		if isValueObjectReturn(pass, fn, expectedTypeName) {
+			return
+		}
+
 		checkContextParam(pass, fn, name)
 		checkReturnType(pass, fn, name, expectedTypeName)
 	})
@@ -254,4 +264,38 @@ func isErrorType(t types.Type) bool {
 // contains the base type name.
 func isVariantConstructor(expectedTypeName, actualTypeName string) bool {
 	return strings.Contains(expectedTypeName, actualTypeName)
+}
+
+// isValueObjectReturn reports whether fn is a value-object constructor returning
+// (T, error) with T being a non-pointer named type whose name matches expectedTypeName.
+// Entity constructors, by contrast, return (*T, error).
+func isValueObjectReturn(pass *analysis.Pass, fn *ast.FuncDecl, expectedTypeName string) bool {
+	results := fn.Type.Results
+	if results == nil || len(results.List) != 2 {
+		return false
+	}
+
+	firstType := pass.TypesInfo.TypeOf(results.List[0].Type)
+	if firstType == nil {
+		return false
+	}
+
+	// Entity constructors return *T; value-object constructors return T by value.
+	if _, isPointer := firstType.(*types.Pointer); isPointer {
+		return false
+	}
+
+	actualTypeName := getTypeName(firstType)
+	if actualTypeName == "" {
+		return false
+	}
+
+	if !strings.EqualFold(actualTypeName, expectedTypeName) {
+		return false
+	}
+
+	// Second return must still be error — otherwise it's not a constructor shape.
+	secondType := pass.TypesInfo.TypeOf(results.List[1].Type)
+
+	return secondType != nil && isErrorType(secondType)
 }

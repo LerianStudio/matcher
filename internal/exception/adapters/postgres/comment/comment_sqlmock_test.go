@@ -494,6 +494,175 @@ func TestCommentRepository_Delete_ExecError_Sqlmock(t *testing.T) {
 	assert.Contains(t, err.Error(), "delete comment")
 }
 
+// --- DeleteByExceptionAndID with sqlmock ---
+
+func TestCommentRepository_DeleteByExceptionAndID_Success_Sqlmock(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupMock(t)
+	defer finish()
+
+	ctx := context.Background()
+	exceptionID := uuid.New()
+	commentID := uuid.New()
+
+	deleteQuery := regexp.QuoteMeta(`
+				DELETE FROM exception_comments WHERE id = $1 AND exception_id = $2
+			`)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(deleteQuery).
+		WithArgs(commentID.String(), exceptionID.String()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	err := repo.DeleteByExceptionAndID(ctx, exceptionID, commentID)
+
+	require.NoError(t, err)
+}
+
+func TestCommentRepository_DeleteByExceptionAndID_NotFound_Sqlmock(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupMock(t)
+	defer finish()
+
+	ctx := context.Background()
+	exceptionID := uuid.New()
+	commentID := uuid.New()
+
+	deleteQuery := regexp.QuoteMeta(`
+				DELETE FROM exception_comments WHERE id = $1 AND exception_id = $2
+			`)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(deleteQuery).
+		WithArgs(commentID.String(), exceptionID.String()).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectRollback()
+
+	err := repo.DeleteByExceptionAndID(ctx, exceptionID, commentID)
+
+	require.ErrorIs(t, err, ErrCommentNotFound)
+}
+
+// --- DeleteByExceptionAndIDWithTx with sqlmock ---
+
+func TestCommentRepository_DeleteByExceptionAndIDWithTx_Success_Sqlmock(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupMock(t)
+	defer finish()
+
+	ctx := context.Background()
+	exceptionID := uuid.New()
+	commentID := uuid.New()
+
+	deleteQuery := regexp.QuoteMeta(`
+				DELETE FROM exception_comments WHERE id = $1 AND exception_id = $2
+			`)
+
+	// Simulate a caller-owned transaction wrapping the scoped delete.
+	mock.ExpectBegin()
+	mock.ExpectExec(deleteQuery).
+		WithArgs(commentID.String(), exceptionID.String()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	// Extract the primary DB from the mock provider so we can begin a tx.
+	primary, err := repo.provider.GetPrimaryDB(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, primary)
+
+	tx, err := primary.DB().BeginTx(ctx, nil)
+	require.NoError(t, err)
+
+	err = repo.DeleteByExceptionAndIDWithTx(ctx, tx, exceptionID, commentID)
+	require.NoError(t, err)
+
+	require.NoError(t, tx.Commit())
+}
+
+func TestCommentRepository_DeleteByExceptionAndIDWithTx_NotFound_Sqlmock(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupMock(t)
+	defer finish()
+
+	ctx := context.Background()
+	exceptionID := uuid.New()
+	commentID := uuid.New()
+
+	deleteQuery := regexp.QuoteMeta(`
+				DELETE FROM exception_comments WHERE id = $1 AND exception_id = $2
+			`)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(deleteQuery).
+		WithArgs(commentID.String(), exceptionID.String()).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectRollback()
+
+	primary, err := repo.provider.GetPrimaryDB(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, primary)
+
+	tx, err := primary.DB().BeginTx(ctx, nil)
+	require.NoError(t, err)
+
+	err = repo.DeleteByExceptionAndIDWithTx(ctx, tx, exceptionID, commentID)
+	require.ErrorIs(t, err, ErrCommentNotFound)
+
+	require.NoError(t, tx.Rollback())
+}
+
+func TestCommentRepository_DeleteByExceptionAndIDWithTx_ExceptionIDMismatch_Sqlmock(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupMock(t)
+	defer finish()
+
+	ctx := context.Background()
+	// exception A was passed to the URL...
+	wrongExceptionID := uuid.New()
+	// ...but commentID belongs to a different exception.
+	commentID := uuid.New()
+
+	deleteQuery := regexp.QuoteMeta(`
+				DELETE FROM exception_comments WHERE id = $1 AND exception_id = $2
+			`)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(deleteQuery).
+		WithArgs(commentID.String(), wrongExceptionID.String()).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectRollback()
+
+	primary, err := repo.provider.GetPrimaryDB(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, primary)
+
+	tx, err := primary.DB().BeginTx(ctx, nil)
+	require.NoError(t, err)
+
+	err = repo.DeleteByExceptionAndIDWithTx(ctx, tx, wrongExceptionID, commentID)
+	require.ErrorIs(t, err, ErrCommentNotFound)
+
+	require.NoError(t, tx.Rollback())
+}
+
+func TestCommentRepository_DeleteByExceptionAndIDWithTx_NilTx_Sqlmock(t *testing.T) {
+	t.Parallel()
+
+	repo, _, finish := setupMock(t)
+	defer finish()
+
+	ctx := context.Background()
+	err := repo.DeleteByExceptionAndIDWithTx(ctx, nil, uuid.New(), uuid.New())
+
+	require.ErrorIs(t, err, ErrTransactionRequired)
+}
+
 // --- Scan helpers ---
 
 func TestScanCommentInto_InvalidID_Sqlmock(t *testing.T) {

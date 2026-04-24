@@ -362,23 +362,7 @@ func (repo *Repository) DeleteByExceptionAndID(
 		ctx,
 		repo.provider,
 		func(tx *sql.Tx) (bool, error) {
-			result, execErr := tx.ExecContext(ctx, `
-				DELETE FROM exception_comments WHERE id = $1 AND exception_id = $2
-			`, commentID.String(), exceptionID.String())
-			if execErr != nil {
-				return false, fmt.Errorf("delete comment scoped to exception: %w", execErr)
-			}
-
-			rowsAffected, affectedErr := result.RowsAffected()
-			if affectedErr != nil {
-				return false, fmt.Errorf("get rows affected: %w", affectedErr)
-			}
-
-			if rowsAffected == 0 {
-				return false, ErrCommentNotFound
-			}
-
-			return true, nil
+			return repo.executeDeleteByExceptionAndID(ctx, tx, exceptionID, commentID)
 		},
 	)
 	if err != nil {
@@ -397,6 +381,80 @@ func (repo *Repository) DeleteByExceptionAndID(
 	}
 
 	return nil
+}
+
+// DeleteByExceptionAndIDWithTx deletes a comment only when both the exception
+// ID and the comment ID match, using the provided transaction. This enables
+// composing comment removal atomically with other writes (e.g. audit trail
+// inserts) within a single transaction scope.
+func (repo *Repository) DeleteByExceptionAndIDWithTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	exceptionID, commentID uuid.UUID,
+) error {
+	if repo == nil || repo.provider == nil {
+		return ErrRepoNotInitialized
+	}
+
+	if tx == nil {
+		return ErrTransactionRequired
+	}
+
+	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+	ctx, span := tracer.Start(ctx, "postgres.comment.delete_by_exception_and_id_with_tx")
+
+	defer span.End()
+
+	_, err := pgcommon.WithTenantTxOrExistingProvider(
+		ctx,
+		repo.provider,
+		tx,
+		func(innerTx *sql.Tx) (bool, error) {
+			return repo.executeDeleteByExceptionAndID(ctx, innerTx, exceptionID, commentID)
+		},
+	)
+	if err != nil {
+		if errors.Is(err, ErrCommentNotFound) {
+			return ErrCommentNotFound
+		}
+
+		wrappedErr := fmt.Errorf("delete comment scoped to exception with tx: %w", err)
+		libOpentelemetry.HandleSpanError(span, "failed to delete comment", wrappedErr)
+		logger.With(
+			libLog.String("exception_id", exceptionID.String()),
+			libLog.String("comment_id", commentID.String()),
+		).Log(ctx, libLog.LevelError, "failed to delete comment scoped to exception")
+
+		return wrappedErr
+	}
+
+	return nil
+}
+
+// executeDeleteByExceptionAndID performs the actual scoped deletion within a
+// transaction. Returns ErrCommentNotFound when no row matches both IDs.
+func (repo *Repository) executeDeleteByExceptionAndID(
+	ctx context.Context,
+	tx *sql.Tx,
+	exceptionID, commentID uuid.UUID,
+) (bool, error) {
+	result, execErr := tx.ExecContext(ctx, `
+				DELETE FROM exception_comments WHERE id = $1 AND exception_id = $2
+			`, commentID.String(), exceptionID.String())
+	if execErr != nil {
+		return false, fmt.Errorf("delete comment scoped to exception: %w", execErr)
+	}
+
+	rowsAffected, affectedErr := result.RowsAffected()
+	if affectedErr != nil {
+		return false, fmt.Errorf("get rows affected: %w", affectedErr)
+	}
+
+	if rowsAffected == 0 {
+		return false, ErrCommentNotFound
+	}
+
+	return true, nil
 }
 
 var _ repositories.CommentRepository = (*Repository)(nil)

@@ -311,6 +311,14 @@ func (repo *stubCommentRepo) DeleteByExceptionAndID(_ context.Context, _, _ uuid
 	return nil
 }
 
+func (repo *stubCommentRepo) DeleteByExceptionAndIDWithTx(
+	_ context.Context,
+	_ *sql.Tx,
+	_, _ uuid.UUID,
+) error {
+	return nil
+}
+
 // stubExceptionProvider implements the exceptionProvider interface for testing.
 type stubExceptionProvider struct {
 	exists bool
