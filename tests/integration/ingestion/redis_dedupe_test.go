@@ -160,22 +160,14 @@ func TestIntegration_Ingestion_Dedupe_TTLExpiry(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, dup, "hash should be duplicate immediately after MarkSeen")
 
-		deadline := time.Now().Add(5 * time.Second)
-		expired := false
-
-		for time.Now().Before(deadline) {
-			dup, err = dedupe.IsDuplicate(ctx, contextID, hash)
-			require.NoError(t, err)
-
-			if !dup {
-				expired = true
-				break
+		// Wait for the TTL to expire via polling.
+		require.Eventually(t, func() bool {
+			dup, pollErr := dedupe.IsDuplicate(ctx, contextID, hash)
+			if pollErr != nil {
+				return false
 			}
-
-			time.Sleep(100 * time.Millisecond)
-		}
-
-		require.True(t, expired, "hash should not be duplicate after TTL expiry")
+			return !dup
+		}, 5*time.Second, 100*time.Millisecond, "hash should not be duplicate after TTL expiry")
 	})
 }
 

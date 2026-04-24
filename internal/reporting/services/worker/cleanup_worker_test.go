@@ -34,20 +34,7 @@ var (
 func waitForCondition(t *testing.T, timeout, interval time.Duration, condition func() bool) {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
-
-	for {
-		if condition() {
-			return
-		}
-
-		if time.Now().After(deadline) {
-			require.Fail(t, "condition not met before timeout")
-			return
-		}
-
-		time.Sleep(interval)
-	}
+	require.Eventually(t, condition, timeout, interval, "condition not met before timeout")
 }
 
 func setupCleanupWorkerMocks(
