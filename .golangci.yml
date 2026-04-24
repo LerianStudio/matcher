@@ -1232,7 +1232,7 @@ linters:
       - linters:
           - gosec
         text: 'G704: SSRF via taint analysis'
-        path: tests/e2e/client/client\.go
+        path: tests/client/client\.go
       - linters:
           - errcheck
           - gosec
