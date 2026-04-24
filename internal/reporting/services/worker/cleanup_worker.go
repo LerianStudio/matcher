@@ -19,9 +19,14 @@ import (
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
+	workermetrics "github.com/LerianStudio/matcher/internal/shared/observability/workermetrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
+
+// cleanupWorkerName is the stable label value emitted on matcher.worker.*
+// metrics from this worker.
+const cleanupWorkerName = "cleanup_worker"
 
 const (
 	defaultCleanupInterval = 1 * time.Hour
@@ -44,6 +49,7 @@ type CleanupWorker struct {
 	cfg     CleanupWorkerConfig
 	logger  libLog.Logger
 	tracer  trace.Tracer
+	metrics *workermetrics.Recorder
 
 	running  atomic.Bool
 	stopOnce sync.Once
@@ -90,6 +96,7 @@ func NewCleanupWorker(
 		cfg:     cfg,
 		logger:  logger,
 		tracer:  otel.Tracer("reporting.cleanup_worker"),
+		metrics: workermetrics.NewRecorder(cleanupWorkerName),
 		stopCh:  make(chan struct{}),
 		doneCh:  make(chan struct{}),
 	}, nil
@@ -199,11 +206,23 @@ func (worker *CleanupWorker) cleanupExpired(ctx context.Context) {
 	ctx, span := worker.tracer.Start(ctx, "cleanup_worker.cleanup_expired")
 	defer span.End()
 
+	startedAt := time.Now()
+	outcome := workermetrics.OutcomeSkipped
+
+	var processed, failed int
+
+	defer func() {
+		worker.metrics.RecordCycle(ctx, startedAt, outcome)
+		worker.metrics.RecordItems(ctx, processed, failed)
+	}()
+
 	ctx = libCommons.ContextWithLogger(ctx, worker.logger)
 	ctx = libCommons.ContextWithTracer(ctx, worker.tracer)
 
 	jobs, err := worker.jobRepo.ListExpired(ctx, worker.cfg.BatchSize)
 	if err != nil {
+		outcome = workermetrics.OutcomeFailure
+
 		libOpentelemetry.HandleSpanError(span, "failed to list expired jobs", err)
 
 		libLog.SafeError(worker.logger, ctx, "failed to list expired jobs", err, runtime.IsProductionMode())
@@ -230,7 +249,8 @@ func (worker *CleanupWorker) cleanupExpired(ctx context.Context) {
 	// No errgroup: cleanupJob already logs per-job failures internally and
 	// returns nothing — we explicitly want to process every job regardless
 	// of peer failures, which is the opposite of errgroup's fail-fast.
-	worker.runCleanupJobsParallel(ctx, jobs, now)
+	processed, failed = worker.runCleanupJobsParallel(ctx, jobs, now)
+	outcome = workermetrics.OutcomeSuccess
 }
 
 // cleanupJobConcurrency caps the number of in-flight cleanupJob goroutines.
@@ -239,11 +259,16 @@ func (worker *CleanupWorker) cleanupExpired(ctx context.Context) {
 // and leaves plenty of slack for other workers sharing the pool.
 const cleanupJobConcurrency = 10
 
+// runCleanupJobsParallel runs cleanupJob on every non-nil entry in jobs and
+// returns the aggregate (processed, failed) counts. A job counts as
+// processed when every stage it attempted succeeded; a job counts as
+// failed if either the expire-transition or the delete step surfaced an
+// error. Skipped-because-grace-period is processed, not failed.
 func (worker *CleanupWorker) runCleanupJobsParallel(
 	ctx context.Context,
 	jobs []*entities.ExportJob,
 	now time.Time,
-) {
+) (int, int) {
 	limit := cleanupJobConcurrency
 	if len(jobs) < limit {
 		limit = len(jobs)
@@ -252,6 +277,8 @@ func (worker *CleanupWorker) runCleanupJobsParallel(
 	sem := make(chan struct{}, limit)
 
 	var wg sync.WaitGroup
+
+	var processed, failed atomic.Int64
 
 	for _, job := range jobs {
 		if job == nil {
@@ -272,53 +299,77 @@ func (worker *CleanupWorker) runCleanupJobsParallel(
 				defer wg.Done()
 				defer func() { <-sem }()
 
-				worker.cleanupJob(goCtx, job, now)
+				if worker.cleanupJob(goCtx, job, now) {
+					processed.Add(1)
+				} else {
+					failed.Add(1)
+				}
 			},
 		)
 	}
 
 	wg.Wait()
+
+	return int(processed.Load()), int(failed.Load())
 }
 
-func (worker *CleanupWorker) cleanupJob(ctx context.Context, job *entities.ExportJob, now time.Time) {
+// cleanupJob runs the two-phase cleanup for one expired export job.
+// Returns true when every stage the job reached succeeded (including the
+// happy no-op paths where the job was already expired or the grace period
+// had not elapsed yet); returns false when either phase surfaced an error.
+func (worker *CleanupWorker) cleanupJob(ctx context.Context, job *entities.ExportJob, now time.Time) bool {
 	// Phase 1: Mark job as expired (prevents new presigned URLs).
-	worker.markJobExpiredIfNeeded(ctx, job)
+	markOK := worker.markJobExpiredIfNeeded(ctx, job)
 
 	// Phase 2: Delete S3 file only after the grace period has elapsed.
 	// This allows presigned URLs issued before expiry to complete.
-	worker.deleteExpiredFileIfReady(ctx, job, now)
+	deleteOK := worker.deleteExpiredFileIfReady(ctx, job, now)
+
+	return markOK && deleteOK
 }
 
-func (worker *CleanupWorker) markJobExpiredIfNeeded(ctx context.Context, job *entities.ExportJob) {
+// markJobExpiredIfNeeded transitions a job to EXPIRED if it is not
+// already. Returns true when the transition succeeded OR the job was
+// already expired (no-op success); returns false when the domain
+// transition or persistence errored.
+func (worker *CleanupWorker) markJobExpiredIfNeeded(ctx context.Context, job *entities.ExportJob) bool {
 	if job.Status == entities.ExportJobStatusExpired {
-		return
+		return true
 	}
 
 	if err := job.MarkExpired(); err != nil {
 		libLog.SafeError(worker.logger, ctx, fmt.Sprintf("failed to transition job %s to expired", job.ID), err, runtime.IsProductionMode())
 
-		return
+		return false
 	}
 
 	if err := worker.jobRepo.Update(ctx, job); err != nil {
 		libLog.SafeError(worker.logger, ctx, fmt.Sprintf("failed to persist job %s expired status", job.ID), err, runtime.IsProductionMode())
 
-		return
+		return false
 	}
 
 	worker.logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("marked job %s as expired", job.ID))
+
+	return true
 }
 
-func (worker *CleanupWorker) deleteExpiredFileIfReady(ctx context.Context, job *entities.ExportJob, now time.Time) {
+// deleteExpiredFileIfReady removes the S3 object if the grace period has
+// elapsed. Returns true when the delete ran successfully OR the object
+// was not yet ready to delete (no-op success); returns false only when
+// the backend rejected the delete.
+func (worker *CleanupWorker) deleteExpiredFileIfReady(ctx context.Context, job *entities.ExportJob, now time.Time) bool {
 	if job.FileKey == "" || !now.After(job.ExpiresAt.Add(worker.cfg.FileDeleteGracePeriod)) {
-		return
+		return true
 	}
 
 	if err := worker.storage.Delete(ctx, job.FileKey); err != nil {
 		worker.logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to delete file for job %s: %v", job.ID, err))
 
-		return
+		return false
 	}
 
 	worker.logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("deleted file for expired job %s", job.ID))
+
+	return true
 }
