@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 // Package observability provides matcher-specific observability helpers
 // layered on top of lib-commons opentelemetry primitives. Right now this
 // package only exposes the span-attribute redactor; future helpers that are

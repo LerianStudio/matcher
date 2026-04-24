@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 // Package auth provides authentication and multi-tenancy middleware for the Matcher service.
 // It extracts tenant information from JWT tokens and manages schema-based tenant isolation.
 package auth

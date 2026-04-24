@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 // Package main provides a combined linter for Matcher-specific patterns.
 //
 // This can be used with golangci-lint via custom linters or run standalone.

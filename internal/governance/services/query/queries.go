@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 // Package query provides read operations for governance entities.
 //
 // Audit log queries live here rather than in the HTTP handler so that

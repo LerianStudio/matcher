@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 // Package cross provides adapters for cross-context dependencies.
 // These adapters bridge different bounded contexts while keeping ports isolated.
 package cross

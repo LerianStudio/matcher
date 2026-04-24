@@ -130,6 +130,7 @@ help:
 	@echo "  make sec                         - Run security checks using gosec"
 	@echo "  make check-tests                 - Verify test coverage for components"
 	@echo "  make check-migrations            - Verify migration pairs and sequential numbering"
+	@echo "  make check-license               - Verify every Go file has an Elastic License 2.0 header"
 	@echo "  make check-coverage              - Check coverage against thresholds"
 	@echo ""
 	@echo ""
@@ -218,7 +219,7 @@ tidy:
 # Code Quality Commands
 #-------------------------------------------------------
 
-.PHONY: lint lint-fix lint-custom format sec vet vulncheck check-tests check-test-tags check-migrations check-generated-artifacts check-coverage
+.PHONY: lint lint-fix lint-custom format sec vet vulncheck check-tests check-test-tags check-migrations check-generated-artifacts check-license check-coverage
 
 vet:
 	$(call print_title,Running go vet)
@@ -315,6 +316,10 @@ check-generated-artifacts:
 		exit 1; \
 	fi; \
 	echo "[ok] Generated artifacts are up to date"
+
+check-license:
+	$(call print_title,Checking Elastic License 2.0 headers)
+	@./scripts/add-license-headers.sh --check
 
 check-coverage: test
 	$(call print_title,Checking coverage thresholds)
@@ -435,6 +440,7 @@ ci:
 	@$(MAKE) check-test-tags
 	@$(MAKE) check-migrations
 	@$(MAKE) check-generated-artifacts
+	@$(MAKE) check-license
 	@$(MAKE) sec
 	@$(MAKE) vet
 	@$(MAKE) vulncheck

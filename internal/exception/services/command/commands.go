@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 // Package command provides exception command use cases (resolution, disputes,
 // dispatch, comments, callbacks). The merged ExceptionUseCase groups all
 // command operations on the exception bounded context behind a single entry
