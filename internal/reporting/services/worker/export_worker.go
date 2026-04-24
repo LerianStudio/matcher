@@ -27,6 +27,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
+	reportingMetrics "github.com/LerianStudio/matcher/internal/reporting/services/metrics"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query/exports"
 	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
@@ -364,6 +365,15 @@ func (worker *ExportWorker) processJob(ctx context.Context, job *entities.Export
 		job.Format,
 	))
 
+	// The repository's ClaimNextQueued already flips the row to RUNNING at
+	// the atomic UPDATE; emit the RUNNING lifecycle transition here so the
+	// counter lands once per claim attempt (retries included).
+	reportingMetrics.RecordExportJobTransition(
+		ctx,
+		string(job.Format),
+		string(entities.ExportJobStatusRunning),
+	)
+
 	tempFile, err := os.CreateTemp(worker.cfg.TempDir, tempFilePrefix+job.ID.String()+"-*")
 	if err != nil {
 		worker.failJob(ctx, job, fmt.Errorf("creating temp file: %w", err))
@@ -452,6 +462,21 @@ func (worker *ExportWorker) processJob(ctx context.Context, job *entities.Export
 		recordCount,
 		bytesWritten,
 	))
+
+	// Success-path lifecycle metric + duration histogram. Duration is
+	// measured from CreatedAt (queue time) not StartedAt (claim time) so
+	// dashboards surface end-to-end export latency — queue time is usually
+	// the dominant component and is what operators notice.
+	reportingMetrics.RecordExportJobTransition(
+		ctx,
+		string(job.Format),
+		string(entities.ExportJobStatusSucceeded),
+	)
+	reportingMetrics.RecordExportDuration(
+		ctx,
+		string(job.Format),
+		float64(time.Since(job.CreatedAt).Milliseconds()),
+	)
 }
 
 func (worker *ExportWorker) streamExport(
@@ -1100,6 +1125,20 @@ func (worker *ExportWorker) failJob(ctx context.Context, job *entities.ExportJob
 
 		libLog.SafeError(worker.logger, ctx, fmt.Sprintf("failed to update job %s status to failed", job.ID), updateErr, runtime.IsProductionMode())
 	}
+
+	// Terminal-failure lifecycle metric + duration histogram. Emitted after
+	// the FAILED transition persists so the counter matches what the DB
+	// reports. Duration covers the full queued → failed window.
+	reportingMetrics.RecordExportJobTransition(
+		ctx,
+		string(job.Format),
+		string(entities.ExportJobStatusFailed),
+	)
+	reportingMetrics.RecordExportDuration(
+		ctx,
+		string(job.Format),
+		float64(time.Since(job.CreatedAt).Milliseconds()),
+	)
 }
 
 func (worker *ExportWorker) requeueForRetry(

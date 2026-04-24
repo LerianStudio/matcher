@@ -15,6 +15,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
+	reportingMetrics "github.com/LerianStudio/matcher/internal/reporting/services/metrics"
 	sharedObservability "github.com/LerianStudio/matcher/internal/shared/observability"
 )
 
@@ -107,6 +108,12 @@ func (uc *ExportJobUseCase) CreateExportJob(
 
 	logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("created export job %s for context %s", job.ID, job.ContextID))
 
+	reportingMetrics.RecordExportJobTransition(
+		ctx,
+		string(job.Format),
+		string(entities.ExportJobStatusQueued),
+	)
+
 	return &CreateExportJobOutput{
 		JobID:     job.ID,
 		Status:    job.Status,
@@ -162,6 +169,12 @@ func (uc *ExportJobUseCase) CancelExportJob(ctx context.Context, id uuid.UUID) e
 	}
 
 	logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("canceled export job %s", job.ID))
+
+	reportingMetrics.RecordExportJobTransition(
+		ctx,
+		string(job.Format),
+		string(entities.ExportJobStatusCanceled),
+	)
 
 	return nil
 }
