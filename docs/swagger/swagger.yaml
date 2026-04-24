@@ -2534,13 +2534,13 @@ definitions:
         example: "2025-01-15T10:30:00Z"
         format: date-time
         type: string
-      match_group_id:
+      matchGroupId:
         example: 550e8400-e29b-41d4-a716-446655440001
         type: string
-      source_id:
+      sourceId:
         example: 550e8400-e29b-41d4-a716-446655440002
         type: string
-      transaction_id:
+      transactionId:
         example: 550e8400-e29b-41d4-a716-446655440000
         type: string
     type: object
@@ -2653,19 +2653,19 @@ definitions:
     type: object
   github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SummaryReportResponse:
     properties:
-      matched_amount:
+      matchedAmount:
         example: "1180000.00"
         type: string
-      matched_count:
+      matchedCount:
         example: 11800
         type: integer
-      total_amount:
+      totalAmount:
         example: "1250000.00"
         type: string
-      unmatched_amount:
+      unmatchedAmount:
         example: "70000.00"
         type: string
-      unmatched_count:
+      unmatchedCount:
         example: 700
         type: integer
     type: object
@@ -2709,20 +2709,20 @@ definitions:
         example: "2025-01-15T10:30:00Z"
         format: date-time
         type: string
-      due_at:
+      dueAt:
         example: "2025-02-15T10:30:00Z"
         format: date-time
         type: string
-      exception_id:
+      exceptionId:
         example: 550e8400-e29b-41d4-a716-446655440003
         type: string
-      source_id:
+      sourceId:
         example: 550e8400-e29b-41d4-a716-446655440002
         type: string
       status:
         example: PENDING
         type: string
-      transaction_id:
+      transactionId:
         example: 550e8400-e29b-41d4-a716-446655440000
         type: string
     type: object
@@ -2731,25 +2731,25 @@ definitions:
       currency:
         example: USD
         type: string
-      fee_schedule_id:
+      feeScheduleId:
         example: 550e8400-e29b-41d4-a716-446655440001
         type: string
-      fee_schedule_name:
+      feeScheduleName:
         example: INTERCHANGE
         type: string
-      net_variance:
+      netVariance:
         example: "-200.00"
         type: string
-      source_id:
+      sourceId:
         example: 550e8400-e29b-41d4-a716-446655440000
         type: string
-      total_actual:
+      totalActual:
         example: "4800.00"
         type: string
-      total_expected:
+      totalExpected:
         example: "5000.00"
         type: string
-      variance_pct:
+      variancePct:
         example: "-4.00"
         type: string
     type: object
@@ -2950,11 +2950,11 @@ definitions:
         description: SHA-256 checksum of the archive file
         example: sha256:abc123def456...
         type: string
-      download_url:
+      downloadUrl:
         description: Presigned URL for downloading the archive
         example: https://s3.amazonaws.com/bucket/archive.gz?X-Amz-Signature=...
         type: string
-      expires_at:
+      expiresAt:
         description: Expiration time of the download URL (RFC3339)
         example: "2026-02-05T13:00:00Z"
         type: string

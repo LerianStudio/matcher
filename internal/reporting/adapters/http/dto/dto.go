@@ -362,45 +362,45 @@ func CashImpactSummaryToResponse(summary *entities.CashImpactSummary) *CashImpac
 
 // MatchedItemResponse represents a matched transaction in a report.
 type MatchedItemResponse struct {
-	TransactionID string `json:"transaction_id" example:"550e8400-e29b-41d4-a716-446655440000"`
-	MatchGroupID  string `json:"match_group_id" example:"550e8400-e29b-41d4-a716-446655440001"`
-	SourceID      string `json:"source_id"      example:"550e8400-e29b-41d4-a716-446655440002"`
-	Amount        string `json:"amount"         example:"1250.50"`
-	Currency      string `json:"currency"       example:"USD"`
-	Date          string `json:"date"           example:"2025-01-15T10:30:00Z" format:"date-time"`
+	TransactionID string `json:"transactionId" example:"550e8400-e29b-41d4-a716-446655440000"`
+	MatchGroupID  string `json:"matchGroupId"  example:"550e8400-e29b-41d4-a716-446655440001"`
+	SourceID      string `json:"sourceId"      example:"550e8400-e29b-41d4-a716-446655440002"`
+	Amount        string `json:"amount"        example:"1250.50"`
+	Currency      string `json:"currency"      example:"USD"`
+	Date          string `json:"date"          example:"2025-01-15T10:30:00Z" format:"date-time"`
 }
 
 // UnmatchedItemResponse represents an unmatched transaction in a report.
 type UnmatchedItemResponse struct {
-	TransactionID string  `json:"transaction_id"        example:"550e8400-e29b-41d4-a716-446655440000"`
-	SourceID      string  `json:"source_id"             example:"550e8400-e29b-41d4-a716-446655440002"`
-	Amount        string  `json:"amount"                example:"1250.50"`
-	Currency      string  `json:"currency"              example:"USD"`
-	Status        string  `json:"status"                example:"PENDING"`
-	ExceptionID   *string `json:"exception_id,omitempty" example:"550e8400-e29b-41d4-a716-446655440003"`
-	DueAt         *string `json:"due_at,omitempty"       example:"2025-02-15T10:30:00Z" format:"date-time"`
-	Date          string  `json:"date"                  example:"2025-01-15T10:30:00Z" format:"date-time"`
+	TransactionID string  `json:"transactionId"          example:"550e8400-e29b-41d4-a716-446655440000"`
+	SourceID      string  `json:"sourceId"               example:"550e8400-e29b-41d4-a716-446655440002"`
+	Amount        string  `json:"amount"                 example:"1250.50"`
+	Currency      string  `json:"currency"               example:"USD"`
+	Status        string  `json:"status"                 example:"PENDING"`
+	ExceptionID   *string `json:"exceptionId,omitempty"  example:"550e8400-e29b-41d4-a716-446655440003"`
+	DueAt         *string `json:"dueAt,omitempty"        example:"2025-02-15T10:30:00Z" format:"date-time"`
+	Date          string  `json:"date"                   example:"2025-01-15T10:30:00Z" format:"date-time"`
 }
 
 // SummaryReportResponse represents an aggregated summary.
 type SummaryReportResponse struct {
-	MatchedCount    int    `json:"matched_count"    example:"11800"`
-	UnmatchedCount  int    `json:"unmatched_count"  example:"700"`
-	TotalAmount     string `json:"total_amount"     example:"1250000.00"`
-	MatchedAmount   string `json:"matched_amount"   example:"1180000.00"`
-	UnmatchedAmount string `json:"unmatched_amount" example:"70000.00"`
+	MatchedCount    int    `json:"matchedCount"    example:"11800"`
+	UnmatchedCount  int    `json:"unmatchedCount"  example:"700"`
+	TotalAmount     string `json:"totalAmount"     example:"1250000.00"`
+	MatchedAmount   string `json:"matchedAmount"   example:"1180000.00"`
+	UnmatchedAmount string `json:"unmatchedAmount" example:"70000.00"`
 }
 
 // VarianceReportRowResponse represents a row in the variance report.
 type VarianceReportRowResponse struct {
-	SourceID        string  `json:"source_id"          example:"550e8400-e29b-41d4-a716-446655440000"`
-	Currency        string  `json:"currency"           example:"USD"`
-	FeeScheduleID   string  `json:"fee_schedule_id"    example:"550e8400-e29b-41d4-a716-446655440001"`
-	FeeScheduleName string  `json:"fee_schedule_name"  example:"INTERCHANGE"`
-	TotalExpected   string  `json:"total_expected"     example:"5000.00"`
-	TotalActual     string  `json:"total_actual"       example:"4800.00"`
-	NetVariance     string  `json:"net_variance"       example:"-200.00"`
-	VariancePct     *string `json:"variance_pct,omitempty" example:"-4.00"`
+	SourceID        string  `json:"sourceId"              example:"550e8400-e29b-41d4-a716-446655440000"`
+	Currency        string  `json:"currency"              example:"USD"`
+	FeeScheduleID   string  `json:"feeScheduleId"         example:"550e8400-e29b-41d4-a716-446655440001"`
+	FeeScheduleName string  `json:"feeScheduleName"       example:"INTERCHANGE"`
+	TotalExpected   string  `json:"totalExpected"         example:"5000.00"`
+	TotalActual     string  `json:"totalActual"           example:"4800.00"`
+	NetVariance     string  `json:"netVariance"           example:"-200.00"`
+	VariancePct     *string `json:"variancePct,omitempty" example:"-4.00"`
 }
 
 // ListMatchedReportResponse wraps a paginated list of matched items.
