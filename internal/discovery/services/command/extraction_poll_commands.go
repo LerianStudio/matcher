@@ -15,6 +15,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
+	discoveryMetrics "github.com/LerianStudio/matcher/internal/discovery/services/metrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -72,6 +73,8 @@ func (uc *UseCase) PollExtractionStatus(ctx context.Context, extractionID uuid.U
 			if cancelErr := req.MarkCancelled(); cancelErr != nil {
 				return nil, fmt.Errorf("mark cancelled: %w", cancelErr)
 			}
+
+			discoveryMetrics.RecordExtractionState(ctx, req.Status.String())
 
 			if err := uc.extractionRepo.UpdateIfUnchanged(ctx, req, expectedUpdatedAt); err != nil {
 				if errors.Is(err, repositories.ErrExtractionConflict) {
@@ -165,6 +168,10 @@ func (uc *UseCase) applyExtractionStatusTransition(
 		}
 
 		changed = previousStatus != req.Status || !req.UpdatedAt.Equal(previousUpdatedAt)
+
+		if previousStatus != req.Status {
+			discoveryMetrics.RecordExtractionState(ctx, req.Status.String())
+		}
 	case "COMPLETE":
 		// NOTE: Intentionally duplicated with extraction_poller.go handlePollStatus.
 		// Both call sites handle COMPLETE independently (inline vs polled) in different
@@ -195,6 +202,10 @@ func (uc *UseCase) applyExtractionStatusTransition(
 			previousResultPath != req.ResultPath ||
 			previousErrorMessage != req.ErrorMessage ||
 			!req.UpdatedAt.Equal(previousUpdatedAt)
+
+		if previousStatus != req.Status {
+			discoveryMetrics.RecordExtractionState(ctx, req.Status.String())
+		}
 	case "FAILED":
 		previousStatus := req.Status
 		previousErrorMessage := req.ErrorMessage
@@ -211,6 +222,10 @@ func (uc *UseCase) applyExtractionStatusTransition(
 			previousErrorMessage != req.ErrorMessage ||
 			previousResultPath != req.ResultPath ||
 			!req.UpdatedAt.Equal(previousUpdatedAt)
+
+		if previousStatus != req.Status {
+			discoveryMetrics.RecordExtractionState(ctx, req.Status.String())
+		}
 	case "CANCELLED":
 		previousStatus := req.Status
 		previousErrorMessage := req.ErrorMessage
@@ -227,6 +242,10 @@ func (uc *UseCase) applyExtractionStatusTransition(
 			previousErrorMessage != req.ErrorMessage ||
 			previousResultPath != req.ResultPath ||
 			!req.UpdatedAt.Equal(previousUpdatedAt)
+
+		if previousStatus != req.Status {
+			discoveryMetrics.RecordExtractionState(ctx, req.Status.String())
+		}
 	default:
 		logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
 		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("unknown extraction status %q for job %s", status.Status, req.FetcherJobID))

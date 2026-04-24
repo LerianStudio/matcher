@@ -16,6 +16,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
+	discoveryMetrics "github.com/LerianStudio/matcher/internal/discovery/services/metrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -122,10 +123,15 @@ func (uc *UseCase) GetConnectionSchema(ctx context.Context, connectionID uuid.UU
 	if uc.schemaCache != nil {
 		cached, err := uc.schemaCache.GetSchema(ctx, connectionID.String())
 		if err == nil && cached != nil {
+			discoveryMetrics.RecordSchemaCacheHit(ctx)
+
 			// Convert FetcherSchema to domain entities.
 			return convertFetcherSchemaToEntities(ctx, connectionID, cached), nil
 		}
-		// Cache miss or error — fall through to DB.
+
+		// Cache miss or error — fall through to DB. Both cases count as a
+		// miss because either way the cache did not satisfy the request.
+		discoveryMetrics.RecordSchemaCacheMiss(ctx)
 	}
 
 	schemas, err := uc.schemaRepo.FindByConnectionID(ctx, connectionID)

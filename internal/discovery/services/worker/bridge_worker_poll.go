@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"sync/atomic"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sync/errgroup"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
+	discoveryMetrics "github.com/LerianStudio/matcher/internal/discovery/services/metrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -34,6 +36,19 @@ func (worker *BridgeWorker) pollCycle(ctx context.Context) {
 
 	ctx, span := tracer.Start(ctx, "discovery.bridge.poll_cycle")
 	defer span.End()
+
+	// Every pollCycle emits fetcher_cycles_total + fetcher_cycle_duration_ms
+	// exactly once via this outcome pointer. Deferred in LIFO order: runs
+	// AFTER heartbeat and BEFORE span.End so cycle-metrics are recorded
+	// regardless of the exit path (lock contention, tenant-list error,
+	// normal success). Default to Skipped — any path that did real work
+	// flips it to Success or Failure.
+	startedAt := time.Now()
+	outcome := discoveryMetrics.OutcomeSkipped
+
+	defer func() {
+		discoveryMetrics.RecordFetcherCycle(ctx, outcome, float64(time.Since(startedAt).Milliseconds()))
+	}()
 
 	// Deferred in LIFO order: heartbeat runs BEFORE span.End, giving the
 	// span a chance to record heartbeat-related attributes if needed.
@@ -56,12 +71,16 @@ func (worker *BridgeWorker) pollCycle(ctx context.Context) {
 
 	tenants, err := worker.tenantLister.ListTenants(ctx)
 	if err != nil {
+		outcome = discoveryMetrics.OutcomeFailure
+
 		libOpentelemetry.HandleSpanError(span, "bridge: list tenants failed", err)
 		logger.With(libLog.String("error", err.Error())).
 			Log(ctx, libLog.LevelError, "bridge: failed to list tenants")
 
 		return
 	}
+
+	outcome = discoveryMetrics.OutcomeSuccess
 
 	span.SetAttributes(attribute.Int("bridge.tenant_count", len(tenants)))
 

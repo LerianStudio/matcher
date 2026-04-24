@@ -13,6 +13,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
+	discoveryMetrics "github.com/LerianStudio/matcher/internal/discovery/services/metrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -104,6 +105,8 @@ func (uc *UseCase) StartExtraction(
 		libOpentelemetry.HandleSpanError(span, "submit extraction job", err)
 
 		if markErr := extractionReq.MarkFailed(entities.SanitizedExtractionFailureMessage); markErr == nil {
+			discoveryMetrics.RecordExtractionState(ctx, extractionReq.Status.String())
+
 			if updateErr := uc.extractionRepo.Update(ctx, extractionReq); updateErr != nil {
 				libOpentelemetry.HandleSpanError(span, "persist failed extraction request", updateErr)
 			}
@@ -115,6 +118,8 @@ func (uc *UseCase) StartExtraction(
 	if err := extractionReq.MarkSubmitted(jobID); err != nil {
 		return nil, fmt.Errorf("mark extraction submitted: %w", err)
 	}
+
+	discoveryMetrics.RecordExtractionState(ctx, extractionReq.Status.String())
 
 	if err := uc.persistSubmittedExtraction(ctx, span, extractionReq); err != nil {
 		return nil, fmt.Errorf("persist submitted extraction request: %w", err)

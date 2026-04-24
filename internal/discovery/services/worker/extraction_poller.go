@@ -16,6 +16,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
+	discoveryMetrics "github.com/LerianStudio/matcher/internal/discovery/services/metrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -190,6 +191,8 @@ func (ep *ExtractionPoller) handleTimeout(
 
 		ep.logger.With(libLog.Err(err)).
 			Log(ctx, libLog.LevelWarn, "extraction poller: failed to update extraction on timeout")
+	} else {
+		discoveryMetrics.RecordExtractionState(ctx, extraction.Status.String())
 	}
 
 	if onFailed != nil {
@@ -266,6 +269,8 @@ func (ep *ExtractionPoller) pollOnce(
 
 				return false
 			}
+
+			discoveryMetrics.RecordExtractionState(ctx, extraction.Status.String())
 
 			if onFailed != nil {
 				onFailed(ctx, "extraction cancelled")
@@ -344,6 +349,8 @@ func (ep *ExtractionPoller) handlePollStatus(
 			return false // retry on next poll — DB may recover
 		}
 
+		discoveryMetrics.RecordExtractionState(ctx, extraction.Status.String())
+
 		if onComplete != nil {
 			if err := onComplete(ctx, status.ResultPath); err != nil {
 				logger.With(libLog.Err(err)).
@@ -378,6 +385,8 @@ func (ep *ExtractionPoller) handlePollStatus(
 			return false // retry on next poll — DB may recover
 		}
 
+		discoveryMetrics.RecordExtractionState(ctx, extraction.Status.String())
+
 		if onFailed != nil {
 			onFailed(ctx, entities.SanitizedExtractionFailureMessage)
 		}
@@ -411,6 +420,8 @@ func (ep *ExtractionPoller) handlePollStatus(
 			return false
 		}
 
+		discoveryMetrics.RecordExtractionState(ctx, extraction.Status.String())
+
 		if onFailed != nil {
 			onFailed(ctx, "extraction cancelled")
 		}
@@ -430,16 +441,25 @@ func (ep *ExtractionPoller) handlePollStatus(
 			return false
 		}
 
-		if extraction.Status != previousStatus || !extraction.UpdatedAt.Equal(previousUpdatedAt) {
-			if err := ep.extractionRepo.UpdateIfUnchanged(ctx, extraction, expectedUpdatedAt); err != nil {
-				if errors.Is(err, repositories.ErrExtractionConflict) {
-					return ep.stopOnConflict(ctx, extraction.ID)
-				}
-
-				logger.With(libLog.Err(err)).
-					Log(ctx, libLog.LevelWarn, "extraction poller: failed to update extraction status")
-			}
+		if extraction.Status == previousStatus && extraction.UpdatedAt.Equal(previousUpdatedAt) {
+			break
 		}
+
+		err := ep.extractionRepo.UpdateIfUnchanged(ctx, extraction, expectedUpdatedAt)
+		if err == nil {
+			if extraction.Status != previousStatus {
+				discoveryMetrics.RecordExtractionState(ctx, extraction.Status.String())
+			}
+
+			break
+		}
+
+		if errors.Is(err, repositories.ErrExtractionConflict) {
+			return ep.stopOnConflict(ctx, extraction.ID)
+		}
+
+		logger.With(libLog.Err(err)).
+			Log(ctx, libLog.LevelWarn, "extraction poller: failed to update extraction status")
 	default:
 		logger.With(libLog.String("fetcher.status", status.Status)).
 			Log(ctx, libLog.LevelWarn, "extraction poller: unknown extraction status")
