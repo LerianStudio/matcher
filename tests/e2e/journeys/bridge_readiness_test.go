@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/tests/e2e"
-	"github.com/LerianStudio/matcher/tests/e2e/client"
+	"github.com/LerianStudio/matcher/tests/client"
 	"github.com/LerianStudio/matcher/tests/e2e/mock"
 )
 
@@ -193,9 +193,8 @@ func TestBridgeReadiness_Journey(t *testing.T) {
 		// 03 — Seed a COMPLETE extraction (lands in "pending" bucket)
 		// =================================================================
 		t.Run("03_seed_complete_extraction", func(t *testing.T) {
-			if pendingConnectionID == "" {
-				t.Skip("skipping: depends on 02_list_connections_resolves_uuids")
-			}
+			require.NotEmpty(t, pendingConnectionID,
+				"02_list_connections_resolves_uuids must populate pendingConnectionID before this subtest runs")
 
 			extraction, err := discovery.StartExtraction(ctx, pendingConnectionID, client.DiscoveryStartExtractionRequest{
 				Tables: map[string]client.DiscoveryExtractionTableRequest{
@@ -233,9 +232,8 @@ func TestBridgeReadiness_Journey(t *testing.T) {
 		// 04 — Seed a FAILED extraction (lands in "failed" bucket)
 		// =================================================================
 		t.Run("04_seed_failed_extraction", func(t *testing.T) {
-			if failedConnectionID == "" {
-				t.Skip("skipping: depends on 02_list_connections_resolves_uuids")
-			}
+			require.NotEmpty(t, failedConnectionID,
+				"02_list_connections_resolves_uuids must populate failedConnectionID before this subtest runs")
 
 			extraction, err := discovery.StartExtraction(ctx, failedConnectionID, client.DiscoveryStartExtractionRequest{
 				Tables: map[string]client.DiscoveryExtractionTableRequest{
@@ -265,9 +263,10 @@ func TestBridgeReadiness_Journey(t *testing.T) {
 		// 05 — Summary reflects pending + failed buckets
 		// =================================================================
 		t.Run("05_summary_counts_pending_and_failed", func(t *testing.T) {
-			if pendingExtractionID == "" || failedExtractionID == "" {
-				t.Skip("skipping: depends on seed subtests")
-			}
+			require.NotEmpty(t, pendingExtractionID,
+				"03_seed_complete_extraction must populate pendingExtractionID before this subtest runs")
+			require.NotEmpty(t, failedExtractionID,
+				"04_seed_failed_extraction must populate failedExtractionID before this subtest runs")
 
 			summary, err := discovery.GetBridgeReadinessSummary(ctx)
 			require.NoError(t, err)
@@ -301,9 +300,8 @@ func TestBridgeReadiness_Journey(t *testing.T) {
 		// 06 — Candidates drilldown for "pending" includes the COMPLETE row
 		// =================================================================
 		t.Run("06_candidates_pending_includes_extraction", func(t *testing.T) {
-			if pendingExtractionID == "" {
-				t.Skip("skipping: depends on 03_seed_complete_extraction")
-			}
+			require.NotEmpty(t, pendingExtractionID,
+				"03_seed_complete_extraction must populate pendingExtractionID before this subtest runs")
 
 			page, err := discovery.ListBridgeCandidates(ctx, "pending", "", 200)
 			require.NoError(t, err)
@@ -348,9 +346,8 @@ func TestBridgeReadiness_Journey(t *testing.T) {
 		// 07 — Candidates drilldown for "failed" includes the FAILED row
 		// =================================================================
 		t.Run("07_candidates_failed_includes_extraction", func(t *testing.T) {
-			if failedExtractionID == "" {
-				t.Skip("skipping: depends on 04_seed_failed_extraction")
-			}
+			require.NotEmpty(t, failedExtractionID,
+				"04_seed_failed_extraction must populate failedExtractionID before this subtest runs")
 
 			page, err := discovery.ListBridgeCandidates(ctx, "failed", "", 200)
 			require.NoError(t, err)
@@ -433,9 +430,8 @@ func TestBridgeReadiness_Journey(t *testing.T) {
 		//       (runtime config round-trip proves systemplane wiring works)
 		// =================================================================
 		t.Run("11_stale_threshold_moves_pending_to_stale", func(t *testing.T) {
-			if pendingExtractionID == "" {
-				t.Skip("skipping: depends on 03_seed_complete_extraction")
-			}
+			require.NotEmpty(t, pendingExtractionID,
+				"03_seed_complete_extraction must populate pendingExtractionID before this subtest runs")
 
 			// Capture the current threshold so we can restore it after the
 			// subtest, independent of success or failure.

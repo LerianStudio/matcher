@@ -55,7 +55,7 @@ func newDedupeService(t *testing.T, h *integration.TestHarness) *ingestionRedis.
 	return ingestionRedis.NewDedupeService(provider)
 }
 
-func TestDedupe_CalculateHash_Deterministic(t *testing.T) {
+func TestIntegration_Ingestion_Dedupe_CalculateHash_Deterministic(t *testing.T) {
 	integration.RunWithHarness(t, func(t *testing.T, h *integration.TestHarness) {
 		dedupe := newDedupeService(t, h)
 
@@ -79,7 +79,7 @@ func TestDedupe_CalculateHash_Deterministic(t *testing.T) {
 	})
 }
 
-func TestDedupe_MarkSeenAndIsDuplicate(t *testing.T) {
+func TestIntegration_Ingestion_Dedupe_MarkSeenAndIsDuplicate(t *testing.T) {
 	integration.RunWithHarness(t, func(t *testing.T, h *integration.TestHarness) {
 		dedupe := newDedupeService(t, h)
 
@@ -107,7 +107,7 @@ func TestDedupe_MarkSeenAndIsDuplicate(t *testing.T) {
 	})
 }
 
-func TestDedupe_IsDuplicate_NotSeen(t *testing.T) {
+func TestIntegration_Ingestion_Dedupe_IsDuplicate_NotSeen(t *testing.T) {
 	integration.RunWithHarness(t, func(t *testing.T, h *integration.TestHarness) {
 		dedupe := newDedupeService(t, h)
 
@@ -121,7 +121,7 @@ func TestDedupe_IsDuplicate_NotSeen(t *testing.T) {
 	})
 }
 
-func TestDedupe_MarkSeenWithRetry_DuplicateReject(t *testing.T) {
+func TestIntegration_Ingestion_Dedupe_MarkSeenWithRetry_DuplicateReject(t *testing.T) {
 	integration.RunWithHarness(t, func(t *testing.T, h *integration.TestHarness) {
 		dedupe := newDedupeService(t, h)
 
@@ -143,7 +143,7 @@ func TestDedupe_MarkSeenWithRetry_DuplicateReject(t *testing.T) {
 	})
 }
 
-func TestDedupe_TTLExpiry(t *testing.T) {
+func TestIntegration_Ingestion_Dedupe_TTLExpiry(t *testing.T) {
 	integration.RunWithHarness(t, func(t *testing.T, h *integration.TestHarness) {
 		dedupe := newDedupeService(t, h)
 
@@ -160,26 +160,18 @@ func TestDedupe_TTLExpiry(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, dup, "hash should be duplicate immediately after MarkSeen")
 
-		deadline := time.Now().Add(5 * time.Second)
-		expired := false
-
-		for time.Now().Before(deadline) {
-			dup, err = dedupe.IsDuplicate(ctx, contextID, hash)
-			require.NoError(t, err)
-
-			if !dup {
-				expired = true
-				break
+		// Wait for the TTL to expire via polling.
+		require.Eventually(t, func() bool {
+			dup, pollErr := dedupe.IsDuplicate(ctx, contextID, hash)
+			if pollErr != nil {
+				return false
 			}
-
-			time.Sleep(100 * time.Millisecond)
-		}
-
-		require.True(t, expired, "hash should not be duplicate after TTL expiry")
+			return !dup
+		}, 5*time.Second, 100*time.Millisecond, "hash should not be duplicate after TTL expiry")
 	})
 }
 
-func TestDedupe_ClearBatch(t *testing.T) {
+func TestIntegration_Ingestion_Dedupe_ClearBatch(t *testing.T) {
 	integration.RunWithHarness(t, func(t *testing.T, h *integration.TestHarness) {
 		dedupe := newDedupeService(t, h)
 

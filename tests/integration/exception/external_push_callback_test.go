@@ -20,7 +20,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestIntegrationExternalPushCallback_WebhookDispatch(t *testing.T) {
+func TestIntegration_Exception_IntegrationExternalPushCallback_WebhookDispatch(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 
@@ -90,7 +90,7 @@ func TestIntegrationExternalPushCallback_WebhookDispatch(t *testing.T) {
 	})
 }
 
-func TestIntegrationExternalPushCallback_JiraDispatch(t *testing.T) {
+func TestIntegration_Exception_IntegrationExternalPushCallback_JiraDispatch(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 
@@ -164,7 +164,7 @@ func TestIntegrationExternalPushCallback_JiraDispatch(t *testing.T) {
 	})
 }
 
-func TestIntegrationExternalPushCallback_ManualRouting(t *testing.T) {
+func TestIntegration_Exception_IntegrationExternalPushCallback_ManualRouting(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 
@@ -186,7 +186,7 @@ func TestIntegrationExternalPushCallback_ManualRouting(t *testing.T) {
 	})
 }
 
-func TestIntegrationExternalPushCallback_IdempotencyGuarantee(t *testing.T) {
+func TestIntegration_Exception_IntegrationExternalPushCallback_IdempotencyGuarantee(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		idempotencyRepo := wireIdempotencyRepo(t, h)
@@ -212,7 +212,7 @@ func TestIntegrationExternalPushCallback_IdempotencyGuarantee(t *testing.T) {
 	})
 }
 
-func TestIntegrationExternalPushCallback_RetryOnTransientFailure(t *testing.T) {
+func TestIntegration_Exception_IntegrationExternalPushCallback_RetryOnTransientFailure(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 
@@ -260,7 +260,7 @@ func TestIntegrationExternalPushCallback_RetryOnTransientFailure(t *testing.T) {
 	})
 }
 
-func TestIntegrationExternalPushCallback_NonRetryableError(t *testing.T) {
+func TestIntegration_Exception_IntegrationExternalPushCallback_NonRetryableError(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 

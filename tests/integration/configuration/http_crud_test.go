@@ -82,8 +82,8 @@ func createTestContext(
 	return created
 }
 
-// TestConfigServiceCRUD_ContextLifecycle exercises the full create-read-update-list-delete cycle for reconciliation contexts.
-func TestConfigServiceCRUD_ContextLifecycle(t *testing.T) {
+// TestIntegration_Configuration_ConfigServiceCRUD_ContextLifecycle exercises the full create-read-update-list-delete cycle for reconciliation contexts.
+func TestIntegration_Configuration_ConfigServiceCRUD_ContextLifecycle(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -145,8 +145,8 @@ func TestConfigServiceCRUD_ContextLifecycle(t *testing.T) {
 	})
 }
 
-// TestConfigServiceCRUD_SourceLifecycle exercises the full create-read-update-list-delete cycle for reconciliation sources.
-func TestConfigServiceCRUD_SourceLifecycle(t *testing.T) {
+// TestIntegration_Configuration_ConfigServiceCRUD_SourceLifecycle exercises the full create-read-update-list-delete cycle for reconciliation sources.
+func TestIntegration_Configuration_ConfigServiceCRUD_SourceLifecycle(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -210,8 +210,8 @@ func TestConfigServiceCRUD_SourceLifecycle(t *testing.T) {
 	})
 }
 
-// TestConfigServiceCRUD_FieldMapLifecycle exercises the full create-read-update-delete cycle for field maps.
-func TestConfigServiceCRUD_FieldMapLifecycle(t *testing.T) {
+// TestIntegration_Configuration_ConfigServiceCRUD_FieldMapLifecycle exercises the full create-read-update-delete cycle for field maps.
+func TestIntegration_Configuration_ConfigServiceCRUD_FieldMapLifecycle(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -270,8 +270,8 @@ func TestConfigServiceCRUD_FieldMapLifecycle(t *testing.T) {
 	})
 }
 
-// TestConfigServiceCRUD_MatchRuleLifecycle exercises the full create-read-update-list-delete cycle for match rules.
-func TestConfigServiceCRUD_MatchRuleLifecycle(t *testing.T) {
+// TestIntegration_Configuration_ConfigServiceCRUD_MatchRuleLifecycle exercises the full create-read-update-list-delete cycle for match rules.
+func TestIntegration_Configuration_ConfigServiceCRUD_MatchRuleLifecycle(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -331,8 +331,8 @@ func TestConfigServiceCRUD_MatchRuleLifecycle(t *testing.T) {
 	})
 }
 
-// TestConfigServiceCRUD_CreateContextValidation verifies that creating a context with an empty name returns an error.
-func TestConfigServiceCRUD_CreateContextValidation(t *testing.T) {
+// TestIntegration_Configuration_ConfigServiceCRUD_CreateContextValidation verifies that creating a context with an empty name returns an error.
+func TestIntegration_Configuration_ConfigServiceCRUD_CreateContextValidation(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -349,8 +349,8 @@ func TestConfigServiceCRUD_CreateContextValidation(t *testing.T) {
 	})
 }
 
-// TestConfigServiceCRUD_CreateSourceNonExistentContext verifies that creating a source for a non-existent context fails.
-func TestConfigServiceCRUD_CreateSourceNonExistentContext(t *testing.T) {
+// TestIntegration_Configuration_ConfigServiceCRUD_CreateSourceNonExistentContext verifies that creating a source for a non-existent context fails.
+func TestIntegration_Configuration_ConfigServiceCRUD_CreateSourceNonExistentContext(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -372,8 +372,8 @@ func TestConfigServiceCRUD_CreateSourceNonExistentContext(t *testing.T) {
 	})
 }
 
-// TestConfigServiceCRUD_UpdateNonExistentContext verifies that updating a non-existent context returns an error.
-func TestConfigServiceCRUD_UpdateNonExistentContext(t *testing.T) {
+// TestIntegration_Configuration_ConfigServiceCRUD_UpdateNonExistentContext verifies that updating a non-existent context returns an error.
+func TestIntegration_Configuration_ConfigServiceCRUD_UpdateNonExistentContext(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -389,8 +389,8 @@ func TestConfigServiceCRUD_UpdateNonExistentContext(t *testing.T) {
 	})
 }
 
-// TestConfigServiceCRUD_DeleteNonExistentContext verifies that deleting a non-existent context returns an error.
-func TestConfigServiceCRUD_DeleteNonExistentContext(t *testing.T) {
+// TestIntegration_Configuration_ConfigServiceCRUD_DeleteNonExistentContext verifies that deleting a non-existent context returns an error.
+func TestIntegration_Configuration_ConfigServiceCRUD_DeleteNonExistentContext(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -402,8 +402,8 @@ func TestConfigServiceCRUD_DeleteNonExistentContext(t *testing.T) {
 	})
 }
 
-// TestConfigServiceCRUD_RuleReorderPriorities verifies that match rule priorities can be reordered.
-func TestConfigServiceCRUD_RuleReorderPriorities(t *testing.T) {
+// TestIntegration_Configuration_ConfigServiceCRUD_RuleReorderPriorities verifies that match rule priorities can be reordered.
+func TestIntegration_Configuration_ConfigServiceCRUD_RuleReorderPriorities(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -453,8 +453,8 @@ func TestConfigServiceCRUD_RuleReorderPriorities(t *testing.T) {
 	})
 }
 
-// TestConfigServiceCRUD_ListContextsPagination verifies that listing contexts respects cursor-based pagination.
-func TestConfigServiceCRUD_ListContextsPagination(t *testing.T) {
+// TestIntegration_Configuration_ConfigServiceCRUD_ListContextsPagination verifies that listing contexts respects cursor-based pagination.
+func TestIntegration_Configuration_ConfigServiceCRUD_ListContextsPagination(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {

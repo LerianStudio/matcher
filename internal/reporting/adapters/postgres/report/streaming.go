@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package report
 
 import (
@@ -14,6 +18,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
@@ -254,7 +259,7 @@ func (repo *Repository) StreamMatchedForExport(
 		span.End()
 		libOpentelemetry.HandleSpanError(span, "failed to begin transaction", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to begin transaction for streaming export: %v", err))
+		libLog.SafeError(logger, ctx, "failed to begin transaction for streaming export", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("begin streaming transaction: %w", err)
 	}
@@ -286,7 +291,7 @@ func (repo *Repository) StreamMatchedForExport(
 		span.End()
 
 		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to rollback after query build error: %v", rollbackErr))
+			libLog.SafeError(logger, ctx, "failed to rollback after query build error", rollbackErr, runtime.IsProductionMode())
 		}
 
 		return nil, fmt.Errorf("building export query: %w", err)
@@ -298,7 +303,7 @@ func (repo *Repository) StreamMatchedForExport(
 		span.End()
 
 		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to rollback after query error: %v", rollbackErr))
+			libLog.SafeError(logger, ctx, "failed to rollback after query error", rollbackErr, runtime.IsProductionMode())
 		}
 
 		libOpentelemetry.HandleSpanError(span, "failed to query matched items", err)
@@ -331,7 +336,7 @@ func (repo *Repository) StreamUnmatchedForExport(
 		span.End()
 		libOpentelemetry.HandleSpanError(span, "failed to begin transaction", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to begin transaction for streaming export: %v", err))
+		libLog.SafeError(logger, ctx, "failed to begin transaction for streaming export", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("begin streaming transaction: %w", err)
 	}
@@ -364,7 +369,7 @@ func (repo *Repository) StreamUnmatchedForExport(
 		span.End()
 
 		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to rollback after query build error: %v", rollbackErr))
+			libLog.SafeError(logger, ctx, "failed to rollback after query build error", rollbackErr, runtime.IsProductionMode())
 		}
 
 		return nil, fmt.Errorf("building export query: %w", err)
@@ -376,7 +381,7 @@ func (repo *Repository) StreamUnmatchedForExport(
 		span.End()
 
 		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to rollback after query error: %v", rollbackErr))
+			libLog.SafeError(logger, ctx, "failed to rollback after query error", rollbackErr, runtime.IsProductionMode())
 		}
 
 		libOpentelemetry.HandleSpanError(span, "failed to query unmatched items", err)
@@ -409,7 +414,7 @@ func (repo *Repository) StreamVarianceForExport(
 		span.End()
 		libOpentelemetry.HandleSpanError(span, "failed to begin transaction", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to begin transaction for streaming export: %v", err))
+		libLog.SafeError(logger, ctx, "failed to begin transaction for streaming export", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("begin streaming transaction: %w", err)
 	}
@@ -438,7 +443,7 @@ func (repo *Repository) StreamVarianceForExport(
 		span.End()
 
 		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to rollback after query error: %v", rollbackErr))
+			libLog.SafeError(logger, ctx, "failed to rollback after query error", rollbackErr, runtime.IsProductionMode())
 		}
 
 		libOpentelemetry.HandleSpanError(span, "failed to query variance rows", err)

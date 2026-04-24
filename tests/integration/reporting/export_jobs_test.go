@@ -14,7 +14,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestExportJob_CreateAndRetrieve(t *testing.T) {
+func TestIntegration_Reporting_ExportJob_CreateAndRetrieve(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		repo := newExportJobRepo(h)
@@ -45,7 +45,7 @@ func TestExportJob_CreateAndRetrieve(t *testing.T) {
 	})
 }
 
-func TestExportJob_GetByID_NotFound(t *testing.T) {
+func TestIntegration_Reporting_ExportJob_GetByID_NotFound(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		repo := newExportJobRepo(h)
@@ -56,7 +56,7 @@ func TestExportJob_GetByID_NotFound(t *testing.T) {
 	})
 }
 
-func TestExportJob_ListByContext(t *testing.T) {
+func TestIntegration_Reporting_ExportJob_ListByContext(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		repo := newExportJobRepo(h)
@@ -104,7 +104,7 @@ func TestExportJob_ListByContext(t *testing.T) {
 	})
 }
 
-func TestExportJob_CancelQueuedJob(t *testing.T) {
+func TestIntegration_Reporting_ExportJob_CancelQueuedJob(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		repo := newExportJobRepo(h)
@@ -130,7 +130,7 @@ func TestExportJob_CancelQueuedJob(t *testing.T) {
 	})
 }
 
-func TestExportJob_StatusTransitions(t *testing.T) {
+func TestIntegration_Reporting_ExportJob_StatusTransitions(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		repo := newExportJobRepo(h)
@@ -195,7 +195,7 @@ func TestExportJob_StatusTransitions(t *testing.T) {
 	})
 }
 
-func TestExportJob_DownloadableOnlyWhenSucceeded(t *testing.T) {
+func TestIntegration_Reporting_ExportJob_DownloadableOnlyWhenSucceeded(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		repo := newExportJobRepo(h)
@@ -233,7 +233,7 @@ func TestExportJob_DownloadableOnlyWhenSucceeded(t *testing.T) {
 	})
 }
 
-func TestExportJob_DeleteRemovesRecord(t *testing.T) {
+func TestIntegration_Reporting_ExportJob_DeleteRemovesRecord(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		repo := newExportJobRepo(h)

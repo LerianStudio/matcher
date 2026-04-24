@@ -2,6 +2,11 @@
 // Use of this source code is governed by an Elastic License 2.0
 // that can be found in the LICENSE.md file.
 
+// interface-only:skip-check-tests
+// Behaviour of initExceptionModule is exercised end-to-end by the
+// Service-level tests in init_test.go. This file has no dedicated
+// companion _test.go — scripts/check-tests.sh honours the marker above.
+
 package bootstrap
 
 import (

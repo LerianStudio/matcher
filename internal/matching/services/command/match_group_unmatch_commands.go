@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package command
 
 import (
@@ -18,6 +22,7 @@ import (
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	"github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
+	"github.com/LerianStudio/matcher/internal/shared/adapters/outboxtelemetry"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
@@ -263,18 +268,24 @@ func (uc *UseCase) enqueueUnmatchEvent(
 
 	// Guard against pathological groups whose transaction list alone
 	// would overflow the broker cap. See the MatchConfirmedEvent path
-	// for the rationale behind matchEventEnvelopeHeadroomBytes.
-	truncatedIDs, originalCount := shared.TruncateIDListIfTooLarge(
-		ctx,
-		shared.EventTypeMatchUnmatched,
-		event.MatchID,
-		event.TransactionIDs,
-		shared.DefaultOutboxMaxPayloadBytes-matchEventEnvelopeHeadroomBytes,
-	)
+	// for the rationale behind matchEventEnvelopeHeadroomBytes. The
+	// domain helper is pure; the WARN line + metric are emitted here so
+	// the domain stays free of logging deps.
+	maxIDBytes := shared.DefaultOutboxMaxPayloadBytes - matchEventEnvelopeHeadroomBytes
+	truncatedIDs, originalCount := shared.TruncateIDListIfTooLarge(event.TransactionIDs, maxIDBytes)
 
 	if len(truncatedIDs) != originalCount {
 		event.TransactionIDs = truncatedIDs
 		event.TruncatedIDCount = originalCount
+
+		outboxtelemetry.RecordIDListTruncated(
+			ctx,
+			shared.EventTypeMatchUnmatched,
+			event.MatchID,
+			originalCount,
+			len(truncatedIDs),
+			maxIDBytes,
+		)
 	}
 
 	body, err := json.Marshal(event)

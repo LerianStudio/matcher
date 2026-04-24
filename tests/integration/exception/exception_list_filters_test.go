@@ -89,10 +89,10 @@ func overrideExceptionCreatedAt(
 }
 
 // --------------------------------------------------------------------------
-// 1. TestListFilters_StatusOnly — 5 exceptions: 3 OPEN, 2 RESOLVED
+// 1. TestIntegration_Exception_ListFilters_StatusOnly — 5 exceptions: 3 OPEN, 2 RESOLVED
 // --------------------------------------------------------------------------
 
-func TestListFilters_StatusOnly(t *testing.T) {
+func TestIntegration_Exception_ListFilters_StatusOnly(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -140,10 +140,10 @@ func TestListFilters_StatusOnly(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// 2. TestListFilters_SeverityOnly — create HIGH, MEDIUM, LOW, CRITICAL
+// 2. TestIntegration_Exception_ListFilters_SeverityOnly — create HIGH, MEDIUM, LOW, CRITICAL
 // --------------------------------------------------------------------------
 
-func TestListFilters_SeverityOnly(t *testing.T) {
+func TestIntegration_Exception_ListFilters_SeverityOnly(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -195,10 +195,10 @@ func TestListFilters_SeverityOnly(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// 3. TestListFilters_CombinedStatusAndSeverity — mixed status+severity
+// 3. TestIntegration_Exception_ListFilters_CombinedStatusAndSeverity — mixed status+severity
 // --------------------------------------------------------------------------
 
-func TestListFilters_CombinedStatusAndSeverity(t *testing.T) {
+func TestIntegration_Exception_ListFilters_CombinedStatusAndSeverity(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -271,10 +271,10 @@ func TestListFilters_CombinedStatusAndSeverity(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// 4. TestListFilters_DateRange — backdate some exceptions, filter by range
+// 4. TestIntegration_Exception_ListFilters_DateRange — backdate some exceptions, filter by range
 // --------------------------------------------------------------------------
 
-func TestListFilters_DateRange(t *testing.T) {
+func TestIntegration_Exception_ListFilters_DateRange(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -353,10 +353,10 @@ func TestListFilters_DateRange(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// 5. TestListFilters_PaginationWithFilter — 7 HIGH exceptions, page size 3
+// 5. TestIntegration_Exception_ListFilters_PaginationWithFilter — 7 HIGH exceptions, page size 3
 // --------------------------------------------------------------------------
 
-func TestListFilters_PaginationWithFilter(t *testing.T) {
+func TestIntegration_Exception_ListFilters_PaginationWithFilter(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -420,10 +420,10 @@ func TestListFilters_PaginationWithFilter(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// 6. TestListFilters_SortOrder — 3 exceptions with staggered timestamps, DESC
+// 6. TestIntegration_Exception_ListFilters_SortOrder — 3 exceptions with staggered timestamps, DESC
 // --------------------------------------------------------------------------
 
-func TestListFilters_SortOrder(t *testing.T) {
+func TestIntegration_Exception_ListFilters_SortOrder(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {

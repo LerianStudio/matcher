@@ -59,7 +59,7 @@ func createDraftContext(
 	return created
 }
 
-func TestContextStateMachine_NewContextStartsInDraft(t *testing.T) {
+func TestIntegration_Configuration_ContextStateMachine_NewContextStartsInDraft(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -72,7 +72,7 @@ func TestContextStateMachine_NewContextStartsInDraft(t *testing.T) {
 	})
 }
 
-func TestContextStateMachine_DraftToActive(t *testing.T) {
+func TestIntegration_Configuration_ContextStateMachine_DraftToActive(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -91,7 +91,7 @@ func TestContextStateMachine_DraftToActive(t *testing.T) {
 	})
 }
 
-func TestContextStateMachine_ActiveToPaused(t *testing.T) {
+func TestIntegration_Configuration_ContextStateMachine_ActiveToPaused(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -119,7 +119,7 @@ func TestContextStateMachine_ActiveToPaused(t *testing.T) {
 	})
 }
 
-func TestContextStateMachine_PausedToActive(t *testing.T) {
+func TestIntegration_Configuration_ContextStateMachine_PausedToActive(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -154,7 +154,7 @@ func TestContextStateMachine_PausedToActive(t *testing.T) {
 	})
 }
 
-func TestContextStateMachine_ActiveToArchived(t *testing.T) {
+func TestIntegration_Configuration_ContextStateMachine_ActiveToArchived(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -182,7 +182,7 @@ func TestContextStateMachine_ActiveToArchived(t *testing.T) {
 	})
 }
 
-func TestContextStateMachine_PausedToArchived(t *testing.T) {
+func TestIntegration_Configuration_ContextStateMachine_PausedToArchived(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -218,7 +218,7 @@ func TestContextStateMachine_PausedToArchived(t *testing.T) {
 	})
 }
 
-func TestContextStateMachine_InvalidTransitions(t *testing.T) {
+func TestIntegration_Configuration_ContextStateMachine_InvalidTransitions(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -302,7 +302,7 @@ func TestContextStateMachine_InvalidTransitions(t *testing.T) {
 	})
 }
 
-func TestContextStateMachine_ArchivedContextRejectsUpdate(t *testing.T) {
+func TestIntegration_Configuration_ContextStateMachine_ArchivedContextRejectsUpdate(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {

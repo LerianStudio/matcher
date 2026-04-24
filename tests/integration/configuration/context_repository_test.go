@@ -15,7 +15,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestContextRepository_CreateAndFindByID(t *testing.T) {
+func TestIntegration_Configuration_ContextRepository_CreateAndFindByID(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := contextRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -44,7 +44,7 @@ func TestContextRepository_CreateAndFindByID(t *testing.T) {
 	})
 }
 
-func TestContextRepository_FindByName(t *testing.T) {
+func TestIntegration_Configuration_ContextRepository_FindByName(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := contextRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -74,7 +74,7 @@ func TestContextRepository_FindByName(t *testing.T) {
 	})
 }
 
-func TestContextRepository_FindAll(t *testing.T) {
+func TestIntegration_Configuration_ContextRepository_FindAll(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := contextRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -104,7 +104,7 @@ func TestContextRepository_FindAll(t *testing.T) {
 	})
 }
 
-func TestContextRepository_Update(t *testing.T) {
+func TestIntegration_Configuration_ContextRepository_Update(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := contextRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -134,7 +134,7 @@ func TestContextRepository_Update(t *testing.T) {
 	})
 }
 
-func TestContextRepository_Delete(t *testing.T) {
+func TestIntegration_Configuration_ContextRepository_Delete(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := contextRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -161,7 +161,7 @@ func TestContextRepository_Delete(t *testing.T) {
 	})
 }
 
-func TestContextRepository_Count(t *testing.T) {
+func TestIntegration_Configuration_ContextRepository_Count(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := contextRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -188,7 +188,7 @@ func TestContextRepository_Count(t *testing.T) {
 	})
 }
 
-func TestContextRepository_FindByID_NotFound(t *testing.T) {
+func TestIntegration_Configuration_ContextRepository_FindByID_NotFound(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := contextRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()

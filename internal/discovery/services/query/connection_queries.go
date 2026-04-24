@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package query
 
 import (
@@ -16,6 +20,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
+	discoveryMetrics "github.com/LerianStudio/matcher/internal/discovery/services/metrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -122,10 +127,15 @@ func (uc *UseCase) GetConnectionSchema(ctx context.Context, connectionID uuid.UU
 	if uc.schemaCache != nil {
 		cached, err := uc.schemaCache.GetSchema(ctx, connectionID.String())
 		if err == nil && cached != nil {
+			discoveryMetrics.RecordSchemaCacheHit(ctx)
+
 			// Convert FetcherSchema to domain entities.
 			return convertFetcherSchemaToEntities(ctx, connectionID, cached), nil
 		}
-		// Cache miss or error — fall through to DB.
+
+		// Cache miss or error — fall through to DB. Both cases count as a
+		// miss because either way the cache did not satisfy the request.
+		discoveryMetrics.RecordSchemaCacheMiss(ctx)
 	}
 
 	schemas, err := uc.schemaRepo.FindByConnectionID(ctx, connectionID)
@@ -197,8 +207,21 @@ func convertFetcherSchemaToEntities(ctx context.Context, connectionID uuid.UUID,
 	return result
 }
 
-// cacheSchemas stores schemas in the cache asynchronously.
+// cacheSchemaDeadline bounds the execution of cacheSchemas so the detached
+// goroutine cannot hang indefinitely on a slow cache backend. The parent
+// request context is stripped via context.WithoutCancel before this
+// function is invoked, so without an internal deadline a stuck SetSchema
+// call would leak the goroutine forever.
+const cacheSchemaDeadline = 10 * time.Second
+
+// cacheSchemas stores schemas in the cache asynchronously. It applies an
+// internal deadline (cacheSchemaDeadline) because the caller detaches the
+// request context via context.WithoutCancel — without a local timeout, a
+// hung cache backend would leak this goroutine.
 func (uc *UseCase) cacheSchemas(ctx context.Context, connectionID uuid.UUID, schemas []*entities.DiscoveredSchema) {
+	ctx, cancel := context.WithTimeout(ctx, cacheSchemaDeadline)
+	defer cancel()
+
 	// Convert domain entities to FetcherSchema for caching.
 	tables := make([]sharedPorts.FetcherTableSchema, 0, len(schemas))
 	discoveredAt := time.Time{}

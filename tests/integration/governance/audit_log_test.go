@@ -19,7 +19,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestIntegrationAuditLog_CreateAndGetByID(t *testing.T) {
+func TestIntegration_Governance_IntegrationAuditLog_CreateAndGetByID(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -62,7 +62,7 @@ func TestIntegrationAuditLog_CreateAndGetByID(t *testing.T) {
 	})
 }
 
-func TestIntegrationAuditLog_TenantIsolation(t *testing.T) {
+func TestIntegration_Governance_IntegrationAuditLog_TenantIsolation(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -117,7 +117,7 @@ func TestIntegrationAuditLog_TenantIsolation(t *testing.T) {
 	})
 }
 
-func TestIntegrationAuditLog_ListByEntityOrdering(t *testing.T) {
+func TestIntegration_Governance_IntegrationAuditLog_ListByEntityOrdering(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -175,7 +175,7 @@ func TestIntegrationAuditLog_ListByEntityOrdering(t *testing.T) {
 	})
 }
 
-func TestIntegrationAuditLog_ListByEntityPagination(t *testing.T) {
+func TestIntegration_Governance_IntegrationAuditLog_ListByEntityPagination(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -224,7 +224,7 @@ func TestIntegrationAuditLog_ListByEntityPagination(t *testing.T) {
 	})
 }
 
-func TestIntegrationAuditLog_GetByIDNotFound(t *testing.T) {
+func TestIntegration_Governance_IntegrationAuditLog_GetByIDNotFound(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -236,7 +236,7 @@ func TestIntegrationAuditLog_GetByIDNotFound(t *testing.T) {
 	})
 }
 
-func TestIntegrationAuditLog_ListByEntityEmpty(t *testing.T) {
+func TestIntegration_Governance_IntegrationAuditLog_ListByEntityEmpty(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -249,7 +249,7 @@ func TestIntegrationAuditLog_ListByEntityEmpty(t *testing.T) {
 	})
 }
 
-func TestIntegrationAuditLog_MultipleEntitiesSameType(t *testing.T) {
+func TestIntegration_Governance_IntegrationAuditLog_MultipleEntitiesSameType(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -309,7 +309,7 @@ func TestIntegrationAuditLog_MultipleEntitiesSameType(t *testing.T) {
 	})
 }
 
-func TestIntegrationAuditLog_NilActorID(t *testing.T) {
+func TestIntegration_Governance_IntegrationAuditLog_NilActorID(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -339,7 +339,7 @@ func TestIntegrationAuditLog_NilActorID(t *testing.T) {
 	})
 }
 
-func TestIntegrationAuditLog_ContextCancellation(t *testing.T) {
+func TestIntegration_Governance_IntegrationAuditLog_ContextCancellation(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -354,7 +354,7 @@ func TestIntegrationAuditLog_ContextCancellation(t *testing.T) {
 	})
 }
 
-func TestIntegrationAuditLog_ComplexChangesJSON(t *testing.T) {
+func TestIntegration_Governance_IntegrationAuditLog_ComplexChangesJSON(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -410,7 +410,7 @@ func TestIntegrationAuditLog_ComplexChangesJSON(t *testing.T) {
 	})
 }
 
-func TestIntegrationAuditLog_CreateWithTx_CommitAndRollback(t *testing.T) {
+func TestIntegration_Governance_IntegrationAuditLog_CreateWithTx_CommitAndRollback(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -473,7 +473,7 @@ func TestIntegrationAuditLog_CreateWithTx_CommitAndRollback(t *testing.T) {
 	})
 }
 
-func TestIntegrationAuditLog_ConcurrentWrites(t *testing.T) {
+func TestIntegration_Governance_IntegrationAuditLog_ConcurrentWrites(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -524,7 +524,7 @@ func TestIntegrationAuditLog_ConcurrentWrites(t *testing.T) {
 	})
 }
 
-func TestIntegrationAuditLog_TransactionAtomicityWithBusinessOperation(t *testing.T) {
+func TestIntegration_Governance_IntegrationAuditLog_TransactionAtomicityWithBusinessOperation(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {

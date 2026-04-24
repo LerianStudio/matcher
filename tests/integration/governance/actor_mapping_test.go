@@ -13,7 +13,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestActorMapping_UpsertAndGet(t *testing.T) {
+func TestIntegration_Governance_ActorMapping_UpsertAndGet(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -44,7 +44,7 @@ func TestActorMapping_UpsertAndGet(t *testing.T) {
 	})
 }
 
-func TestActorMapping_UpsertUpdatesExisting(t *testing.T) {
+func TestIntegration_Governance_ActorMapping_UpsertUpdatesExisting(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -95,7 +95,7 @@ func TestActorMapping_UpsertUpdatesExisting(t *testing.T) {
 	})
 }
 
-func TestActorMapping_UpsertPreservesExistingFieldWhenOmitted(t *testing.T) {
+func TestIntegration_Governance_ActorMapping_UpsertPreservesExistingFieldWhenOmitted(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -125,7 +125,7 @@ func TestActorMapping_UpsertPreservesExistingFieldWhenOmitted(t *testing.T) {
 	})
 }
 
-func TestActorMapping_Pseudonymize(t *testing.T) {
+func TestIntegration_Governance_ActorMapping_Pseudonymize(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -157,7 +157,7 @@ func TestActorMapping_Pseudonymize(t *testing.T) {
 	})
 }
 
-func TestActorMapping_Delete(t *testing.T) {
+func TestIntegration_Governance_ActorMapping_Delete(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -188,7 +188,7 @@ func TestActorMapping_Delete(t *testing.T) {
 	})
 }
 
-func TestActorMapping_GetNonExistent(t *testing.T) {
+func TestIntegration_Governance_ActorMapping_GetNonExistent(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -201,7 +201,7 @@ func TestActorMapping_GetNonExistent(t *testing.T) {
 	})
 }
 
-func TestActorMapping_MultipleActors(t *testing.T) {
+func TestIntegration_Governance_ActorMapping_MultipleActors(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {

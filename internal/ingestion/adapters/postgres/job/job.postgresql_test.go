@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package job
@@ -255,7 +259,6 @@ func TestJobModelToEntity_NilModel(t *testing.T) {
 	require.Nil(t, entity)
 	require.ErrorIs(t, err, errJobModelRequired)
 }
-
 
 func TestJobModelToEntity_InvalidStatus(t *testing.T) {
 	t.Parallel()

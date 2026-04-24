@@ -49,8 +49,9 @@ func TestBridgeWorker_ProcessTenant_EligibleExtraction_BridgesEndToEnd(t *testin
 	w.logger = &stubLogger{}
 	w.tracer = otel.Tracer("bridge_worker_test")
 
-	count := w.processTenant(context.Background(), tenantID)
-	assert.Equal(t, 1, count, "one extraction should be processed")
+	processed, failed := w.processTenant(context.Background(), tenantID)
+	assert.Equal(t, 1, processed, "one extraction should be processed")
+	assert.Zero(t, failed)
 
 	orch.mu.Lock()
 	calls := orch.calls
@@ -91,9 +92,10 @@ func TestBridgeWorker_ProcessTenant_IneligibleExtraction_IsSwallowedAsIdempotent
 	w.logger = &stubLogger{}
 	w.tracer = otel.Tracer("bridge_worker_test")
 
-	count := w.processTenant(context.Background(), tenantID)
+	processed, failed := w.processTenant(context.Background(), tenantID)
 	// Ineligible is idempotent success: processed=1 (no error surfaced).
-	assert.Equal(t, 1, count)
+	assert.Equal(t, 1, processed)
+	assert.Zero(t, failed)
 }
 
 // TestBridgeWorker_ProcessTenant_AlreadyLinked_IsSwallowedAsIdempotent
@@ -126,8 +128,9 @@ func TestBridgeWorker_ProcessTenant_AlreadyLinked_IsSwallowedAsIdempotent(t *tes
 	w.logger = &stubLogger{}
 	w.tracer = otel.Tracer("bridge_worker_test")
 
-	count := w.processTenant(context.Background(), tenantID)
-	assert.Equal(t, 1, count)
+	processed, failed := w.processTenant(context.Background(), tenantID)
+	assert.Equal(t, 1, processed)
+	assert.Zero(t, failed)
 }
 
 // TestBridgeWorker_ProcessTenant_TransientError_IsCountedNegatively
@@ -160,8 +163,9 @@ func TestBridgeWorker_ProcessTenant_TransientError_IsCountedNegatively(t *testin
 	w.logger = &stubLogger{}
 	w.tracer = otel.Tracer("bridge_worker_test")
 
-	count := w.processTenant(context.Background(), tenantID)
-	assert.Equal(t, 0, count, "transient failure should not count as processed")
+	processed, failed := w.processTenant(context.Background(), tenantID)
+	assert.Zero(t, processed, "transient failure should not count as processed")
+	assert.Equal(t, 1, failed, "transient failure should count as failed")
 }
 
 // TestBridgeWorker_ProcessTenant_EmptyTenantBatch_ProcessesZero ensures a
@@ -186,8 +190,9 @@ func TestBridgeWorker_ProcessTenant_EmptyTenantBatch_ProcessesZero(t *testing.T)
 	w.logger = &stubLogger{}
 	w.tracer = otel.Tracer("bridge_worker_test")
 
-	count := w.processTenant(context.Background(), tenantID)
-	assert.Equal(t, 0, count)
+	processed, failed := w.processTenant(context.Background(), tenantID)
+	assert.Zero(t, processed)
+	assert.Zero(t, failed)
 	assert.Equal(t, int64(0), orch.callsCount.Load())
 }
 
@@ -213,8 +218,9 @@ func TestBridgeWorker_ProcessTenant_RepoError_LogsAndReturnsZero(t *testing.T) {
 	w.logger = &stubLogger{}
 	w.tracer = otel.Tracer("bridge_worker_test")
 
-	count := w.processTenant(context.Background(), tenantID)
-	assert.Equal(t, 0, count)
+	processed, failed := w.processTenant(context.Background(), tenantID)
+	assert.Zero(t, processed)
+	assert.Zero(t, failed)
 	assert.Equal(t, int64(0), orch.callsCount.Load())
 }
 
@@ -248,8 +254,9 @@ func TestBridgeWorker_ProcessTenant_MultipleExtractions_AllProcessed(t *testing.
 	w.logger = &stubLogger{}
 	w.tracer = otel.Tracer("bridge_worker_test")
 
-	count := w.processTenant(context.Background(), tenantID)
-	assert.Equal(t, 3, count)
+	processed, failed := w.processTenant(context.Background(), tenantID)
+	assert.Equal(t, 3, processed)
+	assert.Zero(t, failed)
 	assert.Equal(t, int64(3), orch.callsCount.Load())
 }
 

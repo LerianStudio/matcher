@@ -54,7 +54,7 @@ func cleanupDLQTopology(t *testing.T, ch *amqp.Channel) {
 	}
 }
 
-func TestDeclareDLQTopology_Success(t *testing.T) {
+func TestIntegration_Shared_DeclareDLQTopology_Success(t *testing.T) {
 	integration.RunWithHarness(t, func(t *testing.T, h *integration.TestHarness) {
 		_, ch := dialRabbitMQ(t, h)
 
@@ -95,7 +95,7 @@ func TestDeclareDLQTopology_Success(t *testing.T) {
 	})
 }
 
-func TestDeclareDLQTopology_Idempotent(t *testing.T) {
+func TestIntegration_Shared_DeclareDLQTopology_Idempotent(t *testing.T) {
 	integration.RunWithHarness(t, func(t *testing.T, h *integration.TestHarness) {
 		_, ch := dialRabbitMQ(t, h)
 		cleanupDLQTopology(t, ch)
@@ -132,7 +132,7 @@ func TestDeclareDLQTopology_Idempotent(t *testing.T) {
 	})
 }
 
-func TestGetDLXArgs_ReturnsCorrectTable(t *testing.T) {
+func TestIntegration_Shared_GetDLXArgs_ReturnsCorrectTable(t *testing.T) {
 	t.Parallel()
 
 	args := dlq.GetDLXArgs()
@@ -145,7 +145,7 @@ func TestGetDLXArgs_ReturnsCorrectTable(t *testing.T) {
 		"x-dead-letter-exchange should reference the DLX exchange name constant")
 }
 
-func TestDeclareDLQTopology_QueueIsDurable(t *testing.T) {
+func TestIntegration_Shared_DeclareDLQTopology_QueueIsDurable(t *testing.T) {
 	integration.RunWithHarness(t, func(t *testing.T, h *integration.TestHarness) {
 		_, ch := dialRabbitMQ(t, h)
 		cleanupDLQTopology(t, ch)

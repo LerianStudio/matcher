@@ -84,9 +84,9 @@ func sampleVolumeStats() *reportingEntities.VolumeStats {
 	}
 }
 
-// TestDashboardCache_SetAndGet verifies that a cached entry can be stored and retrieved
+// TestIntegration_Reporting_DashboardCache_SetAndGet verifies that a cached entry can be stored and retrieved
 // with matching values through the CacheService.
-func TestDashboardCache_SetAndGet(t *testing.T) {
+func TestIntegration_Reporting_DashboardCache_SetAndGet(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) { //nolint:thelper // test body, not helper
@@ -116,9 +116,9 @@ func TestDashboardCache_SetAndGet(t *testing.T) {
 	})
 }
 
-// TestDashboardCache_CacheMiss verifies that requesting a non-existent key
+// TestIntegration_Reporting_DashboardCache_CacheMiss verifies that requesting a non-existent key
 // returns an ErrCacheMiss sentinel error.
-func TestDashboardCache_CacheMiss(t *testing.T) {
+func TestIntegration_Reporting_DashboardCache_CacheMiss(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) { //nolint:thelper // test body, not helper
@@ -150,9 +150,9 @@ func TestDashboardCache_CacheMiss(t *testing.T) {
 	})
 }
 
-// TestDashboardCache_Invalidation verifies that after InvalidateContext, previously
+// TestIntegration_Reporting_DashboardCache_Invalidation verifies that after InvalidateContext, previously
 // cached entries for that context are no longer retrievable.
-func TestDashboardCache_Invalidation(t *testing.T) {
+func TestIntegration_Reporting_DashboardCache_Invalidation(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) { //nolint:thelper // test body, not helper
@@ -214,9 +214,9 @@ func TestDashboardCache_Invalidation(t *testing.T) {
 	})
 }
 
-// TestDashboardCache_TTLExpiry verifies that cached entries expire after the configured TTL.
+// TestIntegration_Reporting_DashboardCache_TTLExpiry verifies that cached entries expire after the configured TTL.
 // Uses a very short TTL to validate Redis key expiration.
-func TestDashboardCache_TTLExpiry(t *testing.T) {
+func TestIntegration_Reporting_DashboardCache_TTLExpiry(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) { //nolint:thelper // test body, not helper

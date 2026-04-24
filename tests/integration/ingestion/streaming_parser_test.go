@@ -108,7 +108,7 @@ func generateLargeJSON(numObjects int) string {
 // Test 1: CSV streaming parser processes all rows from a large file.
 // --------------------------------------------------------------------------
 
-func TestStreamingParser_CSV_LargeFile(t *testing.T) {
+func TestIntegration_Ingestion_StreamingParser_CSV_LargeFile(t *testing.T) {
 	t.Parallel()
 
 	const totalRows = 1000
@@ -158,7 +158,7 @@ func TestStreamingParser_CSV_LargeFile(t *testing.T) {
 // Test 2: CSV streaming parser delivers data in batches via callback.
 // --------------------------------------------------------------------------
 
-func TestStreamingParser_CSV_BatchCallbacks(t *testing.T) {
+func TestIntegration_Ingestion_StreamingParser_CSV_BatchCallbacks(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -204,7 +204,7 @@ func TestStreamingParser_CSV_BatchCallbacks(t *testing.T) {
 // Test 3: JSON streaming parser processes all objects from a large array.
 // --------------------------------------------------------------------------
 
-func TestStreamingParser_JSON_LargeFile(t *testing.T) {
+func TestIntegration_Ingestion_StreamingParser_JSON_LargeFile(t *testing.T) {
 	t.Parallel()
 
 	const totalObjects = 500
@@ -249,7 +249,7 @@ func TestStreamingParser_JSON_LargeFile(t *testing.T) {
 // Test 4: CSV streaming parser handles an empty file (headers only or no data).
 // --------------------------------------------------------------------------
 
-func TestStreamingParser_CSV_EmptyFile(t *testing.T) {
+func TestIntegration_Ingestion_StreamingParser_CSV_EmptyFile(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -287,7 +287,7 @@ func TestStreamingParser_CSV_EmptyFile(t *testing.T) {
 // Test 5: CSV streaming parser handles malformed rows gracefully.
 // --------------------------------------------------------------------------
 
-func TestStreamingParser_CSV_MalformedRows(t *testing.T) {
+func TestIntegration_Ingestion_StreamingParser_CSV_MalformedRows(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {

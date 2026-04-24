@@ -22,7 +22,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestExceptionCreatorRepository_CreateExceptions(t *testing.T) {
+func TestIntegration_Matching_ExceptionCreatorRepository_CreateExceptions(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := exceptionRepo.NewRepository(h.Provider())
 		runRepo := matchRunRepo.NewRepository(h.Provider())
@@ -99,7 +99,7 @@ func TestExceptionCreatorRepository_CreateExceptions(t *testing.T) {
 	})
 }
 
-func TestExceptionCreatorRepository_CreateExceptions_EmptyList(t *testing.T) {
+func TestIntegration_Matching_ExceptionCreatorRepository_CreateExceptions_EmptyList(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := exceptionRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -115,7 +115,7 @@ func TestExceptionCreatorRepository_CreateExceptions_EmptyList(t *testing.T) {
 	})
 }
 
-func TestExceptionCreatorRepository_CreateExceptions_NilReasons(t *testing.T) {
+func TestIntegration_Matching_ExceptionCreatorRepository_CreateExceptions_NilReasons(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := exceptionRepo.NewRepository(h.Provider())
 		transactionRepo := txRepo.NewRepository(h.Provider())
@@ -163,7 +163,7 @@ func TestExceptionCreatorRepository_CreateExceptions_NilReasons(t *testing.T) {
 	})
 }
 
-func TestExceptionCreatorRepository_CreateExceptions_Idempotent(t *testing.T) {
+func TestIntegration_Matching_ExceptionCreatorRepository_CreateExceptions_Idempotent(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := exceptionRepo.NewRepository(h.Provider())
 		transactionRepo := txRepo.NewRepository(h.Provider())
@@ -214,7 +214,7 @@ func TestExceptionCreatorRepository_CreateExceptions_Idempotent(t *testing.T) {
 	})
 }
 
-func TestExceptionCreatorRepository_CreateExceptions_SkipsNilUUIDs(t *testing.T) {
+func TestIntegration_Matching_ExceptionCreatorRepository_CreateExceptions_SkipsNilUUIDs(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := exceptionRepo.NewRepository(h.Provider())
 		transactionRepo := txRepo.NewRepository(h.Provider())

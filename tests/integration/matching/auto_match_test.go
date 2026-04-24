@@ -291,9 +291,9 @@ func wireIngestionWithTrigger(
 	return uc
 }
 
-// TestAutoMatch_TriggeredOnUpload verifies that when AutoMatchOnUpload is enabled,
+// TestIntegration_Matching_AutoMatch_TriggeredOnUpload verifies that when AutoMatchOnUpload is enabled,
 // a successful ingestion fires the MatchTrigger with the correct contextID.
-func TestAutoMatch_TriggeredOnUpload(t *testing.T) {
+func TestIntegration_Matching_AutoMatch_TriggeredOnUpload(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -331,9 +331,9 @@ func TestAutoMatch_TriggeredOnUpload(t *testing.T) {
 	})
 }
 
-// TestAutoMatch_NotTriggeredWhenDisabled verifies that when AutoMatchOnUpload
+// TestIntegration_Matching_AutoMatch_NotTriggeredWhenDisabled verifies that when AutoMatchOnUpload
 // is disabled (via ContextProvider returning false), ingestion does NOT trigger matching.
-func TestAutoMatch_NotTriggeredWhenDisabled(t *testing.T) {
+func TestIntegration_Matching_AutoMatch_NotTriggeredWhenDisabled(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -366,10 +366,10 @@ func TestAutoMatch_NotTriggeredWhenDisabled(t *testing.T) {
 	})
 }
 
-// TestAutoMatch_TriggeredAfterEachUpload verifies that the trigger fires on every
+// TestIntegration_Matching_AutoMatch_TriggeredAfterEachUpload verifies that the trigger fires on every
 // successful upload — once for ledger, once for bank. Each upload independently
 // fires the trigger because the ingestion UseCase doesn't track cross-source state.
-func TestAutoMatch_TriggeredAfterEachUpload(t *testing.T) {
+func TestIntegration_Matching_AutoMatch_TriggeredAfterEachUpload(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -421,10 +421,10 @@ func TestAutoMatch_TriggeredAfterEachUpload(t *testing.T) {
 	})
 }
 
-// TestAutoMatch_NotTriggeredOnFailedIngestion verifies that when ingestion
+// TestIntegration_Matching_AutoMatch_NotTriggeredOnFailedIngestion verifies that when ingestion
 // fails (e.g., malformed file), the MatchTrigger is NOT called. Auto-match
 // only fires after successful ingestion completion.
-func TestAutoMatch_NotTriggeredOnFailedIngestion(t *testing.T) {
+func TestIntegration_Matching_AutoMatch_NotTriggeredOnFailedIngestion(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {

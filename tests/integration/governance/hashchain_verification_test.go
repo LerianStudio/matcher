@@ -139,14 +139,14 @@ func readChainByTenantSeq(
 	return logs
 }
 
-// TestHashChain_SingleRecord verifies that a single audit log inserted via the
+// TestIntegration_Governance_HashChain_SingleRecord verifies that a single audit log inserted via the
 // repository produces a valid hash chain entry: genesis prev_hash, correct
 // record hash, and VerifyRecordHash passes after a Postgres round-trip.
 //
 // This works because:
 //   - CreatedAt is truncated to microsecond precision before hashing (matches TIMESTAMPTZ)
 //   - changes column is JSON (not JSONB), preserving exact input bytes
-func TestHashChain_SingleRecord(t *testing.T) {
+func TestIntegration_Governance_HashChain_SingleRecord(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -212,9 +212,9 @@ func TestHashChain_SingleRecord(t *testing.T) {
 	})
 }
 
-// TestHashChain_ThreeRecordChain creates 3 audit logs chained together and
+// TestIntegration_Governance_HashChain_ThreeRecordChain creates 3 audit logs chained together and
 // verifies the entire chain via VerifyChain after reading back from Postgres.
-func TestHashChain_ThreeRecordChain(t *testing.T) {
+func TestIntegration_Governance_HashChain_ThreeRecordChain(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -274,10 +274,10 @@ func TestHashChain_ThreeRecordChain(t *testing.T) {
 	})
 }
 
-// TestHashChain_BrokenChain_TamperedHash creates a valid 3-record chain, reads it
+// TestIntegration_Governance_HashChain_BrokenChain_TamperedHash creates a valid 3-record chain, reads it
 // back, tampers with record[1]'s RecordHash, and expects VerifyChain to detect
 // the invalid record hash.
-func TestHashChain_BrokenChain_TamperedHash(t *testing.T) {
+func TestIntegration_Governance_HashChain_BrokenChain_TamperedHash(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -329,10 +329,10 @@ func TestHashChain_BrokenChain_TamperedHash(t *testing.T) {
 	})
 }
 
-// TestHashChain_BrokenChain_WrongPrevHash creates a valid 3-record chain, reads it
+// TestIntegration_Governance_HashChain_BrokenChain_WrongPrevHash creates a valid 3-record chain, reads it
 // back, tampers with record[2]'s PrevHash, and expects VerifyChain to detect the
 // broken chain link.
-func TestHashChain_BrokenChain_WrongPrevHash(t *testing.T) {
+func TestIntegration_Governance_HashChain_BrokenChain_WrongPrevHash(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -382,10 +382,10 @@ func TestHashChain_BrokenChain_WrongPrevHash(t *testing.T) {
 	})
 }
 
-// TestHashChain_RoundTripPreservesData inserts a record with complex Changes JSON
+// TestIntegration_Governance_HashChain_RoundTripPreservesData inserts a record with complex Changes JSON
 // and verifies all fields survive the Postgres round-trip, including timestamps,
 // UUIDs, actor_id, and json.RawMessage content.
-func TestHashChain_RoundTripPreservesData(t *testing.T) {
+func TestIntegration_Governance_HashChain_RoundTripPreservesData(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -490,9 +490,9 @@ func TestHashChain_RoundTripPreservesData(t *testing.T) {
 	})
 }
 
-// TestHashChain_GenesisHashIsZeros verifies that GenesisHash returns exactly
+// TestIntegration_Governance_HashChain_GenesisHashIsZeros verifies that GenesisHash returns exactly
 // 32 zero bytes — the anchor for every tenant's first hash chain record.
-func TestHashChain_GenesisHashIsZeros(t *testing.T) {
+func TestIntegration_Governance_HashChain_GenesisHashIsZeros(t *testing.T) {
 	t.Parallel()
 
 	genesis := hashchain.GenesisHash()

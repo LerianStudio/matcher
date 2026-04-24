@@ -66,7 +66,7 @@ func createFeeRuleTestSchedule(t *testing.T, h *integration.TestHarness, name st
 	return created
 }
 
-func TestFeeRuleRepository_CreateFindUpdateDelete(t *testing.T) {
+func TestIntegration_Configuration_FeeRuleRepository_CreateFindUpdateDelete(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -140,7 +140,7 @@ func TestFeeRuleRepository_CreateFindUpdateDelete(t *testing.T) {
 	})
 }
 
-func TestFeeRuleRepository_RejectsMissingFeeSchedule(t *testing.T) {
+func TestIntegration_Configuration_FeeRuleRepository_RejectsMissingFeeSchedule(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -157,7 +157,7 @@ func TestFeeRuleRepository_RejectsMissingFeeSchedule(t *testing.T) {
 	})
 }
 
-func TestFeeRuleRepository_RejectsDuplicatePriorityAndNameWithinContext(t *testing.T) {
+func TestIntegration_Configuration_FeeRuleRepository_RejectsDuplicatePriorityAndNameWithinContext(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -190,7 +190,7 @@ func TestFeeRuleRepository_RejectsDuplicatePriorityAndNameWithinContext(t *testi
 	})
 }
 
-func TestFeeRuleRepository_AllowsDuplicatePriorityAndNameAcrossContexts(t *testing.T) {
+func TestIntegration_Configuration_FeeRuleRepository_AllowsDuplicatePriorityAndNameAcrossContexts(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -210,7 +210,7 @@ func TestFeeRuleRepository_AllowsDuplicatePriorityAndNameAcrossContexts(t *testi
 	})
 }
 
-func TestFeeRuleRepository_ConcurrentDuplicatePriority(t *testing.T) {
+func TestIntegration_Configuration_FeeRuleRepository_ConcurrentDuplicatePriority(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -263,7 +263,7 @@ func TestFeeRuleRepository_ConcurrentDuplicatePriority(t *testing.T) {
 	})
 }
 
-// TestFeeRuleRepository_CrossTenantIsolation verifies that fee rules created
+// TestIntegration_Configuration_FeeRuleRepository_CrossTenantIsolation verifies that fee rules created
 // in one tenant's schema are invisible to another tenant. This is H21 from
 // the fee-rules-per-field feature review.
 //
@@ -277,7 +277,7 @@ func TestFeeRuleRepository_ConcurrentDuplicatePriority(t *testing.T) {
 //  2. Switch to tenant B schema via context value.
 //  3. Assert FindByID(tenantA_rule.ID) returns ErrFeeRuleNotFound.
 //  4. Assert FindByContextID(tenantA_context.ID) returns empty slice.
-func TestFeeRuleRepository_CrossTenantIsolation(t *testing.T) {
+func TestIntegration_Configuration_FeeRuleRepository_CrossTenantIsolation(t *testing.T) {
 	t.Parallel()
 
 	t.Skip("requires multi-schema harness: the shared integration harness operates " +

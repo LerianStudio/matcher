@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package redis
 
 import (
@@ -11,6 +15,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 	"github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/valkey"
 
 	"github.com/LerianStudio/matcher/internal/exception/ports"
@@ -173,7 +178,7 @@ return 1
 		libOpentelemetry.HandleSpanError(span, "rate limiter script failed", wrappedErr)
 
 		if logger != nil {
-			logger.Log(ctx, libLog.LevelError, fmt.Sprintf("callback rate limiter failed: %v", wrappedErr))
+			libLog.SafeError(logger, ctx, "callback rate limiter failed", wrappedErr, runtime.IsProductionMode())
 		}
 
 		return false, wrappedErr

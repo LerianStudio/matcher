@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/LerianStudio/matcher/tests/e2e/client"
+	"github.com/LerianStudio/matcher/tests/client"
 )
 
 func TestFeeScheduleBuilder_Defaults(t *testing.T) {

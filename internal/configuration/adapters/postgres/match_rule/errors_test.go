@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package match_rule
@@ -6,8 +10,9 @@ import (
 	"errors"
 	"testing"
 
-	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	"github.com/stretchr/testify/assert"
+
+	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 )
 
 func TestMatchRuleSentinelErrors(t *testing.T) {

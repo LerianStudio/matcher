@@ -15,7 +15,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestMatchRunRepository_CreateUpdateAndFind(t *testing.T) {
+func TestIntegration_Matching_MatchRunRepository_CreateUpdateAndFind(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := matchRunRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -49,7 +49,7 @@ func TestMatchRunRepository_CreateUpdateAndFind(t *testing.T) {
 	})
 }
 
-func TestMatchRunRepository_Complete(t *testing.T) {
+func TestIntegration_Matching_MatchRunRepository_Complete(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := matchRunRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -80,7 +80,7 @@ func TestMatchRunRepository_Complete(t *testing.T) {
 	})
 }
 
-func TestMatchRunRepository_ListByContextID(t *testing.T) {
+func TestIntegration_Matching_MatchRunRepository_ListByContextID(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := matchRunRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()

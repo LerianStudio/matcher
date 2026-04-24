@@ -22,7 +22,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestMatchRuleOrdering_CreateAndReorder(t *testing.T) {
+func TestIntegration_Configuration_MatchRuleOrdering_CreateAndReorder(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {

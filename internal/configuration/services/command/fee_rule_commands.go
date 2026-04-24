@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package command
 
 import (
@@ -177,8 +181,17 @@ func (uc *UseCase) UpdateFeeRule(
 	return entity, nil
 }
 
-// DeleteFeeRuleInContext removes a fee rule by ID after verifying it belongs to the provided context.
+// DeleteFeeRuleInContext removes a fee rule by ID after verifying it belongs
+// to the provided context. The public entry point creates its own span so
+// callers see a `configuration.delete_fee_rule_in_context` node in the trace
+// even though the actual work is delegated to the unexported helper. The
+// helper's inner span nests under this one.
 func (uc *UseCase) DeleteFeeRuleInContext(ctx context.Context, contextID, feeRuleID uuid.UUID) error {
+	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled // only tracer needed at entry point; helper re-extracts logger
+
+	ctx, span := tracer.Start(ctx, "configuration.delete_fee_rule_in_context")
+	defer span.End()
+
 	return uc.deleteFeeRule(ctx, contextID, feeRuleID)
 }
 

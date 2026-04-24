@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	clientpkg "github.com/LerianStudio/matcher/tests/e2e/client"
+	clientpkg "github.com/LerianStudio/matcher/tests/client"
 )
 
 // PollOptions configures polling behavior.

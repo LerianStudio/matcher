@@ -18,7 +18,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestFieldMapRepository_CreateAndFindByID(t *testing.T) {
+func TestIntegration_Configuration_FieldMapRepository_CreateAndFindByID(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := fieldMapRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -51,7 +51,7 @@ func TestFieldMapRepository_CreateAndFindByID(t *testing.T) {
 	})
 }
 
-func TestFieldMapRepository_FindBySourceID(t *testing.T) {
+func TestIntegration_Configuration_FieldMapRepository_FindBySourceID(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := fieldMapRepo.NewRepository(h.Provider())
 		srcRepo, err := sourceRepo.NewRepository(h.Provider())
@@ -92,7 +92,7 @@ func TestFieldMapRepository_FindBySourceID(t *testing.T) {
 	})
 }
 
-func TestFieldMapRepository_Update(t *testing.T) {
+func TestIntegration_Configuration_FieldMapRepository_Update(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := fieldMapRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -124,7 +124,7 @@ func TestFieldMapRepository_Update(t *testing.T) {
 	})
 }
 
-func TestFieldMapRepository_Delete(t *testing.T) {
+func TestIntegration_Configuration_FieldMapRepository_Delete(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := fieldMapRepo.NewRepository(h.Provider())
 		srcRepo, err := sourceRepo.NewRepository(h.Provider())
@@ -166,7 +166,7 @@ func TestFieldMapRepository_Delete(t *testing.T) {
 	})
 }
 
-func TestFieldMapRepository_FindByID_NotFound(t *testing.T) {
+func TestIntegration_Configuration_FieldMapRepository_FindByID_NotFound(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := fieldMapRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -176,7 +176,7 @@ func TestFieldMapRepository_FindByID_NotFound(t *testing.T) {
 	})
 }
 
-func TestFieldMapRepository_FindBySourceID_NotFound(t *testing.T) {
+func TestIntegration_Configuration_FieldMapRepository_FindBySourceID_NotFound(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := fieldMapRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()

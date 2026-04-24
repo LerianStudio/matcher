@@ -126,7 +126,7 @@ func newChaosHarness(ctx context.Context) (*ChaosHarness, error) {
 
 	// 3. Start Redis on the shared network.
 	redisContainer, err := redis.Run(startupCtx,
-		"redis:7-alpine",
+		"valkey/valkey:8",
 		network.WithNetwork([]string{redisNetworkAlias}, nw),
 		testcontainers.WithWaitStrategy(
 			wait.ForAll(

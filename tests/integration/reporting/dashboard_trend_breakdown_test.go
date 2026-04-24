@@ -17,9 +17,9 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-// TestDashboardTrend_EmptyDatabase verifies that GetTrendMetrics returns a date series
+// TestIntegration_Reporting_DashboardTrend_EmptyDatabase verifies that GetTrendMetrics returns a date series
 // with all-zero counts when no transactions exist in the queried date range.
-func TestDashboardTrend_EmptyDatabase(t *testing.T) {
+func TestIntegration_Reporting_DashboardTrend_EmptyDatabase(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) { //nolint:thelper // test body, not helper
@@ -55,10 +55,10 @@ func TestDashboardTrend_EmptyDatabase(t *testing.T) {
 	})
 }
 
-// TestDashboardTrend_WithData inserts transactions on 3 different days, creates match
+// TestIntegration_Reporting_DashboardTrend_WithData inserts transactions on 3 different days, creates match
 // groups and exceptions for subsets, then verifies the trend points contain the correct
 // per-day Ingested/Matched/Exceptions counts.
-func TestDashboardTrend_WithData(t *testing.T) {
+func TestIntegration_Reporting_DashboardTrend_WithData(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) { //nolint:thelper // test body, not helper
@@ -267,9 +267,9 @@ func TestDashboardTrend_WithData(t *testing.T) {
 	})
 }
 
-// TestDashboardBreakdown_ExceptionsBySeverity inserts 5 exceptions with mixed
+// TestIntegration_Reporting_DashboardBreakdown_ExceptionsBySeverity inserts 5 exceptions with mixed
 // severities and verifies the BySeverity breakdown counts.
-func TestDashboardBreakdown_ExceptionsBySeverity(t *testing.T) {
+func TestIntegration_Reporting_DashboardBreakdown_ExceptionsBySeverity(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) { //nolint:thelper // test body, not helper
@@ -344,9 +344,9 @@ func TestDashboardBreakdown_ExceptionsBySeverity(t *testing.T) {
 	})
 }
 
-// TestDashboardBreakdown_MatchesByRule inserts match groups linked to two different
+// TestIntegration_Reporting_DashboardBreakdown_MatchesByRule inserts match groups linked to two different
 // rule IDs and verifies ByRule returns the correct count per rule.
-func TestDashboardBreakdown_MatchesByRule(t *testing.T) {
+func TestIntegration_Reporting_DashboardBreakdown_MatchesByRule(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) { //nolint:thelper // test body, not helper
@@ -455,10 +455,10 @@ func TestDashboardBreakdown_MatchesByRule(t *testing.T) {
 	})
 }
 
-// TestDashboardBreakdown_ExceptionsByAge inserts exceptions with varying created_at
+// TestIntegration_Reporting_DashboardBreakdown_ExceptionsByAge inserts exceptions with varying created_at
 // timestamps to place them in different age buckets (<24h, 1-3d, >3d) and verifies
 // the ByAge breakdown has the correct bucket counts.
-func TestDashboardBreakdown_ExceptionsByAge(t *testing.T) {
+func TestIntegration_Reporting_DashboardBreakdown_ExceptionsByAge(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) { //nolint:thelper // test body, not helper

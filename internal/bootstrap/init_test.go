@@ -629,17 +629,18 @@ func TestIsAllowedInsecureHealthCheckHost(t *testing.T) {
 }
 
 func TestInitializeAuthBoundaryLogger(t *testing.T) {
-	originalFn := initializeAuthBoundaryLoggerFn
-	t.Cleanup(func() {
-		initializeAuthBoundaryLoggerFn = originalFn
-	})
+	t.Parallel()
 
 	t.Run("wraps initializer error", func(t *testing.T) {
-		initializeAuthBoundaryLoggerFn = func() (libLog.Logger, error) {
-			return nil, errMatchRuleAdapterRequired
+		t.Parallel()
+
+		connector := &fakeInfraConnector{
+			initAuthBoundary: func() (libLog.Logger, error) {
+				return nil, errMatchRuleAdapterRequired
+			},
 		}
 
-		logger, err := initializeAuthBoundaryLogger()
+		logger, err := initializeAuthBoundaryLogger(connector)
 
 		require.Error(t, err)
 		assert.Nil(t, logger)
@@ -648,23 +649,31 @@ func TestInitializeAuthBoundaryLogger(t *testing.T) {
 	})
 
 	t.Run("returns logger on success", func(t *testing.T) {
+		t.Parallel()
+
 		expectedLogger := libLog.NewNop()
-		initializeAuthBoundaryLoggerFn = func() (libLog.Logger, error) {
-			return expectedLogger, nil
+		connector := &fakeInfraConnector{
+			initAuthBoundary: func() (libLog.Logger, error) {
+				return expectedLogger, nil
+			},
 		}
 
-		logger, err := initializeAuthBoundaryLogger()
+		logger, err := initializeAuthBoundaryLogger(connector)
 
 		require.NoError(t, err)
 		assert.Equal(t, expectedLogger, logger)
 	})
 
 	t.Run("returns error when initializer yields nil logger", func(t *testing.T) {
-		initializeAuthBoundaryLoggerFn = func() (libLog.Logger, error) {
-			return nil, nil
+		t.Parallel()
+
+		connector := &fakeInfraConnector{
+			initAuthBoundary: func() (libLog.Logger, error) {
+				return nil, nil
+			},
 		}
 
-		logger, err := initializeAuthBoundaryLogger()
+		logger, err := initializeAuthBoundaryLogger(connector)
 
 		require.Error(t, err)
 		assert.Nil(t, logger)
@@ -1194,7 +1203,7 @@ func TestCreateArchivalStorage(t *testing.T) {
 			},
 		}
 
-		client, err := createArchivalStorage(context.Background(), cfg)
+		client, err := createArchivalStorage(context.Background(), cfg, nil)
 
 		assert.NoError(t, err)
 		assert.Nil(t, client)
@@ -1212,7 +1221,7 @@ func TestCreateArchivalStorage(t *testing.T) {
 			},
 		}
 
-		client, err := createArchivalStorage(context.Background(), cfg)
+		client, err := createArchivalStorage(context.Background(), cfg, nil)
 
 		assert.NoError(t, err)
 		assert.Nil(t, client)
@@ -1226,7 +1235,7 @@ func TestCreateArchivalStorage(t *testing.T) {
 			ObjectStorage: ObjectStorageConfig{},
 		}
 
-		client, err := createArchivalStorage(context.Background(), cfg)
+		client, err := createArchivalStorage(context.Background(), cfg, nil)
 
 		assert.NoError(t, err)
 		assert.Nil(t, client)
@@ -1247,7 +1256,7 @@ func TestInitArchivalComponents_DisabledNoStorage(t *testing.T) {
 		}
 
 		var cleanups []func()
-		worker, err := initArchivalComponents(nil, cfg, nil, nil, nil, &libLog.NopLogger{}, &cleanups, false)
+		worker, err := initArchivalComponents(nil, cfg, nil, nil, nil, &libLog.NopLogger{}, &cleanups, false, nil)
 
 		assert.NoError(t, err)
 		assert.Nil(t, worker)
@@ -1635,7 +1644,7 @@ func TestCreateObjectStorage_NotEnabled(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorage(context.Background(), cfg)
+	client, err := createObjectStorage(context.Background(), cfg, nil)
 
 	assert.NoError(t, err)
 	assert.Nil(t, client)
@@ -1653,7 +1662,7 @@ func TestCreateObjectStorage_EnabledWithoutBucket(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorage(context.Background(), cfg)
+	client, err := createObjectStorage(context.Background(), cfg, nil)
 
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrObjectStorageBucketRequired)
@@ -1669,7 +1678,7 @@ func TestCreateObjectStorage_CleanupEnabledWithoutBucket(t *testing.T) {
 		ObjectStorage: ObjectStorageConfig{Bucket: ""},
 	}
 
-	client, err := createObjectStorage(context.Background(), cfg)
+	client, err := createObjectStorage(context.Background(), cfg, nil)
 
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrObjectStorageBucketRequired)
@@ -1695,7 +1704,7 @@ func TestCreateObjectStorageForHealth_EmptyEndpoint(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorageForHealth(context.Background(), cfg)
+	client, err := createObjectStorageForHealth(context.Background(), cfg, nil)
 
 	assert.NoError(t, err)
 	assert.Nil(t, client)
@@ -1711,7 +1720,7 @@ func TestCreateObjectStorageForHealth_EmptyBucket(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorageForHealth(context.Background(), cfg)
+	client, err := createObjectStorageForHealth(context.Background(), cfg, nil)
 
 	assert.NoError(t, err)
 	assert.Nil(t, client)
@@ -1727,7 +1736,7 @@ func TestCreateObjectStorageForHealth_BothEmpty(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorageForHealth(context.Background(), cfg)
+	client, err := createObjectStorageForHealth(context.Background(), cfg, nil)
 
 	assert.NoError(t, err)
 	assert.Nil(t, client)
@@ -1904,11 +1913,12 @@ func TestCleanupConnections_WithAllNonNilButUnconnected(t *testing.T) {
 }
 
 func TestCreateObjectStorage_ValidBucketButNoEndpoint(t *testing.T) {
-	originalNewS3Client := newS3ClientFn
-	t.Cleanup(func() { newS3ClientFn = originalNewS3Client })
+	t.Parallel()
 
-	newS3ClientFn = func(context.Context, reportingStorage.S3Config) (*reportingStorage.S3Client, error) {
-		return nil, errS3ClientCreation
+	connector := &fakeInfraConnector{
+		newS3Client: func(context.Context, reportingStorage.S3Config) (*reportingStorage.S3Client, error) {
+			return nil, errS3ClientCreation
+		},
 	}
 
 	cfg := &Config{
@@ -1921,18 +1931,19 @@ func TestCreateObjectStorage_ValidBucketButNoEndpoint(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorage(context.Background(), cfg)
+	client, err := createObjectStorage(context.Background(), cfg, connector)
 	require.Error(t, err)
 	assert.Nil(t, client)
 	assert.Contains(t, err.Error(), "create S3 client")
 }
 
 func TestCreateObjectStorageForHealth_ValidConfig(t *testing.T) {
-	originalNewS3Client := newS3ClientFn
-	t.Cleanup(func() { newS3ClientFn = originalNewS3Client })
+	t.Parallel()
 
-	newS3ClientFn = func(context.Context, reportingStorage.S3Config) (*reportingStorage.S3Client, error) {
-		return &reportingStorage.S3Client{}, nil
+	connector := &fakeInfraConnector{
+		newS3Client: func(context.Context, reportingStorage.S3Config) (*reportingStorage.S3Client, error) {
+			return &reportingStorage.S3Client{}, nil
+		},
 	}
 
 	cfg := &Config{
@@ -1944,17 +1955,18 @@ func TestCreateObjectStorageForHealth_ValidConfig(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorageForHealth(context.Background(), cfg)
+	client, err := createObjectStorageForHealth(context.Background(), cfg, connector)
 	require.NoError(t, err)
 	assert.NotNil(t, client)
 }
 
 func TestCreateArchivalStorage_ValidConfig(t *testing.T) {
-	originalNewS3Client := newS3ClientFn
-	t.Cleanup(func() { newS3ClientFn = originalNewS3Client })
+	t.Parallel()
 
-	newS3ClientFn = func(context.Context, reportingStorage.S3Config) (*reportingStorage.S3Client, error) {
-		return &reportingStorage.S3Client{}, nil
+	connector := &fakeInfraConnector{
+		newS3Client: func(context.Context, reportingStorage.S3Config) (*reportingStorage.S3Client, error) {
+			return &reportingStorage.S3Client{}, nil
+		},
 	}
 
 	cfg := &Config{
@@ -1968,7 +1980,7 @@ func TestCreateArchivalStorage_ValidConfig(t *testing.T) {
 		},
 	}
 
-	client, err := createArchivalStorage(context.Background(), cfg)
+	client, err := createArchivalStorage(context.Background(), cfg, connector)
 	require.NoError(t, err)
 	assert.NotNil(t, client)
 }
@@ -2020,35 +2032,34 @@ func TestOpenDedicatedChannel(t *testing.T) {
 }
 
 func TestInitEventPublishers_OpenChannelFailure_CleansUpOpenedChannel(t *testing.T) {
+	t.Parallel()
+
 	var openCalls atomic.Int32
 
 	var closedChannels atomic.Int32
 
-	restore := setEventPublisherFnsForTest(eventPublisherFnOverrides{
-		openDedicatedChannelFn: func(*libRabbitmq.RabbitMQConnection) (*amqp.Channel, error) {
+	publishers := &fakeEventPublisherFactory{
+		openDedicatedChannel: func(*libRabbitmq.RabbitMQConnection) (*amqp.Channel, error) {
 			if openCalls.Add(1) == 1 {
 				return new(amqp.Channel), nil
 			}
 
 			return nil, errors.New("open failed")
 		},
-		closeAMQPChannelFn: func(*amqp.Channel) error {
+		closeAMQPChannel: func(*amqp.Channel) error {
 			closedChannels.Add(1)
 
 			return nil
 		},
-		newMatchingEventPublisherFromChannelFn: func(*amqp.Channel, ...sharedRabbitmq.ConfirmablePublisherOption) (*matchingRabbitmq.EventPublisher, error) {
+		newMatchingPublisher: func(*amqp.Channel, ...sharedRabbitmq.ConfirmablePublisherOption) (*matchingRabbitmq.EventPublisher, error) {
 			return nil, errors.New("unexpected matching publisher creation")
 		},
-		newIngestionEventPublisherFromChannelFn: func(*amqp.Channel, ...sharedRabbitmq.ConfirmablePublisherOption) (*ingestionRabbitmq.EventPublisher, error) {
+		newIngestionPublisher: func(*amqp.Channel, ...sharedRabbitmq.ConfirmablePublisherOption) (*ingestionRabbitmq.EventPublisher, error) {
 			return nil, errors.New("unexpected ingestion publisher creation")
 		},
-		closeMatchingEventPublisherFn:  func(*matchingRabbitmq.EventPublisher) error { return nil },
-		closeIngestionEventPublisherFn: func(*ingestionRabbitmq.EventPublisher) error { return nil },
-	})
-	t.Cleanup(restore)
+	}
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{}, nil)
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{}, nil, publishers)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "open AMQP channels")
@@ -2058,29 +2069,28 @@ func TestInitEventPublishers_OpenChannelFailure_CleansUpOpenedChannel(t *testing
 }
 
 func TestInitEventPublishers_MatchingPublisherFailure_CleansUpChannels(t *testing.T) {
+	t.Parallel()
+
 	var closedChannels atomic.Int32
 
-	restore := setEventPublisherFnsForTest(eventPublisherFnOverrides{
-		openDedicatedChannelFn: func(*libRabbitmq.RabbitMQConnection) (*amqp.Channel, error) {
+	publishers := &fakeEventPublisherFactory{
+		openDedicatedChannel: func(*libRabbitmq.RabbitMQConnection) (*amqp.Channel, error) {
 			return new(amqp.Channel), nil
 		},
-		closeAMQPChannelFn: func(*amqp.Channel) error {
+		closeAMQPChannel: func(*amqp.Channel) error {
 			closedChannels.Add(1)
 
 			return nil
 		},
-		newMatchingEventPublisherFromChannelFn: func(*amqp.Channel, ...sharedRabbitmq.ConfirmablePublisherOption) (*matchingRabbitmq.EventPublisher, error) {
+		newMatchingPublisher: func(*amqp.Channel, ...sharedRabbitmq.ConfirmablePublisherOption) (*matchingRabbitmq.EventPublisher, error) {
 			return nil, errors.New("matching constructor failed")
 		},
-		newIngestionEventPublisherFromChannelFn: func(*amqp.Channel, ...sharedRabbitmq.ConfirmablePublisherOption) (*ingestionRabbitmq.EventPublisher, error) {
+		newIngestionPublisher: func(*amqp.Channel, ...sharedRabbitmq.ConfirmablePublisherOption) (*ingestionRabbitmq.EventPublisher, error) {
 			return nil, errors.New("unexpected ingestion publisher creation")
 		},
-		closeMatchingEventPublisherFn:  func(*matchingRabbitmq.EventPublisher) error { return nil },
-		closeIngestionEventPublisherFn: func(*ingestionRabbitmq.EventPublisher) error { return nil },
-	})
-	t.Cleanup(restore)
+	}
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{}, nil)
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{}, nil, publishers)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create matching event publisher")
@@ -2090,35 +2100,35 @@ func TestInitEventPublishers_MatchingPublisherFailure_CleansUpChannels(t *testin
 }
 
 func TestInitEventPublishers_IngestionPublisherFailure_CleansUpPublisherAndChannels(t *testing.T) {
+	t.Parallel()
+
 	var closedChannels atomic.Int32
 
 	var closedMatchingPublishers atomic.Int32
 
-	restore := setEventPublisherFnsForTest(eventPublisherFnOverrides{
-		openDedicatedChannelFn: func(*libRabbitmq.RabbitMQConnection) (*amqp.Channel, error) {
+	publishers := &fakeEventPublisherFactory{
+		openDedicatedChannel: func(*libRabbitmq.RabbitMQConnection) (*amqp.Channel, error) {
 			return new(amqp.Channel), nil
 		},
-		closeAMQPChannelFn: func(*amqp.Channel) error {
+		closeAMQPChannel: func(*amqp.Channel) error {
 			closedChannels.Add(1)
 
 			return nil
 		},
-		newMatchingEventPublisherFromChannelFn: func(*amqp.Channel, ...sharedRabbitmq.ConfirmablePublisherOption) (*matchingRabbitmq.EventPublisher, error) {
+		newMatchingPublisher: func(*amqp.Channel, ...sharedRabbitmq.ConfirmablePublisherOption) (*matchingRabbitmq.EventPublisher, error) {
 			return new(matchingRabbitmq.EventPublisher), nil
 		},
-		newIngestionEventPublisherFromChannelFn: func(*amqp.Channel, ...sharedRabbitmq.ConfirmablePublisherOption) (*ingestionRabbitmq.EventPublisher, error) {
+		newIngestionPublisher: func(*amqp.Channel, ...sharedRabbitmq.ConfirmablePublisherOption) (*ingestionRabbitmq.EventPublisher, error) {
 			return nil, errors.New("ingestion constructor failed")
 		},
-		closeMatchingEventPublisherFn: func(*matchingRabbitmq.EventPublisher) error {
+		closeMatchingPublisher: func(*matchingRabbitmq.EventPublisher) error {
 			closedMatchingPublishers.Add(1)
 
 			return nil
 		},
-		closeIngestionEventPublisherFn: func(*ingestionRabbitmq.EventPublisher) error { return nil },
-	})
-	t.Cleanup(restore)
+	}
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{}, nil)
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{}, nil, publishers)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create ingestion event publisher")
@@ -2181,15 +2191,7 @@ func TestShouldAllowDirtyMigrationRecovery(t *testing.T) {
 }
 
 func TestConnectInfrastructure_RunsAllServicesAndMaintainsDependencyOrder(t *testing.T) {
-	originalRunMigrationsFn := runMigrationsFn
-	originalConnectPostgresFn := connectPostgresFn
-	originalEnsureRabbitChannelFn := ensureRabbitChannelFn
-
-	t.Cleanup(func() {
-		runMigrationsFn = originalRunMigrationsFn
-		connectPostgresFn = originalConnectPostgresFn
-		ensureRabbitChannelFn = originalEnsureRabbitChannelFn
-	})
+	t.Parallel()
 
 	// Thread-safe tracking: operations run in parallel goroutines.
 	var mu sync.Mutex
@@ -2203,31 +2205,31 @@ func TestConnectInfrastructure_RunsAllServicesAndMaintainsDependencyOrder(t *tes
 		order = append(order, op)
 	}
 
-	runMigrationsFn = func(
-		_ context.Context,
-		_, _, _ string,
-		_ libLog.Logger,
-		allowDirtyRecovery bool,
-	) error {
-		appendOp("migrate")
+	connector := &fakeInfraConnector{
+		runMigrations: func(
+			_ context.Context,
+			_, _, _ string,
+			_ libLog.Logger,
+			allowDirtyRecovery bool,
+		) error {
+			appendOp("migrate")
 
-		mu.Lock()
-		capturedAllowDirtyRecovery = allowDirtyRecovery
-		mu.Unlock()
+			mu.Lock()
+			capturedAllowDirtyRecovery = allowDirtyRecovery
+			mu.Unlock()
 
-		return nil
-	}
+			return nil
+		},
+		connectPostgres: func(_ context.Context, _ *libPostgres.Client) error {
+			appendOp("postgres")
 
-	connectPostgresFn = func(_ context.Context, _ *libPostgres.Client) error {
-		appendOp("postgres")
+			return nil
+		},
+		ensureRabbitChannel: func(_ *libRabbitmq.RabbitMQConnection) error {
+			appendOp("rabbitmq")
 
-		return nil
-	}
-
-	ensureRabbitChannelFn = func(_ *libRabbitmq.RabbitMQConnection) error {
-		appendOp("rabbitmq")
-
-		return nil
+			return nil
+		},
 	}
 
 	cfg := &Config{
@@ -2247,6 +2249,7 @@ func TestConnectInfrastructure_RunsAllServicesAndMaintainsDependencyOrder(t *tes
 		&libPostgres.Client{},
 		&libRabbitmq.RabbitMQConnection{},
 		&libLog.NopLogger{},
+		connector,
 	)
 
 	require.NoError(t, err)
@@ -2286,30 +2289,21 @@ func TestConnectInfrastructure_NilDependenciesReturnErrors(t *testing.T) {
 	asserter := libAssert.New(context.Background(), &libLog.NopLogger{}, "matcher", "connect_infrastructure.nil")
 	cfg := &Config{}
 
-	err := connectInfrastructure(context.Background(), asserter, cfg, nil, &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
+	err := connectInfrastructure(context.Background(), asserter, cfg, nil, &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{}, nil)
 	require.ErrorIs(t, err, errPostgresClientRequired)
 
-	err = connectInfrastructure(context.Background(), asserter, cfg, &libPostgres.Client{}, nil, &libLog.NopLogger{})
+	err = connectInfrastructure(context.Background(), asserter, cfg, &libPostgres.Client{}, nil, &libLog.NopLogger{}, nil)
 	require.ErrorIs(t, err, errRabbitMQClientRequired)
 }
 
 func TestConnectInfrastructure_RunMigrationsError_ReturnsWrappedError(t *testing.T) {
-	originalRunMigrationsFn := runMigrationsFn
-	originalConnectPostgresFn := connectPostgresFn
-	originalEnsureRabbitChannelFn := ensureRabbitChannelFn
+	t.Parallel()
 
-	t.Cleanup(func() {
-		runMigrationsFn = originalRunMigrationsFn
-		connectPostgresFn = originalConnectPostgresFn
-		ensureRabbitChannelFn = originalEnsureRabbitChannelFn
-	})
-
-	runMigrationsFn = func(context.Context, string, string, string, libLog.Logger, bool) error {
-		return errors.New("migrations failed")
+	connector := &fakeInfraConnector{
+		runMigrations: func(context.Context, string, string, string, libLog.Logger, bool) error {
+			return errors.New("migrations failed")
+		},
 	}
-
-	connectPostgresFn = func(context.Context, *libPostgres.Client) error { return nil }
-	ensureRabbitChannelFn = func(*libRabbitmq.RabbitMQConnection) error { return nil }
 
 	asserter := libAssert.New(context.Background(), &libLog.NopLogger{}, "matcher", "connect_infrastructure.migrations_error")
 	err := connectInfrastructure(
@@ -2319,6 +2313,7 @@ func TestConnectInfrastructure_RunMigrationsError_ReturnsWrappedError(t *testing
 		&libPostgres.Client{},
 		&libRabbitmq.RabbitMQConnection{},
 		&libLog.NopLogger{},
+		connector,
 	)
 
 	require.Error(t, err)
@@ -2326,19 +2321,13 @@ func TestConnectInfrastructure_RunMigrationsError_ReturnsWrappedError(t *testing
 }
 
 func TestConnectInfrastructure_ConnectPostgresError_ReturnsWrappedError(t *testing.T) {
-	originalRunMigrationsFn := runMigrationsFn
-	originalConnectPostgresFn := connectPostgresFn
-	originalEnsureRabbitChannelFn := ensureRabbitChannelFn
+	t.Parallel()
 
-	t.Cleanup(func() {
-		runMigrationsFn = originalRunMigrationsFn
-		connectPostgresFn = originalConnectPostgresFn
-		ensureRabbitChannelFn = originalEnsureRabbitChannelFn
-	})
-
-	runMigrationsFn = func(context.Context, string, string, string, libLog.Logger, bool) error { return nil }
-	connectPostgresFn = func(context.Context, *libPostgres.Client) error { return errors.New("postgres connect failed") }
-	ensureRabbitChannelFn = func(*libRabbitmq.RabbitMQConnection) error { return nil }
+	connector := &fakeInfraConnector{
+		connectPostgres: func(context.Context, *libPostgres.Client) error {
+			return errors.New("postgres connect failed")
+		},
+	}
 
 	asserter := libAssert.New(context.Background(), &libLog.NopLogger{}, "matcher", "connect_infrastructure.postgres_error")
 	err := connectInfrastructure(
@@ -2348,6 +2337,7 @@ func TestConnectInfrastructure_ConnectPostgresError_ReturnsWrappedError(t *testi
 		&libPostgres.Client{},
 		&libRabbitmq.RabbitMQConnection{},
 		&libLog.NopLogger{},
+		connector,
 	)
 
 	require.Error(t, err)
@@ -2355,19 +2345,13 @@ func TestConnectInfrastructure_ConnectPostgresError_ReturnsWrappedError(t *testi
 }
 
 func TestConnectInfrastructure_EnsureRabbitChannelError_ReturnsWrappedError(t *testing.T) {
-	originalRunMigrationsFn := runMigrationsFn
-	originalConnectPostgresFn := connectPostgresFn
-	originalEnsureRabbitChannelFn := ensureRabbitChannelFn
+	t.Parallel()
 
-	t.Cleanup(func() {
-		runMigrationsFn = originalRunMigrationsFn
-		connectPostgresFn = originalConnectPostgresFn
-		ensureRabbitChannelFn = originalEnsureRabbitChannelFn
-	})
-
-	runMigrationsFn = func(context.Context, string, string, string, libLog.Logger, bool) error { return nil }
-	connectPostgresFn = func(context.Context, *libPostgres.Client) error { return nil }
-	ensureRabbitChannelFn = func(*libRabbitmq.RabbitMQConnection) error { return errors.New("rabbit channel failed") }
+	connector := &fakeInfraConnector{
+		ensureRabbitChannel: func(*libRabbitmq.RabbitMQConnection) error {
+			return errors.New("rabbit channel failed")
+		},
+	}
 
 	asserter := libAssert.New(context.Background(), &libLog.NopLogger{}, "matcher", "connect_infrastructure.rabbit_error")
 	err := connectInfrastructure(
@@ -2377,6 +2361,7 @@ func TestConnectInfrastructure_EnsureRabbitChannelError_ReturnsWrappedError(t *t
 		&libPostgres.Client{},
 		&libRabbitmq.RabbitMQConnection{},
 		&libLog.NopLogger{},
+		connector,
 	)
 
 	require.Error(t, err)
@@ -2384,31 +2369,23 @@ func TestConnectInfrastructure_EnsureRabbitChannelError_ReturnsWrappedError(t *t
 }
 
 func TestConnectInfrastructure_MigrationsFinishBeforeRabbitConnect(t *testing.T) {
-	originalRunMigrationsFn := runMigrationsFn
-	originalConnectPostgresFn := connectPostgresFn
-	originalEnsureRabbitChannelFn := ensureRabbitChannelFn
-
-	t.Cleanup(func() {
-		runMigrationsFn = originalRunMigrationsFn
-		connectPostgresFn = originalConnectPostgresFn
-		ensureRabbitChannelFn = originalEnsureRabbitChannelFn
-	})
+	t.Parallel()
 
 	var migrationsFinished atomic.Bool
 
-	runMigrationsFn = func(context.Context, string, string, string, libLog.Logger, bool) error {
-		migrationsFinished.Store(true)
+	connector := &fakeInfraConnector{
+		runMigrations: func(context.Context, string, string, string, libLog.Logger, bool) error {
+			migrationsFinished.Store(true)
 
-		return nil
-	}
+			return nil
+		},
+		ensureRabbitChannel: func(*libRabbitmq.RabbitMQConnection) error {
+			if !migrationsFinished.Load() {
+				return errors.New("rabbit connected before migrations")
+			}
 
-	connectPostgresFn = func(context.Context, *libPostgres.Client) error { return nil }
-	ensureRabbitChannelFn = func(*libRabbitmq.RabbitMQConnection) error {
-		if !migrationsFinished.Load() {
-			return errors.New("rabbit connected before migrations")
-		}
-
-		return nil
+			return nil
+		},
 	}
 
 	asserter := libAssert.New(context.Background(), &libLog.NopLogger{}, "matcher", "connect_infrastructure.migration_order")
@@ -2419,6 +2396,7 @@ func TestConnectInfrastructure_MigrationsFinishBeforeRabbitConnect(t *testing.T)
 		&libPostgres.Client{},
 		&libRabbitmq.RabbitMQConnection{},
 		&libLog.NopLogger{},
+		connector,
 	)
 
 	require.NoError(t, err)
@@ -2426,25 +2404,16 @@ func TestConnectInfrastructure_MigrationsFinishBeforeRabbitConnect(t *testing.T)
 }
 
 func TestConnectInfrastructure_ContextCanceled_PropagatesError(t *testing.T) {
-	originalRunMigrationsFn := runMigrationsFn
-	originalConnectPostgresFn := connectPostgresFn
-	originalEnsureRabbitChannelFn := ensureRabbitChannelFn
-
-	t.Cleanup(func() {
-		runMigrationsFn = originalRunMigrationsFn
-		connectPostgresFn = originalConnectPostgresFn
-		ensureRabbitChannelFn = originalEnsureRabbitChannelFn
-	})
+	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-
 	cancel()
 
-	runMigrationsFn = func(fnCtx context.Context, _, _, _ string, _ libLog.Logger, _ bool) error {
-		return fnCtx.Err()
+	connector := &fakeInfraConnector{
+		runMigrations: func(fnCtx context.Context, _, _, _ string, _ libLog.Logger, _ bool) error {
+			return fnCtx.Err()
+		},
 	}
-	connectPostgresFn = func(context.Context, *libPostgres.Client) error { return nil }
-	ensureRabbitChannelFn = func(*libRabbitmq.RabbitMQConnection) error { return nil }
 
 	asserter := libAssert.New(context.Background(), &libLog.NopLogger{}, "matcher", "connect_infrastructure.timeout")
 	err := connectInfrastructure(
@@ -2454,6 +2423,7 @@ func TestConnectInfrastructure_ContextCanceled_PropagatesError(t *testing.T) {
 		&libPostgres.Client{},
 		&libRabbitmq.RabbitMQConnection{},
 		&libLog.NopLogger{},
+		connector,
 	)
 
 	require.Error(t, err)

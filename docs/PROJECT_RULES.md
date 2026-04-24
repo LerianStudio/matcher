@@ -4,7 +4,7 @@ Architectural constraints and design decisions for the Matcher codebase. This pr
 
 ## 1. Architecture
 
-- Modular monolith with bounded contexts under `internal/{context}` (configuration, discovery, ingestion, matching, exception, governance, reporting, outbox).
+- Modular monolith with 7 bounded contexts under `internal/{context}` (configuration, discovery, ingestion, matching, exception, governance, reporting). Outbox is NOT a bounded context; it is a cross-cutting infrastructure concern wired in `internal/bootstrap/outbox_wiring.go` via the lib-commons v5 canonical dispatcher (see §1 Shared Kernel and `internal/shared/ports/outbox.go`).
 - Hexagonal Architecture per context:
   - `adapters/`: infrastructure and transports (HTTP, DB, MQ).
   - `domain/`: pure business logic and entities.
@@ -34,8 +34,8 @@ Architectural constraints and design decisions for the Matcher codebase. This pr
   - `internal/shared/ports/` for cross-context abstractions (OutboxRepository, AuditLogRepository, InfrastructureProvider, MatchTrigger, TenantLister, FetcherClient, M2MProvider, IdempotencyRepository).
 - **Domain subdirectory variations**: `domain/value_objects/` (configuration, exception, ingestion, matching), `domain/enums/` (matching), `domain/errors/` (governance only).
 - **Type-alias pattern**: When a type migrates to `shared/domain/`, the original package re-exports via type alias for backward compatibility.
-- **Worker directories**: `services/worker/` for background jobs (configuration scheduler, governance archival, reporting export/cleanup, discovery poller/worker).
-- **Syncer directories**: `services/syncer/` for data synchronization (discovery syncer).
+- **Worker directories**: `services/worker/` for ticker-based background jobs (configuration scheduler, governance archival, reporting export/cleanup, discovery bridge/custody/poller workers). Workers own a lifecycle (Start/Stop + Redis distributed lock) and are wired in `internal/bootstrap/` alongside use cases.
+- **Syncer directories**: `services/syncer/` for on-demand domain synchronization helpers imported by both commands and workers. Currently used only by discovery (`services/syncer/syncer.go` — connection schema cache synchronization). Distinct from `services/worker/` because a syncer is a callable helper, not a background lifecycle. Do not introduce a syncer in a context where a single worker or use case suffices.
 - **Outbox dispatcher**: Provided by `lib-commons/v5/commons/outbox`. Wired in `internal/bootstrap/outbox_wiring.go`; matcher registers one handler per event type on the canonical HandlerRegistry instead of hosting its own dispatcher package.
 - **Cross-context communication**: Via shared ports, outbox events, and cross adapters in `internal/shared/adapters/cross/`. Current cross adapters: auto_match, configuration, exception_context_lookup, exception_matching_gateway, ingestion, matching, transaction_repository.
 
@@ -91,6 +91,19 @@ argument during PR review whenever a new `SetSpanAttributesFromValue` call
 site is added or an existing struct is extended. Consider adding a custom
 linter to `tools/linters/observability` if the call-site count grows
 materially (>100) or if a sensitive field leaks into a span attribute.
+
+### /readyz 250ms response cache (K8s probe amplification dampening)
+
+Matcher's `/readyz` handler caches its rendered response for 250ms to dampen Kubernetes probe amplification — five probes per second across many pods would otherwise hammer Postgres/Redis/RabbitMQ connection pools with redundant health checks when nothing has changed.
+
+Invariants:
+
+- **Cache TTL = 250ms.** See `readyzCacheTTL` in `internal/bootstrap/health_check.go` line 331.
+- **Wall-clock cap = 900ms** (under kubelet's default 1s probe budget). See `readyzHandlerWallClockCap` in `internal/bootstrap/health_check.go` line 326.
+- **Drain short-circuit bypasses the cache.** When `drainingGetter()` returns `true` (SIGTERM received, in-flight requests draining), the handler skips the cache entirely and returns 503 immediately. See `internal/bootstrap/health_check.go` lines 270-279.
+- **Per-handler cache instance** — mounting a new handler (e.g. in tests) always starts with an empty cache.
+
+This deviates from Ring's default "always recompute health" guidance, but is justified under probe-amplification-in-K8s conditions. **Do not extend the cache beyond 250ms without load-testing justification**, and do not remove the drain short-circuit — a pod that is draining must report unhealthy on the very next probe, not up to 250ms later.
 
 ## 4. HTTP Handler Patterns
 
@@ -246,6 +259,36 @@ Build tags are the **authoritative** test type discriminator (required at top of
 
 Do NOT merge test files when consolidating source files.
 
+### `t.Parallel()` in Integration Tests
+
+Integration tests under `tests/integration/**` and `internal/**/*_integration_test.go` are permitted to call `t.Parallel()` even though Ring's default policy discourages parallel integration tests. Matcher's integration harness is safe for parallel execution because:
+
+1. `sync.Once` guards container-once-per-suite setup (see `tests/integration/shared_harness.go`).
+2. Each test gets an isolated PostgreSQL schema via tenant-scoped setup, so concurrent tests do not share table state.
+3. Redis/RabbitMQ contention is bounded by per-test key prefixes.
+
+Removing `t.Parallel()` categorically would extend CI wall-clock by ~8x with no correctness benefit.
+
+**Policy:** `t.Parallel()` IS allowed in matcher's integration tests. Unit tests MUST NOT call `t.Parallel()` (Ring default applies).
+
+### Integration Test Location
+
+Most integration tests live under `tests/integration/**` and use the shared harness (`tests/integration/shared_harness.go`).
+
+**Exception:** `internal/discovery/**/*_integration_test.go` stays co-located inside the discovery package. These tests exercise the Fetcher bridge worker with purpose-built fixtures — an httptest Fetcher impersonator emitting contract-locked HMAC + IV headers, a MinIO custody bucket testcontainer, and in-package access to the worker's unexported `pollCycle` helper. Moving them under `tests/integration/discovery/` would force the helper to be exported (widening the surface area of an internal API) and duplicate the bridge-specific fixtures, with no correctness or maintainability benefit.
+
+**Policy:** New integration tests should default to `tests/integration/`. Co-location is only justified when tests require access to unexported helpers or use purpose-built fixtures that do not compose with the shared harness.
+
+### Integration Test Fixtures
+
+Integration test fixtures (`createTest*` / `newTest*` / `seedTest*` / `wireServices` helpers) live per-context in `tests/integration/{context}/helpers_test.go` rather than a centralized `tests/utils/fixtures.go`. Rationale:
+
+1. Matcher's bounded contexts enforce import isolation via depguard rules. Centralizing fixtures would force `tests/utils/` to import from every context, re-coupling what production code deliberately keeps separate.
+2. Per-context fixtures encode domain knowledge — `runMatchAndGetGroup` (matching) knows the match-group aggregate structure, `createExceptionForTransaction` (exception) knows the exception lifecycle, `seedTestConfig` (exception) and `seedE4T9Config` (matching) seed different aggregates even when their signatures look similar.
+3. Deduplication pressure is low. A survey across the four `helpers_test.go` files (matching, exception, flow, reporting) found only a handful of genuinely identical helpers (`mustRedisConn`, `buildCSV`, `countInt`, `noopIngestionPublisher`). The rest are semantically distinct.
+
+**When to promote a helper to shared scope:** Only if the fixture is genuinely context-agnostic — e.g. tenant-header generation, JWT builders, time/UUID fakes. Cross-context helpers of that kind already live in `tests/integration/shared_harness.go` (tenant + harness setup) and `internal/testutil/` (`Ptr[T]`, deterministic time). A new shared helper must add value to at least three contexts and avoid importing any bounded-context domain types.
+
 ## 15. File Naming Conventions
 
 ### Postgres Adapter Files
@@ -293,6 +336,20 @@ Split into `handlers_{feature}.go` when a context has 3+ distinct feature areas 
 
 - Test runner: `gotestsum` if available, else `go test`.
 - Docker Compose command auto-detected (`docker compose` vs `docker-compose`).
+
+### Zero-config convention
+
+Matcher does **not** ship a `.env.example` file, and `docker-compose.yml` does **not** use `env_file:`. Instead, `config/.config-map.example` is the single source-of-truth reference for environment variables.
+
+Rationale:
+
+1. **Bootstrap provides sensible defaults for every key** (`internal/bootstrap/config_defaults.go`), so a bare `docker compose up` works without any prior env setup.
+2. **A single reference file is simpler than keeping `.env.example` + `env_file:` + bootstrap defaults in sync.** Three parallel lists of env vars drift apart; one canonical reference does not.
+3. **Operators who need overrides set env vars directly** — via their deployment pipeline, Helm values, or local shell. They do not need a template file; they read `config/.config-map.example` as documentation.
+
+**Do not create `.env.example`.** When adding a new bootstrap-only configuration key, update `config/.config-map.example` instead.
+
+This deviates from Ring's default `.env.example` + `env_file:` pattern, but is justified by the zero-config-defaults stance. See also `docker-compose.yml` (no `env_file:` directive) and `internal/bootstrap/config_defaults.go` (the single source of defaults).
 
 ## 17. Linting
 

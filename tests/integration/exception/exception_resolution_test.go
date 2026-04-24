@@ -19,7 +19,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestForceMatch_ResolvesExceptionAndCreatesAuditLog(t *testing.T) {
+func TestIntegration_Exception_ForceMatch_ResolvesExceptionAndCreatesAuditLog(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtxWithActor(t, h, "test-operator")
 		seed := seedTestConfig(t, h)
@@ -56,7 +56,7 @@ func TestForceMatch_ResolvesExceptionAndCreatesAuditLog(t *testing.T) {
 	})
 }
 
-func TestForceMatch_RequiresOverrideReason(t *testing.T) {
+func TestIntegration_Exception_ForceMatch_RequiresOverrideReason(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtxWithActor(t, h, "test-operator")
 		seed := seedTestConfig(t, h)
@@ -83,7 +83,7 @@ func TestForceMatch_RequiresOverrideReason(t *testing.T) {
 	})
 }
 
-func TestForceMatch_RequiresNotes(t *testing.T) {
+func TestIntegration_Exception_ForceMatch_RequiresNotes(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtxWithActor(t, h, "test-operator")
 		seed := seedTestConfig(t, h)
@@ -110,7 +110,7 @@ func TestForceMatch_RequiresNotes(t *testing.T) {
 	})
 }
 
-func TestForceMatch_NonExistentException(t *testing.T) {
+func TestIntegration_Exception_ForceMatch_NonExistentException(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtxWithActor(t, h, "test-operator")
 
@@ -126,7 +126,7 @@ func TestForceMatch_NonExistentException(t *testing.T) {
 	})
 }
 
-func TestAdjustEntry_ResolvesExceptionWithAuditTrail(t *testing.T) {
+func TestIntegration_Exception_AdjustEntry_ResolvesExceptionWithAuditTrail(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtxWithActor(t, h, "test-adjuster")
 		seed := seedTestConfig(t, h)
@@ -164,7 +164,7 @@ func TestAdjustEntry_ResolvesExceptionWithAuditTrail(t *testing.T) {
 	})
 }
 
-func TestAdjustEntry_ValidReasonCodes(t *testing.T) {
+func TestIntegration_Exception_AdjustEntry_ValidReasonCodes(t *testing.T) {
 	validReasons := []string{
 		"AMOUNT_CORRECTION",
 		"CURRENCY_CORRECTION",
@@ -208,7 +208,7 @@ func TestAdjustEntry_ValidReasonCodes(t *testing.T) {
 	})
 }
 
-func TestAdjustEntry_ZeroAmountRejected(t *testing.T) {
+func TestIntegration_Exception_AdjustEntry_ZeroAmountRejected(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtxWithActor(t, h, "test-adjuster")
 		seed := seedTestConfig(t, h)
@@ -237,7 +237,7 @@ func TestAdjustEntry_ZeroAmountRejected(t *testing.T) {
 	})
 }
 
-func TestAdjustEntry_ExecutorFailureRollsBack(t *testing.T) {
+func TestIntegration_Exception_AdjustEntry_ExecutorFailureRollsBack(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtxWithActor(t, h, "test-adjuster")
 		seed := seedTestConfig(t, h)

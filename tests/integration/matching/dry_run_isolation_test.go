@@ -15,7 +15,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestIntegrationE4T9_DryRunIsolation(t *testing.T) {
+func TestIntegration_Matching_IntegrationE4T9_DryRunIsolation(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)

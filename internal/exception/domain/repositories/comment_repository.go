@@ -1,7 +1,12 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package repositories
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/google/uuid"
 
@@ -20,4 +25,12 @@ type CommentRepository interface {
 	// cannot be deleted by supplying its commentID under exception B's URL.
 	// Returns ErrCommentNotFound when no row matches both IDs.
 	DeleteByExceptionAndID(ctx context.Context, exceptionID, commentID uuid.UUID) error
+	// DeleteByExceptionAndIDWithTx performs the same scoped deletion as
+	// DeleteByExceptionAndID but participates in the provided transaction so
+	// comment removal can be composed atomically with other writes.
+	DeleteByExceptionAndIDWithTx(
+		ctx context.Context,
+		tx *sql.Tx,
+		exceptionID, commentID uuid.UUID,
+	) error
 }

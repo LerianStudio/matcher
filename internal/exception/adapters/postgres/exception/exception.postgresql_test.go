@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package exception
@@ -16,7 +20,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	pkgHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
@@ -918,28 +921,6 @@ func TestRepository_Update_ConcurrentModification(t *testing.T) {
 
 	_, err = repo.Update(ctx, exception)
 	require.ErrorIs(t, err, ErrConcurrentModification)
-}
-
-func TestLogError(t *testing.T) {
-	t.Parallel()
-
-	t.Run("nop logger does not panic", func(t *testing.T) {
-		t.Parallel()
-
-		require.NotPanics(t, func() {
-			logError(context.Background(), &libLog.NopLogger{}, "test error: %v", "some error")
-		})
-	})
-
-	t.Run("with logger calls Log", func(t *testing.T) {
-		t.Parallel()
-
-		logger := &libLog.NopLogger{}
-
-		require.NotPanics(t, func() {
-			logError(context.Background(), logger, "test error: %v", "some error")
-		})
-	})
 }
 
 func TestRepository_FindByID_Success(t *testing.T) {

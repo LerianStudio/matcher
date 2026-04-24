@@ -103,7 +103,7 @@ func NewTestHarness(ctx context.Context, t *testing.T) (*TestHarness, error) {
 	harness.PostgresDSN = pgDSN
 
 	redisContainer, err := redis.Run(startupCtx,
-		"redis:7-alpine",
+		"valkey/valkey:8",
 		testcontainers.WithWaitStrategy(
 			wait.ForAll(
 				wait.ForListeningPort("6379/tcp"),

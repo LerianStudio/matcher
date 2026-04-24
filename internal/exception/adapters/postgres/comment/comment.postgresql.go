@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package comment
 
 import (
@@ -11,6 +15,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
@@ -57,7 +62,7 @@ func (repo *Repository) Create(
 		wrappedErr := fmt.Errorf("create comment: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create comment", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to create comment: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to create comment", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -101,7 +106,7 @@ func (repo *Repository) CreateWithTx(
 		wrappedErr := fmt.Errorf("create comment with tx: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create comment", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to create comment: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to create comment", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -171,7 +176,7 @@ func (repo *Repository) FindByID(
 		wrappedErr := fmt.Errorf("find comment by id: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to find comment", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to find comment: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to find comment", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -235,7 +240,7 @@ func (repo *Repository) FindByExceptionID(
 		wrappedErr := fmt.Errorf("find comments by exception id: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to find comments", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to find comments: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to find comments", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -269,7 +274,7 @@ func (repo *Repository) Delete(ctx context.Context, id uuid.UUID) error {
 		wrappedErr := fmt.Errorf("delete comment: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to delete comment", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to delete comment: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to delete comment", wrappedErr, runtime.IsProductionMode())
 
 		return wrappedErr
 	}
@@ -309,7 +314,7 @@ func (repo *Repository) DeleteWithTx(ctx context.Context, tx *sql.Tx, id uuid.UU
 		wrappedErr := fmt.Errorf("delete comment with tx: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to delete comment", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to delete comment: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to delete comment", wrappedErr, runtime.IsProductionMode())
 
 		return wrappedErr
 	}
@@ -362,23 +367,7 @@ func (repo *Repository) DeleteByExceptionAndID(
 		ctx,
 		repo.provider,
 		func(tx *sql.Tx) (bool, error) {
-			result, execErr := tx.ExecContext(ctx, `
-				DELETE FROM exception_comments WHERE id = $1 AND exception_id = $2
-			`, commentID.String(), exceptionID.String())
-			if execErr != nil {
-				return false, fmt.Errorf("delete comment scoped to exception: %w", execErr)
-			}
-
-			rowsAffected, affectedErr := result.RowsAffected()
-			if affectedErr != nil {
-				return false, fmt.Errorf("get rows affected: %w", affectedErr)
-			}
-
-			if rowsAffected == 0 {
-				return false, ErrCommentNotFound
-			}
-
-			return true, nil
+			return repo.executeDeleteByExceptionAndID(ctx, tx, exceptionID, commentID)
 		},
 	)
 	if err != nil {
@@ -397,6 +386,80 @@ func (repo *Repository) DeleteByExceptionAndID(
 	}
 
 	return nil
+}
+
+// DeleteByExceptionAndIDWithTx deletes a comment only when both the exception
+// ID and the comment ID match, using the provided transaction. This enables
+// composing comment removal atomically with other writes (e.g. audit trail
+// inserts) within a single transaction scope.
+func (repo *Repository) DeleteByExceptionAndIDWithTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	exceptionID, commentID uuid.UUID,
+) error {
+	if repo == nil || repo.provider == nil {
+		return ErrRepoNotInitialized
+	}
+
+	if tx == nil {
+		return ErrTransactionRequired
+	}
+
+	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+	ctx, span := tracer.Start(ctx, "postgres.comment.delete_by_exception_and_id_with_tx")
+
+	defer span.End()
+
+	_, err := pgcommon.WithTenantTxOrExistingProvider(
+		ctx,
+		repo.provider,
+		tx,
+		func(innerTx *sql.Tx) (bool, error) {
+			return repo.executeDeleteByExceptionAndID(ctx, innerTx, exceptionID, commentID)
+		},
+	)
+	if err != nil {
+		if errors.Is(err, ErrCommentNotFound) {
+			return ErrCommentNotFound
+		}
+
+		wrappedErr := fmt.Errorf("delete comment scoped to exception with tx: %w", err)
+		libOpentelemetry.HandleSpanError(span, "failed to delete comment", wrappedErr)
+		logger.With(
+			libLog.String("exception_id", exceptionID.String()),
+			libLog.String("comment_id", commentID.String()),
+		).Log(ctx, libLog.LevelError, "failed to delete comment scoped to exception")
+
+		return wrappedErr
+	}
+
+	return nil
+}
+
+// executeDeleteByExceptionAndID performs the actual scoped deletion within a
+// transaction. Returns ErrCommentNotFound when no row matches both IDs.
+func (repo *Repository) executeDeleteByExceptionAndID(
+	ctx context.Context,
+	tx *sql.Tx,
+	exceptionID, commentID uuid.UUID,
+) (bool, error) {
+	result, execErr := tx.ExecContext(ctx, `
+				DELETE FROM exception_comments WHERE id = $1 AND exception_id = $2
+			`, commentID.String(), exceptionID.String())
+	if execErr != nil {
+		return false, fmt.Errorf("delete comment scoped to exception: %w", execErr)
+	}
+
+	rowsAffected, affectedErr := result.RowsAffected()
+	if affectedErr != nil {
+		return false, fmt.Errorf("get rows affected: %w", affectedErr)
+	}
+
+	if rowsAffected == 0 {
+		return false, ErrCommentNotFound
+	}
+
+	return true, nil
 }
 
 var _ repositories.CommentRepository = (*Repository)(nil)

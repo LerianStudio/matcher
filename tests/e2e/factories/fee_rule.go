@@ -7,7 +7,7 @@ import (
 	"errors"
 
 	"github.com/LerianStudio/matcher/tests/e2e"
-	"github.com/LerianStudio/matcher/tests/e2e/client"
+	"github.com/LerianStudio/matcher/tests/client"
 )
 
 // FeeRuleFactory creates fee rules for tests.

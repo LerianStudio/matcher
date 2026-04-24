@@ -20,7 +20,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestContextRepository_UniqueNameConstraint(t *testing.T) {
+func TestIntegration_Configuration_ContextRepository_UniqueNameConstraint(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := contextRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -55,7 +55,7 @@ func TestContextRepository_UniqueNameConstraint(t *testing.T) {
 	})
 }
 
-func TestSourceRepository_ForeignKeyConstraint(t *testing.T) {
+func TestIntegration_Configuration_SourceRepository_ForeignKeyConstraint(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo, err := sourceRepo.NewRepository(h.Provider())
 		require.NoError(t, err)
@@ -81,7 +81,7 @@ func TestSourceRepository_ForeignKeyConstraint(t *testing.T) {
 	})
 }
 
-func TestFieldMapRepository_ForeignKeyConstraint(t *testing.T) {
+func TestIntegration_Configuration_FieldMapRepository_ForeignKeyConstraint(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := fieldMapRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -103,7 +103,7 @@ func TestFieldMapRepository_ForeignKeyConstraint(t *testing.T) {
 	})
 }
 
-func TestMatchRuleRepository_ForeignKeyConstraint(t *testing.T) {
+func TestIntegration_Configuration_MatchRuleRepository_ForeignKeyConstraint(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := matchRuleRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -126,7 +126,7 @@ func TestMatchRuleRepository_ForeignKeyConstraint(t *testing.T) {
 	})
 }
 
-func TestContextRepository_DeleteWithSources_CascadeDeletesChildren(t *testing.T) {
+func TestIntegration_Configuration_ContextRepository_DeleteWithSources_CascadeDeletesChildren(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxRepo := contextRepo.NewRepository(h.Provider())
 		srcRepo, err := sourceRepo.NewRepository(h.Provider())
@@ -169,7 +169,7 @@ func TestContextRepository_DeleteWithSources_CascadeDeletesChildren(t *testing.T
 	})
 }
 
-func TestSourceRepository_DeleteWithFieldMaps_CascadeDeletesChildren(t *testing.T) {
+func TestIntegration_Configuration_SourceRepository_DeleteWithFieldMaps_CascadeDeletesChildren(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		srcRepo, err := sourceRepo.NewRepository(h.Provider())
 		require.NoError(t, err)
@@ -211,7 +211,7 @@ func TestSourceRepository_DeleteWithFieldMaps_CascadeDeletesChildren(t *testing.
 	})
 }
 
-func TestMatchRuleRepository_PriorityUniqueness(t *testing.T) {
+func TestIntegration_Configuration_MatchRuleRepository_PriorityUniqueness(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := matchRuleRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -236,7 +236,7 @@ func TestMatchRuleRepository_PriorityUniqueness(t *testing.T) {
 	})
 }
 
-func TestContextRepository_UpdateNonExistent(t *testing.T) {
+func TestIntegration_Configuration_ContextRepository_UpdateNonExistent(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := contextRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -259,7 +259,7 @@ func TestContextRepository_UpdateNonExistent(t *testing.T) {
 	})
 }
 
-func TestContextRepository_DeleteNonExistent(t *testing.T) {
+func TestIntegration_Configuration_ContextRepository_DeleteNonExistent(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := contextRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -269,7 +269,7 @@ func TestContextRepository_DeleteNonExistent(t *testing.T) {
 	})
 }
 
-func TestSourceRepository_EmptyConfig(t *testing.T) {
+func TestIntegration_Configuration_SourceRepository_EmptyConfig(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo, err := sourceRepo.NewRepository(h.Provider())
 		require.NoError(t, err)
@@ -294,7 +294,7 @@ func TestSourceRepository_EmptyConfig(t *testing.T) {
 	})
 }
 
-func TestSourceRepository_ComplexConfig(t *testing.T) {
+func TestIntegration_Configuration_SourceRepository_ComplexConfig(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo, err := sourceRepo.NewRepository(h.Provider())
 		require.NoError(t, err)
@@ -332,7 +332,7 @@ func TestSourceRepository_ComplexConfig(t *testing.T) {
 	})
 }
 
-func TestFieldMapRepository_ComplexMapping(t *testing.T) {
+func TestIntegration_Configuration_FieldMapRepository_ComplexMapping(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := fieldMapRepo.NewRepository(h.Provider())
 		srcRepo, err := sourceRepo.NewRepository(h.Provider())
@@ -383,7 +383,7 @@ func TestFieldMapRepository_ComplexMapping(t *testing.T) {
 	})
 }
 
-func TestContextRepository_Pagination(t *testing.T) {
+func TestIntegration_Configuration_ContextRepository_Pagination(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := contextRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()

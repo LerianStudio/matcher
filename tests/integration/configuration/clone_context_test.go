@@ -160,7 +160,7 @@ func mustNewFeeSchedule(t *testing.T, tenantID uuid.UUID, name string) *fee.FeeS
 // Tests
 // ---------------------------------------------------------------------------
 
-func TestCloneContext_FullClone(t *testing.T) {
+func TestIntegration_Configuration_CloneContext_FullClone(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -219,7 +219,7 @@ func TestCloneContext_FullClone(t *testing.T) {
 	})
 }
 
-func TestCloneContext_OnlySources(t *testing.T) {
+func TestIntegration_Configuration_CloneContext_OnlySources(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -246,7 +246,7 @@ func TestCloneContext_OnlySources(t *testing.T) {
 	})
 }
 
-func TestCloneContext_OnlyRules(t *testing.T) {
+func TestIntegration_Configuration_CloneContext_OnlyRules(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -273,7 +273,7 @@ func TestCloneContext_OnlyRules(t *testing.T) {
 	})
 }
 
-func TestCloneContext_EmptyClone(t *testing.T) {
+func TestIntegration_Configuration_CloneContext_EmptyClone(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -299,9 +299,9 @@ func TestCloneContext_EmptyClone(t *testing.T) {
 	})
 }
 
-// TestCloneContext_SourceSidePreservation verifies that cloned sources preserve
+// TestIntegration_Configuration_CloneContext_SourceSidePreservation verifies that cloned sources preserve
 // their Side field (LEFT/RIGHT). This is H23 from the fee-rules-per-field review.
-func TestCloneContext_SourceSidePreservation(t *testing.T) {
+func TestIntegration_Configuration_CloneContext_SourceSidePreservation(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -392,7 +392,7 @@ func TestCloneContext_SourceSidePreservation(t *testing.T) {
 	})
 }
 
-func TestCloneContext_RequiresNewName(t *testing.T) {
+func TestIntegration_Configuration_CloneContext_RequiresNewName(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -410,7 +410,7 @@ func TestCloneContext_RequiresNewName(t *testing.T) {
 	})
 }
 
-func TestCloneContext_NonExistentSource(t *testing.T) {
+func TestIntegration_Configuration_CloneContext_NonExistentSource(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {

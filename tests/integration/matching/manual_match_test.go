@@ -17,7 +17,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestManualMatch_CreatesGroupAndMarksTransactions(t *testing.T) {
+func TestIntegration_Matching_ManualMatch_CreatesGroupAndMarksTransactions(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -87,7 +87,7 @@ func TestManualMatch_CreatesGroupAndMarksTransactions(t *testing.T) {
 	})
 }
 
-func TestManualMatch_ThreeTransactions(t *testing.T) {
+func TestIntegration_Matching_ManualMatch_ThreeTransactions(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -139,7 +139,7 @@ func TestManualMatch_ThreeTransactions(t *testing.T) {
 	})
 }
 
-func TestManualMatch_RejectsNonUnmatchedTransactions(t *testing.T) {
+func TestIntegration_Matching_ManualMatch_RejectsNonUnmatchedTransactions(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -185,7 +185,7 @@ func TestManualMatch_RejectsNonUnmatchedTransactions(t *testing.T) {
 	})
 }
 
-func TestManualMatch_RejectsFewerThanTwoTransactions(t *testing.T) {
+func TestIntegration_Matching_ManualMatch_RejectsFewerThanTwoTransactions(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -216,7 +216,7 @@ func TestManualMatch_RejectsFewerThanTwoTransactions(t *testing.T) {
 	})
 }
 
-func TestManualMatch_RejectsDuplicateIDs(t *testing.T) {
+func TestIntegration_Matching_ManualMatch_RejectsDuplicateIDs(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -248,7 +248,7 @@ func TestManualMatch_RejectsDuplicateIDs(t *testing.T) {
 	})
 }
 
-func TestUnmatch_RevertsTransactionsToUnmatched(t *testing.T) {
+func TestIntegration_Matching_Unmatch_RevertsTransactionsToUnmatched(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -313,7 +313,7 @@ func TestUnmatch_RevertsTransactionsToUnmatched(t *testing.T) {
 	})
 }
 
-func TestUnmatch_NonExistentGroupReturnsError(t *testing.T) {
+func TestIntegration_Matching_Unmatch_NonExistentGroupReturnsError(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -333,7 +333,7 @@ func TestUnmatch_NonExistentGroupReturnsError(t *testing.T) {
 	})
 }
 
-func TestUnmatch_RevertsProposedGroupTransactions(t *testing.T) {
+func TestIntegration_Matching_Unmatch_RevertsProposedGroupTransactions(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)

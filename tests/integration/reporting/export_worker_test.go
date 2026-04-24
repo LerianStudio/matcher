@@ -12,9 +12,9 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-// TestExportJobLifecycle_QueuedToRunning verifies that a QUEUED export job can
+// TestIntegration_Reporting_ExportJobLifecycle_QueuedToRunning verifies that a QUEUED export job can
 // transition to RUNNING with StartedAt set and Attempts incremented.
-func TestExportJobLifecycle_QueuedToRunning(t *testing.T) {
+func TestIntegration_Reporting_ExportJobLifecycle_QueuedToRunning(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -51,9 +51,9 @@ func TestExportJobLifecycle_QueuedToRunning(t *testing.T) {
 	})
 }
 
-// TestExportJobLifecycle_RunningToSucceeded exercises the full happy-path:
+// TestIntegration_Reporting_ExportJobLifecycle_RunningToSucceeded exercises the full happy-path:
 // QUEUED → RUNNING → SUCCEEDED with file metadata persisted.
-func TestExportJobLifecycle_RunningToSucceeded(t *testing.T) {
+func TestIntegration_Reporting_ExportJobLifecycle_RunningToSucceeded(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -106,9 +106,9 @@ func TestExportJobLifecycle_RunningToSucceeded(t *testing.T) {
 	})
 }
 
-// TestExportJobLifecycle_RunningToFailed exercises the failure path:
+// TestIntegration_Reporting_ExportJobLifecycle_RunningToFailed exercises the failure path:
 // QUEUED → RUNNING → FAILED with error message persisted.
-func TestExportJobLifecycle_RunningToFailed(t *testing.T) {
+func TestIntegration_Reporting_ExportJobLifecycle_RunningToFailed(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -156,9 +156,9 @@ func TestExportJobLifecycle_RunningToFailed(t *testing.T) {
 	})
 }
 
-// TestExportJobLifecycle_CancelQueuedJob verifies that a QUEUED job can be
+// TestIntegration_Reporting_ExportJobLifecycle_CancelQueuedJob verifies that a QUEUED job can be
 // cancelled through the use case, persisting CANCELED status and FinishedAt.
-func TestExportJobLifecycle_CancelQueuedJob(t *testing.T) {
+func TestIntegration_Reporting_ExportJobLifecycle_CancelQueuedJob(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -189,11 +189,11 @@ func TestExportJobLifecycle_CancelQueuedJob(t *testing.T) {
 	})
 }
 
-// TestExportJobLifecycle_CancelRunningJobSucceeds verifies that a RUNNING job
+// TestIntegration_Reporting_ExportJobLifecycle_CancelRunningJobSucceeds verifies that a RUNNING job
 // can be cancelled. The CancelExportJob use case permits cancellation from any
 // non-terminal state (QUEUED or RUNNING). IsTerminal() returns false for RUNNING,
 // so the guard passes and the job transitions to CANCELED.
-func TestExportJobLifecycle_CancelRunningJobSucceeds(t *testing.T) {
+func TestIntegration_Reporting_ExportJobLifecycle_CancelRunningJobSucceeds(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {

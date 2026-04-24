@@ -18,9 +18,9 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-// TestIgnoreTransaction_MarksAsIgnored verifies that an unmatched transaction
+// TestIntegration_Matching_IgnoreTransaction_MarksAsIgnored verifies that an unmatched transaction
 // can be ignored and its status changes to IGNORED.
-func TestIgnoreTransaction_MarksAsIgnored(t *testing.T) {
+func TestIntegration_Matching_IgnoreTransaction_MarksAsIgnored(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -61,9 +61,9 @@ func TestIgnoreTransaction_MarksAsIgnored(t *testing.T) {
 	})
 }
 
-// TestIgnoreTransaction_ExcludedFromMatching verifies that an ignored transaction
+// TestIntegration_Matching_IgnoreTransaction_ExcludedFromMatching verifies that an ignored transaction
 // does not participate in matching. Without its counterpart, no match groups form.
-func TestIgnoreTransaction_ExcludedFromMatching(t *testing.T) {
+func TestIntegration_Matching_IgnoreTransaction_ExcludedFromMatching(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -110,9 +110,9 @@ func TestIgnoreTransaction_ExcludedFromMatching(t *testing.T) {
 	})
 }
 
-// TestIgnoreTransaction_AlreadyMatchedRejected verifies that a transaction
+// TestIntegration_Matching_IgnoreTransaction_AlreadyMatchedRejected verifies that a transaction
 // in MATCHED status cannot be ignored.
-func TestIgnoreTransaction_AlreadyMatchedRejected(t *testing.T) {
+func TestIntegration_Matching_IgnoreTransaction_AlreadyMatchedRejected(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -161,9 +161,9 @@ func TestIgnoreTransaction_AlreadyMatchedRejected(t *testing.T) {
 	})
 }
 
-// TestIgnoreTransaction_NonExistentRejected verifies that attempting to ignore
+// TestIntegration_Matching_IgnoreTransaction_NonExistentRejected verifies that attempting to ignore
 // a transaction that does not exist returns ErrTransactionNotFound.
-func TestIgnoreTransaction_NonExistentRejected(t *testing.T) {
+func TestIntegration_Matching_IgnoreTransaction_NonExistentRejected(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)

@@ -20,7 +20,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestFeeVarianceRepository_CreateBatchWithTx_RoundTrip(t *testing.T) {
+func TestIntegration_Matching_FeeVarianceRepository_CreateBatchWithTx_RoundTrip(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)

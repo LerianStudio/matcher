@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/tests/e2e"
-	"github.com/LerianStudio/matcher/tests/e2e/client"
+	"github.com/LerianStudio/matcher/tests/client"
 	"github.com/LerianStudio/matcher/tests/e2e/factories"
 )
 
@@ -21,7 +21,7 @@ import (
 
 // TestDispute_FullLifecycle tests opening, adding evidence, and closing a dispute.
 func TestDispute_FullLifecycle(t *testing.T) {
-	t.Skip("dispute endpoint returns 500 - pending server-side fix (see #27)")
+	t.Fatal("dispute endpoint returns 500 — tracked in issue #27, fix and delete this guard")
 	e2e.RunE2EWithTimeout(
 		t,
 		3*time.Minute,
@@ -156,7 +156,7 @@ func TestDispute_FullLifecycle(t *testing.T) {
 
 // TestDispute_CloseAsLost tests closing a dispute as lost.
 func TestDispute_CloseAsLost(t *testing.T) {
-	t.Skip("dispute endpoint returns 500 - pending server-side fix (see #27)")
+	t.Fatal("dispute endpoint returns 500 — tracked in issue #27, fix and delete this guard")
 	e2e.RunE2EWithTimeout(
 		t,
 		3*time.Minute,
@@ -270,7 +270,7 @@ func TestDispute_CloseAsLost(t *testing.T) {
 
 // TestDispute_MultipleEvidence tests submitting multiple evidence items.
 func TestDispute_MultipleEvidence(t *testing.T) {
-	t.Skip("dispute endpoint returns 500 - pending server-side fix (see #27)")
+	t.Fatal("dispute endpoint returns 500 — tracked in issue #27, fix and delete this guard")
 	e2e.RunE2EWithTimeout(
 		t,
 		3*time.Minute,
@@ -403,7 +403,7 @@ func TestDispute_MultipleEvidence(t *testing.T) {
 
 // TestDispute_InvalidCategory tests rejection of empty category.
 func TestDispute_InvalidCategory(t *testing.T) {
-	t.Skip("dispute endpoint returns 500 - pending server-side fix (see #27)")
+	t.Fatal("dispute endpoint returns 500 — tracked in issue #27, fix and delete this guard")
 	e2e.RunE2EWithTimeout(
 		t,
 		3*time.Minute,
@@ -583,7 +583,7 @@ func TestDispute_OpenOnNonExistentException(t *testing.T) {
 
 // TestDispute_Categories tests all valid dispute categories.
 func TestDispute_Categories(t *testing.T) {
-	t.Skip("dispute endpoint returns 500 - pending server-side fix (see #27)")
+	t.Fatal("dispute endpoint returns 500 — tracked in issue #27, fix and delete this guard")
 	e2e.RunE2EWithTimeout(
 		t,
 		3*time.Minute,

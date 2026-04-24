@@ -7,7 +7,6 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -25,21 +24,6 @@ import (
 const defaultTelemetryTimeout = 10 * time.Second
 
 const lateTelemetryCleanupTimeout = 30 * time.Second
-
-var initTelemetryFn = InitTelemetry
-
-var initTelemetryFnMu sync.RWMutex
-
-func loadInitTelemetryFn() func(*Config, libLog.Logger) *libOpentelemetry.Telemetry {
-	initTelemetryFnMu.RLock()
-	defer initTelemetryFnMu.RUnlock()
-
-	if initTelemetryFn == nil {
-		return InitTelemetry
-	}
-
-	return initTelemetryFn
-}
 
 // InitTelemetry initializes OpenTelemetry with the provided configuration.
 // It sets up the global TextMapPropagator for distributed trace context propagation
@@ -65,7 +49,7 @@ func InitTelemetry(cfg *Config, logger libLog.Logger) *libOpentelemetry.Telemetr
 	})
 	if err != nil {
 		if logger != nil {
-			logger.Log(context.Background(), libLog.LevelError, fmt.Sprintf("failed to initialize telemetry: %v", err))
+			libLog.SafeError(logger, context.Background(), "failed to initialize telemetry", err, runtime.IsProductionMode())
 		}
 
 		return nil
@@ -141,12 +125,25 @@ func deriveTelemetryTimeout(ctx context.Context) time.Duration {
 //
 // The abandoned goroutine is bounded: gRPC dials have their own internal timeouts,
 // so the goroutine will eventually complete and be garbage collected.
-func InitTelemetryWithTimeout(ctx context.Context, cfg *Config, logger libLog.Logger) *libOpentelemetry.Telemetry {
+func InitTelemetryWithTimeout(
+	ctx context.Context,
+	cfg *Config,
+	logger libLog.Logger,
+	connector InfraConnector,
+) *libOpentelemetry.Telemetry {
 	if cfg == nil {
 		cfg = &Config{}
 	}
 
+	if connector == nil {
+		connector = DefaultInfraConnector()
+	}
+
 	// Fast path: disabled telemetry creates no-op providers instantly (no gRPC).
+	// This path bypasses the injected connector and calls InitTelemetry directly
+	// — matching the pre-refactor semantics where only the live init path went
+	// through the swappable hook. Tests that substitute a slow connector should
+	// not stall this path.
 	if !cfg.Telemetry.Enabled {
 		return InitTelemetry(cfg, logger) //nolint:contextcheck // InitTelemetry intentionally omits context; lib uses context.Background internally
 	}
@@ -156,7 +153,7 @@ func InitTelemetryWithTimeout(ctx context.Context, cfg *Config, logger libLog.Lo
 	ch := make(chan telemetryInitResult, 1)
 	capturedCfg := cfg
 	capturedLogger := logger
-	telemetryInitializer := loadInitTelemetryFn()
+	telemetryInitializer := connector.InitTelemetry
 
 	runtime.SafeGoWithContextAndComponent(
 		ctx, logger, constants.ApplicationName, "telemetry.init",
@@ -205,6 +202,9 @@ func InitTelemetryWithTimeout(ctx context.Context, cfg *Config, logger libLog.Lo
 
 		// Create a disabled-mode telemetry instance so callers always get
 		// a valid struct (avoids nil checks scattered throughout the codebase).
+		// Uses the real InitTelemetry (not the connector) so the fallback path
+		// stays deterministic even when the injected connector is slow or
+		// blocks; matches the pre-refactor direct call.
 		disabledCfg := *cfg
 		disabledCfg.Telemetry.Enabled = false
 

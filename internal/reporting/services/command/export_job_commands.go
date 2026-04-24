@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 // Package command provides write operations for reporting.
 package command
 
@@ -11,9 +15,12 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
+	reportingMetrics "github.com/LerianStudio/matcher/internal/reporting/services/metrics"
+	sharedObservability "github.com/LerianStudio/matcher/internal/shared/observability"
 )
 
 const exportJobResourcePathFmt = "/v1/export-jobs/%s"
@@ -77,7 +84,7 @@ func (uc *ExportJobUseCase) CreateExportJob(
 		ContextID:  input.ContextID.String(),
 		ReportType: string(input.ReportType),
 		Format:     string(input.Format),
-	}, nil)
+	}, sharedObservability.NewMatcherRedactor())
 
 	job, err := entities.NewExportJob(
 		ctx,
@@ -90,7 +97,7 @@ func (uc *ExportJobUseCase) CreateExportJob(
 	if err != nil {
 		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "failed to create export job entity", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to create export job entity: %v", err))
+		libLog.SafeError(logger, ctx, "failed to create export job entity", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("creating export job entity: %w", err)
 	}
@@ -98,12 +105,18 @@ func (uc *ExportJobUseCase) CreateExportJob(
 	if err := uc.repo.Create(ctx, job); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to persist export job", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to persist export job: %v", err))
+		libLog.SafeError(logger, ctx, "failed to persist export job", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("persisting export job: %w", err)
 	}
 
 	logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("created export job %s for context %s", job.ID, job.ContextID))
+
+	reportingMetrics.RecordExportJobTransition(
+		ctx,
+		string(job.Format),
+		string(entities.ExportJobStatusQueued),
+	)
 
 	return &CreateExportJobOutput{
 		JobID:     job.ID,
@@ -123,7 +136,7 @@ func (uc *ExportJobUseCase) CancelExportJob(ctx context.Context, id uuid.UUID) e
 		ID string `json:"id"`
 	}{
 		ID: id.String(),
-	}, nil)
+	}, sharedObservability.NewMatcherRedactor())
 
 	job, err := uc.repo.GetByID(ctx, id)
 	if err != nil {
@@ -138,7 +151,7 @@ func (uc *ExportJobUseCase) CancelExportJob(ctx context.Context, id uuid.UUID) e
 
 		libOpentelemetry.HandleSpanError(span, "failed to get export job for cancellation", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get export job for cancellation: %v", err))
+		libLog.SafeError(logger, ctx, "failed to get export job for cancellation", err, runtime.IsProductionMode())
 
 		return fmt.Errorf("getting export job: %w", err)
 	}
@@ -154,12 +167,18 @@ func (uc *ExportJobUseCase) CancelExportJob(ctx context.Context, id uuid.UUID) e
 	if err := uc.repo.UpdateStatus(ctx, job); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to cancel export job", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to cancel export job: %v", err))
+		libLog.SafeError(logger, ctx, "failed to cancel export job", err, runtime.IsProductionMode())
 
 		return fmt.Errorf("canceling export job: %w", err)
 	}
 
 	logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("canceled export job %s", job.ID))
+
+	reportingMetrics.RecordExportJobTransition(
+		ctx,
+		string(job.Format),
+		string(entities.ExportJobStatusCanceled),
+	)
 
 	return nil
 }

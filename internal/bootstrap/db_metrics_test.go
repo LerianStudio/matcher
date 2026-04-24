@@ -47,10 +47,11 @@ func TestNewDBMetricsCollector(t *testing.T) {
 
 		mockDB := &mockDBResolver{}
 		collector := &DBMetricsCollector{
-			db:       mockDB,
-			meter:    otel.Meter("test.db.pool.zero"),
-			interval: 0,
-			stopCh:   make(chan struct{}),
+			db:              mockDB,
+			meter:           otel.Meter("test.db.pool.zero"),
+			interval:        0,
+			stopCh:          make(chan struct{}),
+			lastStatsByRole: newRoleStatsMap(),
 		}
 
 		assert.Equal(t, time.Duration(0), collector.interval)
@@ -101,7 +102,8 @@ func TestDBMetricsCollectorStop(t *testing.T) {
 		t.Parallel()
 
 		collector := &DBMetricsCollector{
-			stopCh: make(chan struct{}),
+			stopCh:          make(chan struct{}),
+			lastStatsByRole: newRoleStatsMap(),
 		}
 
 		// First stop should work
@@ -174,10 +176,11 @@ func testDBMetricsCollectSuccess(t *testing.T) {
 	}
 
 	collector := &DBMetricsCollector{
-		db:       mockDB,
-		meter:    otel.Meter("test.db.pool"),
-		interval: time.Second,
-		stopCh:   make(chan struct{}),
+		db:              mockDB,
+		meter:           otel.Meter("test.db.pool"),
+		interval:        time.Second,
+		stopCh:          make(chan struct{}),
+		lastStatsByRole: newRoleStatsMap(),
 	}
 
 	err := collector.initMetrics()
@@ -207,10 +210,11 @@ func testDBMetricsDeltaCalculations(t *testing.T) {
 		}
 
 		collector := &DBMetricsCollector{
-			db:       mockDB,
-			meter:    otel.Meter("test.db.pool.delta"),
-			interval: time.Second,
-			stopCh:   make(chan struct{}),
+			db:              mockDB,
+			meter:           otel.Meter("test.db.pool.delta"),
+			interval:        time.Second,
+			stopCh:          make(chan struct{}),
+			lastStatsByRole: newRoleStatsMap(),
 		}
 
 		err := collector.initMetrics()
@@ -222,26 +226,26 @@ func testDBMetricsDeltaCalculations(t *testing.T) {
 		assert.Equal(
 			t,
 			int64(100),
-			collector.lastWaitCount,
+			collector.lastStatsByRole[dbPoolRolePrimary].waitCount,
 			"first collect should set lastWaitCount",
 		)
 		assert.InDelta(
 			t,
 			float64(10),
-			collector.lastWaitDuration,
+			collector.lastStatsByRole[dbPoolRolePrimary].waitDuration,
 			0.01,
 			"first collect should set lastWaitDuration",
 		)
 		assert.Equal(
 			t,
 			int64(50),
-			collector.lastMaxIdleClosed,
+			collector.lastStatsByRole[dbPoolRolePrimary].maxIdleClosed,
 			"first collect should set lastMaxIdleClosed",
 		)
 		assert.Equal(
 			t,
 			int64(25),
-			collector.lastMaxLifeClosed,
+			collector.lastStatsByRole[dbPoolRolePrimary].maxLifeClosed,
 			"first collect should set lastMaxLifeClosed",
 		)
 
@@ -255,26 +259,26 @@ func testDBMetricsDeltaCalculations(t *testing.T) {
 		assert.Equal(
 			t,
 			int64(150),
-			collector.lastWaitCount,
+			collector.lastStatsByRole[dbPoolRolePrimary].waitCount,
 			"second collect should update lastWaitCount",
 		)
 		assert.InDelta(
 			t,
 			float64(15),
-			collector.lastWaitDuration,
+			collector.lastStatsByRole[dbPoolRolePrimary].waitDuration,
 			0.01,
 			"second collect should update lastWaitDuration",
 		)
 		assert.Equal(
 			t,
 			int64(60),
-			collector.lastMaxIdleClosed,
+			collector.lastStatsByRole[dbPoolRolePrimary].maxIdleClosed,
 			"second collect should update lastMaxIdleClosed",
 		)
 		assert.Equal(
 			t,
 			int64(30),
-			collector.lastMaxLifeClosed,
+			collector.lastStatsByRole[dbPoolRolePrimary].maxLifeClosed,
 			"second collect should update lastMaxLifeClosed",
 		)
 	})
@@ -292,10 +296,11 @@ func testDBMetricsDeltaCalculations(t *testing.T) {
 		}
 
 		collector := &DBMetricsCollector{
-			db:       mockDB,
-			meter:    otel.Meter("test.db.pool.reset"),
-			interval: time.Second,
-			stopCh:   make(chan struct{}),
+			db:              mockDB,
+			meter:           otel.Meter("test.db.pool.reset"),
+			interval:        time.Second,
+			stopCh:          make(chan struct{}),
+			lastStatsByRole: newRoleStatsMap(),
 		}
 
 		err := collector.initMetrics()
@@ -316,7 +321,7 @@ func testDBMetricsDeltaCalculations(t *testing.T) {
 		assert.Equal(
 			t,
 			int64(50),
-			collector.lastWaitCount,
+			collector.lastStatsByRole[dbPoolRolePrimary].waitCount,
 			"should update lastWaitCount even on reset",
 		)
 	})
@@ -361,10 +366,11 @@ func TestDBMetricsCollectorInitMetrics(t *testing.T) {
 
 		mockDB := &mockDBResolver{}
 		collector := &DBMetricsCollector{
-			db:       mockDB,
-			meter:    otel.Meter("test.db.pool"),
-			interval: time.Second,
-			stopCh:   make(chan struct{}),
+			db:              mockDB,
+			meter:           otel.Meter("test.db.pool"),
+			interval:        time.Second,
+			stopCh:          make(chan struct{}),
+			lastStatsByRole: newRoleStatsMap(),
 		}
 
 		err := collector.initMetrics()
@@ -395,10 +401,11 @@ func TestDBMetricsCollectorLifecycle(t *testing.T) {
 		}
 
 		collector := &DBMetricsCollector{
-			db:       mockDB,
-			meter:    otel.Meter("test.db.pool.lifecycle"),
-			interval: 10 * time.Millisecond,
-			stopCh:   make(chan struct{}),
+			db:              mockDB,
+			meter:           otel.Meter("test.db.pool.lifecycle"),
+			interval:        10 * time.Millisecond,
+			stopCh:          make(chan struct{}),
+			lastStatsByRole: newRoleStatsMap(),
 		}
 
 		err := collector.initMetrics()
@@ -435,10 +442,11 @@ func TestDBMetricsCollectorLifecycle(t *testing.T) {
 		}
 
 		collector := &DBMetricsCollector{
-			db:       mockDB,
-			meter:    otel.Meter("test.db.pool.cancel"),
-			interval: 50 * time.Millisecond,
-			stopCh:   make(chan struct{}),
+			db:              mockDB,
+			meter:           otel.Meter("test.db.pool.cancel"),
+			interval:        50 * time.Millisecond,
+			stopCh:          make(chan struct{}),
+			lastStatsByRole: newRoleStatsMap(),
 		}
 
 		err := collector.initMetrics()
@@ -456,6 +464,73 @@ func TestDBMetricsCollectorLifecycle(t *testing.T) {
 			collector.Stop()
 		})
 	})
+}
+
+func TestNewRoleStatsMap(t *testing.T) {
+	t.Parallel()
+
+	m := newRoleStatsMap()
+
+	require.NotNil(t, m)
+	require.Contains(t, m, dbPoolRolePrimary)
+	require.Contains(t, m, dbPoolRoleReplica)
+	assert.NotNil(t, m[dbPoolRolePrimary])
+	assert.NotNil(t, m[dbPoolRoleReplica])
+
+	// The two entries are independent — mutating primary must not leak
+	// into replica state.
+	m[dbPoolRolePrimary].waitCount = 42
+	assert.Equal(t, int64(0), m[dbPoolRoleReplica].waitCount)
+}
+
+func TestAggregateStats(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty slice returns zero value", func(t *testing.T) {
+		t.Parallel()
+
+		got := aggregateStats(nil)
+		assert.Equal(t, sql.DBStats{}, got)
+
+		got = aggregateStats([]*sql.DB{})
+		assert.Equal(t, sql.DBStats{}, got)
+	})
+
+	t.Run("skips nil entries without panicking", func(t *testing.T) {
+		t.Parallel()
+
+		assert.NotPanics(t, func() {
+			got := aggregateStats([]*sql.DB{nil, nil})
+			assert.Equal(t, sql.DBStats{}, got)
+		})
+	})
+}
+
+func TestCollect_EmitsReplicaEvenWhenEmpty(t *testing.T) {
+	t.Parallel()
+
+	// When ReplicaDBs() returns an empty slice, recordRoleStats still runs
+	// for role="replica" with a zero-valued aggregate. This is a deliberate
+	// choice — dashboards can distinguish "no replicas configured" (series
+	// present, all zeros) from "replica crashed" (series absent).
+	mockDB := &mockDBResolver{stats: sql.DBStats{OpenConnections: 7}}
+	collector := &DBMetricsCollector{
+		db:              mockDB,
+		meter:           otel.Meter("test.db.pool.replica-empty"),
+		interval:        time.Second,
+		stopCh:          make(chan struct{}),
+		lastStatsByRole: newRoleStatsMap(),
+	}
+	require.NoError(t, collector.initMetrics())
+
+	assert.NotPanics(t, func() {
+		collector.collect(context.Background())
+	})
+
+	// Primary accumulator tracked the mock's Stats(); replica accumulator
+	// stayed at zero because ReplicaDBs() returned nil.
+	assert.Zero(t, collector.lastStatsByRole[dbPoolRoleReplica].waitCount)
+	assert.Zero(t, collector.lastStatsByRole[dbPoolRoleReplica].waitDuration)
 }
 
 type mockDBResolver struct {

@@ -16,7 +16,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestCreateAdjustment_WithMatchGroup(t *testing.T) {
+func TestIntegration_Matching_CreateAdjustment_WithMatchGroup(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -59,7 +59,7 @@ func TestCreateAdjustment_WithMatchGroup(t *testing.T) {
 	})
 }
 
-func TestCreateAdjustment_WithTransactionID(t *testing.T) {
+func TestIntegration_Matching_CreateAdjustment_WithTransactionID(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -102,7 +102,7 @@ func TestCreateAdjustment_WithTransactionID(t *testing.T) {
 	})
 }
 
-func TestCreateAdjustment_AllTypes(t *testing.T) {
+func TestIntegration_Matching_CreateAdjustment_AllTypes(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -145,7 +145,7 @@ func TestCreateAdjustment_AllTypes(t *testing.T) {
 	})
 }
 
-func TestCreateAdjustment_CreditDirection(t *testing.T) {
+func TestIntegration_Matching_CreateAdjustment_CreditDirection(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -179,7 +179,7 @@ func TestCreateAdjustment_CreditDirection(t *testing.T) {
 	})
 }
 
-func TestCreateAdjustment_AuditLogAtomicity(t *testing.T) {
+func TestIntegration_Matching_CreateAdjustment_AuditLogAtomicity(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -230,7 +230,7 @@ func TestCreateAdjustment_AuditLogAtomicity(t *testing.T) {
 	})
 }
 
-func TestCreateAdjustment_RejectsZeroAmount(t *testing.T) {
+func TestIntegration_Matching_CreateAdjustment_RejectsZeroAmount(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)

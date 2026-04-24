@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 // Package worker provides background workers for the discovery context.
 package worker
 
@@ -25,8 +29,13 @@ import (
 	"github.com/LerianStudio/matcher/internal/discovery/schemacache"
 	"github.com/LerianStudio/matcher/internal/discovery/services/syncer"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	workermetrics "github.com/LerianStudio/matcher/internal/shared/observability/workermetrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
+
+// discoveryWorkerName is the stable label value emitted on matcher.worker.*
+// metrics from this worker.
+const discoveryWorkerName = "discovery_worker"
 
 const (
 	// discoveryLockKey is the Redis distributed lock key for discovery sync.
@@ -64,6 +73,7 @@ type DiscoveryWorker struct {
 	syncer        *syncer.ConnectionSyncer
 	logger        libLog.Logger
 	tracer        trace.Tracer
+	metrics       *workermetrics.Recorder
 
 	mu       sync.RWMutex
 	cfg      DiscoveryWorkerConfig
@@ -127,6 +137,7 @@ func NewDiscoveryWorker(
 		cfg:           cfg,
 		logger:        logger,
 		tracer:        otel.Tracer("discovery.worker"),
+		metrics:       workermetrics.NewRecorder(discoveryWorkerName),
 		stopCh:        make(chan struct{}),
 		doneCh:        make(chan struct{}),
 		updateCh:      make(chan time.Duration, 1),
@@ -294,8 +305,20 @@ func (dw *DiscoveryWorker) pollCycle(ctx context.Context) {
 	ctx, span := tracer.Start(ctx, "discovery.worker.poll_cycle")
 	defer span.End()
 
+	startedAt := time.Now()
+	outcome := workermetrics.OutcomeSkipped
+
+	var processed, failed int
+
+	defer func() {
+		dw.metrics.RecordCycle(ctx, startedAt, outcome)
+		dw.metrics.RecordItems(ctx, processed, failed)
+	}()
+
 	acquired, token, err := dw.acquireLock(ctx, discoveryLockKey)
 	if err != nil {
+		outcome = workermetrics.OutcomeFailure
+
 		logger.With(libLog.Err(err)).
 			Log(ctx, libLog.LevelWarn, "discovery: lock error")
 
@@ -308,19 +331,23 @@ func (dw *DiscoveryWorker) pollCycle(ctx context.Context) {
 
 	defer dw.releaseLock(ctx, discoveryLockKey, token)
 
-	// Check Fetcher health before proceeding.
+	// Check Fetcher health before proceeding. A degraded fetcher is NOT a
+	// worker-level failure — the cycle ran, discovered the downstream is
+	// unavailable, and gracefully deferred work. Stay "skipped".
 	if !dw.fetcherClient.IsHealthy(ctx) {
 		logger.Log(ctx, libLog.LevelWarn, "discovery: fetcher service is unhealthy, skipping cycle")
 
 		return
 	}
 
-	dw.syncConnectionsAndSchemas(ctx)
+	outcome = workermetrics.OutcomeSuccess
+	processed, failed = dw.syncConnectionsAndSchemas(ctx)
 }
 
 // syncConnectionsAndSchemas fetches all connections from Fetcher, upserts them,
-// discovers their schemas, and marks stale connections as unreachable.
-func (dw *DiscoveryWorker) syncConnectionsAndSchemas(ctx context.Context) {
+// discovers their schemas, and marks stale connections as unreachable. Returns
+// (processed, failed) connection counts aggregated across tenants.
+func (dw *DiscoveryWorker) syncConnectionsAndSchemas(ctx context.Context) (int, int) {
 	logger, tracer := dw.tracking(ctx)
 
 	ctx, span := tracer.Start(ctx, "discovery.worker.sync_connections")
@@ -333,17 +360,28 @@ func (dw *DiscoveryWorker) syncConnectionsAndSchemas(ctx context.Context) {
 		logger.With(libLog.Err(err)).
 			Log(ctx, libLog.LevelError, "discovery: failed to list tenants")
 
-		return
+		return 0, 0
 	}
 
 	span.SetAttributes(attribute.Int("discovery.tenants_found", len(tenantIDs)))
 
+	var processed, failed int
+
 	for _, tenantID := range tenantIDs {
-		dw.syncTenantConnections(ctx, tenantID)
+		tenantProcessed, tenantFailed := dw.syncTenantConnections(ctx, tenantID)
+		processed += tenantProcessed
+		failed += tenantFailed
 	}
+
+	return processed, failed
 }
 
-func (dw *DiscoveryWorker) syncTenantConnections(parentCtx context.Context, tenantID string) {
+// syncTenantConnections runs one tenant's discovery sync. Returns
+// (processed, failed) connection counts: processed = connections that
+// syncer.SyncConnection returned nil for; failed = connections where
+// SyncConnection surfaced an error. A ListConnections error returns
+// (0, 0) — nothing was attempted, so nothing failed at the item level.
+func (dw *DiscoveryWorker) syncTenantConnections(parentCtx context.Context, tenantID string) (int, int) {
 	ctx := context.WithValue(parentCtx, auth.TenantIDKey, tenantID)
 	logger, tracer := dw.tracking(ctx)
 
@@ -363,12 +401,15 @@ func (dw *DiscoveryWorker) syncTenantConnections(parentCtx context.Context, tena
 			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "discovery: failed to list tenant connections from fetcher")
 
-		return
+		return 0, 0
 	}
 
 	span.SetAttributes(attribute.Int("discovery.connections_found", len(fetcherConns)))
 
+	var processed, failed int
+
 	seenFetcherIDs := make(map[string]bool, len(fetcherConns))
+
 	for _, fc := range fetcherConns {
 		if fc == nil {
 			logger.Log(ctx, libLog.LevelWarn, "discovery: skipping nil fetcher connection entry")
@@ -377,21 +418,29 @@ func (dw *DiscoveryWorker) syncTenantConnections(parentCtx context.Context, tena
 		}
 
 		seenFetcherIDs[fc.ID] = true
-		dw.syncConnection(ctx, fc)
+
+		if dw.syncConnection(ctx, fc) {
+			processed++
+		} else {
+			failed++
+		}
 	}
 
 	dw.markStaleConnections(ctx, seenFetcherIDs)
+
+	return processed, failed
 }
 
 // syncConnection delegates connection/schema synchronization to the shared syncer.
-func (dw *DiscoveryWorker) syncConnection(ctx context.Context, fc *sharedPorts.FetcherConnection) {
+// Returns true when the syncer returned nil; false when it errored.
+func (dw *DiscoveryWorker) syncConnection(ctx context.Context, fc *sharedPorts.FetcherConnection) bool {
 	logger, tracer := dw.tracking(ctx)
 
 	ctx, span := tracer.Start(ctx, "discovery.worker.sync_connection")
 	defer span.End()
 
 	if fc == nil {
-		return
+		return false
 	}
 
 	span.SetAttributes(attribute.String("discovery.fetcher_conn_id", fc.ID))
@@ -404,8 +453,10 @@ func (dw *DiscoveryWorker) syncConnection(ctx context.Context, fc *sharedPorts.F
 			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "discovery: failed to sync connection")
 
-		return
+		return false
 	}
+
+	return true
 }
 
 // markStaleConnections marks connections not seen this cycle as UNREACHABLE.

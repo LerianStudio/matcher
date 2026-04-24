@@ -25,7 +25,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestFeeRuleNormalization_PipelineIntegration(t *testing.T) {
+func TestIntegration_Matching_FeeRuleNormalization_PipelineIntegration(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -149,7 +149,7 @@ func TestFeeRuleNormalization_PipelineIntegration(t *testing.T) {
 	})
 }
 
-func TestFeeRuleNormalization_SideSpecificRulesIntegration(t *testing.T) {
+func TestIntegration_Matching_FeeRuleNormalization_SideSpecificRulesIntegration(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -235,7 +235,7 @@ func TestFeeRuleNormalization_SideSpecificRulesIntegration(t *testing.T) {
 	})
 }
 
-func TestFeeRuleNormalization_GrossNormalizationIntegration(t *testing.T) {
+func TestIntegration_Matching_FeeRuleNormalization_GrossNormalizationIntegration(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -316,7 +316,7 @@ func TestFeeRuleNormalization_GrossNormalizationIntegration(t *testing.T) {
 	})
 }
 
-func TestFeeRuleNormalization_NoMatchingRuleSkipsVerification(t *testing.T) {
+func TestIntegration_Matching_FeeRuleNormalization_NoMatchingRuleSkipsVerification(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -385,7 +385,7 @@ func TestFeeRuleNormalization_NoMatchingRuleSkipsVerification(t *testing.T) {
 	})
 }
 
-func TestFeeRuleNormalization_FeeExceptionScenarios(t *testing.T) {
+func TestIntegration_Matching_FeeRuleNormalization_FeeExceptionScenarios(t *testing.T) {
 	testCases := []struct {
 		name      string
 		applyMeta func(context.Context, *integration.TestHarness, []*shared.Transaction) error

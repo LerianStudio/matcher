@@ -17,9 +17,9 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-// TestClaimNextQueued_NoJobs verifies that ClaimNextQueued returns nil, nil
+// TestIntegration_Reporting_ClaimNextQueued_NoJobs verifies that ClaimNextQueued returns nil, nil
 // when the export_jobs queue is empty.
-func TestClaimNextQueued_NoJobs(t *testing.T) {
+func TestIntegration_Reporting_ClaimNextQueued_NoJobs(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -32,10 +32,10 @@ func TestClaimNextQueued_NoJobs(t *testing.T) {
 	})
 }
 
-// TestClaimNextQueued_ClaimsSingleJob verifies that ClaimNextQueued atomically
+// TestIntegration_Reporting_ClaimNextQueued_ClaimsSingleJob verifies that ClaimNextQueued atomically
 // transitions a single QUEUED job to RUNNING, sets StartedAt, and increments
 // Attempts from 0 to 1.
-func TestClaimNextQueued_ClaimsSingleJob(t *testing.T) {
+func TestIntegration_Reporting_ClaimNextQueued_ClaimsSingleJob(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -68,10 +68,10 @@ func TestClaimNextQueued_ClaimsSingleJob(t *testing.T) {
 	})
 }
 
-// TestClaimNextQueued_FIFO_Order verifies that ClaimNextQueued returns jobs
+// TestIntegration_Reporting_ClaimNextQueued_FIFO_Order verifies that ClaimNextQueued returns jobs
 // in created_at ascending order (FIFO), honouring the ORDER BY created_at ASC
 // in the SELECT ... FOR UPDATE SKIP LOCKED sub-query.
-func TestClaimNextQueued_FIFO_Order(t *testing.T) {
+func TestIntegration_Reporting_ClaimNextQueued_FIFO_Order(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -112,11 +112,11 @@ func TestClaimNextQueued_FIFO_Order(t *testing.T) {
 	})
 }
 
-// TestClaimNextQueued_ConcurrentWorkers_NoDuplicates is the core test for the
+// TestIntegration_Reporting_ClaimNextQueued_ConcurrentWorkers_NoDuplicates is the core test for the
 // SELECT FOR UPDATE SKIP LOCKED semantics. Five concurrent goroutines race to
 // claim five QUEUED jobs. Each job must be claimed exactly once — no duplicates,
 // no missed jobs.
-func TestClaimNextQueued_ConcurrentWorkers_NoDuplicates(t *testing.T) {
+func TestIntegration_Reporting_ClaimNextQueued_ConcurrentWorkers_NoDuplicates(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -198,9 +198,9 @@ func TestClaimNextQueued_ConcurrentWorkers_NoDuplicates(t *testing.T) {
 	})
 }
 
-// TestClaimNextQueued_SkipsNonQueued verifies that ClaimNextQueued only picks
+// TestIntegration_Reporting_ClaimNextQueued_SkipsNonQueued verifies that ClaimNextQueued only picks
 // up jobs in QUEUED status, ignoring RUNNING and COMPLETED jobs.
-func TestClaimNextQueued_SkipsNonQueued(t *testing.T) {
+func TestIntegration_Reporting_ClaimNextQueued_SkipsNonQueued(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		repo := newExportJobRepo(h)

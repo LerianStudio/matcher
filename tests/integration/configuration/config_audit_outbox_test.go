@@ -136,7 +136,7 @@ func countOutboxByAggregate(
 	return n
 }
 
-func TestConfigAuditOutbox_PublishCreatesOutboxEvent(t *testing.T) {
+func TestIntegration_Configuration_ConfigAuditOutbox_PublishCreatesOutboxEvent(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -164,7 +164,7 @@ func TestConfigAuditOutbox_PublishCreatesOutboxEvent(t *testing.T) {
 	})
 }
 
-func TestConfigAuditOutbox_PayloadContainsAuditFields(t *testing.T) {
+func TestIntegration_Configuration_ConfigAuditOutbox_PayloadContainsAuditFields(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -206,7 +206,7 @@ func TestConfigAuditOutbox_PayloadContainsAuditFields(t *testing.T) {
 	})
 }
 
-func TestConfigAuditOutbox_MultipleEventsForDifferentEntities(t *testing.T) {
+func TestIntegration_Configuration_ConfigAuditOutbox_MultipleEventsForDifferentEntities(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -240,7 +240,7 @@ func TestConfigAuditOutbox_MultipleEventsForDifferentEntities(t *testing.T) {
 	})
 }
 
-func TestConfigAuditOutbox_EventStatusIsPending(t *testing.T) {
+func TestIntegration_Configuration_ConfigAuditOutbox_EventStatusIsPending(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -267,7 +267,7 @@ func TestConfigAuditOutbox_EventStatusIsPending(t *testing.T) {
 	})
 }
 
-func TestConfigAuditOutbox_ActorIDPropagated(t *testing.T) {
+func TestIntegration_Configuration_ConfigAuditOutbox_ActorIDPropagated(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {

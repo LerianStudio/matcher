@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/tests/e2e"
-	"github.com/LerianStudio/matcher/tests/e2e/client"
+	"github.com/LerianStudio/matcher/tests/client"
 	"github.com/LerianStudio/matcher/tests/e2e/mock"
 )
 
@@ -160,9 +160,8 @@ func TestDiscovery_Journey(t *testing.T) {
 		// 05 — Get individual connections by Matcher ID
 		// =================================================================
 		t.Run("05_get_connection_postgres", func(t *testing.T) {
-			if postgresConnID == "" {
-				t.Skip("skipping: depends on 04_list_connections which did not populate postgresConnID")
-			}
+			require.NotEmpty(t, postgresConnID,
+				"04_list_connections must populate postgresConnID before this subtest runs")
 
 			conn, err := discovery.GetConnection(ctx, postgresConnID)
 			require.NoError(t, err)
@@ -171,9 +170,8 @@ func TestDiscovery_Journey(t *testing.T) {
 		})
 
 		t.Run("05_get_connection_mysql", func(t *testing.T) {
-			if mysqlConnID == "" {
-				t.Skip("skipping: depends on 04_list_connections which did not populate mysqlConnID")
-			}
+			require.NotEmpty(t, mysqlConnID,
+				"04_list_connections must populate mysqlConnID before this subtest runs")
 
 			conn, err := discovery.GetConnection(ctx, mysqlConnID)
 			require.NoError(t, err)
@@ -197,9 +195,8 @@ func TestDiscovery_Journey(t *testing.T) {
 		// 07 — Get connection schema
 		// =================================================================
 		t.Run("07_get_connection_schema", func(t *testing.T) {
-			if postgresConnID == "" {
-				t.Skip("skipping: depends on 04_list_connections which did not populate postgresConnID")
-			}
+			require.NotEmpty(t, postgresConnID,
+				"04_list_connections must populate postgresConnID before this subtest runs")
 
 			schema, err := discovery.GetConnectionSchema(ctx, postgresConnID)
 			require.NoError(t, err)
@@ -220,9 +217,8 @@ func TestDiscovery_Journey(t *testing.T) {
 		// 08 — Test connection (healthy)
 		// =================================================================
 		t.Run("08_test_connection_healthy", func(t *testing.T) {
-			if postgresConnID == "" {
-				t.Skip("skipping: depends on 04_list_connections which did not populate postgresConnID")
-			}
+			require.NotEmpty(t, postgresConnID,
+				"04_list_connections must populate postgresConnID before this subtest runs")
 
 			result, err := discovery.TestConnection(ctx, postgresConnID)
 			require.NoError(t, err)
@@ -234,9 +230,8 @@ func TestDiscovery_Journey(t *testing.T) {
 		// 09 — Test connection (unhealthy): mutate mock, then verify
 		// =================================================================
 		t.Run("09_test_connection_unhealthy", func(t *testing.T) {
-			if mysqlConnID == "" {
-				t.Skip("skipping: depends on 04_list_connections which did not populate mysqlConnID")
-			}
+			require.NotEmpty(t, mysqlConnID,
+				"04_list_connections must populate mysqlConnID before this subtest runs")
 
 			// Make the mysql connection unhealthy in the mock.
 			mockServer.SetTestResult("conn-mysql-002", &mock.MockTestResult{
@@ -261,9 +256,8 @@ func TestDiscovery_Journey(t *testing.T) {
 		// 10 — Start an extraction job
 		// =================================================================
 		t.Run("10_start_extraction", func(t *testing.T) {
-			if postgresConnID == "" {
-				t.Skip("skipping: depends on 04_list_connections which did not populate postgresConnID")
-			}
+			require.NotEmpty(t, postgresConnID,
+				"04_list_connections must populate postgresConnID before this subtest runs")
 
 			// The mock auto-creates a job when SubmitExtraction is called.
 			// The generated job ID depends on metadata.source (which comes from
@@ -292,9 +286,8 @@ func TestDiscovery_Journey(t *testing.T) {
 		// 11 — Get the extraction request by ID
 		// =================================================================
 		t.Run("11_get_extraction", func(t *testing.T) {
-			if extractionID == "" {
-				t.Skip("skipping: depends on 10_start_extraction which did not populate extractionID")
-			}
+			require.NotEmpty(t, extractionID,
+				"10_start_extraction must populate extractionID before this subtest runs")
 
 			extraction, err := discovery.GetExtraction(ctx, extractionID)
 			require.NoError(t, err)
@@ -308,9 +301,10 @@ func TestDiscovery_Journey(t *testing.T) {
 		// 12 — Poll extraction: simulate RUNNING status
 		// =================================================================
 		t.Run("12_poll_extraction_running", func(t *testing.T) {
-			if extractionID == "" || fetcherJobID == "" {
-				t.Skip("skipping: depends on 10_start_extraction")
-			}
+			require.NotEmpty(t, extractionID,
+				"10_start_extraction must populate extractionID before this subtest runs")
+			require.NotEmpty(t, fetcherJobID,
+				"10_start_extraction must populate fetcherJobID before this subtest runs")
 
 			// Set the mock job to processing (lowercase per Fetcher contract).
 			mockServer.SetJobStatus(fetcherJobID, "processing")
@@ -332,9 +326,10 @@ func TestDiscovery_Journey(t *testing.T) {
 		// 13 — Poll extraction: simulate COMPLETE status
 		// =================================================================
 		t.Run("13_poll_extraction_complete", func(t *testing.T) {
-			if extractionID == "" || fetcherJobID == "" {
-				t.Skip("skipping: depends on 10_start_extraction")
-			}
+			require.NotEmpty(t, extractionID,
+				"10_start_extraction must populate extractionID before this subtest runs")
+			require.NotEmpty(t, fetcherJobID,
+				"10_start_extraction must populate fetcherJobID before this subtest runs")
 
 			// Overwrite the mock job to completed with a valid result path.
 			mockServer.AddJob(mock.MockExtractionJob{
@@ -364,9 +359,8 @@ func TestDiscovery_Journey(t *testing.T) {
 		// 15 — Fetcher unavailable: test, refresh, and extraction should fail
 		// =================================================================
 		t.Run("15_fetcher_unavailable", func(t *testing.T) {
-			if postgresConnID == "" {
-				t.Skip("skipping: depends on 04_list_connections which did not populate postgresConnID")
-			}
+			require.NotEmpty(t, postgresConnID,
+				"04_list_connections must populate postgresConnID before this subtest runs")
 
 			// Make the mock unhealthy.
 			mockServer.SetHealthy(false)
@@ -461,9 +455,8 @@ func TestDiscovery_Journey(t *testing.T) {
 		// 20 — MySQL connection schema verification
 		// =================================================================
 		t.Run("20_get_mysql_connection_schema", func(t *testing.T) {
-			if mysqlConnID == "" {
-				t.Skip("skipping: depends on 04_list_connections which did not populate mysqlConnID")
-			}
+			require.NotEmpty(t, mysqlConnID,
+				"04_list_connections must populate mysqlConnID before this subtest runs")
 
 			schema, err := discovery.GetConnectionSchema(ctx, mysqlConnID)
 			require.NoError(t, err)

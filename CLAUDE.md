@@ -19,7 +19,7 @@ Health check: `GET http://localhost:4018/health`
 | Attribute | Value |
 |-----------|-------|
 | **Project** | Transaction reconciliation engine for Lerian Studio |
-| **Language** | Go (module: `go 1.26.0`) |
+| **Language** | Go (module: `go 1.26.1`) |
 | **Architecture** | Modular monolith: DDD + Hexagonal + CQRS-light |
 | **Database** | PostgreSQL 17, schema-per-tenant isolation |
 | **Cache/Locking** | Valkey (Redis-compatible) 8 |
@@ -124,7 +124,6 @@ internal/
 ├── exception/        # Exception lifecycle, disputes, evidence, resolutions, bulk ops
 ├── governance/       # Immutable audit logs, hash chains, archival
 ├── reporting/        # Dashboard analytics, export jobs (CSV/PDF), variance reports
-├── outbox/           # Reliable event publication via transactional outbox
 ├── shared/           # Shared kernel: cross-context domain types + port abstractions
 └── testutil/         # Shared test helpers (Ptr[T], deterministic time)
 ```
@@ -606,5 +605,5 @@ migration window.
 ---
 
 **Last Updated**: April 2026
-**Go Version**: module `go 1.26.0`
+**Go Version**: module `go 1.26.1`
 **Migrations**: 32 (000001 through 000032)

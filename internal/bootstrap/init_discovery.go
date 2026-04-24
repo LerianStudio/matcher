@@ -330,7 +330,7 @@ func wireBridgeHeartbeatReader(
 		return
 	}
 
-	reader, err := resolveBridgeHeartbeat(ctx, provider)
+	reader, _, err := resolveBridgeHeartbeat(ctx, provider)
 	if err != nil {
 		logger.Log(ctx, libLog.LevelWarn,
 			fmt.Sprintf("bridge heartbeat reader not wired: %v", err))
@@ -338,6 +338,9 @@ func wireBridgeHeartbeatReader(
 		return
 	}
 
+	// Lease ownership: held for the process lifetime. The discovery query
+	// use case lives as long as the bootstrap does, so the reader's Redis
+	// client is needed for the entire process — no explicit Release site.
 	staleAfter := computeBridgeHeartbeatStaleAfter(cfg, configGetter)
 	queryUseCase.WithBridgeHeartbeatReader(reader, staleAfter)
 

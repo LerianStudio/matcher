@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 // Package command provides exception command use cases (resolution, disputes,
 // dispatch, comments, callbacks). The merged ExceptionUseCase groups all
 // command operations on the exception bounded context behind a single entry
@@ -20,6 +24,7 @@ import (
 
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
@@ -268,7 +273,7 @@ func (uc *ExceptionUseCase) revertExceptionStatus(
 	span := trace.SpanFromContext(ctx)
 
 	if abortErr := exception.AbortResolution(ctx, previousStatus); abortErr != nil {
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to abort resolution: %v", abortErr))
+		libLog.SafeError(logger, ctx, "failed to abort resolution", abortErr, runtime.IsProductionMode())
 
 		libOpentelemetry.HandleSpanError(
 			span,
@@ -286,7 +291,7 @@ func (uc *ExceptionUseCase) revertExceptionStatus(
 	}
 
 	if _, updateErr := uc.exceptionRepo.Update(ctx, exception); updateErr != nil {
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to revert exception status: %v", updateErr))
+		libLog.SafeError(logger, ctx, "failed to revert exception status", updateErr, runtime.IsProductionMode())
 
 		libOpentelemetry.HandleSpanError(
 			span,

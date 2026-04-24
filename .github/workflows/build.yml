@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/build.yml@v1.26.3
+    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/build.yml@3197048995e33cfe9880a4c2c76c20f4cf9bd3ef # v1.26.3
     with:
       runner_type: "blacksmith-4vcpu-ubuntu-2404"
       enable_dockerhub: true
@@ -28,7 +28,7 @@ jobs:
       needs.build.result == 'success' &&
       (contains(github.ref, '-beta') || contains(github.ref, '-rc')) &&
       needs.build.outputs.has_builds == 'true'
-    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/gitops-update.yml@v1.26.3
+    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/gitops-update.yml@3197048995e33cfe9880a4c2c76c20f4cf9bd3ef # v1.26.3
     with:
       runner_type: "firmino-lxc-runners"
       artifact_pattern: "gitops-tags-matcher"

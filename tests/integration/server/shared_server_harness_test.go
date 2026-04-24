@@ -13,7 +13,7 @@ var (
 	_ = (*SharedServerHarness)(nil)
 )
 
-func TestSharedServerHarness_TypesExist(t *testing.T) {
+func TestIntegration_Server_SharedServerHarness_TypesExist(t *testing.T) {
 	t.Parallel()
 
 	t.Run("SharedServerHarness embeds SharedTestHarness", func(t *testing.T) {
@@ -30,7 +30,7 @@ func TestSharedServerHarness_TypesExist(t *testing.T) {
 	})
 }
 
-func TestSharedServerHarness_CompatibilityMethods(t *testing.T) {
+func TestIntegration_Server_SharedServerHarness_CompatibilityMethods(t *testing.T) {
 	t.Parallel()
 
 	t.Run("ToLegacyServerHarness method exists", func(t *testing.T) {

@@ -18,7 +18,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestTransactionRepository_CreateAndFindByID(t *testing.T) {
+func TestIntegration_Ingestion_TransactionRepository_CreateAndFindByID(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := txRepo.NewRepository(h.Provider())
 		jRepo := jobRepo.NewRepository(h.Provider())
@@ -64,7 +64,7 @@ func TestTransactionRepository_CreateAndFindByID(t *testing.T) {
 	})
 }
 
-func TestTransactionRepository_ListUnmatchedByContext(t *testing.T) {
+func TestIntegration_Ingestion_TransactionRepository_ListUnmatchedByContext(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := txRepo.NewRepository(h.Provider())
 		jRepo := jobRepo.NewRepository(h.Provider())
@@ -167,7 +167,7 @@ func TestTransactionRepository_ListUnmatchedByContext(t *testing.T) {
 	})
 }
 
-func TestTransactionRepository_MarkMatched(t *testing.T) {
+func TestIntegration_Ingestion_TransactionRepository_MarkMatched(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := txRepo.NewRepository(h.Provider())
 		jRepo := jobRepo.NewRepository(h.Provider())
@@ -233,7 +233,7 @@ func TestTransactionRepository_MarkMatched(t *testing.T) {
 	})
 }
 
-func TestTransactionRepository_MarkPendingReview(t *testing.T) {
+func TestIntegration_Ingestion_TransactionRepository_MarkPendingReview(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := txRepo.NewRepository(h.Provider())
 		jRepo := jobRepo.NewRepository(h.Provider())

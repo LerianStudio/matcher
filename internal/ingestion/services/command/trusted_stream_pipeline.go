@@ -13,6 +13,7 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
+	ingestionMetrics "github.com/LerianStudio/matcher/internal/ingestion/services/metrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -49,6 +50,7 @@ func (uc *UseCase) runTrustedStreamPipeline(
 	state, err := uc.prepareIngestion(ctx, startInput, span)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "trusted stream prepare failed", err)
+		ingestionMetrics.RecordParsingError(ctx, input.Format, ingestionMetrics.ErrorTypePipeline, 1)
 
 		return nil, 0, fmt.Errorf("prepare trusted stream ingestion: %w", err)
 	}
@@ -57,6 +59,11 @@ func (uc *UseCase) runTrustedStreamPipeline(
 
 	if processErr := uc.processIngestionFile(ctx, state); processErr != nil {
 		libOpentelemetry.HandleSpanError(span, "trusted stream processing failed", processErr)
+		// The pipeline failed during parse/normalize. We classify as "parse"
+		// because that's the dominant failure mode here; downstream dedup
+		// and persistence failures surface as ErrorTypePipeline on the two
+		// other branches in this function.
+		ingestionMetrics.RecordParsingError(ctx, input.Format, ingestionMetrics.ErrorTypeParse, 1)
 
 		return nil, 0, uc.failJob(ctx, state.job, processErr, state.markedHashes)
 	}
@@ -66,6 +73,7 @@ func (uc *UseCase) runTrustedStreamPipeline(
 	completedJob, completeErr := uc.completeIngestionJob(ctx, state, span)
 	if completeErr != nil {
 		libOpentelemetry.HandleSpanError(span, "trusted stream completion failed", completeErr)
+		ingestionMetrics.RecordParsingError(ctx, input.Format, ingestionMetrics.ErrorTypePipeline, 1)
 
 		return nil, 0, fmt.Errorf("complete trusted stream ingestion: %w", completeErr)
 	}
@@ -73,6 +81,15 @@ func (uc *UseCase) runTrustedStreamPipeline(
 	// Clear dedup keys on success so legitimate re-deliveries from the bridge
 	// are not silently suppressed beyond the configured TTL window.
 	uc.clearDedupKeys(ctx, state)
+
+	// Success-path business metrics. Emitted after the pipeline commits so
+	// partial failures don't pollute the rows_processed counter.
+	ingestionMetrics.RecordRowsProcessed(ctx, input.Format, state.totalInserted)
+	ingestionMetrics.RecordDedupRate(ctx, input.Format, state.totalRows, state.totalInserted)
+
+	if state.totalErrors > 0 {
+		ingestionMetrics.RecordParsingError(ctx, input.Format, ingestionMetrics.ErrorTypeValidate, state.totalErrors)
+	}
 
 	return completedJob, state.totalInserted, nil
 }

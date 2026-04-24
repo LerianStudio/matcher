@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/LerianStudio/matcher/tests/e2e/client"
+	"github.com/LerianStudio/matcher/tests/client"
 )
 
 // Client wraps all API clients for e2e tests.

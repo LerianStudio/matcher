@@ -82,7 +82,7 @@ func mustParsePort(t *testing.T, s string) network.Port {
 	return p
 }
 
-func TestRabbitMQContainerRequest(t *testing.T) {
+func TestIntegration_Flow_RabbitMQContainerRequest(t *testing.T) {
 	t.Parallel()
 
 	req := rabbitMQContainerRequest()
@@ -93,7 +93,7 @@ func TestRabbitMQContainerRequest(t *testing.T) {
 	assert.NotNil(t, req.WaitingFor)
 }
 
-func TestContainerHostWithRetry_NilContainer(t *testing.T) {
+func TestIntegration_Flow_ContainerHostWithRetry_NilContainer(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -104,7 +104,7 @@ func TestContainerHostWithRetry_NilContainer(t *testing.T) {
 	assert.Contains(t, err.Error(), "container is nil")
 }
 
-func TestContainerHostWithRetry_TypedNilContainer(t *testing.T) {
+func TestIntegration_Flow_ContainerHostWithRetry_TypedNilContainer(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -117,7 +117,7 @@ func TestContainerHostWithRetry_TypedNilContainer(t *testing.T) {
 	assert.Contains(t, err.Error(), "container is nil")
 }
 
-func TestMappedPortWithRetry_NilContainer(t *testing.T) {
+func TestIntegration_Flow_MappedPortWithRetry_NilContainer(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -128,7 +128,7 @@ func TestMappedPortWithRetry_NilContainer(t *testing.T) {
 	assert.Contains(t, err.Error(), "container is nil")
 }
 
-func TestStartRabbitMQContainer_TypedNilContainerRejected(t *testing.T) {
+func TestIntegration_Flow_StartRabbitMQContainer_TypedNilContainerRejected(t *testing.T) {
 	// Not parallel: overrides package-level container factory seam.
 
 	originalFactory := rabbitMQContainerFactory
@@ -146,7 +146,7 @@ func TestStartRabbitMQContainer_TypedNilContainerRejected(t *testing.T) {
 	assert.Contains(t, err.Error(), "nil container")
 }
 
-func TestContainerHostWithRetry_RetriesUntilSuccess(t *testing.T) {
+func TestIntegration_Flow_ContainerHostWithRetry_RetriesUntilSuccess(t *testing.T) {
 	// Not parallel: overrides package-level retry wait seam.
 
 	originalWait := rabbitMQRetryWait
@@ -175,7 +175,7 @@ func TestContainerHostWithRetry_RetriesUntilSuccess(t *testing.T) {
 	assert.Equal(t, []time.Duration{rabbitMQRetryDelay, rabbitMQRetryDelay}, waits)
 }
 
-func TestContainerHostWithRetry_EmptyHostExhaustsRetries(t *testing.T) {
+func TestIntegration_Flow_ContainerHostWithRetry_EmptyHostExhaustsRetries(t *testing.T) {
 	// Not parallel: overrides package-level retry wait seam.
 
 	originalWait := rabbitMQRetryWait
@@ -192,7 +192,7 @@ func TestContainerHostWithRetry_EmptyHostExhaustsRetries(t *testing.T) {
 	assert.Equal(t, rabbitMQRetryCount, fake.hostCalls)
 }
 
-func TestMappedPortWithRetry_EmptyPortExhaustsRetries(t *testing.T) {
+func TestIntegration_Flow_MappedPortWithRetry_EmptyPortExhaustsRetries(t *testing.T) {
 	// Not parallel: overrides package-level retry wait seam.
 
 	originalWait := rabbitMQRetryWait
@@ -210,7 +210,7 @@ func TestMappedPortWithRetry_EmptyPortExhaustsRetries(t *testing.T) {
 	assert.Contains(t, err.Error(), "empty mapped port")
 }
 
-func TestResolveMappedPort_FallsBackToRawPortLookup(t *testing.T) {
+func TestIntegration_Flow_ResolveMappedPort_FallsBackToRawPortLookup(t *testing.T) {
 	t.Parallel()
 
 	fake := &fakeRabbitMQStartupContainer{
@@ -230,7 +230,7 @@ func TestResolveMappedPort_FallsBackToRawPortLookup(t *testing.T) {
 	assert.Equal(t, 1, fake.mappedCalls["5672"])
 }
 
-func TestResolveMappedPort_ReturnsErrorWhenInspectDetailsAreNil(t *testing.T) {
+func TestIntegration_Flow_ResolveMappedPort_ReturnsErrorWhenInspectDetailsAreNil(t *testing.T) {
 	t.Parallel()
 
 	fake := &fakeRabbitMQStartupContainer{
@@ -248,7 +248,7 @@ func TestResolveMappedPort_ReturnsErrorWhenInspectDetailsAreNil(t *testing.T) {
 	assert.Contains(t, err.Error(), "inspect returned nil container details")
 }
 
-func TestResolveMappedPort_FallsBackToInspectBindings(t *testing.T) {
+func TestIntegration_Flow_ResolveMappedPort_FallsBackToInspectBindings(t *testing.T) {
 	t.Parallel()
 
 	fake := &fakeRabbitMQStartupContainer{
@@ -270,7 +270,7 @@ func TestResolveMappedPort_FallsBackToInspectBindings(t *testing.T) {
 	assert.Equal(t, "5673", port)
 }
 
-func TestResolveMappedPort_FallsBackToHostNetworkMode(t *testing.T) {
+func TestIntegration_Flow_ResolveMappedPort_FallsBackToHostNetworkMode(t *testing.T) {
 	t.Parallel()
 
 	fake := &fakeRabbitMQStartupContainer{
@@ -288,7 +288,7 @@ func TestResolveMappedPort_FallsBackToHostNetworkMode(t *testing.T) {
 	assert.Equal(t, "5672", port)
 }
 
-func TestStartRabbitMQContainer_RetriesUntilSuccess(t *testing.T) {
+func TestIntegration_Flow_StartRabbitMQContainer_RetriesUntilSuccess(t *testing.T) {
 	// Not parallel: overrides package-level container factory and retry wait seams.
 
 	originalFactory := rabbitMQContainerFactory
@@ -317,7 +317,7 @@ func TestStartRabbitMQContainer_RetriesUntilSuccess(t *testing.T) {
 	assert.Equal(t, []time.Duration{2 * time.Second, 4 * time.Second}, waits)
 }
 
-func TestStartRabbitMQContainer_FailsAfterMaxAttempts(t *testing.T) {
+func TestIntegration_Flow_StartRabbitMQContainer_FailsAfterMaxAttempts(t *testing.T) {
 	// Not parallel: overrides package-level container factory and retry wait seams.
 
 	originalFactory := rabbitMQContainerFactory
@@ -339,7 +339,7 @@ func TestStartRabbitMQContainer_FailsAfterMaxAttempts(t *testing.T) {
 	assert.Equal(t, rabbitMQStartAttempts, callCount)
 }
 
-func TestStartRabbitMQContainer_ReportsCleanupFailure(t *testing.T) {
+func TestIntegration_Flow_StartRabbitMQContainer_ReportsCleanupFailure(t *testing.T) {
 	// Not parallel: overrides package-level container factory seam.
 
 	originalFactory := rabbitMQContainerFactory
@@ -354,7 +354,7 @@ func TestStartRabbitMQContainer_ReportsCleanupFailure(t *testing.T) {
 	assert.Contains(t, err.Error(), "terminate failed")
 }
 
-func TestStartRabbitMQContainer_AbortsWhenRetryWaitIsCancelled(t *testing.T) {
+func TestIntegration_Flow_StartRabbitMQContainer_AbortsWhenRetryWaitIsCancelled(t *testing.T) {
 	// Not parallel: overrides package-level container factory and retry wait seams.
 
 	originalFactory := rabbitMQContainerFactory
@@ -374,7 +374,7 @@ func TestStartRabbitMQContainer_AbortsWhenRetryWaitIsCancelled(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
-func TestContainerHostWithRetry_AbortsWhenRetryWaitIsCancelled(t *testing.T) {
+func TestIntegration_Flow_ContainerHostWithRetry_AbortsWhenRetryWaitIsCancelled(t *testing.T) {
 	// Not parallel: overrides package-level retry wait seam.
 	originalWait := rabbitMQRetryWait
 	rabbitMQRetryWait = func(_ context.Context, _ time.Duration) error { return context.Canceled }
@@ -390,7 +390,7 @@ func TestContainerHostWithRetry_AbortsWhenRetryWaitIsCancelled(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
-func TestMappedPortWithRetry_AbortsWhenRetryWaitIsCancelled(t *testing.T) {
+func TestIntegration_Flow_MappedPortWithRetry_AbortsWhenRetryWaitIsCancelled(t *testing.T) {
 	// Not parallel: overrides package-level retry wait seam.
 	originalWait := rabbitMQRetryWait
 	rabbitMQRetryWait = func(_ context.Context, _ time.Duration) error { return context.Canceled }
@@ -408,14 +408,14 @@ func TestMappedPortWithRetry_AbortsWhenRetryWaitIsCancelled(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
-func TestWaitWithContext_ImmediateReturn(t *testing.T) {
+func TestIntegration_Flow_WaitWithContext_ImmediateReturn(t *testing.T) {
 	t.Parallel()
 
 	err := waitWithContext(context.Background(), 1*time.Millisecond)
 	assert.NoError(t, err)
 }
 
-func TestWaitWithContext_CancelledContext(t *testing.T) {
+func TestIntegration_Flow_WaitWithContext_CancelledContext(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())

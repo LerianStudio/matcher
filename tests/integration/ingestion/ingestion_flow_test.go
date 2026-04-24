@@ -18,7 +18,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestIngestionFlow_CompleteJobWithTransactions(t *testing.T) {
+func TestIntegration_Ingestion_IngestionFlow_CompleteJobWithTransactions(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		jRepo := jobRepo.NewRepository(h.Provider())
 		tRepo := txRepo.NewRepository(h.Provider())
@@ -108,7 +108,7 @@ func TestIngestionFlow_CompleteJobWithTransactions(t *testing.T) {
 	})
 }
 
-func TestIngestionFlow_JobWithPartialFailures(t *testing.T) {
+func TestIntegration_Ingestion_IngestionFlow_JobWithPartialFailures(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		jRepo := jobRepo.NewRepository(h.Provider())
 		tRepo := txRepo.NewRepository(h.Provider())
@@ -188,7 +188,7 @@ func TestIngestionFlow_JobWithPartialFailures(t *testing.T) {
 	})
 }
 
-func TestIngestionFlow_JobFailed(t *testing.T) {
+func TestIntegration_Ingestion_IngestionFlow_JobFailed(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		jRepo := jobRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -216,7 +216,7 @@ func TestIngestionFlow_JobFailed(t *testing.T) {
 	})
 }
 
-func TestIngestionFlow_MultipleJobsSameContext(t *testing.T) {
+func TestIntegration_Ingestion_IngestionFlow_MultipleJobsSameContext(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		jRepo := jobRepo.NewRepository(h.Provider())
 		tRepo := txRepo.NewRepository(h.Provider())
@@ -294,7 +294,7 @@ func TestIngestionFlow_MultipleJobsSameContext(t *testing.T) {
 	})
 }
 
-func TestIngestionFlow_TransactionDateFiltering(t *testing.T) {
+func TestIntegration_Ingestion_IngestionFlow_TransactionDateFiltering(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		jRepo := jobRepo.NewRepository(h.Provider())
 		tRepo := txRepo.NewRepository(h.Provider())

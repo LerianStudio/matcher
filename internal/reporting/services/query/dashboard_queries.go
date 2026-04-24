@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 // Package query provides read operations for reporting.
 package query
 
@@ -13,6 +17,7 @@ import (
 	"github.com/LerianStudio/lib-commons/v5/commons/errgroup"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
@@ -67,7 +72,7 @@ func (uc *DashboardUseCase) GetVolumeStats(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get volume stats", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get volume stats: %v", err))
+		libLog.SafeError(logger, ctx, "failed to get volume stats", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("getting volume stats: %w", err)
 	}
@@ -100,7 +105,7 @@ func (uc *DashboardUseCase) GetSLAStats(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get sla stats", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get sla stats: %v", err))
+		libLog.SafeError(logger, ctx, "failed to get sla stats", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("getting sla stats: %w", err)
 	}
@@ -126,7 +131,7 @@ func (uc *DashboardUseCase) GetMatchRateStats(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get volume for match rate", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get volume for match rate: %v", err))
+		libLog.SafeError(logger, ctx, "failed to get volume for match rate", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("getting volume for match rate: %w", err)
 	}
@@ -155,7 +160,7 @@ func (uc *DashboardUseCase) GetDashboardAggregates(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get volume stats", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get volume stats: %v", err))
+		libLog.SafeError(logger, ctx, "failed to get volume stats", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("getting volume stats: %w", err)
 	}
@@ -164,7 +169,7 @@ func (uc *DashboardUseCase) GetDashboardAggregates(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get sla stats", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get sla stats: %v", err))
+		libLog.SafeError(logger, ctx, "failed to get sla stats", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("getting sla stats: %w", err)
 	}
@@ -201,7 +206,7 @@ func (uc *DashboardUseCase) GetSourceBreakdown(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get source breakdown", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get source breakdown: %v", err))
+		libLog.SafeError(logger, ctx, "failed to get source breakdown", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("getting source breakdown: %w", err)
 	}
@@ -225,7 +230,7 @@ func (uc *DashboardUseCase) GetCashImpactSummary(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get cash impact summary", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get cash impact summary: %v", err))
+		libLog.SafeError(logger, ctx, "failed to get cash impact summary", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("getting cash impact summary: %w", err)
 	}
@@ -319,7 +324,7 @@ func (uc *DashboardUseCase) GetMatcherDashboardMetrics(
 func reportQueryError(ctx context.Context, span trace.Span, logger libLog.Logger, msg string, err error) error {
 	libOpentelemetry.HandleSpanError(span, "failed to get "+msg, err)
 
-	logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get %s: %v", msg, err))
+	libLog.SafeError(logger, ctx, "failed to get "+msg, err, runtime.IsProductionMode())
 
 	return fmt.Errorf("getting %s: %w", msg, err)
 }

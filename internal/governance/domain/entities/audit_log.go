@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 // Package entities defines governance domain types and validation logic.
 // The canonical AuditLog type definition lives in the shared kernel (internal/shared/domain)
 // and is re-exported here as a type alias for backward compatibility.
