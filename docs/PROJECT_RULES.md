@@ -324,6 +324,20 @@ Split into `handlers_{feature}.go` when a context has 3+ distinct feature areas 
 - Test runner: `gotestsum` if available, else `go test`.
 - Docker Compose command auto-detected (`docker compose` vs `docker-compose`).
 
+### Zero-config convention
+
+Matcher does **not** ship a `.env.example` file, and `docker-compose.yml` does **not** use `env_file:`. Instead, `config/.config-map.example` is the single source-of-truth reference for environment variables.
+
+Rationale:
+
+1. **Bootstrap provides sensible defaults for every key** (`internal/bootstrap/config_defaults.go`), so a bare `docker compose up` works without any prior env setup.
+2. **A single reference file is simpler than keeping `.env.example` + `env_file:` + bootstrap defaults in sync.** Three parallel lists of env vars drift apart; one canonical reference does not.
+3. **Operators who need overrides set env vars directly** — via their deployment pipeline, Helm values, or local shell. They do not need a template file; they read `config/.config-map.example` as documentation.
+
+**Do not create `.env.example`.** When adding a new bootstrap-only configuration key, update `config/.config-map.example` instead.
+
+This deviates from Ring's default `.env.example` + `env_file:` pattern, but is justified by the zero-config-defaults stance. See also `docker-compose.yml` (no `env_file:` directive) and `internal/bootstrap/config_defaults.go` (the single source of defaults).
+
 ## 17. Linting
 
 ### Standard Linters (golangci-lint)
