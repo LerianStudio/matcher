@@ -178,7 +178,10 @@ services:
       FETCHER_ALLOW_PRIVATE_IPS: "${FETCHER_ALLOW_PRIVATE_IPS:-false}"
       FETCHER_DISCOVERY_INTERVAL_SEC: "${FETCHER_DISCOVERY_INTERVAL_SEC:-3600}"
       # Systemplane
-      SYSTEMPLANE_SECRET_MASTER_KEY: ${SYSTEMPLANE_SECRET_MASTER_KEY:-+PnwgNy8bL3HGT1rOXp47PqyGcPywXH/epgmSVwPkL0=}
+      # Fail-fast: docker compose up errors out cleanly if the key is unset
+      # rather than silently starting the app with an insecure hardcoded default.
+      # See config/.config-map.example for generation and rotation guidance.
+      SYSTEMPLANE_SECRET_MASTER_KEY: ${SYSTEMPLANE_SECRET_MASTER_KEY:?SYSTEMPLANE_SECRET_MASTER_KEY is required (see config/.config-map.example)}
       # Build settings
       CGO_ENABLED: "0"
       GOFLAGS: "-mod=mod"
