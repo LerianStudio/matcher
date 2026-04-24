@@ -19,6 +19,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
+	sharedObservability "github.com/LerianStudio/matcher/internal/shared/observability"
 )
 
 // RunMatch executes the matching engine for a given context.
@@ -47,7 +48,7 @@ func (uc *UseCase) RunMatch(
 			ContextID: in.ContextID.String(),
 			Mode:      in.Mode.String(),
 		},
-		nil,
+		sharedObservability.NewMatcherRedactor(),
 	)
 
 	ctx, cancelRun := context.WithCancel(ctx)
@@ -288,7 +289,7 @@ func (uc *UseCase) prepareMatchRun(
 				CandidatesLeft:  len(leftCandidates),
 				CandidatesRight: len(rightCandidates),
 			},
-			nil,
+			sharedObservability.NewMatcherRedactor(),
 		)
 	}
 

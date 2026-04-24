@@ -17,6 +17,7 @@ import (
 
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedObservability "github.com/LerianStudio/matcher/internal/shared/observability"
 )
 
 // CreateAdjustmentInput contains the input parameters for creating an adjustment.
@@ -147,7 +148,7 @@ func (uc *UseCase) CreateAdjustment(
 
 	defer span.End()
 
-	_ = libOpentelemetry.SetSpanAttributesFromValue(span, "matcher", in, nil)
+	_ = libOpentelemetry.SetSpanAttributesFromValue(span, "matcher", in, sharedObservability.NewMatcherRedactor())
 
 	adjustment, err := uc.prepareAdjustment(ctx, in)
 	if err != nil {

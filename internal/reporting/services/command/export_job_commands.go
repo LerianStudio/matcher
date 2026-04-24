@@ -15,6 +15,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
+	sharedObservability "github.com/LerianStudio/matcher/internal/shared/observability"
 )
 
 const exportJobResourcePathFmt = "/v1/export-jobs/%s"
@@ -78,7 +79,7 @@ func (uc *ExportJobUseCase) CreateExportJob(
 		ContextID:  input.ContextID.String(),
 		ReportType: string(input.ReportType),
 		Format:     string(input.Format),
-	}, nil)
+	}, sharedObservability.NewMatcherRedactor())
 
 	job, err := entities.NewExportJob(
 		ctx,
@@ -124,7 +125,7 @@ func (uc *ExportJobUseCase) CancelExportJob(ctx context.Context, id uuid.UUID) e
 		ID string `json:"id"`
 	}{
 		ID: id.String(),
-	}, nil)
+	}, sharedObservability.NewMatcherRedactor())
 
 	job, err := uc.repo.GetByID(ctx, id)
 	if err != nil {

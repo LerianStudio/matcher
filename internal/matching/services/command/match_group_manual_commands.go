@@ -15,6 +15,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedObservability "github.com/LerianStudio/matcher/internal/shared/observability"
 )
 
 // TODO(telemetry): matching/adapters/http/handlers.go — logSpanError uses HandleSpanError for
@@ -66,7 +67,7 @@ func (uc *UseCase) ManualMatch(
 	ctx, span := tracer.Start(ctx, "command.matching.manual_match")
 	defer span.End()
 
-	_ = libOpentelemetry.SetSpanAttributesFromValue(span, "matcher", in, nil)
+	_ = libOpentelemetry.SetSpanAttributesFromValue(span, "matcher", in, sharedObservability.NewMatcherRedactor())
 
 	ctxInfo, err := uc.contextProvider.FindByID(ctx, in.TenantID, in.ContextID)
 	if err != nil {

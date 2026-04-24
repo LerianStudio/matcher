@@ -23,6 +23,7 @@ import (
 	ingestionRepositories "github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedObservability "github.com/LerianStudio/matcher/internal/shared/observability"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -351,7 +352,7 @@ func (uc *UseCase) annotateIngestionSpan(
 			ContextID: contextID.String(),
 			SourceID:  sourceID.String(),
 		},
-		nil,
+		sharedObservability.NewMatcherRedactor(),
 	)
 }
 
@@ -375,7 +376,7 @@ func (uc *UseCase) prepareIngestion(
 			}{
 				FileFormat: format,
 			},
-			nil,
+			sharedObservability.NewMatcherRedactor(),
 		)
 	}
 
@@ -634,7 +635,7 @@ func (uc *UseCase) completeIngestionJob(
 				RecordsValid:   state.totalRows - state.totalErrors,
 				RecordsInvalid: state.totalErrors,
 			},
-			nil,
+			sharedObservability.NewMatcherRedactor(),
 		)
 	}
 
@@ -793,7 +794,7 @@ func (uc *UseCase) IgnoreTransaction(
 				ContextID:     input.ContextID.String(),
 				Reason:        input.Reason,
 			},
-			nil,
+			sharedObservability.NewMatcherRedactor(),
 		)
 	}
 

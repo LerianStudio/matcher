@@ -15,6 +15,7 @@ import (
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
+	sharedObservability "github.com/LerianStudio/matcher/internal/shared/observability"
 )
 
 func (uc *UseCase) executeMatchRules(
@@ -147,7 +148,7 @@ func (uc *UseCase) executeMatchRules(
 				MatchedCount:   matchedCount,
 				UnmatchedCount: unmatchedCount,
 			},
-			nil,
+			sharedObservability.NewMatcherRedactor(),
 		)
 	}
 

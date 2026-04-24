@@ -15,6 +15,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	ingestionRepositories "github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedObservability "github.com/LerianStudio/matcher/internal/shared/observability"
 )
 
 // Query use case errors.
@@ -64,7 +65,7 @@ func (uc *UseCase) GetJob(ctx context.Context, jobID uuid.UUID) (*entities.Inges
 
 	_ = libOpentelemetry.SetSpanAttributesFromValue(span, "query", struct {
 		JobID string `json:"jobId"`
-	}{JobID: jobID.String()}, nil)
+	}{JobID: jobID.String()}, sharedObservability.NewMatcherRedactor())
 
 	job, err := uc.jobRepo.FindByID(ctx, jobID)
 	if err != nil {
@@ -98,7 +99,7 @@ func (uc *UseCase) GetJobByContext(
 	_ = libOpentelemetry.SetSpanAttributesFromValue(span, "query", struct {
 		ContextID string `json:"contextId"`
 		JobID     string `json:"jobId"`
-	}{ContextID: contextID.String(), JobID: jobID.String()}, nil)
+	}{ContextID: contextID.String(), JobID: jobID.String()}, sharedObservability.NewMatcherRedactor())
 
 	job, err := uc.jobRepo.FindByID(ctx, jobID)
 	if err != nil {
@@ -137,7 +138,7 @@ func (uc *UseCase) GetTransaction(
 
 	_ = libOpentelemetry.SetSpanAttributesFromValue(span, "query", struct {
 		TransactionID string `json:"transactionId"`
-	}{TransactionID: transactionID.String()}, nil)
+	}{TransactionID: transactionID.String()}, sharedObservability.NewMatcherRedactor())
 
 	tx, err := uc.transactionRepo.FindByID(ctx, transactionID)
 	if err != nil {
@@ -173,7 +174,7 @@ func (uc *UseCase) ListTransactionsByJob(
 
 	_ = libOpentelemetry.SetSpanAttributesFromValue(span, "query", struct {
 		JobID string `json:"jobId"`
-	}{JobID: jobID.String()}, nil)
+	}{JobID: jobID.String()}, sharedObservability.NewMatcherRedactor())
 
 	txs, pagination, err := uc.transactionRepo.FindByJobID(ctx, jobID, filter)
 	if err != nil {

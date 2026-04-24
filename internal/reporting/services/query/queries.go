@@ -15,6 +15,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query/exports"
+	sharedObservability "github.com/LerianStudio/matcher/internal/shared/observability"
 )
 
 // ErrNilReportRepository is returned when a nil repository is provided.
@@ -85,7 +86,7 @@ func (uc *UseCase) ExportMatchedCSV(
 				ContextID:    filter.ContextID.String(),
 				ExportFormat: "CSV",
 			},
-			nil,
+			sharedObservability.NewMatcherRedactor(),
 		)
 	}
 
@@ -116,7 +117,7 @@ func (uc *UseCase) ExportMatchedCSV(
 			}{
 				RecordsCount: len(items),
 			},
-			nil,
+			sharedObservability.NewMatcherRedactor(),
 		)
 	}
 
@@ -144,7 +145,7 @@ func (uc *UseCase) ExportUnmatchedCSV(
 				ContextID:    filter.ContextID.String(),
 				ExportFormat: "CSV",
 			},
-			nil,
+			sharedObservability.NewMatcherRedactor(),
 		)
 	}
 
@@ -179,7 +180,7 @@ func (uc *UseCase) ExportUnmatchedCSV(
 			}{
 				RecordsCount: len(items),
 			},
-			nil,
+			sharedObservability.NewMatcherRedactor(),
 		)
 	}
 
@@ -238,7 +239,7 @@ func (uc *UseCase) ExportMatchedPDF(
 				ContextID:    filter.ContextID.String(),
 				ExportFormat: "PDF",
 			},
-			nil,
+			sharedObservability.NewMatcherRedactor(),
 		)
 	}
 
@@ -269,7 +270,7 @@ func (uc *UseCase) ExportMatchedPDF(
 			}{
 				RecordsCount: len(items),
 			},
-			nil,
+			sharedObservability.NewMatcherRedactor(),
 		)
 	}
 
@@ -297,7 +298,7 @@ func (uc *UseCase) ExportUnmatchedPDF(
 				ContextID:    filter.ContextID.String(),
 				ExportFormat: "PDF",
 			},
-			nil,
+			sharedObservability.NewMatcherRedactor(),
 		)
 	}
 
@@ -332,7 +333,7 @@ func (uc *UseCase) ExportUnmatchedPDF(
 			}{
 				RecordsCount: len(items),
 			},
-			nil,
+			sharedObservability.NewMatcherRedactor(),
 		)
 	}
 
@@ -391,7 +392,7 @@ func (uc *UseCase) ExportVarianceCSV(
 				ContextID:    filter.ContextID.String(),
 				ExportFormat: "CSV",
 			},
-			nil,
+			sharedObservability.NewMatcherRedactor(),
 		)
 	}
 
@@ -422,7 +423,7 @@ func (uc *UseCase) ExportVarianceCSV(
 			}{
 				RecordsCount: len(rows),
 			},
-			nil,
+			sharedObservability.NewMatcherRedactor(),
 		)
 	}
 
@@ -450,7 +451,7 @@ func (uc *UseCase) ExportVariancePDF(
 				ContextID:    filter.ContextID.String(),
 				ExportFormat: "PDF",
 			},
-			nil,
+			sharedObservability.NewMatcherRedactor(),
 		)
 	}
 
@@ -481,7 +482,7 @@ func (uc *UseCase) ExportVariancePDF(
 			}{
 				RecordsCount: len(rows),
 			},
-			nil,
+			sharedObservability.NewMatcherRedactor(),
 		)
 	}
 
@@ -517,7 +518,7 @@ func (uc *UseCase) StreamMatchedCSV(
 				ExportFormat: "CSV",
 				Streaming:    true,
 			},
-			nil,
+			sharedObservability.NewMatcherRedactor(),
 		)
 	}
 
@@ -571,7 +572,7 @@ func (uc *UseCase) StreamUnmatchedCSV(
 				ExportFormat: "CSV",
 				Streaming:    true,
 			},
-			nil,
+			sharedObservability.NewMatcherRedactor(),
 		)
 	}
 
@@ -625,7 +626,7 @@ func (uc *UseCase) StreamVarianceCSV(
 				ExportFormat: "CSV",
 				Streaming:    true,
 			},
-			nil,
+			sharedObservability.NewMatcherRedactor(),
 		)
 	}
 
