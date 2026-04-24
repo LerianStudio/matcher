@@ -246,6 +246,18 @@ Build tags are the **authoritative** test type discriminator (required at top of
 
 Do NOT merge test files when consolidating source files.
 
+### `t.Parallel()` in Integration Tests
+
+Integration tests under `tests/integration/**` and `internal/**/*_integration_test.go` are permitted to call `t.Parallel()` even though Ring's default policy discourages parallel integration tests. Matcher's integration harness is safe for parallel execution because:
+
+1. `sync.Once` guards container-once-per-suite setup (see `tests/integration/shared_harness.go`).
+2. Each test gets an isolated PostgreSQL schema via tenant-scoped setup, so concurrent tests do not share table state.
+3. Redis/RabbitMQ contention is bounded by per-test key prefixes.
+
+Removing `t.Parallel()` categorically would extend CI wall-clock by ~8x with no correctness benefit.
+
+**Policy:** `t.Parallel()` IS allowed in matcher's integration tests. Unit tests MUST NOT call `t.Parallel()` (Ring default applies).
+
 ## 15. File Naming Conventions
 
 ### Postgres Adapter Files
