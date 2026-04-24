@@ -17,8 +17,16 @@ import (
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	discoveryMetrics "github.com/LerianStudio/matcher/internal/discovery/services/metrics"
+	workermetrics "github.com/LerianStudio/matcher/internal/shared/observability/workermetrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
+
+// extractionPollerName is the stable label value emitted on matcher.worker.*
+// metrics from this poller. The extraction poller is not a ticker-based
+// background worker — it spawns a per-extraction goroutine that polls to
+// terminal state. A "cycle" here means "one PollUntilComplete call ran to
+// its natural end" (terminal state, timeout, or context cancellation).
+const extractionPollerName = "extraction_poller"
 
 // loggerFromContext extracts a logger from context, falling back to the provided default.
 func loggerFromContext(ctx context.Context, fallback libLog.Logger) libLog.Logger {
@@ -57,6 +65,7 @@ type ExtractionPoller struct {
 	extractionRepo repositories.ExtractionRepository
 	logger         libLog.Logger
 	cfg            ExtractionPollerConfig
+	metrics        *workermetrics.Recorder
 }
 
 // NewExtractionPoller creates a new extraction poller.
@@ -91,6 +100,7 @@ func NewExtractionPoller(
 		extractionRepo: extractionRepo,
 		logger:         logger,
 		cfg:            cfg,
+		metrics:        workermetrics.NewRecorder(extractionPollerName),
 	}, nil
 }
 
@@ -136,6 +146,44 @@ func (ep *ExtractionPoller) doPoll(
 	onComplete func(ctx context.Context, resultPath string) error,
 	onFailed func(ctx context.Context, errMsg string),
 ) {
+	// The extraction poller's "cycle" is one complete PollUntilComplete call
+	// from start to terminal state (or timeout / ctx cancel). Item count is
+	// therefore 1 per cycle; success vs failure drops on which of the two
+	// callbacks fires first. We wrap the original callbacks in a small
+	// state observer so the final outcome is recorded exactly once regardless
+	// of which exit path the state machine takes (pollOnce terminal path,
+	// handleTimeout, or ctx.Done — the last being "skipped" since the caller
+	// voluntarily cancelled before a terminal classification was reached).
+	startedAt := time.Now()
+	outcome := workermetrics.OutcomeSkipped
+
+	var processed, failed int
+
+	wrapComplete := func(cbCtx context.Context, resultPath string) error {
+		outcome = workermetrics.OutcomeSuccess
+		processed = 1
+
+		if onComplete == nil {
+			return nil
+		}
+
+		return onComplete(cbCtx, resultPath)
+	}
+
+	wrapFailed := func(cbCtx context.Context, errMsg string) {
+		outcome = workermetrics.OutcomeFailure
+		failed = 1
+
+		if onFailed != nil {
+			onFailed(cbCtx, errMsg)
+		}
+	}
+
+	defer func() {
+		ep.metrics.RecordCycle(ctx, startedAt, outcome)
+		ep.metrics.RecordItems(ctx, processed, failed)
+	}()
+
 	ticker := time.NewTicker(ep.cfg.PollInterval)
 	defer ticker.Stop()
 
@@ -146,11 +194,11 @@ func (ep *ExtractionPoller) doPoll(
 		case <-ctx.Done():
 			return
 		case <-deadline:
-			ep.handleTimeout(ctx, extractionID, onFailed)
+			ep.handleTimeout(ctx, extractionID, wrapFailed)
 
 			return
 		case <-ticker.C:
-			done := ep.pollOnce(ctx, extractionID, onComplete, onFailed)
+			done := ep.pollOnce(ctx, extractionID, wrapComplete, wrapFailed)
 			if done {
 				return
 			}
