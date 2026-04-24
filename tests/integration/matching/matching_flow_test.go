@@ -27,7 +27,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestMatchingFlow_CompleteReconciliation(t *testing.T) {
+func TestIntegration_Matching_MatchingFlow_CompleteReconciliation(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ruleRepo := matchRuleRepo.NewRepository(h.Provider())
 		jRepo := jobRepo.NewRepository(h.Provider())
@@ -225,7 +225,7 @@ func TestMatchingFlow_CompleteReconciliation(t *testing.T) {
 	})
 }
 
-func TestMatchingFlow_DryRunMode(t *testing.T) {
+func TestIntegration_Matching_MatchingFlow_DryRunMode(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ruleRepo := matchRuleRepo.NewRepository(h.Provider())
 		jRepo := jobRepo.NewRepository(h.Provider())
@@ -362,7 +362,7 @@ func TestMatchingFlow_DryRunMode(t *testing.T) {
 	})
 }
 
-func TestMatchingFlow_FailedRun(t *testing.T) {
+func TestIntegration_Matching_MatchingFlow_FailedRun(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		runRepo := matchRunRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -388,7 +388,7 @@ func TestMatchingFlow_FailedRun(t *testing.T) {
 	})
 }
 
-func TestMatchingFlow_MultipleRulesWithPriority(t *testing.T) {
+func TestIntegration_Matching_MatchingFlow_MultipleRulesWithPriority(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ruleRepo := matchRuleRepo.NewRepository(h.Provider())
 		jRepo := jobRepo.NewRepository(h.Provider())
@@ -610,7 +610,7 @@ func TestMatchingFlow_MultipleRulesWithPriority(t *testing.T) {
 	})
 }
 
-func TestMatchingFlow_ListRunsByContext(t *testing.T) {
+func TestIntegration_Matching_MatchingFlow_ListRunsByContext(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		runRepo := matchRunRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()

@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 // Package bootstrap contains startup wiring, migration orchestration, and CI-facing migration preflight helpers.
 package bootstrap
 

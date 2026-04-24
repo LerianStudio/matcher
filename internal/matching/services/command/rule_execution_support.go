@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package command
 
 import (
@@ -13,6 +17,7 @@ import (
 	matching "github.com/LerianStudio/matcher/internal/matching/domain/services"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedObservability "github.com/LerianStudio/matcher/internal/shared/observability"
 )
 
 func validateExecuteRulesInput(ctx context.Context, logger libLog.Logger, span trace.Span, contextID uuid.UUID) error {
@@ -81,7 +86,7 @@ func recordBaseFieldMetrics(
 			MissingBaseAmountCount:   missingBaseAmountTotal,
 			MissingBaseCurrencyCount: missingBaseCurrencyTotal,
 		},
-		nil,
+		sharedObservability.NewMatcherRedactor(),
 	)
 	if err != nil {
 		return missingBaseAmountTotal, missingBaseCurrencyTotal, fmt.Errorf(
@@ -183,7 +188,7 @@ func validateBaseMatchingAvailability(
 		}{
 			Unavailable: true,
 		},
-		nil,
+		sharedObservability.NewMatcherRedactor(),
 	)
 	if attrErr != nil {
 		libOpentelemetry.HandleSpanError(

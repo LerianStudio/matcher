@@ -46,7 +46,7 @@ func newPreviewQueryUC(t *testing.T, h *integration.TestHarness) *ingestionQuery
 	return queryUC
 }
 
-func TestPreviewFile_CSV_Basic(t *testing.T) {
+func TestIntegration_Ingestion_PreviewFile_CSV_Basic(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -70,7 +70,7 @@ func TestPreviewFile_CSV_Basic(t *testing.T) {
 	})
 }
 
-func TestPreviewFile_CSV_LimitsRows(t *testing.T) {
+func TestIntegration_Ingestion_PreviewFile_CSV_LimitsRows(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -88,7 +88,7 @@ func TestPreviewFile_CSV_LimitsRows(t *testing.T) {
 	})
 }
 
-func TestPreviewFile_JSON_Basic(t *testing.T) {
+func TestIntegration_Ingestion_PreviewFile_JSON_Basic(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -108,7 +108,7 @@ func TestPreviewFile_JSON_Basic(t *testing.T) {
 	})
 }
 
-func TestPreviewFile_CSV_DefaultMaxRows(t *testing.T) {
+func TestIntegration_Ingestion_PreviewFile_CSV_DefaultMaxRows(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -127,7 +127,7 @@ func TestPreviewFile_CSV_DefaultMaxRows(t *testing.T) {
 	})
 }
 
-func TestPreviewFile_CSV_MaxRowsCapped(t *testing.T) {
+func TestIntegration_Ingestion_PreviewFile_CSV_MaxRowsCapped(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -146,7 +146,7 @@ func TestPreviewFile_CSV_MaxRowsCapped(t *testing.T) {
 	})
 }
 
-func TestPreviewFile_InvalidFormat(t *testing.T) {
+func TestIntegration_Ingestion_PreviewFile_InvalidFormat(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -158,7 +158,7 @@ func TestPreviewFile_InvalidFormat(t *testing.T) {
 	})
 }
 
-func TestPreviewFile_EmptyFile(t *testing.T) {
+func TestIntegration_Ingestion_PreviewFile_EmptyFile(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -170,7 +170,7 @@ func TestPreviewFile_EmptyFile(t *testing.T) {
 	})
 }
 
-func TestPreviewFile_NilReader(t *testing.T) {
+func TestIntegration_Ingestion_PreviewFile_NilReader(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {

@@ -20,9 +20,14 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	discoveryPorts "github.com/LerianStudio/matcher/internal/discovery/ports"
+	workermetrics "github.com/LerianStudio/matcher/internal/shared/observability/workermetrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
+
+// bridgeWorkerName is the stable label value emitted on matcher.worker.*
+// metrics from this worker.
+const bridgeWorkerName = "bridge_worker"
 
 const (
 	// bridgeWorkerLockKey is the global distributed lock key for the bridge
@@ -176,6 +181,13 @@ type BridgeWorker struct {
 	cfg             BridgeWorkerConfig
 	logger          libLog.Logger
 	tracer          trace.Tracer
+	metrics         *workermetrics.Recorder
+
+	// cleanups holds release callbacks registered by bootstrap wiring so
+	// resources whose lifetime is bound to the worker (e.g. a Redis
+	// connection lease held by the heartbeat writer) are freed on Stop.
+	// Appended under mu; iterated in Stop under mu.
+	cleanups []func()
 
 	running  atomic.Bool
 	stopOnce sync.Once
@@ -222,6 +234,7 @@ func NewBridgeWorker(
 		cfg:            cfg,
 		logger:         logger,
 		tracer:         otel.Tracer("discovery.bridge_worker"),
+		metrics:        workermetrics.NewRecorder(bridgeWorkerName),
 		stopCh:         make(chan struct{}),
 		doneCh:         make(chan struct{}),
 	}, nil
@@ -265,6 +278,17 @@ func (worker *BridgeWorker) Stop() error {
 	})
 	<-worker.doneCh
 
+	worker.mu.Lock()
+	cleanups := worker.cleanups
+	worker.cleanups = nil
+	worker.mu.Unlock()
+
+	for _, cleanup := range cleanups {
+		if cleanup != nil {
+			cleanup()
+		}
+	}
+
 	worker.logger.Log(context.Background(), libLog.LevelInfo, "bridge worker stopped")
 
 	return nil
@@ -298,6 +322,24 @@ func (worker *BridgeWorker) WithHeartbeatWriter(writer discoveryPorts.BridgeHear
 	defer worker.mu.Unlock()
 
 	worker.heartbeatWriter = writer
+}
+
+// RegisterCleanup registers a callback invoked after the run loop terminates
+// during Stop. Bootstrap uses this to tie externally-owned resources (e.g. a
+// Redis connection lease held by the heartbeat writer) to the worker's
+// lifecycle so they release exactly once when the worker stops.
+//
+// Callbacks run sequentially in registration order under Stop's finalization
+// path. A nil callback is accepted and skipped.
+func (worker *BridgeWorker) RegisterCleanup(cleanup func()) {
+	if worker == nil || cleanup == nil {
+		return
+	}
+
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
+
+	worker.cleanups = append(worker.cleanups, cleanup)
 }
 
 // UpdateRuntimeConfig swaps the tick interval / batch size for the next

@@ -15,7 +15,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestMatchRuleRepository_CreateAndFindByID(t *testing.T) {
+func TestIntegration_Configuration_MatchRuleRepository_CreateAndFindByID(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := matchRuleRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -40,7 +40,7 @@ func TestMatchRuleRepository_CreateAndFindByID(t *testing.T) {
 	})
 }
 
-func TestMatchRuleRepository_FindByContextID(t *testing.T) {
+func TestIntegration_Configuration_MatchRuleRepository_FindByContextID(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := matchRuleRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -75,7 +75,7 @@ func TestMatchRuleRepository_FindByContextID(t *testing.T) {
 	})
 }
 
-func TestMatchRuleRepository_FindByContextIDAndType(t *testing.T) {
+func TestIntegration_Configuration_MatchRuleRepository_FindByContextIDAndType(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := matchRuleRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -122,7 +122,7 @@ func TestMatchRuleRepository_FindByContextIDAndType(t *testing.T) {
 	})
 }
 
-func TestMatchRuleRepository_FindByPriority(t *testing.T) {
+func TestIntegration_Configuration_MatchRuleRepository_FindByPriority(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := matchRuleRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -142,7 +142,7 @@ func TestMatchRuleRepository_FindByPriority(t *testing.T) {
 	})
 }
 
-func TestMatchRuleRepository_Update(t *testing.T) {
+func TestIntegration_Configuration_MatchRuleRepository_Update(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := matchRuleRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -168,7 +168,7 @@ func TestMatchRuleRepository_Update(t *testing.T) {
 	})
 }
 
-func TestMatchRuleRepository_Delete(t *testing.T) {
+func TestIntegration_Configuration_MatchRuleRepository_Delete(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := matchRuleRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -191,7 +191,7 @@ func TestMatchRuleRepository_Delete(t *testing.T) {
 	})
 }
 
-func TestMatchRuleRepository_ReorderPriorities(t *testing.T) {
+func TestIntegration_Configuration_MatchRuleRepository_ReorderPriorities(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := matchRuleRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -231,7 +231,7 @@ func TestMatchRuleRepository_ReorderPriorities(t *testing.T) {
 	})
 }
 
-func TestMatchRuleRepository_FindByID_NotFound(t *testing.T) {
+func TestIntegration_Configuration_MatchRuleRepository_FindByID_NotFound(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := matchRuleRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()

@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package worker
 
 import (
@@ -16,8 +20,17 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
+	discoveryMetrics "github.com/LerianStudio/matcher/internal/discovery/services/metrics"
+	workermetrics "github.com/LerianStudio/matcher/internal/shared/observability/workermetrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
+
+// extractionPollerName is the stable label value emitted on matcher.worker.*
+// metrics from this poller. The extraction poller is not a ticker-based
+// background worker — it spawns a per-extraction goroutine that polls to
+// terminal state. A "cycle" here means "one PollUntilComplete call ran to
+// its natural end" (terminal state, timeout, or context cancellation).
+const extractionPollerName = "extraction_poller"
 
 // loggerFromContext extracts a logger from context, falling back to the provided default.
 func loggerFromContext(ctx context.Context, fallback libLog.Logger) libLog.Logger {
@@ -56,6 +69,7 @@ type ExtractionPoller struct {
 	extractionRepo repositories.ExtractionRepository
 	logger         libLog.Logger
 	cfg            ExtractionPollerConfig
+	metrics        *workermetrics.Recorder
 }
 
 // NewExtractionPoller creates a new extraction poller.
@@ -90,6 +104,7 @@ func NewExtractionPoller(
 		extractionRepo: extractionRepo,
 		logger:         logger,
 		cfg:            cfg,
+		metrics:        workermetrics.NewRecorder(extractionPollerName),
 	}, nil
 }
 
@@ -135,6 +150,44 @@ func (ep *ExtractionPoller) doPoll(
 	onComplete func(ctx context.Context, resultPath string) error,
 	onFailed func(ctx context.Context, errMsg string),
 ) {
+	// The extraction poller's "cycle" is one complete PollUntilComplete call
+	// from start to terminal state (or timeout / ctx cancel). Item count is
+	// therefore 1 per cycle; success vs failure drops on which of the two
+	// callbacks fires first. We wrap the original callbacks in a small
+	// state observer so the final outcome is recorded exactly once regardless
+	// of which exit path the state machine takes (pollOnce terminal path,
+	// handleTimeout, or ctx.Done — the last being "skipped" since the caller
+	// voluntarily cancelled before a terminal classification was reached).
+	startedAt := time.Now()
+	outcome := workermetrics.OutcomeSkipped
+
+	var processed, failed int
+
+	wrapComplete := func(cbCtx context.Context, resultPath string) error {
+		outcome = workermetrics.OutcomeSuccess
+		processed = 1
+
+		if onComplete == nil {
+			return nil
+		}
+
+		return onComplete(cbCtx, resultPath)
+	}
+
+	wrapFailed := func(cbCtx context.Context, errMsg string) {
+		outcome = workermetrics.OutcomeFailure
+		failed = 1
+
+		if onFailed != nil {
+			onFailed(cbCtx, errMsg)
+		}
+	}
+
+	defer func() {
+		ep.metrics.RecordCycle(ctx, startedAt, outcome)
+		ep.metrics.RecordItems(ctx, processed, failed)
+	}()
+
 	ticker := time.NewTicker(ep.cfg.PollInterval)
 	defer ticker.Stop()
 
@@ -145,11 +198,11 @@ func (ep *ExtractionPoller) doPoll(
 		case <-ctx.Done():
 			return
 		case <-deadline:
-			ep.handleTimeout(ctx, extractionID, onFailed)
+			ep.handleTimeout(ctx, extractionID, wrapFailed)
 
 			return
 		case <-ticker.C:
-			done := ep.pollOnce(ctx, extractionID, onComplete, onFailed)
+			done := ep.pollOnce(ctx, extractionID, wrapComplete, wrapFailed)
 			if done {
 				return
 			}
@@ -190,6 +243,8 @@ func (ep *ExtractionPoller) handleTimeout(
 
 		ep.logger.With(libLog.Err(err)).
 			Log(ctx, libLog.LevelWarn, "extraction poller: failed to update extraction on timeout")
+	} else {
+		discoveryMetrics.RecordExtractionState(ctx, extraction.Status.String())
 	}
 
 	if onFailed != nil {
@@ -266,6 +321,8 @@ func (ep *ExtractionPoller) pollOnce(
 
 				return false
 			}
+
+			discoveryMetrics.RecordExtractionState(ctx, extraction.Status.String())
 
 			if onFailed != nil {
 				onFailed(ctx, "extraction cancelled")
@@ -344,6 +401,8 @@ func (ep *ExtractionPoller) handlePollStatus(
 			return false // retry on next poll — DB may recover
 		}
 
+		discoveryMetrics.RecordExtractionState(ctx, extraction.Status.String())
+
 		if onComplete != nil {
 			if err := onComplete(ctx, status.ResultPath); err != nil {
 				logger.With(libLog.Err(err)).
@@ -378,6 +437,8 @@ func (ep *ExtractionPoller) handlePollStatus(
 			return false // retry on next poll — DB may recover
 		}
 
+		discoveryMetrics.RecordExtractionState(ctx, extraction.Status.String())
+
 		if onFailed != nil {
 			onFailed(ctx, entities.SanitizedExtractionFailureMessage)
 		}
@@ -411,6 +472,8 @@ func (ep *ExtractionPoller) handlePollStatus(
 			return false
 		}
 
+		discoveryMetrics.RecordExtractionState(ctx, extraction.Status.String())
+
 		if onFailed != nil {
 			onFailed(ctx, "extraction cancelled")
 		}
@@ -430,16 +493,25 @@ func (ep *ExtractionPoller) handlePollStatus(
 			return false
 		}
 
-		if extraction.Status != previousStatus || !extraction.UpdatedAt.Equal(previousUpdatedAt) {
-			if err := ep.extractionRepo.UpdateIfUnchanged(ctx, extraction, expectedUpdatedAt); err != nil {
-				if errors.Is(err, repositories.ErrExtractionConflict) {
-					return ep.stopOnConflict(ctx, extraction.ID)
-				}
-
-				logger.With(libLog.Err(err)).
-					Log(ctx, libLog.LevelWarn, "extraction poller: failed to update extraction status")
-			}
+		if extraction.Status == previousStatus && extraction.UpdatedAt.Equal(previousUpdatedAt) {
+			break
 		}
+
+		err := ep.extractionRepo.UpdateIfUnchanged(ctx, extraction, expectedUpdatedAt)
+		if err == nil {
+			if extraction.Status != previousStatus {
+				discoveryMetrics.RecordExtractionState(ctx, extraction.Status.String())
+			}
+
+			break
+		}
+
+		if errors.Is(err, repositories.ErrExtractionConflict) {
+			return ep.stopOnConflict(ctx, extraction.ID)
+		}
+
+		logger.With(libLog.Err(err)).
+			Log(ctx, libLog.LevelWarn, "extraction poller: failed to update extraction status")
 	default:
 		logger.With(libLog.String("fetcher.status", status.Status)).
 			Log(ctx, libLog.LevelWarn, "extraction poller: unknown extraction status")

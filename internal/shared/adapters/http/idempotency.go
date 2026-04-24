@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 // Package http provides shared HTTP utilities and DTOs.
 package http
 
@@ -16,6 +20,7 @@ import (
 
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
@@ -143,7 +148,7 @@ func handleKeyValidationError(
 	if errors.Is(validationErr, ErrMissingTenantID) {
 		libOpentelemetry.HandleSpanError(span, "missing tenant ID for idempotency", validationErr)
 
-		logIdempotency(ctx, logger, libLog.LevelError, fmt.Sprintf("idempotency middleware: %v", validationErr))
+		libLog.SafeError(logger, ctx, "idempotency middleware", validationErr, runtime.IsProductionMode())
 
 		return RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_configuration_error", "an unexpected error occurred")
 	}
@@ -187,7 +192,7 @@ func executeIdempotencyLogic(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to acquire idempotency lock", err)
 
-		logIdempotency(ctx, logger, libLog.LevelError, fmt.Sprintf("idempotency middleware: failed to acquire lock: %v", err))
+		libLog.SafeError(logger, ctx, "idempotency middleware: failed to acquire lock", err, runtime.IsProductionMode())
 
 		return RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
 	}
@@ -442,7 +447,7 @@ func handleDuplicateRequest(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get cached result", err)
 
-		logIdempotency(ctx, logger, libLog.LevelError, fmt.Sprintf("idempotency: failed to get cached result: %v", err))
+		libLog.SafeError(logger, ctx, "idempotency: failed to get cached result", err, runtime.IsProductionMode())
 
 		return RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
 	}
@@ -483,7 +488,7 @@ func handleDuplicateRequest(
 		if reacquireErr != nil {
 			libOpentelemetry.HandleSpanError(span, "failed to reacquire failed idempotency key", reacquireErr)
 
-			logIdempotency(ctx, logger, libLog.LevelError, fmt.Sprintf("idempotency: failed to reacquire failed key: %v", reacquireErr))
+			libLog.SafeError(logger, ctx, "idempotency: failed to reacquire failed key", reacquireErr, runtime.IsProductionMode())
 
 			return RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
 		}

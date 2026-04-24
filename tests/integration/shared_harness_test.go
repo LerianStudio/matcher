@@ -14,7 +14,7 @@ var (
 	_ = (*SeedData)(nil)
 )
 
-func TestSharedHarness_TypesExist(t *testing.T) {
+func TestIntegration_Flow_SharedHarness_TypesExist(t *testing.T) {
 	t.Parallel()
 
 	t.Run("SharedInfra has expected fields", func(t *testing.T) {

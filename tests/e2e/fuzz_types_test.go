@@ -3,7 +3,6 @@
 package e2e
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -20,19 +19,12 @@ func TestLoadFuzzConfig_Defaults(t *testing.T) { //nolint:paralleltest // env va
 		"E2E_FUZZ_VERBOSE",
 	}
 
-	originalValues := make(map[string]string)
+	// Clear each env var for the scope of this test. Consumers treat empty
+	// string as "unset" (see getEnv / getIntEnvFuzz). t.Setenv restores the
+	// prior value automatically when the test ends.
 	for _, key := range envVars {
-		originalValues[key] = os.Getenv(key)
-		os.Unsetenv(key)
+		t.Setenv(key, "")
 	}
-
-	defer func() {
-		for key, val := range originalValues {
-			if val != "" {
-				os.Setenv(key, val)
-			}
-		}
-	}()
 
 	cfg := LoadFuzzConfig()
 
@@ -55,21 +47,9 @@ func TestLoadFuzzConfig_WithOverrides(t *testing.T) { //nolint:paralleltest // e
 		"E2E_FUZZ_VERBOSE":      "TRUE",
 	}
 
-	originalValues := make(map[string]string)
 	for key, val := range overrides {
-		originalValues[key] = os.Getenv(key)
-		os.Setenv(key, val)
+		t.Setenv(key, val)
 	}
-
-	defer func() {
-		for key := range overrides {
-			if orig, ok := originalValues[key]; ok && orig != "" {
-				os.Setenv(key, orig)
-			} else {
-				os.Unsetenv(key)
-			}
-		}
-	}()
 
 	cfg := LoadFuzzConfig()
 
@@ -82,43 +62,30 @@ func TestLoadFuzzConfig_WithOverrides(t *testing.T) { //nolint:paralleltest // e
 	assert.True(t, cfg.Verbose)
 }
 
-func TestLoadFuzzConfig_InvalidScenarioCount_FallsBackToDefault(t *testing.T) { //nolint:paralleltest // env var mutation
-	orig := os.Getenv("E2E_FUZZ_SCENARIOS")
-
-	os.Setenv("E2E_FUZZ_SCENARIOS", "not-a-number")
-
-	defer func() {
-		if orig != "" {
-			os.Setenv("E2E_FUZZ_SCENARIOS", orig)
-		} else {
-			os.Unsetenv("E2E_FUZZ_SCENARIOS")
-		}
-	}()
+func TestLoadFuzzConfig_InvalidScenarioCount_FallsBackToDefault(t *testing.T) {
+	t.Setenv("E2E_FUZZ_SCENARIOS", "not-a-number")
 
 	cfg := LoadFuzzConfig()
 	assert.Equal(t, defaultFuzzScenarioCount, cfg.ScenarioCount)
 }
 
-func TestGetIntEnvFuzz_ReturnsDefault_WhenUnset(t *testing.T) { //nolint:paralleltest // env var mutation
-	os.Unsetenv("TEST_INT_FUZZ_UNSET")
+func TestGetIntEnvFuzz_ReturnsDefault_WhenUnset(t *testing.T) {
+	// Empty string is treated as unset by getIntEnvFuzz (val != "" guard).
+	t.Setenv("TEST_INT_FUZZ_UNSET", "")
 
 	result := getIntEnvFuzz("TEST_INT_FUZZ_UNSET", 42)
 	assert.Equal(t, 42, result)
 }
 
-func TestGetIntEnvFuzz_ParsesValidInt(t *testing.T) { //nolint:paralleltest // env var mutation
-	os.Setenv("TEST_INT_FUZZ_VALID", "99")
-
-	defer os.Unsetenv("TEST_INT_FUZZ_VALID")
+func TestGetIntEnvFuzz_ParsesValidInt(t *testing.T) {
+	t.Setenv("TEST_INT_FUZZ_VALID", "99")
 
 	result := getIntEnvFuzz("TEST_INT_FUZZ_VALID", 42)
 	assert.Equal(t, 99, result)
 }
 
-func TestGetIntEnvFuzz_ReturnsDefault_OnInvalidValue(t *testing.T) { //nolint:paralleltest // env var mutation
-	os.Setenv("TEST_INT_FUZZ_INVALID", "abc")
-
-	defer os.Unsetenv("TEST_INT_FUZZ_INVALID")
+func TestGetIntEnvFuzz_ReturnsDefault_OnInvalidValue(t *testing.T) {
+	t.Setenv("TEST_INT_FUZZ_INVALID", "abc")
 
 	result := getIntEnvFuzz("TEST_INT_FUZZ_INVALID", 42)
 	assert.Equal(t, 42, result)

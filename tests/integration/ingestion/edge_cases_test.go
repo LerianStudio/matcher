@@ -19,7 +19,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestJobRepository_ForeignKeyConstraint(t *testing.T) {
+func TestIntegration_Ingestion_JobRepository_ForeignKeyConstraint(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := jobRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -41,7 +41,7 @@ func TestJobRepository_ForeignKeyConstraint(t *testing.T) {
 	})
 }
 
-func TestTransactionRepository_ForeignKeyConstraint(t *testing.T) {
+func TestIntegration_Ingestion_TransactionRepository_ForeignKeyConstraint(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := txRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -68,7 +68,7 @@ func TestTransactionRepository_ForeignKeyConstraint(t *testing.T) {
 	})
 }
 
-func TestTransactionRepository_DuplicateExternalID(t *testing.T) {
+func TestIntegration_Ingestion_TransactionRepository_DuplicateExternalID(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		jRepo := jobRepo.NewRepository(h.Provider())
 		tRepo := txRepo.NewRepository(h.Provider())
@@ -116,7 +116,7 @@ func TestTransactionRepository_DuplicateExternalID(t *testing.T) {
 	})
 }
 
-func TestTransactionRepository_LargeAmount(t *testing.T) {
+func TestIntegration_Ingestion_TransactionRepository_LargeAmount(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		jRepo := jobRepo.NewRepository(h.Provider())
 		tRepo := txRepo.NewRepository(h.Provider())
@@ -160,7 +160,7 @@ func TestTransactionRepository_LargeAmount(t *testing.T) {
 	})
 }
 
-func TestTransactionRepository_SmallAmount(t *testing.T) {
+func TestIntegration_Ingestion_TransactionRepository_SmallAmount(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		jRepo := jobRepo.NewRepository(h.Provider())
 		tRepo := txRepo.NewRepository(h.Provider())
@@ -204,7 +204,7 @@ func TestTransactionRepository_SmallAmount(t *testing.T) {
 	})
 }
 
-func TestTransactionRepository_NegativeAmount(t *testing.T) {
+func TestIntegration_Ingestion_TransactionRepository_NegativeAmount(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		jRepo := jobRepo.NewRepository(h.Provider())
 		tRepo := txRepo.NewRepository(h.Provider())
@@ -248,7 +248,7 @@ func TestTransactionRepository_NegativeAmount(t *testing.T) {
 	})
 }
 
-func TestTransactionRepository_UnicodeDescription(t *testing.T) {
+func TestIntegration_Ingestion_TransactionRepository_UnicodeDescription(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		jRepo := jobRepo.NewRepository(h.Provider())
 		tRepo := txRepo.NewRepository(h.Provider())
@@ -292,7 +292,7 @@ func TestTransactionRepository_UnicodeDescription(t *testing.T) {
 	})
 }
 
-func TestTransactionRepository_MetadataJSON(t *testing.T) {
+func TestIntegration_Ingestion_TransactionRepository_MetadataJSON(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		jRepo := jobRepo.NewRepository(h.Provider())
 		tRepo := txRepo.NewRepository(h.Provider())
@@ -343,7 +343,7 @@ func TestTransactionRepository_MetadataJSON(t *testing.T) {
 	})
 }
 
-func TestTransactionRepository_MarkMatched_EmptyList(t *testing.T) {
+func TestIntegration_Ingestion_TransactionRepository_MarkMatched_EmptyList(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		tRepo := txRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -353,7 +353,7 @@ func TestTransactionRepository_MarkMatched_EmptyList(t *testing.T) {
 	})
 }
 
-func TestTransactionRepository_MarkPendingReview_EmptyList(t *testing.T) {
+func TestIntegration_Ingestion_TransactionRepository_MarkPendingReview_EmptyList(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		tRepo := txRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -363,7 +363,7 @@ func TestTransactionRepository_MarkPendingReview_EmptyList(t *testing.T) {
 	})
 }
 
-func TestTransactionRepository_MarkMatched_NonExistentIDs(t *testing.T) {
+func TestIntegration_Ingestion_TransactionRepository_MarkMatched_NonExistentIDs(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		tRepo := txRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -374,7 +374,7 @@ func TestTransactionRepository_MarkMatched_NonExistentIDs(t *testing.T) {
 	})
 }
 
-func TestJobRepository_CursorPagination(t *testing.T) {
+func TestIntegration_Ingestion_JobRepository_CursorPagination(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := jobRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -424,7 +424,7 @@ func TestJobRepository_CursorPagination(t *testing.T) {
 	})
 }
 
-func TestJobRepository_UpdateWithTx(t *testing.T) {
+func TestIntegration_Ingestion_JobRepository_UpdateWithTx(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := jobRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -462,7 +462,7 @@ func TestJobRepository_UpdateWithTx(t *testing.T) {
 	})
 }
 
-func TestTransactionRepository_FindByID_NotFound(t *testing.T) {
+func TestIntegration_Ingestion_TransactionRepository_FindByID_NotFound(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := txRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -472,7 +472,7 @@ func TestTransactionRepository_FindByID_NotFound(t *testing.T) {
 	})
 }
 
-func TestTransactionRepository_ListUnmatchedByContext_EmptyResult(t *testing.T) {
+func TestIntegration_Ingestion_TransactionRepository_ListUnmatchedByContext_EmptyResult(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := txRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()

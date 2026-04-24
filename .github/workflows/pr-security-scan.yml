@@ -22,7 +22,7 @@ on:
 
 jobs:
   security-scan:
-    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/pr-security-scan.yml@v1.26.3
+    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/pr-security-scan.yml@3197048995e33cfe9880a4c2c76c20f4cf9bd3ef # v1.26.3
     with:
       runner_type: "blacksmith-4vcpu-ubuntu-2404"
       dockerhub_org: "lerianstudio"

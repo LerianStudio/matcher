@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/LerianStudio/matcher/tests/e2e"
-	"github.com/LerianStudio/matcher/tests/e2e/client"
+	"github.com/LerianStudio/matcher/tests/client"
 )
 
 type dashboardStresserHighVolumeStats struct {

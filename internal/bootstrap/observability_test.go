@@ -114,7 +114,7 @@ func TestInitTelemetryWithTimeout(t *testing.T) {
 		}
 		logger := &mockLoggerForTelemetry{}
 
-		telemetry := InitTelemetryWithTimeout(context.Background(), cfg, logger)
+		telemetry := InitTelemetryWithTimeout(context.Background(), cfg, logger, nil)
 
 		require.NotNil(t, telemetry)
 		assert.False(t, telemetry.EnableTelemetry)
@@ -123,7 +123,7 @@ func TestInitTelemetryWithTimeout(t *testing.T) {
 	t.Run("nil config defaults to disabled telemetry", func(t *testing.T) {
 		logger := &mockLoggerForTelemetry{}
 
-		telemetry := InitTelemetryWithTimeout(context.Background(), nil, logger)
+		telemetry := InitTelemetryWithTimeout(context.Background(), nil, logger, nil)
 
 		require.NotNil(t, telemetry)
 		assert.False(t, telemetry.EnableTelemetry)
@@ -148,7 +148,7 @@ func TestInitTelemetryWithTimeout(t *testing.T) {
 
 		start := time.Now()
 
-		telemetry := InitTelemetryWithTimeout(ctx, cfg, logger)
+		telemetry := InitTelemetryWithTimeout(ctx, cfg, logger, nil)
 		elapsed := time.Since(start)
 
 		// Must always return a non-nil telemetry — either the real one
@@ -159,8 +159,6 @@ func TestInitTelemetryWithTimeout(t *testing.T) {
 	})
 
 	t.Run("timeout fallback logs warning and returns disabled telemetry", func(t *testing.T) {
-		originalInitTelemetryFn := loadInitTelemetryFn()
-
 		cfg := &Config{
 			Telemetry: TelemetryConfig{
 				Enabled:           true,
@@ -173,21 +171,22 @@ func TestInitTelemetryWithTimeout(t *testing.T) {
 
 		block := make(chan struct{})
 
-		restore := setInitTelemetryFnForTest(func(*Config, libLog.Logger) *libOpentelemetry.Telemetry {
-			<-block
+		connector := &fakeInfraConnector{
+			initTelemetry: func(*Config, libLog.Logger) *libOpentelemetry.Telemetry {
+				<-block
 
-			return originalInitTelemetryFn(&Config{
-				Telemetry: TelemetryConfig{Enabled: false},
-			}, logger)
-		})
-		t.Cleanup(restore)
+				return InitTelemetry(&Config{
+					Telemetry: TelemetryConfig{Enabled: false},
+				}, logger)
+			},
+		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 		defer cancel()
 
 		start := time.Now()
 
-		telemetry := InitTelemetryWithTimeout(ctx, cfg, logger)
+		telemetry := InitTelemetryWithTimeout(ctx, cfg, logger, connector)
 		elapsed := time.Since(start)
 		close(block)
 
@@ -200,12 +199,13 @@ func TestInitTelemetryWithTimeout(t *testing.T) {
 	t.Run("expired parent context returns disabled telemetry quickly", func(t *testing.T) {
 		block := make(chan struct{})
 
-		restore := setInitTelemetryFnForTest(func(*Config, libLog.Logger) *libOpentelemetry.Telemetry {
-			<-block
+		connector := &fakeInfraConnector{
+			initTelemetry: func(*Config, libLog.Logger) *libOpentelemetry.Telemetry {
+				<-block
 
-			return &libOpentelemetry.Telemetry{}
-		})
-		t.Cleanup(restore)
+				return &libOpentelemetry.Telemetry{}
+			},
+		}
 
 		cfg := &Config{
 			Telemetry: TelemetryConfig{
@@ -219,7 +219,7 @@ func TestInitTelemetryWithTimeout(t *testing.T) {
 		defer cancel()
 
 		start := time.Now()
-		telemetry := InitTelemetryWithTimeout(expiredCtx, cfg, &mockLoggerForTelemetry{})
+		telemetry := InitTelemetryWithTimeout(expiredCtx, cfg, &mockLoggerForTelemetry{}, connector)
 		elapsed := time.Since(start)
 		close(block)
 
@@ -228,13 +228,10 @@ func TestInitTelemetryWithTimeout(t *testing.T) {
 		assert.Less(t, elapsed, 200*time.Millisecond)
 	})
 
-	t.Run("nil injected telemetry initializer falls back to InitTelemetry", func(t *testing.T) {
-		restore := setInitTelemetryFnForTest(nil)
-		t.Cleanup(restore)
-
+	t.Run("nil connector falls back to default InfraConnector", func(t *testing.T) {
 		cfg := &Config{Telemetry: TelemetryConfig{Enabled: false}}
 
-		telemetry := InitTelemetryWithTimeout(context.Background(), cfg, &mockLoggerForTelemetry{})
+		telemetry := InitTelemetryWithTimeout(context.Background(), cfg, &mockLoggerForTelemetry{}, nil)
 
 		require.NotNil(t, telemetry)
 		assert.False(t, telemetry.EnableTelemetry)

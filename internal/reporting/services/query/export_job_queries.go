@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 // Package query provides read operations for reporting.
 package query
 
@@ -11,6 +15,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
@@ -56,7 +61,7 @@ func (svc *ExportJobQueryService) GetByID(
 			libOpentelemetry.HandleSpanError(span, "failed to get export job", err)
 		}
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get export job by ID %s: %v", id.String(), err))
+		libLog.SafeError(logger, ctx, "failed to get export job by ID "+id.String(), err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("getting export job: %w", err)
 	}

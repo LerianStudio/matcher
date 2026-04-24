@@ -44,7 +44,7 @@ func lockCtx(t *testing.T, h *integration.TestHarness) context.Context {
 	return ctx
 }
 
-func TestDistributedLock_AcquireAndRelease(t *testing.T) {
+func TestIntegration_Matching_DistributedLock_AcquireAndRelease(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -61,7 +61,7 @@ func TestDistributedLock_AcquireAndRelease(t *testing.T) {
 	})
 }
 
-func TestDistributedLock_DoubleAcquireFails(t *testing.T) {
+func TestIntegration_Matching_DistributedLock_DoubleAcquireFails(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -91,7 +91,7 @@ func TestDistributedLock_DoubleAcquireFails(t *testing.T) {
 	})
 }
 
-func TestDistributedLock_DifferentContextsIndependent(t *testing.T) {
+func TestIntegration_Matching_DistributedLock_DifferentContextsIndependent(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -111,7 +111,7 @@ func TestDistributedLock_DifferentContextsIndependent(t *testing.T) {
 	})
 }
 
-func TestDistributedLock_DoubleReleaseFails(t *testing.T) {
+func TestIntegration_Matching_DistributedLock_DoubleReleaseFails(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -144,7 +144,7 @@ func TestDistributedLock_DoubleReleaseFails(t *testing.T) {
 	})
 }
 
-func TestDistributedLock_LockExpires(t *testing.T) {
+func TestIntegration_Matching_DistributedLock_LockExpires(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -171,7 +171,7 @@ func TestDistributedLock_LockExpires(t *testing.T) {
 	})
 }
 
-func TestDistributedLock_ConcurrentAcquire(t *testing.T) {
+func TestIntegration_Matching_DistributedLock_ConcurrentAcquire(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -219,7 +219,7 @@ func TestDistributedLock_ConcurrentAcquire(t *testing.T) {
 	})
 }
 
-func TestDistributedLock_RefreshExtendsTTL(t *testing.T) {
+func TestIntegration_Matching_DistributedLock_RefreshExtendsTTL(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {

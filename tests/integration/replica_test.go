@@ -14,7 +14,7 @@ import (
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 )
 
-func TestReadReplicaRouting(t *testing.T) {
+func TestIntegration_Flow_ReadReplicaRouting(t *testing.T) {
 	RunWithDatabase(t, func(t *testing.T, h *TestHarness) {
 		ctx := h.Ctx()
 		provider := h.Provider()
@@ -82,7 +82,7 @@ func TestReadReplicaRouting(t *testing.T) {
 	})
 }
 
-func TestReplicaFallbackToPrimary(t *testing.T) {
+func TestIntegration_Flow_ReplicaFallbackToPrimary(t *testing.T) {
 	RunWithDatabase(t, func(t *testing.T, h *TestHarness) {
 		ctx := h.Ctx()
 		provider := h.Provider()
@@ -120,7 +120,7 @@ func TestReplicaFallbackToPrimary(t *testing.T) {
 	})
 }
 
-func TestReadReplicaTenantIsolation(t *testing.T) {
+func TestIntegration_Flow_ReadReplicaTenantIsolation(t *testing.T) {
 	RunWithDatabase(t, func(t *testing.T, h *TestHarness) {
 		provider := h.Provider()
 

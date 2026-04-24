@@ -13333,15 +13333,15 @@ const docTemplate = `{
                     "format": "date-time",
                     "example": "2025-01-15T10:30:00Z"
                 },
-                "match_group_id": {
+                "matchGroupId": {
                     "type": "string",
                     "example": "550e8400-e29b-41d4-a716-446655440001"
                 },
-                "source_id": {
+                "sourceId": {
                     "type": "string",
                     "example": "550e8400-e29b-41d4-a716-446655440002"
                 },
-                "transaction_id": {
+                "transactionId": {
                     "type": "string",
                     "example": "550e8400-e29b-41d4-a716-446655440000"
                 }
@@ -13500,23 +13500,23 @@ const docTemplate = `{
         "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SummaryReportResponse": {
             "type": "object",
             "properties": {
-                "matched_amount": {
+                "matchedAmount": {
                     "type": "string",
                     "example": "1180000.00"
                 },
-                "matched_count": {
+                "matchedCount": {
                     "type": "integer",
                     "example": 11800
                 },
-                "total_amount": {
+                "totalAmount": {
                     "type": "string",
                     "example": "1250000.00"
                 },
-                "unmatched_amount": {
+                "unmatchedAmount": {
                     "type": "string",
                     "example": "70000.00"
                 },
-                "unmatched_count": {
+                "unmatchedCount": {
                     "type": "integer",
                     "example": 700
                 }
@@ -13578,16 +13578,16 @@ const docTemplate = `{
                     "format": "date-time",
                     "example": "2025-01-15T10:30:00Z"
                 },
-                "due_at": {
+                "dueAt": {
                     "type": "string",
                     "format": "date-time",
                     "example": "2025-02-15T10:30:00Z"
                 },
-                "exception_id": {
+                "exceptionId": {
                     "type": "string",
                     "example": "550e8400-e29b-41d4-a716-446655440003"
                 },
-                "source_id": {
+                "sourceId": {
                     "type": "string",
                     "example": "550e8400-e29b-41d4-a716-446655440002"
                 },
@@ -13595,7 +13595,7 @@ const docTemplate = `{
                     "type": "string",
                     "example": "PENDING"
                 },
-                "transaction_id": {
+                "transactionId": {
                     "type": "string",
                     "example": "550e8400-e29b-41d4-a716-446655440000"
                 }
@@ -13608,31 +13608,31 @@ const docTemplate = `{
                     "type": "string",
                     "example": "USD"
                 },
-                "fee_schedule_id": {
+                "feeScheduleId": {
                     "type": "string",
                     "example": "550e8400-e29b-41d4-a716-446655440001"
                 },
-                "fee_schedule_name": {
+                "feeScheduleName": {
                     "type": "string",
                     "example": "INTERCHANGE"
                 },
-                "net_variance": {
+                "netVariance": {
                     "type": "string",
                     "example": "-200.00"
                 },
-                "source_id": {
+                "sourceId": {
                     "type": "string",
                     "example": "550e8400-e29b-41d4-a716-446655440000"
                 },
-                "total_actual": {
+                "totalActual": {
                     "type": "string",
                     "example": "4800.00"
                 },
-                "total_expected": {
+                "totalExpected": {
                     "type": "string",
                     "example": "5000.00"
                 },
-                "variance_pct": {
+                "variancePct": {
                     "type": "string",
                     "example": "-4.00"
                 }
@@ -13901,12 +13901,12 @@ const docTemplate = `{
                     "type": "string",
                     "example": "sha256:abc123def456..."
                 },
-                "download_url": {
+                "downloadUrl": {
                     "description": "Presigned URL for downloading the archive",
                     "type": "string",
                     "example": "https://s3.amazonaws.com/bucket/archive.gz?X-Amz-Signature=..."
                 },
-                "expires_at": {
+                "expiresAt": {
                     "description": "Expiration time of the download URL (RFC3339)",
                     "type": "string",
                     "example": "2026-02-05T13:00:00Z"

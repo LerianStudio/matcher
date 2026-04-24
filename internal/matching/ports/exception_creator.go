@@ -1,3 +1,13 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
+// interface-only:skip-check-tests
+// Pure interface declaration. The compile-time compliance check lives in
+// the adapter at internal/matching/adapters/postgres/exception_creator/
+// exception_creator.postgresql.go — behaviour is covered by that adapter's
+// own tests. scripts/check-tests.sh honours the marker above.
+
 package ports
 
 import (

@@ -27,6 +27,14 @@ for file in "${files[@]}"; do
     continue
   fi
 
+  # interface-only:skip-check-tests marker — production file whose behaviour
+  # is covered by tests elsewhere (e.g. bootstrap init module signature locks
+  # whose behaviour lives in init_test.go). The marker must appear as a comment
+  # at the top of the file.
+  if rg -q "interface-only:skip-check-tests" "$file"; then
+    continue
+  fi
+
   dir="$(dirname "$file")"
   base="$(basename "$file" .go)"
   test_file="$dir/${base}_test.go"

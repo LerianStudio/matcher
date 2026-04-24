@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 // Package bootstrap provides application initialization and dependency wiring.
 package bootstrap
 
@@ -6,11 +10,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/LerianStudio/lib-commons/v5/commons/outbox"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
+	"github.com/LerianStudio/matcher/internal/shared/observability/outboxmetrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -162,43 +168,92 @@ func RegisterOutboxHandlers(
 
 // registerOutboxHandlers registers all event-type handlers on the canonical HandlerRegistry.
 // Each handler is invoked when the outbox dispatcher processes an event of the matching type.
+//
+// Every registered handler is wrapped by instrumentHandler so matcher.outbox.*
+// handler metrics are emitted on every invocation. The wrapping is
+// transparent to the lib-commons dispatcher — the EventHandler contract
+// is preserved verbatim.
 func registerOutboxHandlers(
 	registry *outbox.HandlerRegistry,
 	ingestPub sharedPorts.IngestionEventPublisher,
 	matchPub sharedDomain.MatchEventPublisher,
 	auditPub sharedDomain.AuditEventPublisher,
 ) error {
-	if err := registry.Register(sharedDomain.EventTypeIngestionCompleted, func(ctx context.Context, event *outbox.OutboxEvent) error {
+	if err := registry.Register(sharedDomain.EventTypeIngestionCompleted, instrumentHandler(sharedDomain.EventTypeIngestionCompleted, func(ctx context.Context, event *outbox.OutboxEvent) error {
 		return publishIngestionCompleted(ctx, ingestPub, event.Payload)
-	}); err != nil {
+	})); err != nil {
 		return fmt.Errorf("register ingestion completed handler: %w", err)
 	}
 
-	if err := registry.Register(sharedDomain.EventTypeIngestionFailed, func(ctx context.Context, event *outbox.OutboxEvent) error {
+	if err := registry.Register(sharedDomain.EventTypeIngestionFailed, instrumentHandler(sharedDomain.EventTypeIngestionFailed, func(ctx context.Context, event *outbox.OutboxEvent) error {
 		return publishIngestionFailed(ctx, ingestPub, event.Payload)
-	}); err != nil {
+	})); err != nil {
 		return fmt.Errorf("register ingestion failed handler: %w", err)
 	}
 
-	if err := registry.Register(sharedDomain.EventTypeMatchConfirmed, func(ctx context.Context, event *outbox.OutboxEvent) error {
+	if err := registry.Register(sharedDomain.EventTypeMatchConfirmed, instrumentHandler(sharedDomain.EventTypeMatchConfirmed, func(ctx context.Context, event *outbox.OutboxEvent) error {
 		return publishMatchConfirmed(ctx, matchPub, event.Payload)
-	}); err != nil {
+	})); err != nil {
 		return fmt.Errorf("register match confirmed handler: %w", err)
 	}
 
-	if err := registry.Register(sharedDomain.EventTypeMatchUnmatched, func(ctx context.Context, event *outbox.OutboxEvent) error {
+	if err := registry.Register(sharedDomain.EventTypeMatchUnmatched, instrumentHandler(sharedDomain.EventTypeMatchUnmatched, func(ctx context.Context, event *outbox.OutboxEvent) error {
 		return publishMatchUnmatched(ctx, matchPub, event.Payload)
-	}); err != nil {
+	})); err != nil {
 		return fmt.Errorf("register match unmatched handler: %w", err)
 	}
 
-	if err := registry.Register(sharedDomain.EventTypeAuditLogCreated, func(ctx context.Context, event *outbox.OutboxEvent) error {
+	if err := registry.Register(sharedDomain.EventTypeAuditLogCreated, instrumentHandler(sharedDomain.EventTypeAuditLogCreated, func(ctx context.Context, event *outbox.OutboxEvent) error {
 		return publishAuditLogCreated(ctx, auditPub, event.Payload)
-	}); err != nil {
+	})); err != nil {
 		return fmt.Errorf("register audit log created handler: %w", err)
 	}
 
 	return nil
+}
+
+// instrumentHandler wraps an outbox.EventHandler with matcher.outbox.*
+// handler-metrics emission. The wrapper measures wall-clock duration of
+// the inner handler and classifies the outcome from the return error:
+//   - nil → OutcomeSuccess
+//   - non-retryable sentinel (isNonRetryableOutboxError) → OutcomeSkipped
+//     (the dispatcher will mark the event invalid rather than retry, so
+//     counting it as "failure" would falsely inflate retry alerts)
+//   - anything else → OutcomeFailure
+//
+// The inner handler's error is returned verbatim so dispatcher-level
+// retry classification and state transitions are unaffected.
+func instrumentHandler(eventType string, inner outbox.EventHandler) outbox.EventHandler {
+	return func(ctx context.Context, event *outbox.OutboxEvent) error {
+		startedAt := time.Now()
+
+		err := inner(ctx, event)
+
+		outboxmetrics.RecordHandlerInvocation(
+			ctx,
+			eventType,
+			classifyHandlerOutcome(err),
+			float64(time.Since(startedAt).Milliseconds()),
+		)
+
+		return err
+	}
+}
+
+// classifyHandlerOutcome maps a handler return into the matcher.outbox
+// handler-outcome enum. It reuses isNonRetryableOutboxError so the
+// metric's "skipped" bucket mirrors exactly what the dispatcher treats
+// as non-retryable — no drift between "the counter says skipped" and
+// "the dispatcher marks invalid".
+func classifyHandlerOutcome(err error) string {
+	switch {
+	case err == nil:
+		return outboxmetrics.OutcomeSuccess
+	case isNonRetryableOutboxError(err):
+		return outboxmetrics.OutcomeSkipped
+	default:
+		return outboxmetrics.OutcomeFailure
+	}
 }
 
 // Event publishing functions (one per outbox event type).

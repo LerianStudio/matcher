@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"sync/atomic"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sync/errgroup"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
+	discoveryMetrics "github.com/LerianStudio/matcher/internal/discovery/services/metrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -34,6 +36,30 @@ func (worker *BridgeWorker) pollCycle(ctx context.Context) {
 
 	ctx, span := tracer.Start(ctx, "discovery.bridge.poll_cycle")
 	defer span.End()
+
+	// Every pollCycle emits fetcher_cycles_total + fetcher_cycle_duration_ms
+	// exactly once via this outcome pointer. Deferred in LIFO order: runs
+	// AFTER heartbeat and BEFORE span.End so cycle-metrics are recorded
+	// regardless of the exit path (lock contention, tenant-list error,
+	// normal success). Default to Skipped — any path that did real work
+	// flips it to Success or Failure.
+	startedAt := time.Now()
+	outcome := discoveryMetrics.OutcomeSkipped
+
+	// processed/failed aggregate across tenants for the matcher.worker.*
+	// item counters. Used atomically because tenant-level fan-out is
+	// parallel via errgroup.
+	var processed, failed atomic.Int64
+
+	defer func() {
+		discoveryMetrics.RecordFetcherCycle(ctx, outcome, float64(time.Since(startedAt).Milliseconds()))
+
+		// Map the discovery cycle outcome onto the shared worker
+		// outcome vocabulary. The two share the same three values
+		// (success/failure/skipped) so this is a direct passthrough.
+		worker.metrics.RecordCycle(ctx, startedAt, outcome)
+		worker.metrics.RecordItems(ctx, int(processed.Load()), int(failed.Load()))
+	}()
 
 	// Deferred in LIFO order: heartbeat runs BEFORE span.End, giving the
 	// span a chance to record heartbeat-related attributes if needed.
@@ -56,12 +82,16 @@ func (worker *BridgeWorker) pollCycle(ctx context.Context) {
 
 	tenants, err := worker.tenantLister.ListTenants(ctx)
 	if err != nil {
+		outcome = discoveryMetrics.OutcomeFailure
+
 		libOpentelemetry.HandleSpanError(span, "bridge: list tenants failed", err)
 		logger.With(libLog.String("error", err.Error())).
 			Log(ctx, libLog.LevelError, "bridge: failed to list tenants")
 
 		return
 	}
+
+	outcome = discoveryMetrics.OutcomeSuccess
 
 	span.SetAttributes(attribute.Int("bridge.tenant_count", len(tenants)))
 
@@ -73,8 +103,6 @@ func (worker *BridgeWorker) pollCycle(ctx context.Context) {
 	// use the error-propagation side of the group because processTenant
 	// absorbs every failure it encounters and returns only the processed
 	// count.
-	var processed atomic.Int64
-
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.SetLimit(worker.cfg.TenantConcurrency)
 
@@ -87,7 +115,10 @@ func (worker *BridgeWorker) pollCycle(ctx context.Context) {
 		// so the goroutine closure captures it safely without an explicit
 		// local copy.
 		group.Go(func() error {
-			processed.Add(int64(worker.processTenant(groupCtx, tenantID)))
+			tenantProcessed, tenantFailed := worker.processTenant(groupCtx, tenantID)
+
+			processed.Add(int64(tenantProcessed))
+			failed.Add(int64(tenantFailed))
 
 			return nil
 		})
@@ -103,13 +134,18 @@ func (worker *BridgeWorker) pollCycle(ctx context.Context) {
 	span.SetAttributes(
 		attribute.Int("bridge.tenant_concurrency", worker.cfg.TenantConcurrency),
 		attribute.Int64("bridge.extractions_processed", processed.Load()),
+		attribute.Int64("bridge.extractions_failed", failed.Load()),
 	)
 }
 
-// processTenant drives bridge work for a single tenant. Returns the number
-// of extractions that completed the pipeline (successfully or with a
-// terminal idempotent signal) so the cycle-level span can report totals.
-func (worker *BridgeWorker) processTenant(parentCtx context.Context, tenantID string) int {
+// processTenant drives bridge work for a single tenant. Returns
+// (processed, failed) counts so the cycle aggregates for
+// matcher.worker.items_processed_total / items_failed_total. An
+// extraction is processed when bridgeOne returns nil (successful link
+// or idempotent no-op); it is failed when bridgeOne returns an error
+// (whether transient or terminal — the retry machinery is separate from
+// "did this attempt produce work").
+func (worker *BridgeWorker) processTenant(parentCtx context.Context, tenantID string) (int, int) {
 	ctx := context.WithValue(parentCtx, auth.TenantIDKey, tenantID)
 	logger, tracer := worker.tracking(ctx)
 
@@ -128,12 +164,12 @@ func (worker *BridgeWorker) processTenant(parentCtx context.Context, tenantID st
 			libLog.String("error", err.Error()),
 		).Log(ctx, libLog.LevelWarn, "bridge: failed to find eligible extractions")
 
-		return 0
+		return 0, 0
 	}
 
 	span.SetAttributes(attribute.Int("bridge.eligible_count", len(extractions)))
 
-	processed := 0
+	var processed, failed int
 
 	for _, extraction := range extractions {
 		if extraction == nil {
@@ -141,6 +177,8 @@ func (worker *BridgeWorker) processTenant(parentCtx context.Context, tenantID st
 		}
 
 		if err := worker.bridgeOne(ctx, extraction, tenantID); err != nil {
+			failed++
+
 			worker.logBridgeError(ctx, logger, extraction.ID, tenantID, err)
 
 			continue
@@ -149,7 +187,7 @@ func (worker *BridgeWorker) processTenant(parentCtx context.Context, tenantID st
 		processed++
 	}
 
-	return processed
+	return processed, failed
 }
 
 // bridgeOne runs a single extraction through the orchestrator. Wraps each

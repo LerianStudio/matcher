@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package worker
@@ -25,8 +29,8 @@ import (
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
-	"github.com/LerianStudio/matcher/internal/shared/ports"
 	storageMocks "github.com/LerianStudio/matcher/internal/shared/objectstorage/mocks"
+	"github.com/LerianStudio/matcher/internal/shared/ports"
 	sharedTestutil "github.com/LerianStudio/matcher/internal/shared/testutil"
 
 	"go.uber.org/mock/gomock"

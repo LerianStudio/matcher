@@ -23,7 +23,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestMatchItemRepository_CreateBatch(t *testing.T) {
+func TestIntegration_Matching_MatchItemRepository_CreateBatch(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		runRepo := matchRunRepo.NewRepository(h.Provider())
 		groupRepo := matchGroupRepo.NewRepository(h.Provider())
@@ -149,7 +149,7 @@ func TestMatchItemRepository_CreateBatch(t *testing.T) {
 	})
 }
 
-func TestMatchItemRepository_CreateBatch_Empty(t *testing.T) {
+func TestIntegration_Matching_MatchItemRepository_CreateBatch_Empty(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		itemRepo := matchItemRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -160,7 +160,7 @@ func TestMatchItemRepository_CreateBatch_Empty(t *testing.T) {
 	})
 }
 
-func TestMatchItemRepository_CreateBatch_PartialAllocation(t *testing.T) {
+func TestIntegration_Matching_MatchItemRepository_CreateBatch_PartialAllocation(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		runRepo := matchRunRepo.NewRepository(h.Provider())
 		groupRepo := matchGroupRepo.NewRepository(h.Provider())
@@ -287,7 +287,7 @@ func TestMatchItemRepository_CreateBatch_PartialAllocation(t *testing.T) {
 	})
 }
 
-func TestMatchItemRepository_CreateBatch_LargeSet(t *testing.T) {
+func TestIntegration_Matching_MatchItemRepository_CreateBatch_LargeSet(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		runRepo := matchRunRepo.NewRepository(h.Provider())
 		groupRepo := matchGroupRepo.NewRepository(h.Provider())

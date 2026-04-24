@@ -15,7 +15,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/testutil"
 )
 
-func TestIntegrationSLARouting_CriticalAmount(t *testing.T) {
+func TestIntegration_Exception_IntegrationSLARouting_CriticalAmount(t *testing.T) {
 	t.Parallel()
 
 	input := services.SLAInput{
@@ -35,7 +35,7 @@ func TestIntegrationSLARouting_CriticalAmount(t *testing.T) {
 	require.WithinDuration(t, expectedDue, result.DueAt, time.Second)
 }
 
-func TestIntegrationSLARouting_CriticalAge(t *testing.T) {
+func TestIntegration_Exception_IntegrationSLARouting_CriticalAge(t *testing.T) {
 	t.Parallel()
 
 	input := services.SLAInput{
@@ -51,7 +51,7 @@ func TestIntegrationSLARouting_CriticalAge(t *testing.T) {
 	require.Equal(t, "CRITICAL", result.RuleName)
 }
 
-func TestIntegrationSLARouting_HighAmount(t *testing.T) {
+func TestIntegration_Exception_IntegrationSLARouting_HighAmount(t *testing.T) {
 	t.Parallel()
 
 	input := services.SLAInput{
@@ -71,7 +71,7 @@ func TestIntegrationSLARouting_HighAmount(t *testing.T) {
 	require.WithinDuration(t, expectedDue, result.DueAt, time.Second)
 }
 
-func TestIntegrationSLARouting_HighAge(t *testing.T) {
+func TestIntegration_Exception_IntegrationSLARouting_HighAge(t *testing.T) {
 	t.Parallel()
 
 	input := services.SLAInput{
@@ -87,7 +87,7 @@ func TestIntegrationSLARouting_HighAge(t *testing.T) {
 	require.Equal(t, "HIGH", result.RuleName)
 }
 
-func TestIntegrationSLARouting_MediumAmount(t *testing.T) {
+func TestIntegration_Exception_IntegrationSLARouting_MediumAmount(t *testing.T) {
 	t.Parallel()
 
 	input := services.SLAInput{
@@ -107,7 +107,7 @@ func TestIntegrationSLARouting_MediumAmount(t *testing.T) {
 	require.WithinDuration(t, expectedDue, result.DueAt, time.Second)
 }
 
-func TestIntegrationSLARouting_MediumAge(t *testing.T) {
+func TestIntegration_Exception_IntegrationSLARouting_MediumAge(t *testing.T) {
 	t.Parallel()
 
 	input := services.SLAInput{
@@ -123,7 +123,7 @@ func TestIntegrationSLARouting_MediumAge(t *testing.T) {
 	require.Equal(t, "MEDIUM", result.RuleName)
 }
 
-func TestIntegrationSLARouting_LowDefault(t *testing.T) {
+func TestIntegration_Exception_IntegrationSLARouting_LowDefault(t *testing.T) {
 	t.Parallel()
 
 	input := services.SLAInput{
@@ -143,7 +143,7 @@ func TestIntegrationSLARouting_LowDefault(t *testing.T) {
 	require.WithinDuration(t, expectedDue, result.DueAt, time.Second)
 }
 
-func TestIntegrationSLARouting_DeterministicOrdering(t *testing.T) {
+func TestIntegration_Exception_IntegrationSLARouting_DeterministicOrdering(t *testing.T) {
 	t.Parallel()
 
 	referenceTime := time.Date(2026, 1, 20, 12, 0, 0, 0, time.UTC)
@@ -193,7 +193,7 @@ func TestIntegrationSLARouting_DeterministicOrdering(t *testing.T) {
 	}
 }
 
-func TestIntegrationSLARouting_RoutingDecisions(t *testing.T) {
+func TestIntegration_Exception_IntegrationSLARouting_RoutingDecisions(t *testing.T) {
 	t.Parallel()
 
 	criticalSeverity := sharedexception.ExceptionSeverityCritical
@@ -332,7 +332,7 @@ func TestIntegrationSLARouting_RoutingDecisions(t *testing.T) {
 	}
 }
 
-func TestIntegrationSLARouting_NoMatchingRule(t *testing.T) {
+func TestIntegration_Exception_IntegrationSLARouting_NoMatchingRule(t *testing.T) {
 	t.Parallel()
 
 	input := services.RoutingInput{
@@ -355,7 +355,7 @@ func TestIntegrationSLARouting_NoMatchingRule(t *testing.T) {
 	require.ErrorIs(t, err, services.ErrNoMatchingRoutingRule)
 }
 
-func TestIntegrationSLARouting_EmptyRules(t *testing.T) {
+func TestIntegration_Exception_IntegrationSLARouting_EmptyRules(t *testing.T) {
 	t.Parallel()
 
 	input := services.SLAInput{

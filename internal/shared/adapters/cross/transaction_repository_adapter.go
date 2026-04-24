@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 // Package cross provides adapters for cross-context dependencies.
 // These adapters bridge different bounded contexts while keeping ports isolated.
 package cross
@@ -15,6 +19,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	ingestionTxRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/transaction"
 	matchingRepos "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
@@ -150,7 +155,7 @@ func (adapter *TransactionRepositoryAdapter) MarkMatchedWithTx(
 		wrappedErr := fmt.Errorf("mark matched with transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to mark transactions matched", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to mark transactions matched: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to mark transactions matched", wrappedErr, runtime.IsProductionMode())
 
 		return wrappedErr
 	}
@@ -205,7 +210,7 @@ func (adapter *TransactionRepositoryAdapter) MarkPendingReviewWithTx(
 			wrappedErr,
 		)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to mark transactions pending review: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to mark transactions pending review", wrappedErr, runtime.IsProductionMode())
 
 		return wrappedErr
 	}
@@ -248,7 +253,7 @@ func (adapter *TransactionRepositoryAdapter) WithTx(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to run transaction wrapper", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to run transaction wrapper: %v", err))
+		libLog.SafeError(logger, ctx, "failed to run transaction wrapper", err, runtime.IsProductionMode())
 
 		return fmt.Errorf("run transaction wrapper: %w", err)
 	}
@@ -299,7 +304,7 @@ func (adapter *TransactionRepositoryAdapter) MarkUnmatchedWithTx(
 		wrappedErr := fmt.Errorf("mark unmatched with transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to mark transactions unmatched", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to mark transactions unmatched: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to mark transactions unmatched", wrappedErr, runtime.IsProductionMode())
 
 		return wrappedErr
 	}

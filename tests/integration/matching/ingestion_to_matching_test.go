@@ -15,7 +15,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestIntegrationE4T9_IngestionToMatching_PersistsArtifactsAndUpdatesTransactions(t *testing.T) {
+func TestIntegration_Matching_IntegrationE4T9_IngestionToMatching_PersistsArtifactsAndUpdatesTransactions(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -79,9 +79,9 @@ func TestIntegrationE4T9_IngestionToMatching_PersistsArtifactsAndUpdatesTransact
 	})
 }
 
-// TestIntegrationE4T9_ConfiguredSourceSidesDriveMatching verifies that
+// TestIntegration_Matching_IntegrationE4T9_ConfiguredSourceSidesDriveMatching verifies that
 // matching uses configured source sides rather than runtime direction hints.
-func TestIntegrationE4T9_ConfiguredSourceSidesDriveMatching(t *testing.T) {
+func TestIntegration_Matching_IntegrationE4T9_ConfiguredSourceSidesDriveMatching(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)

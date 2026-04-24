@@ -16,7 +16,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestBulkAssign_AssignsMultipleExceptions(t *testing.T) {
+func TestIntegration_Exception_BulkAssign_AssignsMultipleExceptions(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -66,7 +66,7 @@ func TestBulkAssign_AssignsMultipleExceptions(t *testing.T) {
 	})
 }
 
-func TestBulkAssign_PartialInvalidIDs(t *testing.T) {
+func TestIntegration_Exception_BulkAssign_PartialInvalidIDs(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -122,7 +122,7 @@ func TestBulkAssign_PartialInvalidIDs(t *testing.T) {
 	})
 }
 
-func TestBulkResolve_ResolvesAll(t *testing.T) {
+func TestIntegration_Exception_BulkResolve_ResolvesAll(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -178,7 +178,7 @@ func TestBulkResolve_ResolvesAll(t *testing.T) {
 	})
 }
 
-func TestBulkResolve_SkipsAlreadyResolved(t *testing.T) {
+func TestIntegration_Exception_BulkResolve_SkipsAlreadyResolved(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -244,7 +244,7 @@ func TestBulkResolve_SkipsAlreadyResolved(t *testing.T) {
 	})
 }
 
-func TestBulkAssign_EmptyList(t *testing.T) {
+func TestIntegration_Exception_BulkAssign_EmptyList(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {

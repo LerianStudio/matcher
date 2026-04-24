@@ -11,7 +11,7 @@ var (
 	_ = serverHarnessBase{}
 )
 
-func TestHarnessBase_TypesExist(t *testing.T) {
+func TestIntegration_Server_HarnessBase_TypesExist(t *testing.T) {
 	t.Parallel()
 
 	t.Run("serverHarnessBase has Fiber App field", func(t *testing.T) {
@@ -44,7 +44,7 @@ func TestHarnessBase_TypesExist(t *testing.T) {
 	})
 }
 
-func TestHarnessBase_Methods(t *testing.T) {
+func TestIntegration_Server_HarnessBase_Methods(t *testing.T) {
 	t.Parallel()
 
 	t.Run("Do method signature exists", func(t *testing.T) {

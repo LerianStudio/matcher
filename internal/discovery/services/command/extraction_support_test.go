@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package command
@@ -17,6 +21,7 @@ func TestExtractionSupport_BuildExtractionJobInput_ConfigNameFallback(t *testing
 
 	conn := testConnectionEntity()
 	conn.ConfigName = ""
+	conn.ProductName = "matcher"
 
 	input, err := buildExtractionJobInput(conn, map[string]any{
 		"transactions": map[string]any{"columns": []string{"id", "amount"}},
@@ -26,7 +31,7 @@ func TestExtractionSupport_BuildExtractionJobInput_ConfigNameFallback(t *testing
 
 	require.NoError(t, err)
 	require.Contains(t, input.MappedFields, conn.FetcherConnID)
-	assert.Equal(t, conn.FetcherConnID, input.Metadata["source"])
+	assert.Equal(t, conn.ProductName, input.Metadata["source"])
 	require.Contains(t, input.Filters, conn.FetcherConnID)
 }
 

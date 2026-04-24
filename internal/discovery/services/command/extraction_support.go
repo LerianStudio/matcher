@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package command
 
 import (
@@ -60,11 +64,12 @@ func buildExtractionJobInput(
 	}
 
 	// Build Metadata with required "source" key.
-	// Use ConfigName (user-assigned unique identifier, e.g. "prod-db") rather than
-	// ProductName (human label, e.g. "PostgreSQL 16.2") to ensure unique provenance
-	// when multiple connections share the same engine type.
+	// Use ProductName (the product that owns this connection, e.g. "matcher")
+	// to satisfy Fetcher's product ownership validation (validateProductOwnership).
+	// Fetcher compares metadata.source against connection.ProductName — using
+	// ConfigName here would cause FET-1016 (Product Mismatch).
 	metadata := map[string]any{
-		"source": configName,
+		"source": conn.ProductName,
 	}
 
 	return sharedPorts.ExtractionJobInput{

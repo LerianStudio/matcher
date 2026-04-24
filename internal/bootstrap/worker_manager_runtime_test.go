@@ -275,7 +275,7 @@ func TestApplyWorkerRuntimeConfig_Export(t *testing.T) {
 	cfg.ExportWorker.PollIntervalSec = 10
 	cfg.ExportWorker.PageSize = 500
 
-	require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "export", worker, cfg))
+	require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "export", worker, cfg, nil))
 
 	updates := worker.lastUpdates()
 	require.Len(t, updates, 1)
@@ -291,7 +291,7 @@ func TestApplyWorkerRuntimeConfig_Cleanup(t *testing.T) {
 	cfg.CleanupWorker.IntervalSec = 7200
 	cfg.CleanupWorker.BatchSize = 50
 
-	require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "cleanup", worker, cfg))
+	require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "cleanup", worker, cfg, nil))
 
 	u := worker.lastUpdate()
 	require.NotNil(t, u)
@@ -309,14 +309,13 @@ func TestApplyWorkerRuntimeConfig_Archival(t *testing.T) {
 	cfg.Archival.StorageBucket = "archive-bucket"
 	cfg.ObjectStorage.Endpoint = "http://localhost:8333"
 
-	originalNewS3Client := newS3ClientFn
-	t.Cleanup(func() { newS3ClientFn = originalNewS3Client })
-
-	newS3ClientFn = func(context.Context, reportingStorage.S3Config) (*reportingStorage.S3Client, error) {
-		return &reportingStorage.S3Client{}, nil
+	connector := &fakeInfraConnector{
+		newS3Client: func(context.Context, reportingStorage.S3Config) (*reportingStorage.S3Client, error) {
+			return &reportingStorage.S3Client{}, nil
+		},
 	}
 
-	require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "archival", worker, cfg))
+	require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "archival", worker, cfg, connector))
 
 	u := worker.lastUpdate()
 	require.NotNil(t, u)
@@ -332,7 +331,7 @@ func TestApplyWorkerRuntimeConfig_Scheduler(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Scheduler.IntervalSec = 120
 
-	require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "scheduler", worker, cfg))
+	require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "scheduler", worker, cfg, nil))
 
 	u := worker.lastUpdate()
 	require.NotNil(t, u)
@@ -346,7 +345,7 @@ func TestApplyWorkerRuntimeConfig_Discovery(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Fetcher.DiscoveryIntervalSec = 45
 
-	require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "discovery", worker, cfg))
+	require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "discovery", worker, cfg, nil))
 
 	u := worker.lastUpdate()
 	require.NotNil(t, u)
@@ -358,7 +357,7 @@ func TestApplyWorkerRuntimeConfig_NilConfig_IsNoop(t *testing.T) {
 
 	worker := &runtimeAwareExportWorker{}
 	assert.NotPanics(t, func() {
-		require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "export", worker, nil))
+		require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "export", worker, nil, nil))
 	})
 	assert.Empty(t, worker.lastUpdates())
 }
@@ -368,7 +367,7 @@ func TestApplyWorkerRuntimeConfig_NilWorker_IsNoop(t *testing.T) {
 
 	cfg := defaultConfig()
 	assert.NotPanics(t, func() {
-		require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "export", nil, cfg))
+		require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "export", nil, cfg, nil))
 	})
 }
 
@@ -380,7 +379,7 @@ func TestApplyWorkerRuntimeConfig_WrongInterface_IsNoop(t *testing.T) {
 	cfg := defaultConfig()
 
 	assert.NotPanics(t, func() {
-		require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "export", worker, cfg))
+		require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "export", worker, cfg, nil))
 	})
 }
 
@@ -434,7 +433,7 @@ func TestApplyFetcherBridgeRuntimeConfig_UpdatesWorkerOnMutation(t *testing.T) {
 	cfg.Fetcher.BridgeBatchSize = 25
 	cfg.Fetcher.BridgeTenantConcurrency = 8
 
-	require.NoError(t, applyWorkerRuntimeConfig(context.Background(), workerNameFetcherBridge, worker, cfg))
+	require.NoError(t, applyWorkerRuntimeConfig(context.Background(), workerNameFetcherBridge, worker, cfg, nil))
 
 	last := worker.lastUpdate()
 	require.NotNil(t, last, "applyFetcherBridgeRuntimeConfig must forward to UpdateRuntimeConfig")

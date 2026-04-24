@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package http
@@ -26,9 +30,23 @@ import (
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories/mocks"
+	governanceQuery "github.com/LerianStudio/matcher/internal/governance/services/query"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	"github.com/LerianStudio/matcher/pkg/constant"
 )
+
+// newTestHandler constructs a Handler wired to a query use case backed by
+// the provided mock repository. Centralises the repo → queryUC → handler
+// chain so individual tests can keep treating the mock as the read-path
+// boundary without rewriting every call site.
+func newTestHandler(t *testing.T, repo *mocks.MockAuditLogRepository, production bool) (*Handler, error) {
+	t.Helper()
+
+	queryUC, err := governanceQuery.NewUseCase(repo)
+	require.NoError(t, err)
+
+	return NewHandler(queryUC, production)
+}
 
 var (
 	errTestDatabaseConnectionFailed = errors.New("database connection failed")
@@ -56,17 +74,19 @@ func TestNewHandler(t *testing.T) {
 		ctrl := gomock.NewController(t)
 
 		repo := mocks.NewMockAuditLogRepository(ctrl)
+		queryUC, err := governanceQuery.NewUseCase(repo)
+		require.NoError(t, err)
 
-		handler, err := NewHandler(repo, false)
+		handler, err := NewHandler(queryUC, false)
 		require.NoError(t, err)
 		require.NotNil(t, handler)
 	})
 
-	t.Run("nil repository", func(t *testing.T) {
+	t.Run("nil query use case", func(t *testing.T) {
 		t.Parallel()
 
 		handler, err := NewHandler(nil, false)
-		require.ErrorIs(t, err, ErrRepoRequired)
+		require.ErrorIs(t, err, ErrQueryUseCaseRequired)
 		require.Nil(t, handler)
 	})
 }
@@ -80,7 +100,7 @@ func TestRegisterRoutes(t *testing.T) {
 		ctrl := gomock.NewController(t)
 
 		repo := mocks.NewMockAuditLogRepository(ctrl)
-		handler, err := NewHandler(repo, false)
+		handler, err := newTestHandler(t, repo, false)
 		require.NoError(t, err)
 
 		app := fiber.New()
@@ -106,7 +126,7 @@ func TestRegisterRoutes(t *testing.T) {
 		ctrl := gomock.NewController(t)
 
 		repo := mocks.NewMockAuditLogRepository(ctrl)
-		handler, err := NewHandler(repo, false)
+		handler, err := newTestHandler(t, repo, false)
 		require.NoError(t, err)
 
 		err = RegisterRoutes(nil, handler)
@@ -148,7 +168,7 @@ func testGetAuditLogSuccess(t *testing.T) {
 	repo := mocks.NewMockAuditLogRepository(ctrl)
 	repo.EXPECT().GetByID(gomock.Any(), auditLogID).Return(auditLog, nil)
 
-	handler, err := NewHandler(repo, false)
+	handler, err := newTestHandler(t, repo, false)
 	require.NoError(t, err)
 
 	ctx := createTestContextWithTenant(tenantID)
@@ -167,7 +187,7 @@ func testGetAuditLogMissingID(t *testing.T) {
 	t.Helper()
 	ctrl := gomock.NewController(t)
 	repo := mocks.NewMockAuditLogRepository(ctrl)
-	handler, err := NewHandler(repo, false)
+	handler, err := newTestHandler(t, repo, false)
 	require.NoError(t, err)
 
 	ctx := createTestContext()
@@ -182,7 +202,7 @@ func testGetAuditLogInvalidUUID(t *testing.T) {
 	t.Helper()
 	ctrl := gomock.NewController(t)
 	repo := mocks.NewMockAuditLogRepository(ctrl)
-	handler, err := NewHandler(repo, false)
+	handler, err := newTestHandler(t, repo, false)
 	require.NoError(t, err)
 
 	ctx := createTestContext()
@@ -205,7 +225,7 @@ func testGetAuditLogNotFoundError(t *testing.T) {
 	repo := mocks.NewMockAuditLogRepository(ctrl)
 	repo.EXPECT().GetByID(gomock.Any(), auditLogID).Return(nil, governanceErrors.ErrAuditLogNotFound)
 
-	handler, err := NewHandler(repo, false)
+	handler, err := newTestHandler(t, repo, false)
 	require.NoError(t, err)
 
 	ctx := createTestContext()
@@ -224,7 +244,7 @@ func testGetAuditLogNotFoundNil(t *testing.T) {
 	repo := mocks.NewMockAuditLogRepository(ctrl)
 	repo.EXPECT().GetByID(gomock.Any(), auditLogID).Return(nil, nil)
 
-	handler, err := NewHandler(repo, false)
+	handler, err := newTestHandler(t, repo, false)
 	require.NoError(t, err)
 
 	ctx := createTestContext()
@@ -243,7 +263,7 @@ func testGetAuditLogInternalError(t *testing.T) {
 	repo := mocks.NewMockAuditLogRepository(ctrl)
 	repo.EXPECT().GetByID(gomock.Any(), auditLogID).Return(nil, errTestDatabaseConnectionFailed)
 
-	handler, err := NewHandler(repo, false)
+	handler, err := newTestHandler(t, repo, false)
 	require.NoError(t, err)
 
 	ctx := createTestContext()
@@ -395,7 +415,7 @@ func testListAuditLogsByEntitySuccess(t *testing.T) {
 		ListByEntity(gomock.Any(), entityType, entityID, (*sharedhttp.TimestampCursor)(nil), constants.DefaultPaginationLimit).
 		Return(logs, "", nil)
 
-	handler, err := NewHandler(repo, false)
+	handler, err := newTestHandler(t, repo, false)
 	require.NoError(t, err)
 
 	ctx := createTestContextWithTenant(tenantID)
@@ -424,7 +444,7 @@ func testListAuditLogsByEntityLimitCapped(t *testing.T) {
 		ListByEntity(gomock.Any(), entityType, entityID, (*sharedhttp.TimestampCursor)(nil), constants.MaximumPaginationLimit).
 		Return([]*entities.AuditLog{}, "", nil)
 
-	handler, err := NewHandler(repo, false)
+	handler, err := newTestHandler(t, repo, false)
 	require.NoError(t, err)
 
 	ctx := createTestContextWithTenant(tenantID)
@@ -445,7 +465,7 @@ func testListAuditLogsByEntityInvalidID(t *testing.T) {
 	tenantID := uuid.New()
 
 	repo := mocks.NewMockAuditLogRepository(ctrl)
-	handler, err := NewHandler(repo, false)
+	handler, err := newTestHandler(t, repo, false)
 	require.NoError(t, err)
 
 	ctx := createTestContextWithTenant(tenantID)
@@ -479,7 +499,7 @@ func testListAuditLogsByEntityInvalidTenant(t *testing.T) {
 		ListByEntity(gomock.Any(), entityType, entityID, (*sharedhttp.TimestampCursor)(nil), constants.DefaultPaginationLimit).
 		Return([]*entities.AuditLog{}, "", nil)
 
-	handler, err := NewHandler(repo, false)
+	handler, err := newTestHandler(t, repo, false)
 	require.NoError(t, err)
 
 	ctx := createTestContext()
@@ -503,7 +523,7 @@ func testListAuditLogsByEntityInternalError(t *testing.T) {
 		ListByEntity(gomock.Any(), entityType, entityID, (*sharedhttp.TimestampCursor)(nil), constants.DefaultPaginationLimit).
 		Return(nil, "", errTestDatabaseTimeout)
 
-	handler, err := NewHandler(repo, false)
+	handler, err := newTestHandler(t, repo, false)
 	require.NoError(t, err)
 
 	ctx := createTestContextWithTenant(tenantID)
@@ -522,7 +542,7 @@ func testListAuditLogsByEntityInvalidCursor(t *testing.T) {
 	entityType := "reconciliation_context"
 
 	repo := mocks.NewMockAuditLogRepository(ctrl)
-	handler, err := NewHandler(repo, false)
+	handler, err := newTestHandler(t, repo, false)
 	require.NoError(t, err)
 
 	ctx := createTestContextWithTenant(tenantID)
@@ -691,7 +711,7 @@ func testListAuditLogsWithCursorPagination(t *testing.T) {
 			return logs, encodedCursor, nil
 		})
 
-	handler, err := NewHandler(repo, false)
+	handler, err := newTestHandler(t, repo, false)
 	require.NoError(t, err)
 
 	ctx := createTestContextWithTenant(tenantID)
@@ -732,7 +752,7 @@ func testListAuditLogsMissingParam(
 	tenantID := uuid.New()
 
 	repo := mocks.NewMockAuditLogRepository(ctrl)
-	handler, err := NewHandler(repo, false)
+	handler, err := newTestHandler(t, repo, false)
 	require.NoError(t, err)
 
 	ctx := createTestContextWithTenant(tenantID)
@@ -755,7 +775,7 @@ func testListAuditLogsWithTenantScenario(t *testing.T, tenantID uuid.UUID, expec
 		ListByEntity(gomock.Any(), entityType, entityID, (*sharedhttp.TimestampCursor)(nil), constants.DefaultPaginationLimit).
 		Return([]*entities.AuditLog{}, "", nil)
 
-	handler, err := NewHandler(repo, false)
+	handler, err := newTestHandler(t, repo, false)
 	require.NoError(t, err)
 
 	var ctx context.Context
@@ -886,7 +906,7 @@ func TestListAuditLogs(t *testing.T) {
 			List(gomock.Any(), gomock.Any(), (*sharedhttp.TimestampCursor)(nil), constants.DefaultPaginationLimit).
 			Return(logs, "", nil)
 
-		handler, err := NewHandler(repo, false)
+		handler, err := newTestHandler(t, repo, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -925,7 +945,7 @@ func TestListAuditLogs(t *testing.T) {
 					return logs, "", nil
 				})
 
-		handler, err := NewHandler(repo, false)
+		handler, err := newTestHandler(t, repo, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -952,7 +972,7 @@ func TestListAuditLogs(t *testing.T) {
 					return []*entities.AuditLog{}, "", nil
 				})
 
-		handler, err := NewHandler(repo, false)
+		handler, err := newTestHandler(t, repo, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -979,7 +999,7 @@ func TestListAuditLogs(t *testing.T) {
 					return []*entities.AuditLog{}, "", nil
 				})
 
-		handler, err := NewHandler(repo, false)
+		handler, err := newTestHandler(t, repo, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -1007,7 +1027,7 @@ func TestListAuditLogs(t *testing.T) {
 					return []*entities.AuditLog{}, "", nil
 				})
 
-		handler, err := NewHandler(repo, false)
+		handler, err := newTestHandler(t, repo, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -1035,7 +1055,7 @@ func TestListAuditLogs(t *testing.T) {
 					return []*entities.AuditLog{}, "", nil
 				})
 
-		handler, err := NewHandler(repo, false)
+		handler, err := newTestHandler(t, repo, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -1063,7 +1083,7 @@ func TestListAuditLogs(t *testing.T) {
 					return []*entities.AuditLog{}, "", nil
 				})
 
-		handler, err := NewHandler(repo, false)
+		handler, err := newTestHandler(t, repo, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -1091,7 +1111,7 @@ func TestListAuditLogs(t *testing.T) {
 					return []*entities.AuditLog{}, "", nil
 				})
 
-		handler, err := NewHandler(repo, false)
+		handler, err := newTestHandler(t, repo, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -1124,7 +1144,7 @@ func TestListAuditLogs(t *testing.T) {
 					return []*entities.AuditLog{}, "", nil
 				})
 
-		handler, err := NewHandler(repo, false)
+		handler, err := newTestHandler(t, repo, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -1167,7 +1187,7 @@ func TestListAuditLogs(t *testing.T) {
 				return logs, encodedCursor, nil
 			})
 
-		handler, err := NewHandler(repo, false)
+		handler, err := newTestHandler(t, repo, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -1199,7 +1219,7 @@ func TestListAuditLogs(t *testing.T) {
 			List(gomock.Any(), gomock.Any(), (*sharedhttp.TimestampCursor)(nil), constants.MaximumPaginationLimit).
 			Return([]*entities.AuditLog{}, "", nil)
 
-		handler, err := NewHandler(repo, false)
+		handler, err := newTestHandler(t, repo, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -1221,7 +1241,7 @@ func TestListAuditLogs(t *testing.T) {
 		tenantID := uuid.New()
 
 		repo := mocks.NewMockAuditLogRepository(ctrl)
-		handler, err := NewHandler(repo, false)
+		handler, err := newTestHandler(t, repo, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -1243,7 +1263,7 @@ func TestListAuditLogs(t *testing.T) {
 		tenantID := uuid.New()
 
 		repo := mocks.NewMockAuditLogRepository(ctrl)
-		handler, err := NewHandler(repo, false)
+		handler, err := newTestHandler(t, repo, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -1265,7 +1285,7 @@ func TestListAuditLogs(t *testing.T) {
 		tenantID := uuid.New()
 
 		repo := mocks.NewMockAuditLogRepository(ctrl)
-		handler, err := NewHandler(repo, false)
+		handler, err := newTestHandler(t, repo, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -1287,7 +1307,7 @@ func TestListAuditLogs(t *testing.T) {
 			List(gomock.Any(), gomock.Any(), (*sharedhttp.TimestampCursor)(nil), constants.DefaultPaginationLimit).
 			Return(nil, "", errTestDatabaseConnectionFailed)
 
-		handler, err := NewHandler(repo, false)
+		handler, err := newTestHandler(t, repo, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -1309,7 +1329,7 @@ func TestListAuditLogs(t *testing.T) {
 			List(gomock.Any(), gomock.Any(), (*sharedhttp.TimestampCursor)(nil), constants.DefaultPaginationLimit).
 			Return([]*entities.AuditLog{}, "", nil)
 
-		handler, err := NewHandler(repo, false)
+		handler, err := newTestHandler(t, repo, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -1332,7 +1352,7 @@ func TestListAuditLogs(t *testing.T) {
 		tenantID := uuid.New()
 
 		repo := mocks.NewMockAuditLogRepository(ctrl)
-		handler, err := NewHandler(repo, false)
+		handler, err := newTestHandler(t, repo, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -1355,7 +1375,7 @@ func TestListAuditLogs(t *testing.T) {
 		tenantID := uuid.New()
 
 		repo := mocks.NewMockAuditLogRepository(ctrl)
-		handler, err := NewHandler(repo, false)
+		handler, err := newTestHandler(t, repo, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)
@@ -1378,7 +1398,7 @@ func TestListAuditLogs(t *testing.T) {
 		tenantID := uuid.New()
 
 		repo := mocks.NewMockAuditLogRepository(ctrl)
-		handler, err := NewHandler(repo, false)
+		handler, err := newTestHandler(t, repo, false)
 		require.NoError(t, err)
 
 		ctx := createTestContextWithTenant(tenantID)

@@ -259,7 +259,7 @@ func seedDashboardDataWithExceptions(
 	require.NoError(t, err)
 }
 
-func TestIntegrationDashboardAggregates_VolumeStats(t *testing.T) {
+func TestIntegration_Governance_IntegrationDashboardAggregates_VolumeStats(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		seed := seedDashboardTestConfig(t, h)
 		seedDashboardData(t, h, seed, 10, 5)
@@ -290,7 +290,7 @@ func TestIntegrationDashboardAggregates_VolumeStats(t *testing.T) {
 	})
 }
 
-func TestIntegrationDashboardAggregates_MatchRateStats(t *testing.T) {
+func TestIntegration_Governance_IntegrationDashboardAggregates_MatchRateStats(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		seed := seedDashboardTestConfig(t, h)
 		seedDashboardData(t, h, seed, 8, 2)
@@ -318,7 +318,7 @@ func TestIntegrationDashboardAggregates_MatchRateStats(t *testing.T) {
 	})
 }
 
-func TestIntegrationDashboardAggregates_SLAStats(t *testing.T) {
+func TestIntegration_Governance_IntegrationDashboardAggregates_SLAStats(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		seed := seedDashboardTestConfig(t, h)
 		seedDashboardDataWithExceptions(t, h, seed, 4, 1, 2, 1)
@@ -348,7 +348,7 @@ func TestIntegrationDashboardAggregates_SLAStats(t *testing.T) {
 	})
 }
 
-func TestIntegrationDashboardAggregates_FullDashboard(t *testing.T) {
+func TestIntegration_Governance_IntegrationDashboardAggregates_FullDashboard(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		seed := seedDashboardTestConfig(t, h)
 		seedDashboardData(t, h, seed, 6, 4)
@@ -384,7 +384,7 @@ func TestIntegrationDashboardAggregates_FullDashboard(t *testing.T) {
 	})
 }
 
-func TestIntegrationDashboardAggregates_EmptyData(t *testing.T) {
+func TestIntegration_Governance_IntegrationDashboardAggregates_EmptyData(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		seed := seedDashboardTestConfig(t, h)
 
@@ -420,7 +420,7 @@ func TestIntegrationDashboardAggregates_EmptyData(t *testing.T) {
 	})
 }
 
-func TestIntegrationDashboardAggregates_DateFiltering(t *testing.T) {
+func TestIntegration_Governance_IntegrationDashboardAggregates_DateFiltering(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		seed := seedDashboardTestConfig(t, h)
 		seedDashboardData(t, h, seed, 10, 5)
@@ -454,7 +454,7 @@ func TestIntegrationDashboardAggregates_DateFiltering(t *testing.T) {
 	})
 }
 
-func TestIntegrationDashboardAggregates_SourceFiltering(t *testing.T) {
+func TestIntegration_Governance_IntegrationDashboardAggregates_SourceFiltering(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		seed := seedDashboardTestConfig(t, h)
 		seedDashboardData(t, h, seed, 5, 3)
@@ -522,7 +522,7 @@ func TestIntegrationDashboardAggregates_SourceFiltering(t *testing.T) {
 	})
 }
 
-func TestIntegrationDashboardAggregates_CountInvariants(t *testing.T) {
+func TestIntegration_Governance_IntegrationDashboardAggregates_CountInvariants(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		seed := seedDashboardTestConfig(t, h)
 		seedDashboardData(t, h, seed, 7, 3)

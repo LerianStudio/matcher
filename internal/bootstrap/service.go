@@ -39,12 +39,13 @@ type Service struct {
 	Routes        *Routes
 	ConfigManager *ConfigManager
 
-	outboxRunner       libCommons.App
-	dbMetricsCollector *DBMetricsCollector
-	workerManager      *WorkerManager
-	connectionManager  connectionCloser
-	cleanupFuncs       []func()
-	readinessState     *readinessState
+	outboxRunner          libCommons.App
+	dbMetricsCollector    *DBMetricsCollector
+	redisMetricsCollector *RedisMetricsCollector
+	workerManager         *WorkerManager
+	connectionManager     connectionCloser
+	cleanupFuncs          []func()
+	readinessState        *readinessState
 
 	// Systemplane client for centralized runtime configuration.
 	// Nil when systemplane initialization fails (graceful degradation).
@@ -134,6 +135,10 @@ func (svc *Service) Run() error {
 
 	if svc.dbMetricsCollector != nil {
 		svc.dbMetricsCollector.Start(ctx)
+	}
+
+	if svc.redisMetricsCollector != nil {
+		svc.redisMetricsCollector.Start(ctx)
 	}
 
 	activeCfg := svc.resolveActiveConfig()
@@ -240,6 +245,10 @@ func (svc *Service) stopBackgroundWorkers(ctx context.Context, logger libLog.Log
 
 	if svc.dbMetricsCollector != nil {
 		svc.dbMetricsCollector.Stop()
+	}
+
+	if svc.redisMetricsCollector != nil {
+		svc.redisMetricsCollector.Stop()
 	}
 
 	if outbox := svc.outboxStoppable(); outbox != nil {

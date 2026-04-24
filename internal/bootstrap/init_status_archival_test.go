@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package bootstrap
@@ -68,7 +72,7 @@ func TestInitArchivalComponents_DisabledArchival_ReturnsNil(t *testing.T) {
 
 	var cleanups []func()
 
-	worker, err := initArchivalComponents(nil, cfg, nil, nil, nil, nil, &cleanups, false)
+	worker, err := initArchivalComponents(nil, cfg, nil, nil, nil, nil, &cleanups, false, nil)
 
 	assert.NoError(t, err)
 	assert.Nil(t, worker)
@@ -86,7 +90,7 @@ func TestInitArchivalComponents_DisabledArchivalWithRuntimeConfig_ReturnsNil(t *
 
 	var cleanups []func()
 
-	worker, err := initArchivalComponents(nil, cfg, func() *Config { return cfg }, nil, nil, nil, &cleanups, false)
+	worker, err := initArchivalComponents(nil, cfg, func() *Config { return cfg }, nil, nil, nil, &cleanups, false, nil)
 
 	assert.NoError(t, err)
 	assert.Nil(t, worker)

@@ -244,10 +244,15 @@ func initArchivalComponents(
 	logger libLog.Logger,
 	cleanups *[]func(),
 	production bool,
+	connector InfraConnector,
 ) (*governanceWorker.ArchivalWorker, error) {
+	if connector == nil {
+		connector = DefaultInfraConnector()
+	}
+
 	archiveRepo := archiveMetadataRepo.NewRepository(provider)
 
-	initialBackend, err := createArchivalStorage(context.TODO(), cfg)
+	initialBackend, err := createArchivalStorage(context.TODO(), cfg, connector)
 	if err != nil {
 		return nil, fmt.Errorf("create archival storage: %w", err)
 	}
@@ -258,7 +263,7 @@ func initArchivalComponents(
 	// and worker guards handle nil correctly.
 	var archivalStorage *objectstorage.Client
 	if configGetter != nil && initialBackend != nil {
-		archivalStorage = newRuntimeArchivalStorageClient(cfg, configGetter, initialBackend)
+		archivalStorage = newRuntimeArchivalStorageClient(cfg, configGetter, initialBackend, connector)
 	} else if initialBackend != nil {
 		archivalStorage = objectstorage.NewClient(initialBackend)
 	}
@@ -326,9 +331,13 @@ func createArchivalStorageAvailable(cfg *Config) bool {
 
 // createArchivalStorage creates an S3-compatible object storage
 // backend for the archival bucket.
-func createArchivalStorage(ctx context.Context, cfg *Config) (objectstorage.Backend, error) {
+func createArchivalStorage(ctx context.Context, cfg *Config, connector InfraConnector) (objectstorage.Backend, error) {
 	if cfg.Archival.StorageBucket == "" || cfg.ObjectStorage.Endpoint == "" {
 		return nil, nil
+	}
+
+	if connector == nil {
+		connector = DefaultInfraConnector()
 	}
 
 	s3Cfg := reportingStorage.S3Config{
@@ -341,7 +350,7 @@ func createArchivalStorage(ctx context.Context, cfg *Config) (objectstorage.Back
 		AllowInsecure:   allowInsecureObjectStorageEndpoint(cfg),
 	}
 
-	client, err := newS3ClientFn(detachedContext(ctx), s3Cfg)
+	client, err := connector.NewS3Client(detachedContext(ctx), s3Cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create archival S3 client: %w", err)
 	}
@@ -360,7 +369,12 @@ func newRuntimeArchivalStorageClient(
 	initialCfg *Config,
 	configGetter func() *Config,
 	fallback objectstorage.Backend,
+	connector InfraConnector,
 ) *objectstorage.Client {
+	if connector == nil {
+		connector = DefaultInfraConnector()
+	}
+
 	resolver := func(ctx context.Context) (objectstorage.Backend, string, error) {
 		cfg := initialCfg
 
@@ -370,7 +384,7 @@ func newRuntimeArchivalStorageClient(
 			}
 		}
 
-		backend, err := createArchivalStorage(ctx, cfg)
+		backend, err := createArchivalStorage(ctx, cfg, connector)
 		if err != nil {
 			// Return the error plus an empty key so the Client keeps
 			// its last good backend (matches the previous dynamic

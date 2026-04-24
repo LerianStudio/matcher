@@ -243,9 +243,9 @@ func varianceRowKey(row *entities.VarianceReportRow) string {
 	return row.SourceID.String() + ":" + row.Currency + ":" + row.FeeScheduleID.String()
 }
 
-// TestVarianceReport_EmptyDatabase verifies that GetVarianceReport returns an
+// TestIntegration_Reporting_VarianceReport_EmptyDatabase verifies that GetVarianceReport returns an
 // empty slice and zero pagination when no fee variances exist for the filter.
-func TestVarianceReport_EmptyDatabase(t *testing.T) {
+func TestIntegration_Reporting_VarianceReport_EmptyDatabase(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -266,10 +266,10 @@ func TestVarianceReport_EmptyDatabase(t *testing.T) {
 	})
 }
 
-// TestVarianceReport_SingleGroupAggregation inserts 3 fee variances with the
+// TestIntegration_Reporting_VarianceReport_SingleGroupAggregation inserts 3 fee variances with the
 // same (source_id, currency, fee schedule) and verifies that GetVarianceReport
 // returns a single aggregated row with correct SUMs.
-func TestVarianceReport_SingleGroupAggregation(t *testing.T) {
+func TestIntegration_Reporting_VarianceReport_SingleGroupAggregation(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -318,9 +318,9 @@ func TestVarianceReport_SingleGroupAggregation(t *testing.T) {
 	})
 }
 
-// TestVarianceReport_MultipleGroups inserts variances for 2 sources × 2
+// TestIntegration_Reporting_VarianceReport_MultipleGroups inserts variances for 2 sources × 2
 // currencies and verifies that 4 distinct aggregated rows are returned.
-func TestVarianceReport_MultipleGroups(t *testing.T) {
+func TestIntegration_Reporting_VarianceReport_MultipleGroups(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -413,11 +413,11 @@ func TestVarianceReport_MultipleGroups(t *testing.T) {
 	})
 }
 
-// TestVarianceReport_ListVariancePage_Pagination inserts 5 distinct
+// TestIntegration_Reporting_VarianceReport_ListVariancePage_Pagination inserts 5 distinct
 // (source_id, currency, fee schedule) groups and pages through them with
 // limit=2. Verifies that all 5 groups are returned across 3 pages and that
 // the composite cursor key format is correct.
-func TestVarianceReport_ListVariancePage_Pagination(t *testing.T) {
+func TestIntegration_Reporting_VarianceReport_ListVariancePage_Pagination(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -512,9 +512,9 @@ func TestVarianceReport_ListVariancePage_Pagination(t *testing.T) {
 	})
 }
 
-// TestVarianceReport_SourceFilter inserts variances for 2 sources, then queries
+// TestIntegration_Reporting_VarianceReport_SourceFilter inserts variances for 2 sources, then queries
 // with a SourceID filter, verifying only the filtered source's rows are returned.
-func TestVarianceReport_SourceFilter(t *testing.T) {
+func TestIntegration_Reporting_VarianceReport_SourceFilter(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {

@@ -50,6 +50,10 @@ func TestValidate_ProductionWildcardCORS(t *testing.T) {
 	assert.Contains(t, err.Error(), "CORS")
 }
 
+// TestValidate_ProductionEmptyCORS documents that empty CORS_ALLOWED_ORIGINS is
+// permitted in production. Only the literal wildcard "*" is rejected — a blank
+// value means "no cross-origin requests accepted", which is strictly stricter
+// than restricting to a specific origin and therefore safe.
 func TestValidate_ProductionEmptyCORS(t *testing.T) {
 	t.Parallel()
 
@@ -57,15 +61,17 @@ func TestValidate_ProductionEmptyCORS(t *testing.T) {
 	cfg.App.EnvName = "production"
 	cfg.Postgres.PrimaryPassword = "secure-password"
 	cfg.Server.CORSAllowedOrigins = ""
+	cfg.Server.TrustedProxies = "10.0.0.0/8" // satisfy prod+rate-limit precondition
 	cfg.RabbitMQ.User = "produser"
 	cfg.RabbitMQ.Password = "prodpass"
 	cfg.RabbitMQ.AllowInsecureHealthCheck = false
 	cfg.Redis.Password = "redis-pass"
 	cfg.RateLimit.Enabled = true
+	cfg.ObjectStorage.Endpoint = "https://s3.example.com"
+	cfg.Fetcher.URL = ""
 
 	err := cfg.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "CORS")
+	require.NoError(t, err)
 }
 
 func TestValidateAuthConfig_EnabledButNoHost(t *testing.T) {

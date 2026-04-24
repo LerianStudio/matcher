@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 // Package audit provides adapters for publishing exception audit events.
 package audit
 
@@ -16,6 +20,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
+	"github.com/LerianStudio/matcher/internal/shared/adapters/outboxtelemetry"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -254,7 +259,7 @@ func marshalOrTruncate(
 
 	originalSize := len(payload)
 
-	sharedDomain.RecordOutboxTruncation(
+	outboxtelemetry.RecordAuditChangesTruncated(
 		ctx,
 		auditExceptionEntityType,
 		event.EntityID,

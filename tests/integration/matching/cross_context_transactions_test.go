@@ -116,9 +116,9 @@ func queryTransactionStatus(
 	return status
 }
 
-// TestCrossContextTx_FindByContextAndIDs verifies that all ingested transactions
+// TestIntegration_Matching_CrossContextTx_FindByContextAndIDs verifies that all ingested transactions
 // are returned when queried with their exact IDs through the cross-context adapter.
-func TestCrossContextTx_FindByContextAndIDs(t *testing.T) {
+func TestIntegration_Matching_CrossContextTx_FindByContextAndIDs(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 
@@ -156,10 +156,10 @@ func TestCrossContextTx_FindByContextAndIDs(t *testing.T) {
 	})
 }
 
-// TestCrossContextTx_FindByContextAndIDs_PartialMatch verifies that when the
+// TestIntegration_Matching_CrossContextTx_FindByContextAndIDs_PartialMatch verifies that when the
 // query includes a non-existent ID alongside real ones, only the existing
 // transactions are returned without error.
-func TestCrossContextTx_FindByContextAndIDs_PartialMatch(t *testing.T) {
+func TestIntegration_Matching_CrossContextTx_FindByContextAndIDs_PartialMatch(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 
@@ -199,9 +199,9 @@ func TestCrossContextTx_FindByContextAndIDs_PartialMatch(t *testing.T) {
 	})
 }
 
-// TestCrossContextTx_FindByContextAndIDs_EmptyList verifies that querying with
+// TestIntegration_Matching_CrossContextTx_FindByContextAndIDs_EmptyList verifies that querying with
 // an empty ID list returns an empty result without error.
-func TestCrossContextTx_FindByContextAndIDs_EmptyList(t *testing.T) {
+func TestIntegration_Matching_CrossContextTx_FindByContextAndIDs_EmptyList(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 
@@ -218,10 +218,10 @@ func TestCrossContextTx_FindByContextAndIDs_EmptyList(t *testing.T) {
 	})
 }
 
-// TestCrossContextTx_MarkMatched verifies that MarkMatched transitions
+// TestIntegration_Matching_CrossContextTx_MarkMatched verifies that MarkMatched transitions
 // transactions from UNMATCHED to MATCHED, and that subsequent queries
 // through the adapter reflect the new status.
-func TestCrossContextTx_MarkMatched(t *testing.T) {
+func TestIntegration_Matching_CrossContextTx_MarkMatched(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 
@@ -269,9 +269,9 @@ func TestCrossContextTx_MarkMatched(t *testing.T) {
 	})
 }
 
-// TestCrossContextTx_MarkUnmatched_Rollback verifies the status lifecycle:
+// TestIntegration_Matching_CrossContextTx_MarkUnmatched_Rollback verifies the status lifecycle:
 // UNMATCHED → MATCHED (via MarkMatched) → UNMATCHED (via MarkUnmatched).
-func TestCrossContextTx_MarkUnmatched_Rollback(t *testing.T) {
+func TestIntegration_Matching_CrossContextTx_MarkUnmatched_Rollback(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 
@@ -327,9 +327,9 @@ func TestCrossContextTx_MarkUnmatched_Rollback(t *testing.T) {
 	})
 }
 
-// TestCrossContextTx_WithTx_Transactional verifies that WithTx wraps multiple
+// TestIntegration_Matching_CrossContextTx_WithTx_Transactional verifies that WithTx wraps multiple
 // operations atomically — either all succeed or none persist.
-func TestCrossContextTx_WithTx_Transactional(t *testing.T) {
+func TestIntegration_Matching_CrossContextTx_WithTx_Transactional(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 

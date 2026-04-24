@@ -71,7 +71,7 @@ func createComment(
 	return created
 }
 
-func TestCommentRepository_FindByExceptionID_Empty(t *testing.T) {
+func TestIntegration_Exception_CommentRepository_FindByExceptionID_Empty(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		cRepo, excID := setupCommentRepoTest(t, h, "EMPTY")
@@ -83,7 +83,7 @@ func TestCommentRepository_FindByExceptionID_Empty(t *testing.T) {
 	})
 }
 
-func TestCommentRepository_CreateAndFind(t *testing.T) {
+func TestIntegration_Exception_CommentRepository_CreateAndFind(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		cRepo, excID := setupCommentRepoTest(t, h, "CRFIND")
@@ -136,7 +136,7 @@ func TestCommentRepository_CreateAndFind(t *testing.T) {
 	})
 }
 
-func TestCommentRepository_FindByExceptionID_OrderingWithManyComments(t *testing.T) {
+func TestIntegration_Exception_CommentRepository_FindByExceptionID_OrderingWithManyComments(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		cRepo, excID := setupCommentRepoTest(t, h, "ORDER")
@@ -178,7 +178,7 @@ func TestCommentRepository_FindByExceptionID_OrderingWithManyComments(t *testing
 	})
 }
 
-func TestCommentRepository_DeleteWithTx(t *testing.T) {
+func TestIntegration_Exception_CommentRepository_DeleteWithTx(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		cRepo, excID := setupCommentRepoTest(t, h, "DELTX")
@@ -212,7 +212,7 @@ func TestCommentRepository_DeleteWithTx(t *testing.T) {
 	})
 }
 
-func TestCommentRepository_FindByExceptionID_IsolationBetweenExceptions(t *testing.T) {
+func TestIntegration_Exception_CommentRepository_FindByExceptionID_IsolationBetweenExceptions(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		provider := h.Provider()

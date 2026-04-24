@@ -19,12 +19,12 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-// TestCrossTenantIsolation_H03 verifies that PostgreSQL schema-based tenant isolation
+// TestIntegration_Auth_CrossTenantIsolation_H03 verifies that PostgreSQL schema-based tenant isolation
 // prevents one tenant from accessing another tenant's data.
 //
 // This test addresses H-03 from REVIEW_AUTH.md:
 // "No E2E test proves tenant isolation prevents cross-tenant data access."
-func TestCrossTenantIsolation_H03(t *testing.T) {
+func TestIntegration_Auth_CrossTenantIsolation_H03(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		t.Run("tenant A cannot see tenant B data", func(t *testing.T) {
 			tenantAID := uuid.New()

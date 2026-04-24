@@ -548,8 +548,37 @@ type Config struct {
 }
 
 // Options provides optional configuration overrides for server initialization.
+//
+// InfraConnector and EventPublishers allow tests to inject fake
+// implementations of infrastructure-level primitives (migrations, connect
+// calls, telemetry init, AMQP channel/publisher lifecycle) without mutating
+// process-global state. When left nil, InitServersWithOptions fills in the
+// production defaults via DefaultInfraConnector / DefaultEventPublisherFactory.
 type Options struct {
-	Logger libLog.Logger
+	Logger          libLog.Logger
+	InfraConnector  InfraConnector
+	EventPublishers EventPublisherFactory
+}
+
+// ensureDefaults fills in production factories for any nil Options field.
+// Callers that construct Options without supplying factories get the same
+// behaviour as passing a zero-value Options: bootstrap uses the defaults.
+// Safe to call on a nil receiver — returns a fresh Options populated with
+// production defaults.
+func (opts *Options) ensureDefaults() *Options {
+	if opts == nil {
+		opts = &Options{}
+	}
+
+	if opts.InfraConnector == nil {
+		opts.InfraConnector = DefaultInfraConnector()
+	}
+
+	if opts.EventPublishers == nil {
+		opts.EventPublishers = DefaultEventPublisherFactory()
+	}
+
+	return opts
 }
 
 // FetcherMaxExtractionBytes returns the effective size cap for Fetcher

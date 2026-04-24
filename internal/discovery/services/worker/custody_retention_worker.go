@@ -25,9 +25,14 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
+	workermetrics "github.com/LerianStudio/matcher/internal/shared/observability/workermetrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
+
+// custodyRetentionWorkerName is the stable label value emitted on
+// matcher.worker.* metrics from this worker.
+const custodyRetentionWorkerName = "custody_retention_worker"
 
 const (
 	// custodyRetentionLockKey is the global distributed lock key for the
@@ -150,6 +155,7 @@ type CustodyRetentionWorker struct {
 	cfg            CustodyRetentionWorkerConfig
 	logger         libLog.Logger
 	tracer         trace.Tracer
+	metrics        *workermetrics.Recorder
 
 	running  atomic.Bool
 	stopOnce sync.Once
@@ -202,6 +208,7 @@ func NewCustodyRetentionWorker(
 		cfg:            cfg,
 		logger:         logger,
 		tracer:         otel.Tracer("discovery.custody_retention_worker"),
+		metrics:        workermetrics.NewRecorder(custodyRetentionWorkerName),
 		stopCh:         make(chan struct{}),
 		doneCh:         make(chan struct{}),
 	}, nil
@@ -347,8 +354,20 @@ func (worker *CustodyRetentionWorker) sweepCycle(ctx context.Context) {
 	ctx, span := tracer.Start(ctx, "discovery.custody_retention.sweep_cycle")
 	defer span.End()
 
+	startedAt := time.Now()
+	outcome := workermetrics.OutcomeSkipped
+
+	var processed, failed int
+
+	defer func() {
+		worker.metrics.RecordCycle(ctx, startedAt, outcome)
+		worker.metrics.RecordItems(ctx, processed, failed)
+	}()
+
 	acquired, token, err := worker.acquireLock(ctx)
 	if err != nil {
+		outcome = workermetrics.OutcomeFailure
+
 		libOpentelemetry.HandleSpanError(span, "custody retention lock acquire failed", err)
 		logger.With(libLog.String("error", err.Error())).
 			Log(ctx, libLog.LevelWarn, "custody retention: lock acquire failed")
@@ -364,6 +383,8 @@ func (worker *CustodyRetentionWorker) sweepCycle(ctx context.Context) {
 
 	tenants, err := worker.tenantLister.ListTenants(ctx)
 	if err != nil {
+		outcome = workermetrics.OutcomeFailure
+
 		libOpentelemetry.HandleSpanError(span, "custody retention: list tenants failed", err)
 		logger.With(libLog.String("error", err.Error())).
 			Log(ctx, libLog.LevelError, "custody retention: failed to list tenants")
@@ -371,26 +392,34 @@ func (worker *CustodyRetentionWorker) sweepCycle(ctx context.Context) {
 		return
 	}
 
-	span.SetAttributes(attribute.Int("custody_retention.tenant_count", len(tenants)))
+	outcome = workermetrics.OutcomeSuccess
 
-	deleted := 0
+	span.SetAttributes(attribute.Int("custody_retention.tenant_count", len(tenants)))
 
 	for _, tenantID := range tenants {
 		if tenantID == "" {
 			continue
 		}
 
-		count := worker.sweepTenant(ctx, tenantID)
-		deleted += count
+		tenantDeleted, tenantFailed := worker.sweepTenant(ctx, tenantID)
+		processed += tenantDeleted
+		failed += tenantFailed
 	}
 
-	span.SetAttributes(attribute.Int("custody_retention.objects_deleted", deleted))
+	span.SetAttributes(
+		attribute.Int("custody_retention.objects_deleted", processed),
+		attribute.Int("custody_retention.objects_failed", failed),
+	)
 }
 
-// sweepTenant runs the retention sweep for a single tenant. Returns the
-// number of custody objects actually deleted (excluding no-op deletes for
-// objects that were already gone).
-func (worker *CustodyRetentionWorker) sweepTenant(parentCtx context.Context, tenantID string) int {
+// sweepTenant runs the retention sweep for a single tenant. Returns
+// (deleted, failed) counts for cycle-level aggregation. "deleted" is
+// the number of sweepOne calls that returned true (full success path,
+// including convergence marker best-effort). "failed" is the number of
+// candidates where sweepOne returned false — either build-key errored,
+// Delete errored, or some transient backend issue. Already-gone objects
+// count as deleted (sweepOne's Delete is an idempotent no-op on them).
+func (worker *CustodyRetentionWorker) sweepTenant(parentCtx context.Context, tenantID string) (int, int) {
 	ctx := context.WithValue(parentCtx, auth.TenantIDKey, tenantID)
 	logger, tracer := worker.tracking(ctx)
 
@@ -407,12 +436,12 @@ func (worker *CustodyRetentionWorker) sweepTenant(parentCtx context.Context, ten
 			libLog.String("error", err.Error()),
 		).Log(ctx, libLog.LevelWarn, "custody retention: failed to find candidates")
 
-		return 0
+		return 0, 0
 	}
 
 	span.SetAttributes(attribute.Int("custody_retention.candidate_count", len(candidates)))
 
-	deleted := 0
+	var deleted, failed int
 
 	for _, extraction := range candidates {
 		if extraction == nil {
@@ -421,12 +450,17 @@ func (worker *CustodyRetentionWorker) sweepTenant(parentCtx context.Context, ten
 
 		if worker.sweepOne(ctx, tenantID, extraction) {
 			deleted++
+		} else {
+			failed++
 		}
 	}
 
-	span.SetAttributes(attribute.Int("custody_retention.tenant_deleted", deleted))
+	span.SetAttributes(
+		attribute.Int("custody_retention.tenant_deleted", deleted),
+		attribute.Int("custody_retention.tenant_failed", failed),
+	)
 
-	return deleted
+	return deleted, failed
 }
 
 // sweepOne deletes a single orphan custody object. Returns true when a

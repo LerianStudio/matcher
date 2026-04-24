@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package command
 
 import (
@@ -15,6 +19,7 @@ import (
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
+	sharedObservability "github.com/LerianStudio/matcher/internal/shared/observability"
 )
 
 func (uc *UseCase) executeMatchRules(
@@ -147,7 +152,7 @@ func (uc *UseCase) executeMatchRules(
 				MatchedCount:   matchedCount,
 				UnmatchedCount: unmatchedCount,
 			},
-			nil,
+			sharedObservability.NewMatcherRedactor(),
 		)
 	}
 

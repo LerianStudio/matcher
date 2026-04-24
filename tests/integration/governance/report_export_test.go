@@ -161,7 +161,7 @@ func seedTransactionsWithMatches(
 	require.NoError(t, err)
 }
 
-func TestIntegrationReportExports_MatchedCSV(t *testing.T) {
+func TestIntegration_Governance_IntegrationReportExports_MatchedCSV(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		seed := seedReportTestConfig(t, h)
 		seedTransactionsWithMatches(t, h, seed, 3, 0)
@@ -192,7 +192,7 @@ func TestIntegrationReportExports_MatchedCSV(t *testing.T) {
 	})
 }
 
-func TestIntegrationReportExports_UnmatchedCSV(t *testing.T) {
+func TestIntegration_Governance_IntegrationReportExports_UnmatchedCSV(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		seed := seedReportTestConfig(t, h)
 		seedTransactionsWithMatches(t, h, seed, 0, 5)
@@ -227,7 +227,7 @@ func TestIntegrationReportExports_UnmatchedCSV(t *testing.T) {
 	})
 }
 
-func TestIntegrationReportExports_SummaryCSV(t *testing.T) {
+func TestIntegration_Governance_IntegrationReportExports_SummaryCSV(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		seed := seedReportTestConfig(t, h)
 		seedTransactionsWithMatches(t, h, seed, 4, 2)
@@ -261,7 +261,7 @@ func TestIntegrationReportExports_SummaryCSV(t *testing.T) {
 	})
 }
 
-func TestIntegrationReportExports_MatchedPDF(t *testing.T) {
+func TestIntegration_Governance_IntegrationReportExports_MatchedPDF(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		seed := seedReportTestConfig(t, h)
 		seedTransactionsWithMatches(t, h, seed, 2, 0)
@@ -287,7 +287,7 @@ func TestIntegrationReportExports_MatchedPDF(t *testing.T) {
 	})
 }
 
-func TestIntegrationReportExports_UnmatchedPDF(t *testing.T) {
+func TestIntegration_Governance_IntegrationReportExports_UnmatchedPDF(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		seed := seedReportTestConfig(t, h)
 		seedTransactionsWithMatches(t, h, seed, 0, 3)
@@ -313,7 +313,7 @@ func TestIntegrationReportExports_UnmatchedPDF(t *testing.T) {
 	})
 }
 
-func TestIntegrationReportExports_SummaryPDF(t *testing.T) {
+func TestIntegration_Governance_IntegrationReportExports_SummaryPDF(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		seed := seedReportTestConfig(t, h)
 		seedTransactionsWithMatches(t, h, seed, 3, 2)
@@ -339,7 +339,7 @@ func TestIntegrationReportExports_SummaryPDF(t *testing.T) {
 	})
 }
 
-func TestIntegrationReportExports_EmptyData(t *testing.T) {
+func TestIntegration_Governance_IntegrationReportExports_EmptyData(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		seed := seedReportTestConfig(t, h)
 
@@ -373,7 +373,7 @@ func TestIntegrationReportExports_EmptyData(t *testing.T) {
 	})
 }
 
-func TestIntegrationReportExports_DateFiltering(t *testing.T) {
+func TestIntegration_Governance_IntegrationReportExports_DateFiltering(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		seed := seedReportTestConfig(t, h)
 		seedTransactionsWithMatches(t, h, seed, 5, 0)

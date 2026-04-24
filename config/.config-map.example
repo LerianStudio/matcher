@@ -219,8 +219,35 @@ M2M_TARGET_SERVICE=fetcher
 # SYSTEMPLANE_MONGODB_POLL_INTERVAL_SEC=30
 
 # REQUIRED: AES-256-GCM master key for encrypting secret config values.
+#
 # Generate a unique value per environment:
 #   openssl rand -base64 32 | tr -d '\n'
-# SECURITY: The development default (used in docker-compose.yml) is
-# explicitly blocked in production by validateProductionConfig.
+#
+# docker-compose.yml uses the ${VAR:?err} form for this key, so `docker
+# compose up` fails loudly if the variable is not set. There is no hardcoded
+# fallback — exporting the variable (or setting it in your shell profile /
+# deployment pipeline) is mandatory.
+#
+# ── Rotation ────────────────────────────────────────────────────────────────
+# The current key version is v1 (implicit — there is only one key).
+#
+# Rotating the master key requires:
+#   1. Decrypting every secret systemplane entry with the current key,
+#   2. Re-encrypting with the new key,
+#   3. Atomically swapping the value of SYSTEMPLANE_SECRET_MASTER_KEY and
+#      restarting the service.
+#
+# A migration script MUST be used for rotation — editing the key in place
+# without re-encrypting existing values will render every encrypted secret
+# unrecoverable.
+#
+# ── Loss of key ─────────────────────────────────────────────────────────────
+# Losing this key means losing every systemplane-encrypted value stored in
+# the backend (Postgres or MongoDB). Back it up alongside your database
+# credentials in your secret manager. Treat it with the same discipline.
+#
+# SECURITY: Any development default (e.g. the key historically committed to
+# docker-compose.yml) is explicitly blocked in production by
+# validateProductionConfig. Production deployments MUST supply a freshly
+# generated value.
 # SYSTEMPLANE_SECRET_MASTER_KEY=

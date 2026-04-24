@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTestHarnessStructure(t *testing.T) {
+func TestIntegration_Flow_TestHarnessStructure(t *testing.T) {
 	t.Parallel()
 
 	harness := &TestHarness{
@@ -28,14 +28,14 @@ func TestTestHarnessStructure(t *testing.T) {
 	require.NotEmpty(t, harness.RabbitMQHealthURL)
 }
 
-func TestTerminateContainerNil(t *testing.T) {
+func TestIntegration_Flow_TerminateContainerNil(t *testing.T) {
 	t.Parallel()
 
 	err := terminateContainer(context.Background(), nil)
 	require.NoError(t, err)
 }
 
-func TestRunWithDatabase(t *testing.T) {
+func TestIntegration_Flow_RunWithDatabase(t *testing.T) {
 	RunWithDatabase(t, func(t *testing.T, h *TestHarness) {
 		require.NotNil(t, h.Connection)
 		require.NotEqual(t, uuid.Nil, h.Seed.TenantID)
@@ -47,7 +47,7 @@ func TestRunWithDatabase(t *testing.T) {
 	})
 }
 
-func TestSeedDataIsValid(t *testing.T) {
+func TestIntegration_Flow_SeedDataIsValid(t *testing.T) {
 	RunWithDatabase(t, func(t *testing.T, h *TestHarness) {
 		require.NotEmpty(t, h.PostgresDSN)
 		require.NotNil(t, h.Connection)

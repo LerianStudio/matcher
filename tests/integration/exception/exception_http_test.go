@@ -62,10 +62,10 @@ func setupMultipleExceptions(t *testing.T, h *integration.TestHarness, count int
 }
 
 // --------------------------------------------------------------------------
-// 1. TestExceptionList_ReturnsAll
+// 1. TestIntegration_Exception_ExceptionList_ReturnsAll
 // --------------------------------------------------------------------------
 
-func TestExceptionList_ReturnsAll(t *testing.T) {
+func TestIntegration_Exception_ExceptionList_ReturnsAll(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -87,10 +87,10 @@ func TestExceptionList_ReturnsAll(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// 2. TestExceptionList_FilterBySeverity
+// 2. TestIntegration_Exception_ExceptionList_FilterBySeverity
 // --------------------------------------------------------------------------
 
-func TestExceptionList_FilterBySeverity(t *testing.T) {
+func TestIntegration_Exception_ExceptionList_FilterBySeverity(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		// Create 6 exceptions: indices 0,3 = CRITICAL; 1,4 = HIGH; 2,5 = MEDIUM
 		setupMultipleExceptions(t, h, 6)
@@ -116,10 +116,10 @@ func TestExceptionList_FilterBySeverity(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// 3. TestExceptionList_FilterByStatus
+// 3. TestIntegration_Exception_ExceptionList_FilterByStatus
 // --------------------------------------------------------------------------
 
-func TestExceptionList_FilterByStatus(t *testing.T) {
+func TestIntegration_Exception_ExceptionList_FilterByStatus(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ids := setupMultipleExceptions(t, h, 3)
 		ctx := testCtx(t, h)
@@ -162,10 +162,10 @@ func TestExceptionList_FilterByStatus(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// 4. TestExceptionList_Pagination
+// 4. TestIntegration_Exception_ExceptionList_Pagination
 // --------------------------------------------------------------------------
 
-func TestExceptionList_Pagination(t *testing.T) {
+func TestIntegration_Exception_ExceptionList_Pagination(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		const totalCount = 5
 
@@ -210,10 +210,10 @@ func TestExceptionList_Pagination(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// 5. TestExceptionGetByID
+// 5. TestIntegration_Exception_ExceptionGetByID
 // --------------------------------------------------------------------------
 
-func TestExceptionGetByID(t *testing.T) {
+func TestIntegration_Exception_ExceptionGetByID(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		provider := h.Provider()
@@ -247,10 +247,10 @@ func TestExceptionGetByID(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// 6. TestExceptionGetByID_NotFound
+// 6. TestIntegration_Exception_ExceptionGetByID_NotFound
 // --------------------------------------------------------------------------
 
-func TestExceptionGetByID_NotFound(t *testing.T) {
+func TestIntegration_Exception_ExceptionGetByID_NotFound(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		repo := exceptionRepoAdapter.NewRepository(h.Provider())
@@ -262,10 +262,10 @@ func TestExceptionGetByID_NotFound(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// 7. TestExceptionForceMatch_FullFlow
+// 7. TestIntegration_Exception_ExceptionForceMatch_FullFlow
 // --------------------------------------------------------------------------
 
-func TestExceptionForceMatch_FullFlow(t *testing.T) {
+func TestIntegration_Exception_ExceptionForceMatch_FullFlow(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtxWithActor(t, h, "http-test-operator")
 		provider := h.Provider()
@@ -317,10 +317,10 @@ func TestExceptionForceMatch_FullFlow(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// 8. TestExceptionAdjustEntry_FullFlow
+// 8. TestIntegration_Exception_ExceptionAdjustEntry_FullFlow
 // --------------------------------------------------------------------------
 
-func TestExceptionAdjustEntry_FullFlow(t *testing.T) {
+func TestIntegration_Exception_ExceptionAdjustEntry_FullFlow(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtxWithActor(t, h, "http-test-adjuster")
 		provider := h.Provider()

@@ -19,7 +19,8 @@ import (
 // Setting to "" would therefore blank fields like DEFAULT_TENANT_ID and break
 // validation paths that depend on default values.
 //
-// Original values are restored via t.Cleanup so neighbouring tests are unaffected.
+// Original values are restored via t.Setenv (for previously-set vars) and
+// t.Cleanup (for previously-unset vars) so neighbouring tests are unaffected.
 // Because process env is global mutable state, the calling test MUST NOT call
 // t.Parallel().
 func clearConfigEnvVars(t *testing.T) {
@@ -27,16 +28,21 @@ func clearConfigEnvVars(t *testing.T) {
 
 	for _, key := range append(configEnvVarKeys, legacyAuthEnvVarKeys()...) {
 		value, exists := os.LookupEnv(key)
+		if exists {
+			// t.Setenv registers a Cleanup that restores the prior value; it
+			// also sets the var to `value` now, which is a no-op since that's
+			// already its current value.
+			t.Setenv(key, value)
+		} else {
+			// Env var was unset before the test. Ensure it's still unset on
+			// cleanup in case the test body sets it.
+			t.Cleanup(func() { _ = os.Unsetenv(key) })
+		}
+
+		// Clear the var for the scope of the test. This MUST use os.Unsetenv
+		// (not t.Setenv with an empty string) because restoreZeroedFields
+		// distinguishes present-but-empty from absent.
 		requireNoError(t, os.Unsetenv(key))
-
-		t.Cleanup(func() {
-			if exists {
-				requireNoError(t, os.Setenv(key, value))
-				return
-			}
-
-			requireNoError(t, os.Unsetenv(key))
-		})
 	}
 }
 

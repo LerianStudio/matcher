@@ -122,7 +122,7 @@ func transitionDisputeToWon(
 	require.NoError(t, err)
 }
 
-func TestDisputeList_EmptyResult(t *testing.T) {
+func TestIntegration_Exception_DisputeList_EmptyResult(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		provider := h.Provider()
@@ -139,7 +139,7 @@ func TestDisputeList_EmptyResult(t *testing.T) {
 	})
 }
 
-func TestDisputeList_FilterByState(t *testing.T) {
+func TestIntegration_Exception_DisputeList_FilterByState(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 
@@ -194,7 +194,7 @@ func TestDisputeList_FilterByState(t *testing.T) {
 	})
 }
 
-func TestDisputeList_PaginationForward(t *testing.T) {
+func TestIntegration_Exception_DisputeList_PaginationForward(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 
@@ -264,7 +264,7 @@ func TestDisputeList_PaginationForward(t *testing.T) {
 	})
 }
 
-func TestDisputeFindByExceptionID(t *testing.T) {
+func TestIntegration_Exception_DisputeFindByExceptionID(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 
@@ -294,7 +294,7 @@ func TestDisputeFindByExceptionID(t *testing.T) {
 	})
 }
 
-func TestDisputeExistsForTenant(t *testing.T) {
+func TestIntegration_Exception_DisputeExistsForTenant(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 

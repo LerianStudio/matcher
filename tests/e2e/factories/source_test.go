@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/LerianStudio/matcher/tests/e2e"
-	"github.com/LerianStudio/matcher/tests/e2e/client"
+	"github.com/LerianStudio/matcher/tests/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

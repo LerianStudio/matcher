@@ -24,9 +24,9 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-// TestOutboxDispatcher_DispatchOnce_PublishesPendingEvents verifies that
+// TestIntegration_Matching_OutboxDispatcher_DispatchOnce_PublishesPendingEvents verifies that
 // a valid pending outbox event is published by the dispatcher.
-func TestOutboxDispatcher_DispatchOnce_PublishesPendingEvents(t *testing.T) {
+func TestIntegration_Matching_OutboxDispatcher_DispatchOnce_PublishesPendingEvents(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := e4t9Ctx(t, h)
 		repo := integration.NewTestOutboxRepository(t, h.Connection)
@@ -53,9 +53,9 @@ func TestOutboxDispatcher_DispatchOnce_PublishesPendingEvents(t *testing.T) {
 	})
 }
 
-// TestOutboxDispatcher_RetriesFailedEvents verifies that a FAILED event
+// TestIntegration_Matching_OutboxDispatcher_RetriesFailedEvents verifies that a FAILED event
 // with an old updated_at timestamp is retried and published.
-func TestOutboxDispatcher_RetriesFailedEvents(t *testing.T) {
+func TestIntegration_Matching_OutboxDispatcher_RetriesFailedEvents(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := e4t9Ctx(t, h)
 		repo := integration.NewTestOutboxRepository(t, h.Connection)
@@ -93,9 +93,9 @@ func TestOutboxDispatcher_RetriesFailedEvents(t *testing.T) {
 	})
 }
 
-// TestOutboxDispatcher_ResetsStuckProcessing verifies that a PROCESSING event
+// TestIntegration_Matching_OutboxDispatcher_ResetsStuckProcessing verifies that a PROCESSING event
 // stuck beyond the processing timeout is reset and successfully published.
-func TestOutboxDispatcher_ResetsStuckProcessing(t *testing.T) {
+func TestIntegration_Matching_OutboxDispatcher_ResetsStuckProcessing(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := e4t9Ctx(t, h)
 		repo := integration.NewTestOutboxRepository(t, h.Connection)
@@ -138,9 +138,9 @@ func TestOutboxDispatcher_ResetsStuckProcessing(t *testing.T) {
 	})
 }
 
-// TestOutboxDispatcher_MarksInvalidOnBadPayload verifies that an event with
+// TestIntegration_Matching_OutboxDispatcher_MarksInvalidOnBadPayload verifies that an event with
 // invalid payload is classified as non-retryable and marked INVALID.
-func TestOutboxDispatcher_MarksInvalidOnBadPayload(t *testing.T) {
+func TestIntegration_Matching_OutboxDispatcher_MarksInvalidOnBadPayload(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := e4t9Ctx(t, h)
 		repo := integration.NewTestOutboxRepository(t, h.Connection)
@@ -185,9 +185,9 @@ func TestOutboxDispatcher_MarksInvalidOnBadPayload(t *testing.T) {
 	})
 }
 
-// TestOutboxDispatcher_SkipsRecentlyFailedEvents verifies that a FAILED event
+// TestIntegration_Matching_OutboxDispatcher_SkipsRecentlyFailedEvents verifies that a FAILED event
 // with a recent updated_at timestamp is NOT retried within the retry window.
-func TestOutboxDispatcher_SkipsRecentlyFailedEvents(t *testing.T) {
+func TestIntegration_Matching_OutboxDispatcher_SkipsRecentlyFailedEvents(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := e4t9Ctx(t, h)
 		repo := integration.NewTestOutboxRepository(t, h.Connection)
@@ -225,7 +225,7 @@ func TestOutboxDispatcher_SkipsRecentlyFailedEvents(t *testing.T) {
 	})
 }
 
-func TestOutboxDispatcher_DispatchOnce_MultiTenantDBBacked(t *testing.T) {
+func TestIntegration_Matching_OutboxDispatcher_DispatchOnce_MultiTenantDBBacked(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := integration.NewTestOutboxRepository(t, h.Connection)
 
@@ -343,13 +343,13 @@ func newAllEventDispatcher(
 	return dispatcher
 }
 
-// TestOutboxDispatcher_DispatchOnce_AllEventTypes parameterizes the
+// TestIntegration_Matching_OutboxDispatcher_DispatchOnce_AllEventTypes parameterizes the
 // single-happy-path test (which previously covered only
 // EventTypeMatchConfirmed) over every event type registered via
 // bootstrap.RegisterOutboxHandlers. A regression that drops a handler
 // from the registry — or one that swaps publishers for the wrong event
 // type — fails here rather than leaking into production silently.
-func TestOutboxDispatcher_DispatchOnce_AllEventTypes(t *testing.T) {
+func TestIntegration_Matching_OutboxDispatcher_DispatchOnce_AllEventTypes(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := e4t9Ctx(t, h)
 		tenantID := h.Seed.TenantID
@@ -514,12 +514,12 @@ func TestOutboxDispatcher_DispatchOnce_AllEventTypes(t *testing.T) {
 	})
 }
 
-// TestOutboxDispatcher_ProductionClassifier_MarksInvalidOnMalformedJSON
+// TestIntegration_Matching_OutboxDispatcher_ProductionClassifier_MarksInvalidOnMalformedJSON
 // asserts that when the dispatcher is wired with the ACTUAL production
 // classifier (bootstrap.IsNonRetryableOutboxError), structurally-invalid
 // payloads (ones that json.Unmarshal cannot decode into the target event
 // type) are classified as non-retryable and marked INVALID. This differs
-// from TestOutboxDispatcher_MarksInvalidOnBadPayload above, which uses
+// from TestIntegration_Matching_OutboxDispatcher_MarksInvalidOnBadPayload above, which uses
 // a bespoke "any-error-is-non-retryable" classifier for demonstration
 // purposes — production's classifier only marks INVALID for specific
 // sentinel errors, and a regression that drops one of those sentinels
@@ -533,7 +533,7 @@ func TestOutboxDispatcher_DispatchOnce_AllEventTypes(t *testing.T) {
 // errInvalidPayload (the sentinel in nonRetryableErrors that drives
 // the INVALID classification). This exercises the same classifier
 // code path the original truncated-JSON scenario did.
-func TestOutboxDispatcher_ProductionClassifier_MarksInvalidOnMalformedJSON(t *testing.T) {
+func TestIntegration_Matching_OutboxDispatcher_ProductionClassifier_MarksInvalidOnMalformedJSON(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := e4t9Ctx(t, h)
 		repo := integration.NewTestOutboxRepository(t, h.Connection)

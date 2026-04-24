@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestOverrideRateLimitsForTests_NilService exercises the nil-service guard so
+// TestIntegration_Ratelimit_OverrideRateLimitsForTests_NilService exercises the nil-service guard so
 // the helper compiles and is wired up. It does not require infrastructure.
-func TestOverrideRateLimitsForTests_NilService(t *testing.T) {
+func TestIntegration_Ratelimit_OverrideRateLimitsForTests_NilService(t *testing.T) {
 	require.NoError(t, OverrideRateLimitsForTests(context.Background(), nil))
 }

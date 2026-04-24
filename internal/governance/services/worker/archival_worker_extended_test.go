@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package worker
@@ -525,7 +529,9 @@ func TestProcessTenant_InvalidTenantID(t *testing.T) {
 	require.NoError(t, err)
 
 	// intentionally only verifies no panic; other behavior tested elsewhere
-	w.processTenant(context.Background(), "not-a-valid-uuid")
+	processed, failed := w.processTenant(context.Background(), "not-a-valid-uuid")
+	assert.Zero(t, processed)
+	assert.Zero(t, failed)
 }
 
 func TestProcessTenant_ProvisionPartitionsError(t *testing.T) {
@@ -558,7 +564,9 @@ func TestProcessTenant_ProvisionPartitionsError(t *testing.T) {
 	deps.pmMock.ExpectRollback()
 
 	// Should not panic
-	w.processTenant(ctx, tenantID)
+	processed, failed := w.processTenant(ctx, tenantID)
+	assert.Zero(t, processed)
+	assert.Zero(t, failed)
 }
 
 // --- archiveTenant tests ---
@@ -581,9 +589,11 @@ func TestArchiveTenant_ListPartitionsError(t *testing.T) {
 	// ListPartitions fails at BeginTx
 	deps.pmMock.ExpectBegin().WillReturnError(errors.New("db connection lost"))
 
-	err = w.archiveTenant(ctx, tenantID)
+	processed, failed, err := w.archiveTenant(ctx, tenantID)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "list partitions")
+	assert.Zero(t, processed)
+	assert.Zero(t, failed)
 }
 
 // --- archivePartition already complete test ---

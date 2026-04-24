@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package worker
@@ -30,20 +34,7 @@ var (
 func waitForCondition(t *testing.T, timeout, interval time.Duration, condition func() bool) {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
-
-	for {
-		if condition() {
-			return
-		}
-
-		if time.Now().After(deadline) {
-			require.Fail(t, "condition not met before timeout")
-			return
-		}
-
-		time.Sleep(interval)
-	}
+	require.Eventually(t, condition, timeout, interval, "condition not met before timeout")
 }
 
 func setupCleanupWorkerMocks(

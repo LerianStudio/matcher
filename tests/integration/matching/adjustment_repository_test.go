@@ -77,7 +77,7 @@ func createTestAdjustment(
 	return created
 }
 
-func TestAdjustmentRepository_Create(t *testing.T) {
+func TestIntegration_Matching_AdjustmentRepository_Create(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -137,7 +137,7 @@ func TestAdjustmentRepository_Create(t *testing.T) {
 	})
 }
 
-func TestAdjustmentRepository_FindByID(t *testing.T) {
+func TestIntegration_Matching_AdjustmentRepository_FindByID(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -171,7 +171,7 @@ func TestAdjustmentRepository_FindByID(t *testing.T) {
 	})
 }
 
-func TestAdjustmentRepository_FindByID_NotFound(t *testing.T) {
+func TestIntegration_Matching_AdjustmentRepository_FindByID_NotFound(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -188,7 +188,7 @@ func TestAdjustmentRepository_FindByID_NotFound(t *testing.T) {
 	})
 }
 
-func TestAdjustmentRepository_ListByContextID(t *testing.T) {
+func TestIntegration_Matching_AdjustmentRepository_ListByContextID(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -230,7 +230,7 @@ func TestAdjustmentRepository_ListByContextID(t *testing.T) {
 	})
 }
 
-func TestAdjustmentRepository_ListByContextID_Pagination(t *testing.T) {
+func TestIntegration_Matching_AdjustmentRepository_ListByContextID_Pagination(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -290,7 +290,7 @@ func TestAdjustmentRepository_ListByContextID_Pagination(t *testing.T) {
 	})
 }
 
-func TestAdjustmentRepository_ListByMatchGroupID(t *testing.T) {
+func TestIntegration_Matching_AdjustmentRepository_ListByMatchGroupID(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -365,7 +365,7 @@ func TestAdjustmentRepository_ListByMatchGroupID(t *testing.T) {
 	})
 }
 
-func TestAdjustmentRepository_CreateWithAuditLog(t *testing.T) {
+func TestIntegration_Matching_AdjustmentRepository_CreateWithAuditLog(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -423,7 +423,7 @@ func TestAdjustmentRepository_CreateWithAuditLog(t *testing.T) {
 	})
 }
 
-func TestAdjustmentRepository_CreateWithAuditLogWithTx(t *testing.T) {
+func TestIntegration_Matching_AdjustmentRepository_CreateWithAuditLogWithTx(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -482,7 +482,7 @@ func TestAdjustmentRepository_CreateWithAuditLogWithTx(t *testing.T) {
 	})
 }
 
-func TestAdjustmentRepository_CreateWithAuditLog_RollbackWhenAuditMissing(t *testing.T) {
+func TestIntegration_Matching_AdjustmentRepository_CreateWithAuditLog_RollbackWhenAuditMissing(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {

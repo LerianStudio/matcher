@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRabbitMQ_ConnectionEstablishment(t *testing.T) {
+func TestIntegration_Flow_RabbitMQ_ConnectionEstablishment(t *testing.T) {
 	RunWithHarness(t, func(t *testing.T, h *TestHarness) {
 		conn := createRabbitMQConnectionFromHarness(t, h)
 
@@ -32,7 +32,7 @@ func TestRabbitMQ_ConnectionEstablishment(t *testing.T) {
 	})
 }
 
-func TestRabbitMQ_ChannelManagement(t *testing.T) {
+func TestIntegration_Flow_RabbitMQ_ChannelManagement(t *testing.T) {
 	RunWithHarness(t, func(t *testing.T, h *TestHarness) {
 		conn := createRabbitMQConnectionFromHarness(t, h)
 
@@ -52,7 +52,7 @@ func TestRabbitMQ_ChannelManagement(t *testing.T) {
 	})
 }
 
-func TestRabbitMQ_ExchangeDeclare(t *testing.T) {
+func TestIntegration_Flow_RabbitMQ_ExchangeDeclare(t *testing.T) {
 	RunWithHarness(t, func(t *testing.T, h *TestHarness) {
 		conn := createRabbitMQConnectionFromHarness(t, h)
 
@@ -81,7 +81,7 @@ func TestRabbitMQ_ExchangeDeclare(t *testing.T) {
 	})
 }
 
-func TestRabbitMQ_QueueDeclareAndBind(t *testing.T) {
+func TestIntegration_Flow_RabbitMQ_QueueDeclareAndBind(t *testing.T) {
 	RunWithHarness(t, func(t *testing.T, h *TestHarness) {
 		conn := createRabbitMQConnectionFromHarness(t, h)
 
@@ -112,7 +112,7 @@ func TestRabbitMQ_QueueDeclareAndBind(t *testing.T) {
 	})
 }
 
-func TestRabbitMQ_PublishMessage(t *testing.T) {
+func TestIntegration_Flow_RabbitMQ_PublishMessage(t *testing.T) {
 	RunWithHarness(t, func(t *testing.T, h *TestHarness) {
 		conn := createRabbitMQConnectionFromHarness(t, h)
 
@@ -159,7 +159,7 @@ func TestRabbitMQ_PublishMessage(t *testing.T) {
 	})
 }
 
-func TestRabbitMQ_ConsumeMessage(t *testing.T) {
+func TestIntegration_Flow_RabbitMQ_ConsumeMessage(t *testing.T) {
 	RunWithHarness(t, func(t *testing.T, h *TestHarness) {
 		conn := createRabbitMQConnectionFromHarness(t, h)
 
@@ -232,7 +232,7 @@ func TestRabbitMQ_ConsumeMessage(t *testing.T) {
 	})
 }
 
-func TestRabbitMQ_MessageHeaders(t *testing.T) {
+func TestIntegration_Flow_RabbitMQ_MessageHeaders(t *testing.T) {
 	RunWithHarness(t, func(t *testing.T, h *TestHarness) {
 		conn := createRabbitMQConnectionFromHarness(t, h)
 
@@ -302,7 +302,7 @@ func TestRabbitMQ_MessageHeaders(t *testing.T) {
 	})
 }
 
-func TestRabbitMQ_MultipleConsumers(t *testing.T) {
+func TestIntegration_Flow_RabbitMQ_MultipleConsumers(t *testing.T) {
 	RunWithHarness(t, func(t *testing.T, h *TestHarness) {
 		conn := createRabbitMQConnectionFromHarness(t, h)
 
@@ -393,7 +393,7 @@ func TestRabbitMQ_MultipleConsumers(t *testing.T) {
 	})
 }
 
-func TestRabbitMQ_MessageRequeue(t *testing.T) {
+func TestIntegration_Flow_RabbitMQ_MessageRequeue(t *testing.T) {
 	RunWithHarness(t, func(t *testing.T, h *TestHarness) {
 		conn := createRabbitMQConnectionFromHarness(t, h)
 
@@ -459,7 +459,7 @@ func TestRabbitMQ_MessageRequeue(t *testing.T) {
 	})
 }
 
-func TestRabbitMQ_TopicRouting(t *testing.T) {
+func TestIntegration_Flow_RabbitMQ_TopicRouting(t *testing.T) {
 	RunWithHarness(t, func(t *testing.T, h *TestHarness) {
 		conn := createRabbitMQConnectionFromHarness(t, h)
 
@@ -546,7 +546,7 @@ func TestRabbitMQ_TopicRouting(t *testing.T) {
 	})
 }
 
-func TestRabbitMQ_ConnectionReconnect(t *testing.T) {
+func TestIntegration_Flow_RabbitMQ_ConnectionReconnect(t *testing.T) {
 	RunWithHarness(t, func(t *testing.T, h *TestHarness) {
 		conn := createRabbitMQConnectionFromHarness(t, h)
 

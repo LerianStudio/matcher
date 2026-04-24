@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 // Package http provides HTTP handlers for governance operations.
 package http
 
@@ -17,29 +21,33 @@ import (
 	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/governance/adapters/http/dto"
-	governanceEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
-	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
+	governanceQuery "github.com/LerianStudio/matcher/internal/governance/services/query"
 	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // Sentinel errors for handler validation.
 var (
-	ErrRepoRequired       = errors.New("audit log repository is required")
-	ErrMissingAuditLogID  = errors.New("audit log id is required")
-	ErrInvalidAuditLogID  = errors.New("audit log id must be a valid UUID")
-	ErrMissingEntityType  = errors.New("entity type is required")
-	ErrMissingEntityID    = errors.New("entity id is required")
-	ErrInvalidEntityID    = errors.New("entity id must be a valid UUID")
-	ErrInvalidDateFromFmt = errors.New("date_from must be a valid date (YYYY-MM-DD or RFC3339)")
-	ErrInvalidDateToFmt   = errors.New("date_to must be a valid date (YYYY-MM-DD or RFC3339)")
-	ErrInvalidDateFormat  = errors.New("invalid date format")
+	ErrQueryUseCaseRequired = errors.New("audit log query use case is required")
+	ErrMissingAuditLogID    = errors.New("audit log id is required")
+	ErrInvalidAuditLogID    = errors.New("audit log id must be a valid UUID")
+	ErrMissingEntityType    = errors.New("entity type is required")
+	ErrMissingEntityID      = errors.New("entity id is required")
+	ErrInvalidEntityID      = errors.New("entity id must be a valid UUID")
+	ErrInvalidDateFromFmt   = errors.New("date_from must be a valid date (YYYY-MM-DD or RFC3339)")
+	ErrInvalidDateToFmt     = errors.New("date_to must be a valid date (YYYY-MM-DD or RFC3339)")
+	ErrInvalidDateFormat    = errors.New("invalid date format")
 )
 
 // Handler handles HTTP requests for governance audit logs.
 // It instruments each operation with OpenTelemetry metrics for observability:
 // audit_log_created_total, audit_log_queries_total, and audit_log_query_latency_seconds.
+//
+// Read operations delegate to a query use case (CQRS: reads live in
+// services/query/) rather than hitting the repository directly — the handler
+// itself no longer holds a repository reference.
 //
 // productionMode governs SafeError behavior (suppresses internal error
 // details in client responses when true). Stored as a per-handler bool
@@ -48,7 +56,7 @@ var (
 // constructed a handler, regardless of the production flag each test
 // wanted to exercise.
 type Handler struct {
-	repo repositories.AuditLogRepository
+	queryUC *governanceQuery.UseCase
 
 	// OpenTelemetry metric instruments
 	createdTotal     metric.Int64Counter
@@ -59,12 +67,12 @@ type Handler struct {
 }
 
 // NewHandler creates a new governance HTTP handler.
-func NewHandler(repo repositories.AuditLogRepository, production bool) (*Handler, error) {
-	if repo == nil {
-		return nil, ErrRepoRequired
+func NewHandler(queryUC *governanceQuery.UseCase, production bool) (*Handler, error) {
+	if queryUC == nil {
+		return nil, ErrQueryUseCaseRequired
 	}
 
-	handler := &Handler{repo: repo, productionMode: production}
+	handler := &Handler{queryUC: queryUC, productionMode: production}
 
 	if err := handler.initMetrics(); err != nil {
 		return nil, fmt.Errorf("init governance handler metrics: %w", err)
@@ -200,7 +208,7 @@ func (handler *Handler) GetAuditLog(
 		)
 	}
 
-	auditLog, err := handler.repo.GetByID(ctx, id)
+	auditLog, err := handler.queryUC.GetAuditLog(ctx, governanceQuery.GetAuditLogInput{ID: id})
 
 	handler.queryLatencyHist.Record(ctx, time.Since(queryStart).Seconds())
 
@@ -210,18 +218,6 @@ func (handler *Handler) GetAuditLog(
 		}
 
 		return handler.writeServiceError(ctx, fiberCtx, span, logger, "failed to get audit log", err)
-	}
-
-	if auditLog == nil {
-		return handler.writeNotFound(
-			ctx,
-			fiberCtx,
-			span,
-			logger,
-			"governance_audit_log_not_found",
-			"audit log not found",
-			governanceErrors.ErrAuditLogNotFound,
-		)
 	}
 
 	if writeErr := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.AuditLogToResponse(auditLog)); writeErr != nil {
@@ -286,7 +282,15 @@ func (handler *Handler) ListAuditLogsByEntity(
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 	}
 
-	logs, nextCursor, err := handler.repo.ListByEntity(ctx, entityType, entityID, cursor, limit)
+	logs, nextCursor, err := handler.queryUC.ListAuditLogsByEntity(
+		ctx,
+		governanceQuery.ListAuditLogsByEntityInput{
+			EntityType: entityType,
+			EntityID:   entityID,
+			Cursor:     cursor,
+			Limit:      limit,
+		},
+	)
 
 	handler.queryLatencyHist.Record(ctx, time.Since(queryStart).Seconds())
 
@@ -351,7 +355,14 @@ func (handler *Handler) ListAuditLogs(
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 	}
 
-	logs, nextCursor, err := handler.repo.List(ctx, filter, cursor, limit)
+	logs, nextCursor, err := handler.queryUC.ListAuditLogs(
+		ctx,
+		governanceQuery.ListAuditLogsInput{
+			Filter: filter,
+			Cursor: cursor,
+			Limit:  limit,
+		},
+	)
 
 	handler.queryLatencyHist.Record(ctx, time.Since(queryStart).Seconds())
 
@@ -375,8 +386,8 @@ func (handler *Handler) ListAuditLogs(
 	return nil
 }
 
-func parseAuditLogFilter(fiberCtx *fiber.Ctx) (governanceEntities.AuditLogFilter, error) {
-	var filter governanceEntities.AuditLogFilter
+func parseAuditLogFilter(fiberCtx *fiber.Ctx) (sharedDomain.AuditLogFilter, error) {
+	var filter sharedDomain.AuditLogFilter
 
 	if actor := fiberCtx.Query("actor"); actor != "" {
 		if err := libHTTP.ValidateQueryParamLength(actor, "actor", libHTTP.MaxQueryParamLengthLong); err != nil {

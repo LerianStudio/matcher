@@ -18,7 +18,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration/server"
 )
 
-func TestIntegrationHTTPFlow_UploadFile_ReturnsAccepted(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_UploadFile_ReturnsAccepted(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -57,7 +57,7 @@ func TestIntegrationHTTPFlow_UploadFile_ReturnsAccepted(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_UploadJSONFile_ReturnsAccepted(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_UploadJSONFile_ReturnsAccepted(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -108,7 +108,7 @@ func TestIntegrationHTTPFlow_UploadJSONFile_ReturnsAccepted(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_UploadJSONAndMatch_PublishesEvents(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_UploadJSONAndMatch_PublishesEvents(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -219,7 +219,7 @@ func TestIntegrationHTTPFlow_UploadJSONAndMatch_PublishesEvents(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_UploadMultiRowJSON_ReturnsAccepted(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_UploadMultiRowJSON_ReturnsAccepted(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -268,7 +268,7 @@ func TestIntegrationHTTPFlow_UploadMultiRowJSON_ReturnsAccepted(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_UploadAndMatch_PublishesEvents(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_UploadAndMatch_PublishesEvents(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -367,7 +367,7 @@ func TestIntegrationHTTPFlow_UploadAndMatch_PublishesEvents(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_DryRunMatch_DoesNotPublishEvent(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_DryRunMatch_DoesNotPublishEvent(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -454,7 +454,7 @@ func TestIntegrationHTTPFlow_DryRunMatch_DoesNotPublishEvent(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_GetJobStatus(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_GetJobStatus(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 
@@ -494,7 +494,7 @@ func TestIntegrationHTTPFlow_GetJobStatus(t *testing.T) {
 // Partial Match Scenario Tests
 // =============================================================================
 
-func TestIntegrationHTTPFlow_PartialMatch_OnlyMatchingPairsConfirmed(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_PartialMatch_OnlyMatchingPairsConfirmed(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -592,7 +592,7 @@ func TestIntegrationHTTPFlow_PartialMatch_OnlyMatchingPairsConfirmed(t *testing.
 	})
 }
 
-func TestIntegrationHTTPFlow_PartialMatch_UnmatchedTransactionsRemainPending(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_PartialMatch_UnmatchedTransactionsRemainPending(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -657,7 +657,7 @@ func TestIntegrationHTTPFlow_PartialMatch_UnmatchedTransactionsRemainPending(t *
 	})
 }
 
-func TestIntegrationHTTPFlow_PartialMatch_NoMatchesProducesNoEvent(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_PartialMatch_NoMatchesProducesNoEvent(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -735,7 +735,7 @@ func TestIntegrationHTTPFlow_PartialMatch_NoMatchesProducesNoEvent(t *testing.T)
 // Error Handling Tests
 // =============================================================================
 
-func TestIntegrationHTTPFlow_UploadFile_InvalidFormat_ReturnsBadRequest(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_UploadFile_InvalidFormat_ReturnsBadRequest(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 
@@ -759,7 +759,7 @@ func TestIntegrationHTTPFlow_UploadFile_InvalidFormat_ReturnsBadRequest(t *testi
 	})
 }
 
-func TestIntegrationHTTPFlow_UploadFile_MissingFormat_ReturnsBadRequest(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_UploadFile_MissingFormat_ReturnsBadRequest(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 
@@ -781,7 +781,7 @@ func TestIntegrationHTTPFlow_UploadFile_MissingFormat_ReturnsBadRequest(t *testi
 	})
 }
 
-func TestIntegrationHTTPFlow_UploadFile_NonExistentSource_ReturnsError(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_UploadFile_NonExistentSource_ReturnsError(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 
@@ -803,7 +803,7 @@ func TestIntegrationHTTPFlow_UploadFile_NonExistentSource_ReturnsError(t *testin
 	})
 }
 
-func TestIntegrationHTTPFlow_UploadFile_NonExistentContext_ReturnsError(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_UploadFile_NonExistentContext_ReturnsError(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 
@@ -825,7 +825,7 @@ func TestIntegrationHTTPFlow_UploadFile_NonExistentContext_ReturnsError(t *testi
 	})
 }
 
-func TestIntegrationHTTPFlow_UploadFile_InvalidContextID_ReturnsBadRequest(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_UploadFile_InvalidContextID_ReturnsBadRequest(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 
@@ -855,7 +855,7 @@ func TestIntegrationHTTPFlow_UploadFile_InvalidContextID_ReturnsBadRequest(t *te
 	})
 }
 
-func TestIntegrationHTTPFlow_UploadFile_InvalidSourceID_ReturnsBadRequest(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_UploadFile_InvalidSourceID_ReturnsBadRequest(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 
@@ -885,7 +885,7 @@ func TestIntegrationHTTPFlow_UploadFile_InvalidSourceID_ReturnsBadRequest(t *tes
 	})
 }
 
-func TestIntegrationHTTPFlow_UploadFile_MalformedCSV_ProcessesWithErrors(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_UploadFile_MalformedCSV_ProcessesWithErrors(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -919,7 +919,7 @@ func TestIntegrationHTTPFlow_UploadFile_MalformedCSV_ProcessesWithErrors(t *test
 	})
 }
 
-func TestIntegrationHTTPFlow_UploadFile_EmptyFile_ReturnsError(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_UploadFile_EmptyFile_ReturnsError(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 
@@ -947,7 +947,7 @@ func TestIntegrationHTTPFlow_UploadFile_EmptyFile_ReturnsError(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_UploadFile_ExceedsMaxSize_Returns413(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_UploadFile_ExceedsMaxSize_Returns413(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 
@@ -976,7 +976,7 @@ func TestIntegrationHTTPFlow_UploadFile_ExceedsMaxSize_Returns413(t *testing.T) 
 	})
 }
 
-func TestIntegrationHTTPFlow_UploadFile_ExactlyMaxSize_ReturnsAccepted(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_UploadFile_ExactlyMaxSize_ReturnsAccepted(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 		EnsureContext(t, sh, seed.ContextID)
@@ -1015,7 +1015,7 @@ func TestIntegrationHTTPFlow_UploadFile_ExactlyMaxSize_ReturnsAccepted(t *testin
 	})
 }
 
-func TestIntegrationHTTPFlow_GetJob_NonExistentJob_ReturnsNotFound(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_GetJob_NonExistentJob_ReturnsNotFound(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 
@@ -1042,7 +1042,7 @@ func TestIntegrationHTTPFlow_GetJob_NonExistentJob_ReturnsNotFound(t *testing.T)
 	})
 }
 
-func TestIntegrationHTTPFlow_GetJob_InvalidJobID_ReturnsBadRequest(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_GetJob_InvalidJobID_ReturnsBadRequest(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 
@@ -1068,7 +1068,7 @@ func TestIntegrationHTTPFlow_GetJob_InvalidJobID_ReturnsBadRequest(t *testing.T)
 	})
 }
 
-func TestIntegrationHTTPFlow_RunMatch_InvalidMode_ReturnsBadRequest(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_RunMatch_InvalidMode_ReturnsBadRequest(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 
@@ -1088,7 +1088,7 @@ func TestIntegrationHTTPFlow_RunMatch_InvalidMode_ReturnsBadRequest(t *testing.T
 	})
 }
 
-func TestIntegrationHTTPFlow_RunMatch_MissingMode_ReturnsBadRequest(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_RunMatch_MissingMode_ReturnsBadRequest(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 
@@ -1106,7 +1106,7 @@ func TestIntegrationHTTPFlow_RunMatch_MissingMode_ReturnsBadRequest(t *testing.T
 	})
 }
 
-func TestIntegrationHTTPFlow_RunMatch_InvalidContextID_ReturnsBadRequest(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_RunMatch_InvalidContextID_ReturnsBadRequest(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		matchPath := "/v1/matching/contexts/not-a-uuid/run"
 		resp, body, err := sh.DoJSON(http.MethodPost, matchPath, map[string]string{
@@ -1128,7 +1128,7 @@ func TestIntegrationHTTPFlow_RunMatch_InvalidContextID_ReturnsBadRequest(t *test
 // Multiple Files Per Source Tests
 // =============================================================================
 
-func TestIntegrationHTTPFlow_MultipleFilesPerSource_CreatesSeperateJobs(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_MultipleFilesPerSource_CreatesSeperateJobs(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -1350,7 +1350,7 @@ func TestIntegrationHTTPFlow_MultipleFilesPerSource_AllTransactionsParticipateIn
 	})
 }
 
-func TestIntegrationHTTPFlow_MultipleFilesPerSource_MultiRowFiles(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_MultipleFilesPerSource_MultiRowFiles(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
@@ -1506,7 +1506,7 @@ func TestIntegrationHTTPFlow_MultipleFilesPerSource_MultiRowFiles(t *testing.T) 
 	})
 }
 
-func TestIntegrationHTTPFlow_MultipleFilesPerSource_SequentialJobStatus(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_MultipleFilesPerSource_SequentialJobStatus(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -1569,7 +1569,7 @@ func TestIntegrationHTTPFlow_MultipleFilesPerSource_SequentialJobStatus(t *testi
 // No-Match Scenario Tests
 // =============================================================================
 
-func TestIntegrationHTTPFlow_NoMatch_DifferentReferences_DoesNotPublishEvent(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_NoMatch_DifferentReferences_DoesNotPublishEvent(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -1656,7 +1656,7 @@ func TestIntegrationHTTPFlow_NoMatch_DifferentReferences_DoesNotPublishEvent(t *
 	})
 }
 
-func TestIntegrationHTTPFlow_NoMatch_DifferentAmounts_DoesNotPublishEvent(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_NoMatch_DifferentAmounts_DoesNotPublishEvent(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -1750,7 +1750,7 @@ func TestIntegrationHTTPFlow_NoMatch_DifferentAmounts_DoesNotPublishEvent(t *tes
 	})
 }
 
-func TestIntegrationHTTPFlow_NoMatch_DifferentCurrencies_DoesNotPublishEvent(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_NoMatch_DifferentCurrencies_DoesNotPublishEvent(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -1844,7 +1844,7 @@ func TestIntegrationHTTPFlow_NoMatch_DifferentCurrencies_DoesNotPublishEvent(t *
 	})
 }
 
-func TestIntegrationHTTPFlow_NoMatch_CompletelyDifferentData_DoesNotPublishEvent(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_NoMatch_CompletelyDifferentData_DoesNotPublishEvent(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -1936,7 +1936,7 @@ func TestIntegrationHTTPFlow_NoMatch_CompletelyDifferentData_DoesNotPublishEvent
 // Transaction Listing Tests
 // =============================================================================
 
-func TestIntegrationHTTPFlow_ListTransactions_ReturnsAllTransactions(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_ListTransactions_ReturnsAllTransactions(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -2008,7 +2008,7 @@ func TestIntegrationHTTPFlow_ListTransactions_ReturnsAllTransactions(t *testing.
 	})
 }
 
-func TestIntegrationHTTPFlow_ListTransactions_Pagination_Limit(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_ListTransactions_Pagination_Limit(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -2053,7 +2053,7 @@ func TestIntegrationHTTPFlow_ListTransactions_Pagination_Limit(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_ListTransactions_Pagination_Cursor(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_ListTransactions_Pagination_Cursor(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -2135,7 +2135,7 @@ func TestIntegrationHTTPFlow_ListTransactions_Pagination_Cursor(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_ListTransactions_SortOrder(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_ListTransactions_SortOrder(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -2192,7 +2192,7 @@ func TestIntegrationHTTPFlow_ListTransactions_SortOrder(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_ListTransactions_InvalidJobID_ReturnsBadRequest(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_ListTransactions_InvalidJobID_ReturnsBadRequest(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 
@@ -2210,7 +2210,7 @@ func TestIntegrationHTTPFlow_ListTransactions_InvalidJobID_ReturnsBadRequest(t *
 	})
 }
 
-func TestIntegrationHTTPFlow_ListTransactions_NonExistentJob_ReturnsNotFound(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_ListTransactions_NonExistentJob_ReturnsNotFound(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 
@@ -2229,7 +2229,7 @@ func TestIntegrationHTTPFlow_ListTransactions_NonExistentJob_ReturnsNotFound(t *
 	})
 }
 
-func TestIntegrationHTTPFlow_ListTransactions_InvalidSortOrder_ReturnsBadRequest(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_ListTransactions_InvalidSortOrder_ReturnsBadRequest(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -2257,7 +2257,7 @@ func TestIntegrationHTTPFlow_ListTransactions_InvalidSortOrder_ReturnsBadRequest
 	})
 }
 
-func TestIntegrationHTTPFlow_ListTransactions_EmptyJob_ReturnsBadRequest(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_ListTransactions_EmptyJob_ReturnsBadRequest(t *testing.T) {
 	t.Parallel()
 
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
@@ -2281,7 +2281,7 @@ func TestIntegrationHTTPFlow_ListTransactions_EmptyJob_ReturnsBadRequest(t *test
 // Case Sensitivity Matching Tests
 // =============================================================================
 
-func TestIntegrationHTTPFlow_CaseInsensitiveMatch_DifferentCaseReferencesMatch(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_CaseInsensitiveMatch_DifferentCaseReferencesMatch(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -2360,7 +2360,7 @@ func TestIntegrationHTTPFlow_CaseInsensitiveMatch_DifferentCaseReferencesMatch(t
 	})
 }
 
-func TestIntegrationHTTPFlow_CaseSensitiveMatch_DifferentCaseReferencesDoNotMatch(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_CaseSensitiveMatch_DifferentCaseReferencesDoNotMatch(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -2448,7 +2448,7 @@ func TestIntegrationHTTPFlow_CaseSensitiveMatch_DifferentCaseReferencesDoNotMatc
 	})
 }
 
-func TestIntegrationHTTPFlow_CaseSensitiveMatch_ExactCaseReferencesMatch(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_CaseSensitiveMatch_ExactCaseReferencesMatch(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -2531,7 +2531,7 @@ func TestIntegrationHTTPFlow_CaseSensitiveMatch_ExactCaseReferencesMatch(t *test
 // Date Tolerance Matching Tests
 // =============================================================================
 
-func TestIntegrationHTTPFlow_DatePrecisionDay_SameDayMatches(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_DatePrecisionDay_SameDayMatches(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -2619,7 +2619,7 @@ func TestIntegrationHTTPFlow_DatePrecisionDay_SameDayMatches(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_DatePrecisionDay_OneDayApartNoMatch(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_DatePrecisionDay_OneDayApartNoMatch(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -2709,7 +2709,7 @@ func TestIntegrationHTTPFlow_DatePrecisionDay_OneDayApartNoMatch(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_DatePrecisionDay_MultipleTransactionsMixedDates(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_DatePrecisionDay_MultipleTransactionsMixedDates(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -2798,7 +2798,7 @@ func TestIntegrationHTTPFlow_DatePrecisionDay_MultipleTransactionsMixedDates(t *
 // Job Status Tests
 // =============================================================================
 
-func TestIntegrationHTTPFlow_JobCreation_ReturnsValidStatus(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_JobCreation_ReturnsValidStatus(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 		EnsureContext(t, sh, seed.ContextID)
@@ -2834,7 +2834,7 @@ func TestIntegrationHTTPFlow_JobCreation_ReturnsValidStatus(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_JobCreation_MultipleJobsIndependent(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_JobCreation_MultipleJobsIndependent(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 		EnsureContext(t, sh, seed.ContextID)
@@ -2873,7 +2873,7 @@ func TestIntegrationHTTPFlow_JobCreation_MultipleJobsIndependent(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_JobStatus_PersistedAcrossRequests(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_JobStatus_PersistedAcrossRequests(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 		EnsureContext(t, sh, seed.ContextID)
@@ -2912,7 +2912,7 @@ func TestIntegrationHTTPFlow_JobStatus_PersistedAcrossRequests(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_JobStatus_LedgerAndBankJobsCompleteBeforeMatching(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_JobStatus_LedgerAndBankJobsCompleteBeforeMatching(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -2984,7 +2984,7 @@ func TestIntegrationHTTPFlow_JobStatus_LedgerAndBankJobsCompleteBeforeMatching(t
 // Match Idempotency Tests
 // =============================================================================
 
-func TestIntegrationHTTPFlow_MatchIdempotency_SecondRunProducesNoMatches(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_MatchIdempotency_SecondRunProducesNoMatches(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
@@ -3251,7 +3251,7 @@ func TestIntegrationHTTPFlow_MatchIdempotency_MultipleTransactions_OnlyUnmatched
 	})
 }
 
-func TestIntegrationHTTPFlow_MatchIdempotency_ThirdRunNoNewMatches(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_MatchIdempotency_ThirdRunNoNewMatches(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
 		defer cancel()
@@ -3379,7 +3379,7 @@ func TestIntegrationHTTPFlow_MatchIdempotency_ThirdRunNoNewMatches(t *testing.T)
 // GetMatchRun and GetMatchRunResults Tests
 // =============================================================================
 
-func TestIntegrationHTTPFlow_GetMatchRun_ReturnsRunDetails(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_GetMatchRun_ReturnsRunDetails(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -3476,7 +3476,7 @@ func TestIntegrationHTTPFlow_GetMatchRun_ReturnsRunDetails(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_GetMatchRun_NonExistentRun_ReturnsNotFound(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_GetMatchRun_NonExistentRun_ReturnsNotFound(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 
@@ -3500,7 +3500,7 @@ func TestIntegrationHTTPFlow_GetMatchRun_NonExistentRun_ReturnsNotFound(t *testi
 	})
 }
 
-func TestIntegrationHTTPFlow_GetMatchRun_InvalidRunID_ReturnsBadRequest(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_GetMatchRun_InvalidRunID_ReturnsBadRequest(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 
@@ -3519,7 +3519,7 @@ func TestIntegrationHTTPFlow_GetMatchRun_InvalidRunID_ReturnsBadRequest(t *testi
 	})
 }
 
-func TestIntegrationHTTPFlow_GetMatchRun_MissingContextID_ReturnsBadRequest(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_GetMatchRun_MissingContextID_ReturnsBadRequest(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		runID := uuid.New()
 		getRunPath := fmt.Sprintf("/v1/matching/runs/%s", runID)
@@ -3537,7 +3537,7 @@ func TestIntegrationHTTPFlow_GetMatchRun_MissingContextID_ReturnsBadRequest(t *t
 	})
 }
 
-func TestIntegrationHTTPFlow_GetMatchRunResults_ReturnsPaginatedGroups(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_GetMatchRunResults_ReturnsPaginatedGroups(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -3640,7 +3640,7 @@ func TestIntegrationHTTPFlow_GetMatchRunResults_ReturnsPaginatedGroups(t *testin
 	})
 }
 
-func TestIntegrationHTTPFlow_GetMatchRunResults_WithPagination(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_GetMatchRunResults_WithPagination(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -3728,7 +3728,7 @@ func TestIntegrationHTTPFlow_GetMatchRunResults_WithPagination(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_GetMatchRunResults_InvalidRunID_ReturnsBadRequest(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_GetMatchRunResults_InvalidRunID_ReturnsBadRequest(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 
@@ -3750,7 +3750,7 @@ func TestIntegrationHTTPFlow_GetMatchRunResults_InvalidRunID_ReturnsBadRequest(t
 	})
 }
 
-func TestIntegrationHTTPFlow_GetMatchRunResults_MissingContextID_ReturnsBadRequest(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_GetMatchRunResults_MissingContextID_ReturnsBadRequest(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		runID := uuid.New()
 		getGroupsPath := fmt.Sprintf("/v1/matching/runs/%s/groups", runID)
@@ -3772,7 +3772,7 @@ func TestIntegrationHTTPFlow_GetMatchRunResults_MissingContextID_ReturnsBadReque
 // Concurrent Upload Tests
 // =============================================================================
 
-func TestIntegrationHTTPFlow_ConcurrentUploads_SameSource(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_ConcurrentUploads_SameSource(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
@@ -3873,7 +3873,7 @@ func TestIntegrationHTTPFlow_ConcurrentUploads_SameSource(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_ConcurrentUploads_DifferentSources(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_ConcurrentUploads_DifferentSources(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
@@ -3992,7 +3992,7 @@ func TestIntegrationHTTPFlow_ConcurrentUploads_DifferentSources(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_ConcurrentUploads_WithMatching(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_ConcurrentUploads_WithMatching(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
@@ -4164,7 +4164,7 @@ func TestIntegrationHTTPFlow_ConcurrentUploads_WithMatching(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_ConcurrentUploads_RaceConditionStress(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_ConcurrentUploads_RaceConditionStress(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 		defer cancel()
@@ -4284,7 +4284,7 @@ func TestIntegrationHTTPFlow_ConcurrentUploads_RaceConditionStress(t *testing.T)
 // XML File Upload Tests
 // =============================================================================
 
-func TestIntegrationHTTPFlow_UploadXMLFile_ReturnsAccepted(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_UploadXMLFile_ReturnsAccepted(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -4324,7 +4324,7 @@ func TestIntegrationHTTPFlow_UploadXMLFile_ReturnsAccepted(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_UploadXMLAndMatch_PublishesEvents(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_UploadXMLAndMatch_PublishesEvents(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -4434,7 +4434,7 @@ func TestIntegrationHTTPFlow_UploadXMLAndMatch_PublishesEvents(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_UploadMultiRowXML_ReturnsAccepted(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_UploadMultiRowXML_ReturnsAccepted(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -4477,7 +4477,7 @@ func TestIntegrationHTTPFlow_UploadMultiRowXML_ReturnsAccepted(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_MixedFormatUpload_CSVAndXML_MatchesAcrossFormats(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_MixedFormatUpload_CSVAndXML_MatchesAcrossFormats(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -4570,7 +4570,7 @@ func TestIntegrationHTTPFlow_MixedFormatUpload_CSVAndXML_MatchesAcrossFormats(t 
 // Job Listing Pagination Tests
 // =============================================================================
 
-func TestIntegrationHTTPFlow_ListJobs_WithLimit(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_ListJobs_WithLimit(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
@@ -4613,7 +4613,7 @@ func TestIntegrationHTTPFlow_ListJobs_WithLimit(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_ListJobs_CursorPagination(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_ListJobs_CursorPagination(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
@@ -4679,7 +4679,7 @@ func TestIntegrationHTTPFlow_ListJobs_CursorPagination(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_ListJobs_SortOrderAsc(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_ListJobs_SortOrderAsc(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
@@ -4732,7 +4732,7 @@ func TestIntegrationHTTPFlow_ListJobs_SortOrderAsc(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_ListJobs_SortOrderDesc(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_ListJobs_SortOrderDesc(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
@@ -4785,7 +4785,7 @@ func TestIntegrationHTTPFlow_ListJobs_SortOrderDesc(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_ListJobs_ResponseStructure(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_ListJobs_ResponseStructure(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -4828,7 +4828,7 @@ func TestIntegrationHTTPFlow_ListJobs_ResponseStructure(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_ListJobs_EmptyContext_ReturnsEmptyList(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_ListJobs_EmptyContext_ReturnsEmptyList(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		seed := SetupFlowTestConfig(t, sh)
 
@@ -4847,7 +4847,7 @@ func TestIntegrationHTTPFlow_ListJobs_EmptyContext_ReturnsEmptyList(t *testing.T
 // Deduplication Tests
 // =============================================================================
 
-func TestIntegrationHTTPFlow_DuplicateUpload_SameFile_NoDoubleCount(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_DuplicateUpload_SameFile_NoDoubleCount(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
@@ -4945,7 +4945,7 @@ func TestIntegrationHTTPFlow_DuplicateUpload_SameFile_NoDoubleCount(t *testing.T
 	})
 }
 
-func TestIntegrationHTTPFlow_DuplicateUpload_MultiRowFile_DeduplicatesAll(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_DuplicateUpload_MultiRowFile_DeduplicatesAll(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
@@ -5043,7 +5043,7 @@ func TestIntegrationHTTPFlow_DuplicateUpload_MultiRowFile_DeduplicatesAll(t *tes
 	})
 }
 
-func TestIntegrationHTTPFlow_DuplicateUpload_ThreeUploads_StillDeduplicates(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_DuplicateUpload_ThreeUploads_StillDeduplicates(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
@@ -5128,7 +5128,7 @@ func TestIntegrationHTTPFlow_DuplicateUpload_ThreeUploads_StillDeduplicates(t *t
 // Multi-Rule Priority Tests
 // =============================================================================
 
-func TestIntegrationHTTPFlow_MultiRule_ExactRuleAppliedFirst(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_MultiRule_ExactRuleAppliedFirst(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -5234,7 +5234,7 @@ func TestIntegrationHTTPFlow_MultiRule_ExactRuleAppliedFirst(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_MultiRule_ToleranceRuleAppliedWhenExactFails(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_MultiRule_ToleranceRuleAppliedWhenExactFails(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -5355,7 +5355,7 @@ func TestIntegrationHTTPFlow_MultiRule_ToleranceRuleAppliedWhenExactFails(t *tes
 	})
 }
 
-func TestIntegrationHTTPFlow_MultiRule_MixedMatchesDifferentRules(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_MultiRule_MixedMatchesDifferentRules(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
@@ -5468,7 +5468,7 @@ func TestIntegrationHTTPFlow_MultiRule_MixedMatchesDifferentRules(t *testing.T) 
 	})
 }
 
-func TestIntegrationHTTPFlow_MultiRule_NoMatchWhenOutsideTolerance(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_MultiRule_NoMatchWhenOutsideTolerance(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -5562,7 +5562,7 @@ func TestIntegrationHTTPFlow_MultiRule_NoMatchWhenOutsideTolerance(t *testing.T)
 // Match Confirmed Event Payload Verification Tests
 // =============================================================================
 
-func TestIntegrationHTTPFlow_MatchConfirmedEvent_ContainsAllRequiredFields(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_MatchConfirmedEvent_ContainsAllRequiredFields(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -5657,7 +5657,7 @@ func TestIntegrationHTTPFlow_MatchConfirmedEvent_ContainsAllRequiredFields(t *te
 	})
 }
 
-func TestIntegrationHTTPFlow_MatchConfirmedEvent_ConfidenceScore(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_MatchConfirmedEvent_ConfidenceScore(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -5727,7 +5727,7 @@ func TestIntegrationHTTPFlow_MatchConfirmedEvent_ConfidenceScore(t *testing.T) {
 	})
 }
 
-func TestIntegrationHTTPFlow_MatchConfirmedEvent_TimestampsAreValid(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_MatchConfirmedEvent_TimestampsAreValid(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -5833,7 +5833,7 @@ func TestIntegrationHTTPFlow_MatchConfirmedEvent_TimestampsAreValid(t *testing.T
 	})
 }
 
-func TestIntegrationHTTPFlow_MatchConfirmedEvent_MultipleMatches_EmitsMultipleEvents(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_MatchConfirmedEvent_MultipleMatches_EmitsMultipleEvents(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
@@ -5933,7 +5933,7 @@ func TestIntegrationHTTPFlow_MatchConfirmedEvent_MultipleMatches_EmitsMultipleEv
 	})
 }
 
-func TestIntegrationHTTPFlow_MatchConfirmedEvent_TenantIDFromContext(t *testing.T) {
+func TestIntegration_Flow_IntegrationHTTPFlow_MatchConfirmedEvent_TenantIDFromContext(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()

@@ -296,7 +296,7 @@ var (
 	_ shared.MatchEventPublisher          = (*noopMatchPublisher)(nil)
 )
 
-func TestIntegrationDedupeJobState(t *testing.T) {
+func TestIntegration_Ingestion_IntegrationDedupeJobState(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		provider := h.Provider()
 		jobRepo := ingestionJobRepo.NewRepository(provider)
@@ -360,7 +360,7 @@ func TestIntegrationDedupeJobState(t *testing.T) {
 	})
 }
 
-func TestIntegrationUploadFlow(t *testing.T) {
+func TestIntegration_Ingestion_IntegrationUploadFlow(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		provider := h.Provider()
 		jobRepo := ingestionJobRepo.NewRepository(provider)
@@ -415,7 +415,7 @@ func TestIntegrationUploadFlow(t *testing.T) {
 	})
 }
 
-func TestIntegrationEventPublication(t *testing.T) {
+func TestIntegration_Ingestion_IntegrationEventPublication(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		provider := h.Provider()
 		jobRepo := ingestionJobRepo.NewRepository(provider)
@@ -472,7 +472,7 @@ func TestIntegrationEventPublication(t *testing.T) {
 	})
 }
 
-func TestIntegrationEventPublicationFailure(t *testing.T) {
+func TestIntegration_Ingestion_IntegrationEventPublicationFailure(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		provider := h.Provider()
 		jobRepo := ingestionJobRepo.NewRepository(provider)
@@ -529,7 +529,7 @@ func TestIntegrationEventPublicationFailure(t *testing.T) {
 	})
 }
 
-func TestOutboxDispatcherPublishesPending(t *testing.T) {
+func TestIntegration_Ingestion_OutboxDispatcherPublishesPending(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		provider := h.Provider()
 		jobRepo := ingestionJobRepo.NewRepository(provider)

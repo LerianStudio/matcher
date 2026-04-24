@@ -15,7 +15,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestDispute_OpenAndClose_WonWithAuditTrail(t *testing.T) {
+func TestIntegration_Exception_Dispute_OpenAndClose_WonWithAuditTrail(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtxWithActor(t, h, "dispute-operator")
 		seed := seedTestConfig(t, h)
@@ -61,7 +61,7 @@ func TestDispute_OpenAndClose_WonWithAuditTrail(t *testing.T) {
 	})
 }
 
-func TestDispute_OpenAndClose_LostWithAuditTrail(t *testing.T) {
+func TestIntegration_Exception_Dispute_OpenAndClose_LostWithAuditTrail(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtxWithActor(t, h, "dispute-operator")
 		seed := seedTestConfig(t, h)
@@ -103,7 +103,7 @@ func TestDispute_OpenAndClose_LostWithAuditTrail(t *testing.T) {
 	})
 }
 
-func TestDispute_SubmitEvidence(t *testing.T) {
+func TestIntegration_Exception_Dispute_SubmitEvidence(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtxWithActor(t, h, "evidence-submitter")
 		seed := seedTestConfig(t, h)
@@ -144,7 +144,7 @@ func TestDispute_SubmitEvidence(t *testing.T) {
 	})
 }
 
-func TestDispute_MultipleEvidenceSubmissions(t *testing.T) {
+func TestIntegration_Exception_Dispute_MultipleEvidenceSubmissions(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtxWithActor(t, h, "evidence-submitter")
 		seed := seedTestConfig(t, h)
@@ -188,7 +188,7 @@ func TestDispute_MultipleEvidenceSubmissions(t *testing.T) {
 	})
 }
 
-func TestDispute_OpenOnNonExistentException(t *testing.T) {
+func TestIntegration_Exception_Dispute_OpenOnNonExistentException(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtxWithActor(t, h, "dispute-operator")
 
@@ -204,7 +204,7 @@ func TestDispute_OpenOnNonExistentException(t *testing.T) {
 	})
 }
 
-func TestDispute_CloseNonExistentDispute(t *testing.T) {
+func TestIntegration_Exception_Dispute_CloseNonExistentDispute(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtxWithActor(t, h, "dispute-operator")
 
@@ -220,7 +220,7 @@ func TestDispute_CloseNonExistentDispute(t *testing.T) {
 	})
 }
 
-func TestDispute_FullLifecycleWithEvidence(t *testing.T) {
+func TestIntegration_Exception_Dispute_FullLifecycleWithEvidence(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtxWithActor(t, h, "lifecycle-operator")
 		seed := seedTestConfig(t, h)

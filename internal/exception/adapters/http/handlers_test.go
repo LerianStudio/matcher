@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package http
@@ -308,6 +312,14 @@ func (repo *stubCommentRepo) FindByExceptionID(_ context.Context, _ uuid.UUID) (
 }
 
 func (repo *stubCommentRepo) DeleteByExceptionAndID(_ context.Context, _, _ uuid.UUID) error {
+	return nil
+}
+
+func (repo *stubCommentRepo) DeleteByExceptionAndIDWithTx(
+	_ context.Context,
+	_ *sql.Tx,
+	_, _ uuid.UUID,
+) error {
 	return nil
 }
 

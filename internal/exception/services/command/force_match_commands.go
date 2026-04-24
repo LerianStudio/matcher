@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package command
 
 import (
@@ -12,6 +16,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
@@ -90,7 +95,7 @@ func (uc *ExceptionUseCase) processForceMatch(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to load exception", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to load exception: %v", err))
+		libLog.SafeError(logger, ctx, "failed to load exception", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("find exception: %w", err)
 	}

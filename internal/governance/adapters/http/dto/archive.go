@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package dto
 
 import (
@@ -33,9 +37,9 @@ type ArchiveMetadataResponse struct {
 // @Description Presigned download URL for an archived audit log
 type ArchiveDownloadResponse struct {
 	// Presigned URL for downloading the archive
-	DownloadURL string `json:"download_url" example:"https://s3.amazonaws.com/bucket/archive.gz?X-Amz-Signature=..."`
+	DownloadURL string `json:"downloadUrl" example:"https://s3.amazonaws.com/bucket/archive.gz?X-Amz-Signature=..."`
 	// Expiration time of the download URL (RFC3339)
-	ExpiresAt string `json:"expires_at"   example:"2026-02-05T13:00:00Z"`
+	ExpiresAt string `json:"expiresAt"   example:"2026-02-05T13:00:00Z"`
 	// SHA-256 checksum of the archive file
 	Checksum string `json:"checksum"     example:"sha256:abc123def456..."`
 }

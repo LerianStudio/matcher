@@ -752,11 +752,18 @@ linters:
               desc: "Domain purity violation: Domain services cannot import Postgres adapters."
         # ===========================================
         # Domain Layer: no logging/tracing dependencies
+        #
+        # File globs cover both nested domain subdirectories
+        # (internal/shared/domain/fee/…) and domain root files that sit
+        # one level below the domain directory (internal/shared/domain/*.go).
+        # The "**/" prefix alone does not match zero path components in
+        # golangci-lint's glob engine, so both patterns are required.
         # ===========================================
         domain-no-logging:
           list-mode: original
           files:
             - "**/domain/**/*.go"
+            - "**/domain/*.go"
           deny:
             - pkg: "log"
               desc: "Domain purity violation: avoid logging in domain layer."
@@ -772,6 +779,8 @@ linters:
               desc: "Domain purity violation: avoid tracing in domain layer."
             - pkg: "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
               desc: "Domain purity violation: avoid tracing in domain layer."
+            - pkg: "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry/metrics"
+              desc: "Domain purity violation: avoid telemetry in domain layer."
             - pkg: "github.com/LerianStudio/lib-commons/v5/commons/log"
               desc: "Domain purity violation: avoid logging in domain layer."
             - pkg: "github.com/LerianStudio/lib-commons/v5/commons/zap"
@@ -782,6 +791,20 @@ linters:
               desc: "Domain purity violation: avoid infrastructure dependencies in domain layer."
             - pkg: "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
               desc: "Domain purity violation: avoid infrastructure dependencies in domain layer."
+            # NOTE ON THE ROOT commons PACKAGE
+            # ---------------------------------
+            # We intentionally do NOT deny "github.com/LerianStudio/lib-commons/v5/commons".
+            # depguard matches pkg entries as prefixes, so a deny on the root would
+            # also block every commons subpackage (commons/assert, commons/outbox,
+            # commons/cron, commons/pointers) that domain entities legitimately use
+            # as pure utilities. The root is only useful in domain if a caller
+            # wanted NewTrackingFromContext — which returns a *log.Logger, a
+            # *opentelemetry.Tracer, and a *metrics.MetricsFactory, all three of
+            # which ARE denied above. Any code that tried to reach for the tracker
+            # would fail the depguard check at the use-site packages (commons/log,
+            # commons/opentelemetry, commons/opentelemetry/metrics). The root
+            # package stays legal for pure commons helpers that do not exist; in
+            # practice no domain file imports the root alone.
         # ===========================================
         # Shared Kernel Boundaries
         # Shared adapters must use shared kernel, not cross-context domain
@@ -1209,7 +1232,7 @@ linters:
       - linters:
           - gosec
         text: 'G704: SSRF via taint analysis'
-        path: tests/e2e/client/client\.go
+        path: tests/client/client\.go
       - linters:
           - errcheck
           - gosec

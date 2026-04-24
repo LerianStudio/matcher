@@ -155,9 +155,9 @@ func wideReportFilter(contextID uuid.UUID) entities.ReportFilter {
 	}
 }
 
-// TestExportLimit_ListMatchedForExport_Empty verifies that querying matched
+// TestIntegration_Reporting_ExportLimit_ListMatchedForExport_Empty verifies that querying matched
 // export data on a context with no matched transactions returns an empty slice.
-func TestExportLimit_ListMatchedForExport_Empty(t *testing.T) {
+func TestIntegration_Reporting_ExportLimit_ListMatchedForExport_Empty(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -172,10 +172,10 @@ func TestExportLimit_ListMatchedForExport_Empty(t *testing.T) {
 	})
 }
 
-// TestExportLimit_ListMatchedForExport_BelowLimit verifies that when the
+// TestIntegration_Reporting_ExportLimit_ListMatchedForExport_BelowLimit verifies that when the
 // result set is smaller than maxRecords, all rows are returned without
 // triggering overflow detection.
-func TestExportLimit_ListMatchedForExport_BelowLimit(t *testing.T) {
+func TestIntegration_Reporting_ExportLimit_ListMatchedForExport_BelowLimit(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -208,9 +208,9 @@ func TestExportLimit_ListMatchedForExport_BelowLimit(t *testing.T) {
 	})
 }
 
-// TestExportLimit_ListUnmatchedForExport_BelowLimit verifies that unmatched
+// TestIntegration_Reporting_ExportLimit_ListUnmatchedForExport_BelowLimit verifies that unmatched
 // export returns all rows when the count is below maxRecords.
-func TestExportLimit_ListUnmatchedForExport_BelowLimit(t *testing.T) {
+func TestIntegration_Reporting_ExportLimit_ListUnmatchedForExport_BelowLimit(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -241,11 +241,11 @@ func TestExportLimit_ListUnmatchedForExport_BelowLimit(t *testing.T) {
 	})
 }
 
-// TestExportLimit_ListMatchedForExport_AtLimit verifies that when the result
+// TestIntegration_Reporting_ExportLimit_ListMatchedForExport_AtLimit verifies that when the result
 // set has exactly N rows and maxRecords=N, all N rows are returned. The query
 // uses LIMIT N+1 internally (safeExportLimit), so N rows means no overflow
 // row exists—exactly N results come back.
-func TestExportLimit_ListMatchedForExport_AtLimit(t *testing.T) {
+func TestIntegration_Reporting_ExportLimit_ListMatchedForExport_AtLimit(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -269,12 +269,12 @@ func TestExportLimit_ListMatchedForExport_AtLimit(t *testing.T) {
 	})
 }
 
-// TestExportLimit_ListUnmatchedForExport_OverflowDetection verifies the
+// TestIntegration_Reporting_ExportLimit_ListUnmatchedForExport_OverflowDetection verifies the
 // LIMIT+1 overflow detection pattern. When the database holds N+1 rows and
 // the caller asks for maxRecords=N, the internal query uses LIMIT N+1 and
 // returns N+1 rows. The repository's defensive guard detects
 // len(items) > maxRecords and returns ErrExportLimitExceeded.
-func TestExportLimit_ListUnmatchedForExport_OverflowDetection(t *testing.T) {
+func TestIntegration_Reporting_ExportLimit_ListUnmatchedForExport_OverflowDetection(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		seed := seedDashboardConfig(t, h)
 		baseDate := time.Now().UTC().AddDate(0, 0, -5)

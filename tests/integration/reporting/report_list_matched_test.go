@@ -17,9 +17,9 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-// TestListMatched_EmptyResult verifies that ListMatched returns an empty slice
+// TestIntegration_Reporting_ListMatched_EmptyResult verifies that ListMatched returns an empty slice
 // and no cursor when no matched data exists within the queried date range.
-func TestListMatched_EmptyResult(t *testing.T) {
+func TestIntegration_Reporting_ListMatched_EmptyResult(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -42,10 +42,10 @@ func TestListMatched_EmptyResult(t *testing.T) {
 	})
 }
 
-// TestListMatched_ReturnsAllFields inserts a single matched transaction chain
+// TestIntegration_Reporting_ListMatched_ReturnsAllFields inserts a single matched transaction chain
 // (ingestion_job → transaction → match_run → match_group CONFIRMED → match_item)
 // and verifies that ListMatched returns all MatchedItem fields correctly.
-func TestListMatched_ReturnsAllFields(t *testing.T) {
+func TestIntegration_Reporting_ListMatched_ReturnsAllFields(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -130,10 +130,10 @@ func TestListMatched_ReturnsAllFields(t *testing.T) {
 	})
 }
 
-// TestListMatched_PaginationForward inserts 5 matched transactions, then pages
+// TestIntegration_Reporting_ListMatched_PaginationForward inserts 5 matched transactions, then pages
 // through them with Limit=2 in ASC order. Verifies: first page has 2 items + cursor,
 // second page has 2 items + cursor, third page has 1 item + empty cursor.
-func TestListMatched_PaginationForward(t *testing.T) {
+func TestIntegration_Reporting_ListMatched_PaginationForward(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -260,9 +260,9 @@ func TestListMatched_PaginationForward(t *testing.T) {
 	})
 }
 
-// TestListMatched_SourceFilter inserts matched transactions across 2 distinct sources,
+// TestIntegration_Reporting_ListMatched_SourceFilter inserts matched transactions across 2 distinct sources,
 // then filters by SourceID and verifies only the filtered source's items are returned.
-func TestListMatched_SourceFilter(t *testing.T) {
+func TestIntegration_Reporting_ListMatched_SourceFilter(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -426,9 +426,9 @@ func TestListMatched_SourceFilter(t *testing.T) {
 	})
 }
 
-// TestListUnmatched_BasicQuery inserts 3 unmatched transactions (status=UNMATCHED)
+// TestIntegration_Reporting_ListUnmatched_BasicQuery inserts 3 unmatched transactions (status=UNMATCHED)
 // and verifies ListUnmatched returns them with correct fields.
-func TestListUnmatched_BasicQuery(t *testing.T) {
+func TestIntegration_Reporting_ListUnmatched_BasicQuery(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -508,10 +508,10 @@ func TestListUnmatched_BasicQuery(t *testing.T) {
 	})
 }
 
-// TestListUnmatched_StatusFilter inserts transactions with mixed statuses
+// TestIntegration_Reporting_ListUnmatched_StatusFilter inserts transactions with mixed statuses
 // (UNMATCHED, PENDING_REVIEW, MATCHED) and verifies ListUnmatched excludes
 // MATCHED but includes UNMATCHED and PENDING_REVIEW (the query uses t.status != 'MATCHED').
-func TestListUnmatched_StatusFilter(t *testing.T) {
+func TestIntegration_Reporting_ListUnmatched_StatusFilter(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {

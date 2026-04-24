@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package actormapping
 
 import (
@@ -12,6 +16,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
@@ -87,7 +92,7 @@ func (repo *Repository) upsertInternal(ctx context.Context, tx *sql.Tx, mapping 
 		wrappedErr := fmt.Errorf("upsert actor mapping: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to upsert actor mapping", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to upsert actor mapping: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to upsert actor mapping", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -136,7 +141,7 @@ func (repo *Repository) GetByActorID(ctx context.Context, actorID string) (*enti
 		wrappedErr := fmt.Errorf("get actor mapping by id: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to get actor mapping", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get actor mapping: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to get actor mapping", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -197,7 +202,7 @@ func (repo *Repository) Pseudonymize(ctx context.Context, actorID string) error 
 		wrappedErr := fmt.Errorf("pseudonymize actor mapping: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to pseudonymize actor mapping", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to pseudonymize actor mapping: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to pseudonymize actor mapping", wrappedErr, runtime.IsProductionMode())
 
 		return wrappedErr
 	}
@@ -264,7 +269,7 @@ func (repo *Repository) deleteInternal(ctx context.Context, tx *sql.Tx, actorID 
 		wrappedErr := fmt.Errorf("delete actor mapping: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to delete actor mapping", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to delete actor mapping: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to delete actor mapping", wrappedErr, runtime.IsProductionMode())
 
 		return wrappedErr
 	}

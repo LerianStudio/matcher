@@ -400,11 +400,10 @@ func reserveLoopbackAddress() (string, error) {
 func waitForServerToListen(t *testing.T, address string, timeout time.Duration) {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
 	client := &http.Client{Timeout: 100 * time.Millisecond}
 	url := "http://" + address + "/readyz"
 
-	for time.Now().Before(deadline) {
+	require.Eventually(t, func() bool {
 		req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, url, http.NoBody)
 		if reqErr != nil {
 			t.Fatalf("failed to build readiness probe request: %v", reqErr)
@@ -413,18 +412,16 @@ func waitForServerToListen(t *testing.T, address string, timeout time.Duration) 
 		req.Close = true
 
 		resp, err := client.Do(req)
-		if err == nil {
-			if closeErr := resp.Body.Close(); closeErr != nil {
-				t.Logf("failed to close probe connection: %v", closeErr)
-			}
-
-			return
+		if err != nil {
+			return false
 		}
 
-		time.Sleep(10 * time.Millisecond)
-	}
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			t.Logf("failed to close probe connection: %v", closeErr)
+		}
 
-	t.Fatalf("server did not start listening on %s within %v", address, timeout)
+		return true
+	}, timeout, 10*time.Millisecond, "server did not start listening on %s within %v", address, timeout)
 }
 
 func TestServerRun_WithTLSMissingFiles(t *testing.T) {

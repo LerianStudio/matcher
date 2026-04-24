@@ -120,6 +120,8 @@ help:
 	@echo "  make clean                       - Remove build artifacts and temp files"
 	@echo "  make dev                         - Run with live reload (air)"
 	@echo "  make tidy                        - Clean go module dependencies"
+	@echo "  make dev-setup                   - Install all required dev tools (one-time onboarding)"
+	@echo "  make check-tools                 - Verify all required dev tools are installed"
 	@echo ""
 	@echo ""
 	@echo "Code Quality Commands:"
@@ -130,6 +132,7 @@ help:
 	@echo "  make sec                         - Run security checks using gosec"
 	@echo "  make check-tests                 - Verify test coverage for components"
 	@echo "  make check-migrations            - Verify migration pairs and sequential numbering"
+	@echo "  make check-license               - Verify every Go file has an Elastic License 2.0 header"
 	@echo "  make check-coverage              - Check coverage against thresholds"
 	@echo ""
 	@echo ""
@@ -148,6 +151,7 @@ help:
 	@echo "  make test-e2e-dashboard          - Run 5k tx dashboard stresser (data preserved)"
 	@echo "  make test-all                    - Run all tests (unit + int + e2e) with merged coverage"
 	@echo "  make test-chaos                  - Run chaos/resilience tests"
+	@echo "  make test-leak                   - Run goroutine-leak tests (unit+leak build tags)"
 	@echo ""
 	@echo ""
 	@echo "Coverage Commands:"
@@ -180,6 +184,8 @@ help:
 	@echo "  make migrate-down                - Roll back last migration"
 	@echo "  make migrate-to VERSION=<n>      - Migrate to a specific version"
 	@echo "  make migrate-create NAME=<name>  - Create new migration files"
+	@echo "  make migrate-version             - Show current migration version"
+	@echo "  make migrate-force VERSION=<n>   - Force version (rescue stuck state; DOES NOT run SQL)"
 	@echo ""
 	@echo ""
 
@@ -214,10 +220,65 @@ tidy:
 	@echo "[ok] Go modules tidied successfully"
 
 #-------------------------------------------------------
+# Dev Tool Setup
+#-------------------------------------------------------
+
+.PHONY: dev-setup check-tools
+
+# dev-setup installs every CLI tool the Makefile expects to find on PATH.
+# golangci-lint is pinned to $(GOLANGCI_LINT_VERSION). Other tools use @latest
+# to match the pattern already used by `make sec`, `make vulncheck`, etc.
+dev-setup:
+	$(call print_title,Installing dev tools)
+	@echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION)..."
+	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	@echo "Installing gosec..."
+	@go install github.com/securego/gosec/v2/cmd/gosec@latest
+	@echo "Installing govulncheck..."
+	@go install golang.org/x/vuln/cmd/govulncheck@latest
+	@echo "Installing swag..."
+	@go install github.com/swaggo/swag/cmd/swag@latest
+	@echo "Installing golang-migrate..."
+	@go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+	@echo "Installing mockgen..."
+	@go install go.uber.org/mock/mockgen@latest
+	@echo "Installing goimports..."
+	@go install golang.org/x/tools/cmd/goimports@latest
+	@echo "Installing gci..."
+	@go install github.com/daixiang0/gci@latest
+	@echo "Installing air..."
+	@go install github.com/air-verse/air@latest
+	@echo "Installing gocovmerge..."
+	@go install github.com/wadey/gocovmerge@latest
+	@echo "[ok] dev-setup complete"
+	@echo ""
+	@echo "Run 'make check-tools' to verify every tool is on PATH."
+
+# check-tools verifies every tool dev-setup installs is reachable on PATH.
+# Fails fast with a single clear message naming the missing tool.
+check-tools:
+	$(call print_title,Checking dev tools)
+	@missing=0; \
+	for tool in golangci-lint gosec govulncheck swag migrate mockgen goimports gci air gocovmerge; do \
+		if command -v $$tool >/dev/null 2>&1; then \
+			echo "  [ok] $$tool"; \
+		else \
+			echo "  [missing] $$tool"; \
+			missing=1; \
+		fi; \
+	done; \
+	if [ "$$missing" -ne 0 ]; then \
+		echo ""; \
+		echo "One or more dev tools are missing. Run: make dev-setup"; \
+		exit 1; \
+	fi
+	@echo "[ok] all dev tools present"
+
+#-------------------------------------------------------
 # Code Quality Commands
 #-------------------------------------------------------
 
-.PHONY: lint lint-fix lint-custom format sec vet vulncheck check-tests check-test-tags check-migrations check-generated-artifacts check-coverage
+.PHONY: lint lint-fix lint-custom format sec vet vulncheck check-tests check-test-tags check-migrations check-generated-artifacts check-license check-coverage
 
 vet:
 	$(call print_title,Running go vet)
@@ -252,15 +313,20 @@ lint-custom:
 	@echo "Running repository transaction pattern checks..."
 	@go vet -vettool=$(BIN_DIR)/matcherlint ./internal/.../adapters/postgres/... 2>&1 || echo "   ⚠️  Repository WithTx violations found (see above)"
 	@echo ""
+	@echo "Running determinism pattern checks (advisory)..."
+	@MATCHER_DETERMINISM_LINTER=1 go vet -tags=unit -vettool=$(BIN_DIR)/matcherlint ./internal/... 2>&1 || echo "   ⚠️  Determinism violations found (see above) — advisory, not blocking"
+	@echo ""
 	@echo "[ok] Custom lint check completed (violations are warnings until cleanup)"
 
 lint-custom-strict:
 	$(call print_title,Running custom Matcher linters - STRICT MODE)
 	@mkdir -p $(BIN_DIR)
 	@cd tools && go build -o ../$(BIN_DIR)/matcherlint ./linters/matcherlint/...
-	@go vet -vettool=$(BIN_DIR)/matcherlint ./internal/.../domain/entities/...
-	@go vet -vettool=$(BIN_DIR)/matcherlint ./internal/.../services/...
-	@go vet -vettool=$(BIN_DIR)/matcherlint ./internal/.../adapters/postgres/...
+	@MATCHER_GOLEAK_LINTER=1 go vet -tags="unit leak" -vettool=$(BIN_DIR)/matcherlint ./internal/.../domain/entities/...
+	@MATCHER_GOLEAK_LINTER=1 go vet -tags="unit leak" -vettool=$(BIN_DIR)/matcherlint ./internal/.../services/...
+	@MATCHER_GOLEAK_LINTER=1 go vet -tags="unit leak" -vettool=$(BIN_DIR)/matcherlint ./internal/.../adapters/postgres/...
+	@echo "Running goroutine-leak coverage checks..."
+	@MATCHER_GOLEAK_LINTER=1 go vet -tags="unit leak" -vettool=$(BIN_DIR)/matcherlint ./internal/...
 	@echo "[ok] Custom linting passed (strict mode)"
 
 format:
@@ -313,6 +379,10 @@ check-generated-artifacts:
 	fi; \
 	echo "[ok] Generated artifacts are up to date"
 
+check-license:
+	$(call print_title,Checking Elastic License 2.0 headers)
+	@./scripts/add-license-headers.sh --check
+
 check-coverage: test
 	$(call print_title,Checking coverage thresholds)
 	@if command -v go-test-coverage >/dev/null 2>&1; then \
@@ -326,7 +396,7 @@ check-coverage: test
 # Test Commands
 #-------------------------------------------------------
 
-.PHONY: test test-unit coverage-unit test-int test-e2e test-e2e-discovery test-e2e-dashboard test-chaos test-all cover
+.PHONY: test test-unit coverage-unit test-int test-e2e test-e2e-discovery test-e2e-dashboard test-chaos test-leak test-all cover
 
 test: test-unit
 
@@ -387,6 +457,11 @@ test-chaos:
 	@TESTCONTAINERS_RYUK_DISABLED=$${TESTCONTAINERS_RYUK_DISABLED:-true} $(TEST_RUNNER) -tags=chaos -timeout=15m -v -count=1 -p 1 -race ./tests/chaos/...
 	@echo "[ok] Chaos tests passed"
 
+test-leak:
+	$(call print_title,Running goroutine-leak tests)
+	@$(CLEAN_ENV) $(TEST_RUNNER) -tags="unit leak" -timeout=120s -count=1 $(GO_CI_PACKAGES)
+	@echo "[ok] Goroutine-leak tests passed"
+
 test-all:
 	$(call print_title,Running all tests - unit + integration + e2e)
 	@$(MAKE) test-unit
@@ -421,11 +496,13 @@ ci:
 	@$(MAKE) generate-casdoor
 	@$(MAKE) lint
 	@$(MAKE) test
+	@$(MAKE) test-leak
 	@$(MAKE) test-int
 	@$(MAKE) check-tests
 	@$(MAKE) check-test-tags
 	@$(MAKE) check-migrations
 	@$(MAKE) check-generated-artifacts
+	@$(MAKE) check-license
 	@$(MAKE) sec
 	@$(MAKE) vet
 	@$(MAKE) vulncheck
@@ -536,7 +613,7 @@ generate-docs:
 # Migration Commands
 #-------------------------------------------------------
 
-.PHONY: check-db-safety migrate-up migrate-down migrate-to migrate-create
+.PHONY: check-db-safety migrate-up migrate-down migrate-to migrate-create migrate-version migrate-force
 
 check-db-safety:
 	@set -eu; \
@@ -608,3 +685,28 @@ migrate-create:
 	@echo "  1. Edit the .up.sql file with your changes"
 	@echo "  2. Edit the .down.sql file with the rollback"
 	@echo "  3. Run 'make migrate-up' to apply"
+
+# migrate-version prints the current migration version (read-only; no
+# check-db-safety dependency so it works against any DATABASE_URL).
+migrate-version:
+	$(call print_title,Current migration version)
+	$(call check_command,migrate,"https://github.com/golang-migrate/migrate")
+	@migrate -path $(MIGRATE_PATH) -database "$(DATABASE_URL)" version
+
+# migrate-force hard-sets the migration version without running SQL. Use only
+# to rescue a stuck/dirty migration state — this does NOT apply or roll back
+# anything. Requires VERSION=<n>.
+migrate-force: check-db-safety
+	$(call print_title,Forcing migration version)
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION not specified."; \
+		echo "Usage: make migrate-force VERSION=<version_number>"; \
+		echo "WARNING: this only overwrites schema_migrations; no SQL runs."; \
+		exit 1; \
+	fi
+	$(call check_command,migrate,"https://github.com/golang-migrate/migrate")
+	@echo "WARNING: forcing version $(VERSION) — schema_migrations will be"
+	@echo "         overwritten without running any up/down SQL. Use only to"
+	@echo "         rescue a stuck state (dirty flag) after manual repair."
+	@migrate -path $(MIGRATE_PATH) -database "$(DATABASE_URL)" force $(VERSION)
+	@echo "[ok] Migration version forced to $(VERSION)"

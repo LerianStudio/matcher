@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package command
@@ -354,6 +358,14 @@ func (m *mockCommentRepository) DeleteByExceptionAndID(_ context.Context, _, _ u
 	return nil
 }
 
+func (m *mockCommentRepository) DeleteByExceptionAndIDWithTx(
+	_ context.Context,
+	_ *sql.Tx,
+	_, _ uuid.UUID,
+) error {
+	return nil
+}
+
 // stubCommentRepository is a configurable stub for comment repository in behavior tests.
 type stubCommentRepository struct {
 	comment   *entities.ExceptionComment
@@ -397,6 +409,14 @@ func (s *stubCommentRepository) FindByExceptionID(
 }
 
 func (s *stubCommentRepository) DeleteByExceptionAndID(_ context.Context, _, _ uuid.UUID) error {
+	return s.deleteErr
+}
+
+func (s *stubCommentRepository) DeleteByExceptionAndIDWithTx(
+	_ context.Context,
+	_ *sql.Tx,
+	_, _ uuid.UUID,
+) error {
 	return s.deleteErr
 }
 

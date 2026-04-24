@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package match_rule
@@ -18,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	pkgHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"

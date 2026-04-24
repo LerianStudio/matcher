@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package command
@@ -25,6 +29,7 @@ func testConnectionEntity() *entities.FetcherConnection {
 		ID:               uuid.New(),
 		FetcherConnID:    "fetcher-conn-1",
 		ConfigName:       "config-1",
+		ProductName:      "matcher",
 		DatabaseType:     "postgresql",
 		Status:           vo.ConnectionStatusAvailable,
 		SchemaDiscovered: true,
@@ -266,7 +271,7 @@ func TestStartExtraction_Success(t *testing.T) {
 	currencyCond := fetcherClient.lastSubmitInput.Filters[configKey]["transactions"]["currency"].(map[string]any)
 	assert.Equal(t, []any{"USD"}, currencyCond["eq"])
 	require.NotNil(t, fetcherClient.lastSubmitInput.Metadata)
-	assert.Equal(t, connection.ConfigName, fetcherClient.lastSubmitInput.Metadata["source"])
+	assert.Equal(t, connection.ProductName, fetcherClient.lastSubmitInput.Metadata["source"])
 }
 
 func TestExtractRequestedColumns(t *testing.T) {

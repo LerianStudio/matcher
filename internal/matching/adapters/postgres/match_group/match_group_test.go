@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package match_group
@@ -15,7 +19,6 @@ import (
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 )
-
 
 func TestPostgreSQLModel_RoundTrip(t *testing.T) {
 	t.Parallel()
