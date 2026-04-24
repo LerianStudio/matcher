@@ -18,8 +18,10 @@ package main
 import (
 	"os"
 
+	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/multichecker"
 
+	"github.com/LerianStudio/matcher/tools/linters/determinism"
 	"github.com/LerianStudio/matcher/tools/linters/entityconstructor"
 	"github.com/LerianStudio/matcher/tools/linters/goroutineleak"
 	"github.com/LerianStudio/matcher/tools/linters/observability"
@@ -27,24 +29,43 @@ import (
 )
 
 func main() {
-	// Goroutine-leak coverage is gated behind lint-custom-strict until every
-	// flagged package has goleak.VerifyTestMain wired. Enable via the
-	// MATCHER_GOLEAK_LINTER env var, which the Makefile sets for the
-	// strict target.
+	// Goroutine-leak coverage is gated behind lint-custom-strict via
+	// MATCHER_GOLEAK_LINTER — that package has been cleaned up and is a
+	// hard gate.
+	//
+	// Determinism is still advisory: it fires on existing violations that
+	// have not been cleaned up yet. A dedicated MATCHER_DETERMINISM_LINTER
+	// env var lets lint-custom opt in without failing CI. Once the codebase
+	// is clean the gate graduates to MATCHER_GOLEAK_LINTER alongside
+	// goroutineleak.
+	determinismEnabled := os.Getenv("MATCHER_DETERMINISM_LINTER") == "1"
+
 	if os.Getenv("MATCHER_GOLEAK_LINTER") == "1" {
-		multichecker.Main(
+		analyzers := []*analysis.Analyzer{
 			entityconstructor.Analyzer,
 			observability.Analyzer,
 			repositorytx.Analyzer,
 			goroutineleak.Analyzer,
-		)
+		}
+
+		if determinismEnabled {
+			analyzers = append(analyzers, determinism.Analyzer)
+		}
+
+		multichecker.Main(analyzers...)
 
 		return
 	}
 
-	multichecker.Main(
+	analyzers := []*analysis.Analyzer{
 		entityconstructor.Analyzer,
 		observability.Analyzer,
 		repositorytx.Analyzer,
-	)
+	}
+
+	if determinismEnabled {
+		analyzers = append(analyzers, determinism.Analyzer)
+	}
+
+	multichecker.Main(analyzers...)
 }

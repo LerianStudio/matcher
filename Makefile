@@ -254,6 +254,9 @@ lint-custom:
 	@echo "Running repository transaction pattern checks..."
 	@go vet -vettool=$(BIN_DIR)/matcherlint ./internal/.../adapters/postgres/... 2>&1 || echo "   ⚠️  Repository WithTx violations found (see above)"
 	@echo ""
+	@echo "Running determinism pattern checks (advisory)..."
+	@MATCHER_DETERMINISM_LINTER=1 go vet -tags=unit -vettool=$(BIN_DIR)/matcherlint ./internal/... 2>&1 || echo "   ⚠️  Determinism violations found (see above) — advisory, not blocking"
+	@echo ""
 	@echo "[ok] Custom lint check completed (violations are warnings until cleanup)"
 
 lint-custom-strict:
