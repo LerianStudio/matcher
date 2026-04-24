@@ -39,18 +39,18 @@ func (te *TenantExtractor) ExtractTenant() fiber.Handler {
 
 		defer span.End()
 
-		defaultTenantID := getDefaultTenantID()
-		defaultTenantSlug := getDefaultTenantSlug()
+		currentDefaultTenantID := getDefaultTenantID()
+		currentDefaultTenantSlug := getDefaultTenantSlug()
 
 		span.SetAttributes(attribute.Bool("auth.enabled", te.authEnabled))
 
 		if !te.authEnabled {
-			ctx = context.WithValue(ctx, TenantIDKey, defaultTenantID)
-			ctx = context.WithValue(ctx, TenantSlugKey, defaultTenantSlug)
+			ctx = context.WithValue(ctx, TenantIDKey, currentDefaultTenantID)
+			ctx = context.WithValue(ctx, TenantSlugKey, currentDefaultTenantSlug)
 
 			span.SetAttributes(
-				attribute.String("tenant.id", defaultTenantID),
-				attribute.String("tenant.slug", defaultTenantSlug),
+				attribute.String("tenant.id", currentDefaultTenantID),
+				attribute.String("tenant.slug", currentDefaultTenantSlug),
 				attribute.String("auth.mode", "disabled"),
 			)
 
@@ -86,8 +86,8 @@ func (te *TenantExtractor) ExtractTenant() fiber.Handler {
 
 		tenantID, tenantSlug, userID, err := extractClaimsFromToken(
 			token,
-			defaultTenantID,
-			defaultTenantSlug,
+			currentDefaultTenantID,
+			currentDefaultTenantSlug,
 			te.tokenSecret,
 			te.requireTenantClaims,
 		)
@@ -134,11 +134,28 @@ func (te *TenantExtractor) validateTenantClaims() fiber.Handler {
 	}
 
 	return func(fiberCtx *fiber.Ctx) error {
+		ctx := fiberCtx.UserContext()
+		if ctx == nil {
+			ctx = context.Background()
+		}
+
+		_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+		ctx, span := tracer.Start(ctx, "middleware.validate_tenant_claims")
+
+		defer span.End()
+
+		span.SetAttributes(attribute.Bool("auth.enabled", te.authEnabled))
+
 		if !te.authEnabled {
+			span.SetAttributes(attribute.String("auth.mode", "validate_only_disabled"))
+			fiberCtx.SetUserContext(ctx)
+
 			return fiberCtx.Next()
 		}
 
 		if len(te.tokenSecret) == 0 {
+			span.SetStatus(codes.Error, "token secret not configured")
+
 			return fiber.NewError(
 				fiber.StatusInternalServerError,
 				"authentication service unavailable",
@@ -147,26 +164,34 @@ func (te *TenantExtractor) validateTenantClaims() fiber.Handler {
 
 		token := libHTTP.ExtractTokenFromHeader(fiberCtx)
 		if token == "" {
+			libOpentelemetry.HandleSpanError(span, "missing authorization token", ErrMissingToken)
+
 			return fiber.NewError(fiber.StatusUnauthorized, ErrMissingToken.Error())
 		}
 
-		defaultTenantID := getDefaultTenantID()
-		defaultTenantSlug := getDefaultTenantSlug()
+		currentDefaultTenantID := getDefaultTenantID()
+		currentDefaultTenantSlug := getDefaultTenantSlug()
 
 		_, _, _, err := extractClaimsFromToken(
 			token,
-			defaultTenantID,
-			defaultTenantSlug,
+			currentDefaultTenantID,
+			currentDefaultTenantSlug,
 			te.tokenSecret,
 			te.requireTenantClaims,
 		)
 		if err != nil {
 			if errors.Is(err, ErrMissingTenantClaim) {
+				libOpentelemetry.HandleSpanError(span, "missing tenant claim", err)
+
 				return fiber.NewError(fiber.StatusForbidden, "tenant claim required")
 			}
 
+			libOpentelemetry.HandleSpanError(span, "invalid token", err)
+
 			return fiber.NewError(fiber.StatusUnauthorized, ErrInvalidToken.Error())
 		}
+
+		fiberCtx.SetUserContext(ctx)
 
 		return fiberCtx.Next()
 	}

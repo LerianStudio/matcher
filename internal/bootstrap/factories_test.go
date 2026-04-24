@@ -162,19 +162,19 @@ func TestDefaultInfraConnector_EnsureRabbitChannel_EmptyConnection(t *testing.T)
 	_ = err
 }
 
-// TestDefaultInfraConnector_InitializeAuthBoundaryLogger exercises the
-// real zap logger construction. The default config is intentionally
-// minimal (zero-value libZap.Config) and the lib-commons validator
-// requires OTelLibraryName, so we expect an error — the coverage goal
-// is the delegation itself, not the zap configuration.
+// TestDefaultInfraConnector_InitializeAuthBoundaryLogger verifies that
+// delegation produces a valid logger. The factory populates libZap.Config
+// with app-consistent defaults (OTelLibraryName = matcher, Environment /
+// Level resolved from empty inputs) so the lib-commons validator accepts
+// the config and returns a non-nil logger.
 func TestDefaultInfraConnector_InitializeAuthBoundaryLogger(t *testing.T) {
 	t.Parallel()
 
 	connector := DefaultInfraConnector()
 
 	logger, err := connector.InitializeAuthBoundaryLogger()
-	_ = logger
-	_ = err
+	require.NoError(t, err)
+	require.NotNil(t, logger)
 }
 
 // TestDefaultInfraConnector_NewS3Client_EmptyConfig exercises the

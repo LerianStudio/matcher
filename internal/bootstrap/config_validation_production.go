@@ -149,10 +149,6 @@ func requireProductionHTTPS(ctx context.Context, asserter *assert.Asserter, rawU
 		return fmt.Errorf("production config validation: invalid URL %q for %s: %w", rawURL, envVar, parseErr)
 	}
 
-	if parsed == nil {
-		return fmt.Errorf("%s: %w", envVar, errURLParsedToNil)
-	}
-
 	if err := asserter.That(ctx,
 		strings.EqualFold(parsed.Scheme, "https") && parsed.Host != "",
 		envVar+" must be an absolute HTTPS URL in production",

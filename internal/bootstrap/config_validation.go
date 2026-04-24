@@ -6,7 +6,6 @@ package bootstrap
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -14,9 +13,6 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
-
-// errURLParsedToNil is returned when url.Parse succeeds but yields a nil *url.URL.
-var errURLParsedToNil = errors.New("production config validation: URL parsed to nil")
 
 const (
 	maxRateLimitRequestsPerWindow = 1_000_000

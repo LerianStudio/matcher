@@ -13,7 +13,7 @@ Matcher ships metrics via **OpenTelemetry Protocol (OTLP) push** to a configured
 
 ### If a reviewer asks "where's /metrics"
 
-Point them here. A Prometheus-compatible scrape surface CAN be added later — via `otel-collector`'s Prometheus receiver on the push side of the pipeline — but that is a **deployment decision**, not an application-code decision. Matcher itself stays push-only.
+Point them here. A Prometheus-compatible scrape surface CAN be added later — via `otel-collector`'s Prometheus exporter on the push side of the pipeline — but that is a **deployment decision**, not an application-code decision. Matcher itself stays push-only.
 
 ### Related configuration keys
 
@@ -23,7 +23,7 @@ Point them here. A Prometheus-compatible scrape surface CAN be added later — v
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `localhost:4317` | OTLP gRPC collector target |
 | `OTEL_LIBRARY_NAME` | `github.com/LerianStudio/matcher` | Instrumentation library identifier |
 | `OTEL_RESOURCE_SERVICE_NAME` | `matcher` | Service name resource attribute |
-| `OTEL_RESOURCE_SERVICE_VERSION` | (git-sha) | Service version resource attribute |
-| `OTEL_RESOURCE_DEPLOYMENT_ENVIRONMENT` | (from `ENV_NAME`) | Deployment environment attribute |
+| `OTEL_RESOURCE_SERVICE_VERSION` | `1.1.0` | Service version resource attribute |
+| `OTEL_RESOURCE_DEPLOYMENT_ENVIRONMENT` | `development` | Deployment environment attribute |
 
 See `config/.config-map.example` for the full list of bootstrap-only keys.

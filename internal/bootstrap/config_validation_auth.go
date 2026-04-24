@@ -43,26 +43,44 @@ func (cfg *Config) validateRateLimitConfig(ctx context.Context, asserter *assert
 	return cfg.validateActiveRateLimitConfig(ctx, asserter)
 }
 
+// validatePositiveBounded validates that value is strictly positive and does
+// not exceed max. Both failure paths wrap the assertion error with the same
+// "config validation:" prefix the rate-limit checks use throughout.
+func validatePositiveBounded(
+	ctx context.Context,
+	asserter *assert.Asserter,
+	value int,
+	fieldKey, positiveMsg string,
+	maxValue int,
+	maxMsg string,
+) error {
+	if err := asserter.That(ctx, value > 0, positiveMsg, fieldKey, value); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	if err := asserter.That(ctx, value <= maxValue, maxMsg, fieldKey, value); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	return nil
+}
+
 // validateExportRateLimitConfig validates export-specific rate limit bounds.
 func (cfg *Config) validateExportRateLimitConfig(ctx context.Context, asserter *assert.Asserter) error {
-	if err := asserter.That(ctx, cfg.RateLimit.ExportMax > 0, "EXPORT_RATE_LIMIT_MAX must be positive", "export_rate_limit_max", cfg.RateLimit.ExportMax); err != nil {
-		return fmt.Errorf("config validation: %w", err)
+	if err := validatePositiveBounded(ctx, asserter, cfg.RateLimit.ExportMax,
+		"export_rate_limit_max",
+		"EXPORT_RATE_LIMIT_MAX must be positive",
+		maxRateLimitRequestsPerWindow,
+		"EXPORT_RATE_LIMIT_MAX must not exceed 1000000"); err != nil {
+		return err
 	}
 
-	if err := asserter.That(ctx, cfg.RateLimit.ExportMax <= maxRateLimitRequestsPerWindow,
-		"EXPORT_RATE_LIMIT_MAX must not exceed 1000000",
-		"export_rate_limit_max", cfg.RateLimit.ExportMax); err != nil {
-		return fmt.Errorf("config validation: %w", err)
-	}
-
-	if err := asserter.That(ctx, cfg.RateLimit.ExportExpirySec > 0, "EXPORT_RATE_LIMIT_EXPIRY_SEC must be positive", "export_rate_limit_expiry", cfg.RateLimit.ExportExpirySec); err != nil {
-		return fmt.Errorf("config validation: %w", err)
-	}
-
-	if err := asserter.That(ctx, cfg.RateLimit.ExportExpirySec <= maxRateLimitWindowSeconds,
-		"EXPORT_RATE_LIMIT_EXPIRY_SEC must not exceed 86400",
-		"export_rate_limit_expiry", cfg.RateLimit.ExportExpirySec); err != nil {
-		return fmt.Errorf("config validation: %w", err)
+	if err := validatePositiveBounded(ctx, asserter, cfg.RateLimit.ExportExpirySec,
+		"export_rate_limit_expiry",
+		"EXPORT_RATE_LIMIT_EXPIRY_SEC must be positive",
+		maxRateLimitWindowSeconds,
+		"EXPORT_RATE_LIMIT_EXPIRY_SEC must not exceed 86400"); err != nil {
+		return err
 	}
 
 	return nil
@@ -71,64 +89,52 @@ func (cfg *Config) validateExportRateLimitConfig(ctx context.Context, asserter *
 // validateActiveRateLimitConfig validates global and dispatch rate limit bounds
 // when rate limiting is enabled.
 func (cfg *Config) validateActiveRateLimitConfig(ctx context.Context, asserter *assert.Asserter) error {
-	if err := asserter.That(ctx, cfg.RateLimit.Max > 0, "RATE_LIMIT_MAX must be positive", "rate_limit_max", cfg.RateLimit.Max); err != nil {
-		return fmt.Errorf("config validation: %w", err)
+	if err := validatePositiveBounded(ctx, asserter, cfg.RateLimit.Max,
+		"rate_limit_max",
+		"RATE_LIMIT_MAX must be positive",
+		maxRateLimitRequestsPerWindow,
+		"RATE_LIMIT_MAX must not exceed 1000000"); err != nil {
+		return err
 	}
 
-	if err := asserter.That(ctx, cfg.RateLimit.Max <= maxRateLimitRequestsPerWindow,
-		"RATE_LIMIT_MAX must not exceed 1000000",
-		"rate_limit_max", cfg.RateLimit.Max); err != nil {
-		return fmt.Errorf("config validation: %w", err)
+	if err := validatePositiveBounded(ctx, asserter, cfg.RateLimit.ExpirySec,
+		"rate_limit_expiry",
+		"RATE_LIMIT_EXPIRY_SEC must be positive",
+		maxRateLimitWindowSeconds,
+		"RATE_LIMIT_EXPIRY_SEC must not exceed 86400"); err != nil {
+		return err
 	}
 
-	if err := asserter.That(ctx, cfg.RateLimit.ExpirySec > 0, "RATE_LIMIT_EXPIRY_SEC must be positive", "rate_limit_expiry", cfg.RateLimit.ExpirySec); err != nil {
-		return fmt.Errorf("config validation: %w", err)
+	if err := validatePositiveBounded(ctx, asserter, cfg.RateLimit.DispatchMax,
+		"dispatch_rate_limit_max",
+		"DISPATCH_RATE_LIMIT_MAX must be positive",
+		maxRateLimitRequestsPerWindow,
+		"DISPATCH_RATE_LIMIT_MAX must not exceed 1000000"); err != nil {
+		return err
 	}
 
-	if err := asserter.That(ctx, cfg.RateLimit.ExpirySec <= maxRateLimitWindowSeconds,
-		"RATE_LIMIT_EXPIRY_SEC must not exceed 86400",
-		"rate_limit_expiry", cfg.RateLimit.ExpirySec); err != nil {
-		return fmt.Errorf("config validation: %w", err)
+	if err := validatePositiveBounded(ctx, asserter, cfg.RateLimit.DispatchExpirySec,
+		"dispatch_rate_limit_expiry",
+		"DISPATCH_RATE_LIMIT_EXPIRY_SEC must be positive",
+		maxRateLimitWindowSeconds,
+		"DISPATCH_RATE_LIMIT_EXPIRY_SEC must not exceed 86400"); err != nil {
+		return err
 	}
 
-	if err := asserter.That(ctx, cfg.RateLimit.DispatchMax > 0, "DISPATCH_RATE_LIMIT_MAX must be positive", "dispatch_rate_limit_max", cfg.RateLimit.DispatchMax); err != nil {
-		return fmt.Errorf("config validation: %w", err)
+	if err := validatePositiveBounded(ctx, asserter, cfg.RateLimit.AdminMax,
+		"admin_rate_limit_max",
+		"ADMIN_RATE_LIMIT_MAX must be positive",
+		maxRateLimitRequestsPerWindow,
+		"ADMIN_RATE_LIMIT_MAX must not exceed 1000000"); err != nil {
+		return err
 	}
 
-	if err := asserter.That(ctx, cfg.RateLimit.DispatchMax <= maxRateLimitRequestsPerWindow,
-		"DISPATCH_RATE_LIMIT_MAX must not exceed 1000000",
-		"dispatch_rate_limit_max", cfg.RateLimit.DispatchMax); err != nil {
-		return fmt.Errorf("config validation: %w", err)
-	}
-
-	if err := asserter.That(ctx, cfg.RateLimit.DispatchExpirySec > 0, "DISPATCH_RATE_LIMIT_EXPIRY_SEC must be positive", "dispatch_rate_limit_expiry", cfg.RateLimit.DispatchExpirySec); err != nil {
-		return fmt.Errorf("config validation: %w", err)
-	}
-
-	if err := asserter.That(ctx, cfg.RateLimit.DispatchExpirySec <= maxRateLimitWindowSeconds,
-		"DISPATCH_RATE_LIMIT_EXPIRY_SEC must not exceed 86400",
-		"dispatch_rate_limit_expiry", cfg.RateLimit.DispatchExpirySec); err != nil {
-		return fmt.Errorf("config validation: %w", err)
-	}
-
-	if err := asserter.That(ctx, cfg.RateLimit.AdminMax > 0, "ADMIN_RATE_LIMIT_MAX must be positive", "admin_rate_limit_max", cfg.RateLimit.AdminMax); err != nil {
-		return fmt.Errorf("config validation: %w", err)
-	}
-
-	if err := asserter.That(ctx, cfg.RateLimit.AdminMax <= maxRateLimitRequestsPerWindow,
-		"ADMIN_RATE_LIMIT_MAX must not exceed 1000000",
-		"admin_rate_limit_max", cfg.RateLimit.AdminMax); err != nil {
-		return fmt.Errorf("config validation: %w", err)
-	}
-
-	if err := asserter.That(ctx, cfg.RateLimit.AdminExpirySec > 0, "ADMIN_RATE_LIMIT_EXPIRY_SEC must be positive", "admin_rate_limit_expiry", cfg.RateLimit.AdminExpirySec); err != nil {
-		return fmt.Errorf("config validation: %w", err)
-	}
-
-	if err := asserter.That(ctx, cfg.RateLimit.AdminExpirySec <= maxRateLimitWindowSeconds,
-		"ADMIN_RATE_LIMIT_EXPIRY_SEC must not exceed 86400",
-		"admin_rate_limit_expiry", cfg.RateLimit.AdminExpirySec); err != nil {
-		return fmt.Errorf("config validation: %w", err)
+	if err := validatePositiveBounded(ctx, asserter, cfg.RateLimit.AdminExpirySec,
+		"admin_rate_limit_expiry",
+		"ADMIN_RATE_LIMIT_EXPIRY_SEC must be positive",
+		maxRateLimitWindowSeconds,
+		"ADMIN_RATE_LIMIT_EXPIRY_SEC must not exceed 86400"); err != nil {
+		return err
 	}
 
 	return nil

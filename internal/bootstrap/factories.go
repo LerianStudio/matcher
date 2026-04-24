@@ -20,6 +20,7 @@ import (
 	matchingRabbitmq "github.com/LerianStudio/matcher/internal/matching/adapters/rabbitmq"
 	reportingStorage "github.com/LerianStudio/matcher/internal/reporting/adapters/storage"
 	sharedRabbitmq "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
 // InfraConnector abstracts the infrastructure-level primitives the bootstrap
@@ -153,11 +154,17 @@ func (defaultInfraConnector) InitTelemetry(cfg *Config, logger libLog.Logger) *l
 }
 
 // InitializeAuthBoundaryLogger constructs a fresh zap logger for the auth
-// boundary. The default lib-zap configuration is intentional: the auth logger
-// is kept independent of the main application logger so that scrubbing /
-// redaction rules applied to business logs never affect auth audit output.
+// boundary. The config is pinned to production/info with the app's OTel
+// library name so audit output is structured JSON regardless of the main
+// application logger's runtime configuration — downstream compliance
+// tooling consumes these logs and expects a stable machine-parseable format
+// in every environment.
 func (defaultInfraConnector) InitializeAuthBoundaryLogger() (libLog.Logger, error) {
-	logger, err := libZap.New(libZap.Config{})
+	logger, err := libZap.New(libZap.Config{
+		Environment:     libZap.EnvironmentProduction,
+		Level:           defaultLoggerLevel,
+		OTelLibraryName: constants.ApplicationName,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("build auth boundary logger: %w", err)
 	}
