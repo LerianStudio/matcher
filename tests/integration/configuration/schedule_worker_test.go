@@ -17,7 +17,7 @@ import (
 // boolPtr returns a pointer to the given bool value.
 func boolPtr(v bool) *bool { return &v }
 
-func TestSchedule_CreateAndFindByID(t *testing.T) {
+func TestIntegration_Configuration_Schedule_CreateAndFindByID(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := scheduleRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -53,7 +53,7 @@ func TestSchedule_CreateAndFindByID(t *testing.T) {
 	})
 }
 
-func TestSchedule_FindByContextID(t *testing.T) {
+func TestIntegration_Configuration_Schedule_FindByContextID(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := scheduleRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -101,7 +101,7 @@ func TestSchedule_FindByContextID(t *testing.T) {
 	})
 }
 
-func TestSchedule_FindDueSchedules(t *testing.T) {
+func TestIntegration_Configuration_Schedule_FindDueSchedules(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := scheduleRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -147,7 +147,7 @@ func TestSchedule_FindDueSchedules(t *testing.T) {
 	})
 }
 
-func TestSchedule_UpdateLastRunAndNextRun(t *testing.T) {
+func TestIntegration_Configuration_Schedule_UpdateLastRunAndNextRun(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := scheduleRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -194,7 +194,7 @@ func TestSchedule_UpdateLastRunAndNextRun(t *testing.T) {
 	})
 }
 
-func TestSchedule_DisabledScheduleNotDue(t *testing.T) {
+func TestIntegration_Configuration_Schedule_DisabledScheduleNotDue(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := scheduleRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()

@@ -20,7 +20,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestMatchGroupRepository_CreateBatchAndList(t *testing.T) {
+func TestIntegration_Matching_MatchGroupRepository_CreateBatchAndList(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		runRepo := matchRunRepo.NewRepository(h.Provider())
 		groupRepo := matchGroupRepo.NewRepository(h.Provider())
@@ -96,7 +96,7 @@ func TestMatchGroupRepository_CreateBatchAndList(t *testing.T) {
 	})
 }
 
-func TestMatchGroupRepository_MultipleGroups(t *testing.T) {
+func TestIntegration_Matching_MatchGroupRepository_MultipleGroups(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		runRepo := matchRunRepo.NewRepository(h.Provider())
 		groupRepo := matchGroupRepo.NewRepository(h.Provider())

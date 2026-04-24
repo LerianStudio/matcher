@@ -29,7 +29,7 @@ import (
 )
 
 //nolint:paralleltest,bodyclose // integration tests use shared server; body closed in doRequest
-func TestIntegrationIdempotency_SameKeyReturnsCachedResponse(t *testing.T) {
+func TestIntegration_Exception_IntegrationIdempotency_SameKeyReturnsCachedResponse(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) { //nolint:thelper
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -78,7 +78,7 @@ func TestIntegrationIdempotency_SameKeyReturnsCachedResponse(t *testing.T) {
 }
 
 //nolint:paralleltest,bodyclose // integration tests use shared server; body closed in doRequest
-func TestIntegrationIdempotency_DifferentKeysProcessedSeparately(t *testing.T) {
+func TestIntegration_Exception_IntegrationIdempotency_DifferentKeysProcessedSeparately(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) { //nolint:thelper
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -130,7 +130,7 @@ func TestIntegrationIdempotency_DifferentKeysProcessedSeparately(t *testing.T) {
 }
 
 //nolint:paralleltest,bodyclose // integration tests use shared server; body closed in doRequest
-func TestIntegrationIdempotency_HashBasedDeduplication(t *testing.T) {
+func TestIntegration_Exception_IntegrationIdempotency_HashBasedDeduplication(t *testing.T) {
 	// NOTE: Hash-based deduplication cannot work with multipart/form-data requests
 	// because each multipart.NewWriter generates a random boundary, making the
 	// body hash different every time. This test uses JSON requests instead.
@@ -178,7 +178,7 @@ func TestIntegrationIdempotency_HashBasedDeduplication(t *testing.T) {
 }
 
 //nolint:paralleltest,bodyclose // integration tests use shared server; body closed in doRequest
-func TestIntegrationIdempotency_FailedRequestAllowsRetry(t *testing.T) {
+func TestIntegration_Exception_IntegrationIdempotency_FailedRequestAllowsRetry(t *testing.T) {
 	server.RunWithServer(t, func(t *testing.T, sh *server.ServerHarness) { //nolint:thelper
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()

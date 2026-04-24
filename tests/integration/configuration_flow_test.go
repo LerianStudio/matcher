@@ -23,7 +23,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration/ratelimit"
 )
 
-func TestConfigurationFlow_Integration(t *testing.T) {
+func TestIntegration_Flow_ConfigurationFlow_Integration(t *testing.T) {
 	RunWithHarness(t, func(t *testing.T, h *TestHarness) {
 		setProjectRoot(t)
 		postgresHost, postgresPort := extractHostPort(t, h.PostgresDSN)

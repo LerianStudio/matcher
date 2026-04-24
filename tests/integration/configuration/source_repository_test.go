@@ -16,7 +16,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestSourceRepository_CreateAndFindByID(t *testing.T) {
+func TestIntegration_Configuration_SourceRepository_CreateAndFindByID(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo, err := sourceRepo.NewRepository(h.Provider())
 		require.NoError(t, err)
@@ -49,7 +49,7 @@ func TestSourceRepository_CreateAndFindByID(t *testing.T) {
 	})
 }
 
-func TestSourceRepository_FindByContextID(t *testing.T) {
+func TestIntegration_Configuration_SourceRepository_FindByContextID(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo, err := sourceRepo.NewRepository(h.Provider())
 		require.NoError(t, err)
@@ -105,7 +105,7 @@ func TestSourceRepository_FindByContextID(t *testing.T) {
 	})
 }
 
-func TestSourceRepository_FindByContextIDAndType(t *testing.T) {
+func TestIntegration_Configuration_SourceRepository_FindByContextIDAndType(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo, err := sourceRepo.NewRepository(h.Provider())
 		require.NoError(t, err)
@@ -149,7 +149,7 @@ func TestSourceRepository_FindByContextIDAndType(t *testing.T) {
 	})
 }
 
-func TestSourceRepository_Update(t *testing.T) {
+func TestIntegration_Configuration_SourceRepository_Update(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo, err := sourceRepo.NewRepository(h.Provider())
 		require.NoError(t, err)
@@ -183,7 +183,7 @@ func TestSourceRepository_Update(t *testing.T) {
 	})
 }
 
-func TestSourceRepository_Delete(t *testing.T) {
+func TestIntegration_Configuration_SourceRepository_Delete(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo, err := sourceRepo.NewRepository(h.Provider())
 		require.NoError(t, err)
@@ -213,7 +213,7 @@ func TestSourceRepository_Delete(t *testing.T) {
 	})
 }
 
-func TestSourceRepository_FindByID_NotFound(t *testing.T) {
+func TestIntegration_Configuration_SourceRepository_FindByID_NotFound(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo, err := sourceRepo.NewRepository(h.Provider())
 		require.NoError(t, err)

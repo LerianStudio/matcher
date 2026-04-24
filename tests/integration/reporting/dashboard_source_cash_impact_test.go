@@ -104,9 +104,9 @@ func seedSourceBreakdownData(
 	require.NoError(t, err)
 }
 
-// TestSourceBreakdown_EmptyDatabase verifies that querying a context with no
+// TestIntegration_Reporting_SourceBreakdown_EmptyDatabase verifies that querying a context with no
 // transactions returns an empty (non-nil) slice.
-func TestSourceBreakdown_EmptyDatabase(t *testing.T) {
+func TestIntegration_Reporting_SourceBreakdown_EmptyDatabase(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) { //nolint:thelper // test body
 		seed := seedDashboardConfig(t, h)
 
@@ -126,10 +126,10 @@ func TestSourceBreakdown_EmptyDatabase(t *testing.T) {
 	})
 }
 
-// TestSourceBreakdown_SingleSource inserts 5 transactions on one source, matches 3
+// TestIntegration_Reporting_SourceBreakdown_SingleSource inserts 5 transactions on one source, matches 3
 // of them, and verifies per-source aggregation: totals, matched/unmatched counts,
 // amounts, and match rate.
-func TestSourceBreakdown_SingleSource(t *testing.T) {
+func TestIntegration_Reporting_SourceBreakdown_SingleSource(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) { //nolint:thelper // test body
 		seed := seedDashboardConfig(t, h)
 		baseDate := time.Date(2025, 5, 10, 12, 0, 0, 0, time.UTC)
@@ -178,9 +178,9 @@ func TestSourceBreakdown_SingleSource(t *testing.T) {
 	})
 }
 
-// TestSourceBreakdown_MultipleSourceComparison inserts transactions on two sources
+// TestIntegration_Reporting_SourceBreakdown_MultipleSourceComparison inserts transactions on two sources
 // with different match rates and verifies both appear with correct per-source stats.
-func TestSourceBreakdown_MultipleSourceComparison(t *testing.T) {
+func TestIntegration_Reporting_SourceBreakdown_MultipleSourceComparison(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) { //nolint:thelper // test body
 		seed := seedDashboardConfig(t, h)
 		baseDate := time.Date(2025, 6, 1, 10, 0, 0, 0, time.UTC)
@@ -340,10 +340,10 @@ func seedCashImpactCurrencyData(
 	require.NoError(t, err)
 }
 
-// TestCashImpactSummary_ByCurrency inserts unmatched transactions in two currencies
+// TestIntegration_Reporting_CashImpactSummary_ByCurrency inserts unmatched transactions in two currencies
 // (USD and EUR) and verifies the ByCurrency breakdown has correct amounts and counts.
 // Cash impact only counts transactions NOT in any CONFIRMED match group.
-func TestCashImpactSummary_ByCurrency(t *testing.T) {
+func TestIntegration_Reporting_CashImpactSummary_ByCurrency(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) { //nolint:thelper // test body
 		seed := seedDashboardConfig(t, h)
 		baseDate := time.Date(2025, 7, 1, 12, 0, 0, 0, time.UTC)
@@ -392,10 +392,10 @@ func TestCashImpactSummary_ByCurrency(t *testing.T) {
 	})
 }
 
-// TestCashImpactSummary_ByAge inserts unmatched transactions at different ages
+// TestIntegration_Reporting_CashImpactSummary_ByAge inserts unmatched transactions at different ages
 // and verifies the ByAge buckets contain correct counts and amounts.
 // The query uses EXTRACT(EPOCH FROM (NOW() - t.date)) / 3600 for age in hours.
-func TestCashImpactSummary_ByAge(t *testing.T) {
+func TestIntegration_Reporting_CashImpactSummary_ByAge(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) { //nolint:thelper // test body
 		seed := seedDashboardConfig(t, h)
 

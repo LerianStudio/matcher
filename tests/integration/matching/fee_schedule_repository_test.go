@@ -39,7 +39,7 @@ func newTestSchedule(
 	return schedule
 }
 
-func TestFeeScheduleRepository_CreateAndGetByID(t *testing.T) {
+func TestIntegration_Matching_FeeScheduleRepository_CreateAndGetByID(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := feeScheduleRepo.NewRepository(h.Provider())
 		ctx := e4t9Ctx(t, h)
@@ -90,7 +90,7 @@ func TestFeeScheduleRepository_CreateAndGetByID(t *testing.T) {
 	})
 }
 
-func TestFeeScheduleRepository_CreateWithTieredFee(t *testing.T) {
+func TestIntegration_Matching_FeeScheduleRepository_CreateWithTieredFee(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := feeScheduleRepo.NewRepository(h.Provider())
 		ctx := e4t9Ctx(t, h)
@@ -140,7 +140,7 @@ func TestFeeScheduleRepository_CreateWithTieredFee(t *testing.T) {
 	})
 }
 
-func TestFeeScheduleRepository_Update(t *testing.T) {
+func TestIntegration_Matching_FeeScheduleRepository_Update(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := feeScheduleRepo.NewRepository(h.Provider())
 		ctx := e4t9Ctx(t, h)
@@ -199,7 +199,7 @@ func TestFeeScheduleRepository_Update(t *testing.T) {
 	})
 }
 
-func TestFeeScheduleRepository_Delete(t *testing.T) {
+func TestIntegration_Matching_FeeScheduleRepository_Delete(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := feeScheduleRepo.NewRepository(h.Provider())
 		ctx := e4t9Ctx(t, h)
@@ -224,7 +224,7 @@ func TestFeeScheduleRepository_Delete(t *testing.T) {
 	})
 }
 
-func TestFeeScheduleRepository_DeleteNonExistent(t *testing.T) {
+func TestIntegration_Matching_FeeScheduleRepository_DeleteNonExistent(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := feeScheduleRepo.NewRepository(h.Provider())
 		ctx := e4t9Ctx(t, h)
@@ -234,7 +234,7 @@ func TestFeeScheduleRepository_DeleteNonExistent(t *testing.T) {
 	})
 }
 
-func TestFeeScheduleRepository_List(t *testing.T) {
+func TestIntegration_Matching_FeeScheduleRepository_List(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := feeScheduleRepo.NewRepository(h.Provider())
 		ctx := e4t9Ctx(t, h)
@@ -273,7 +273,7 @@ func TestFeeScheduleRepository_List(t *testing.T) {
 	})
 }
 
-func TestFeeScheduleRepository_ListWithLimit(t *testing.T) {
+func TestIntegration_Matching_FeeScheduleRepository_ListWithLimit(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := feeScheduleRepo.NewRepository(h.Provider())
 		ctx := e4t9Ctx(t, h)
@@ -296,7 +296,7 @@ func TestFeeScheduleRepository_ListWithLimit(t *testing.T) {
 	})
 }
 
-func TestFeeScheduleRepository_GetByIDs(t *testing.T) {
+func TestIntegration_Matching_FeeScheduleRepository_GetByIDs(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := feeScheduleRepo.NewRepository(h.Provider())
 		ctx := e4t9Ctx(t, h)
@@ -331,7 +331,7 @@ func TestFeeScheduleRepository_GetByIDs(t *testing.T) {
 	})
 }
 
-func TestFeeScheduleRepository_GetByIDsEmpty(t *testing.T) {
+func TestIntegration_Matching_FeeScheduleRepository_GetByIDsEmpty(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := feeScheduleRepo.NewRepository(h.Provider())
 		ctx := e4t9Ctx(t, h)
@@ -343,7 +343,7 @@ func TestFeeScheduleRepository_GetByIDsEmpty(t *testing.T) {
 	})
 }
 
-func TestFeeScheduleRepository_CascadeDeleteItems(t *testing.T) {
+func TestIntegration_Matching_FeeScheduleRepository_CascadeDeleteItems(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := feeScheduleRepo.NewRepository(h.Provider())
 		ctx := e4t9Ctx(t, h)

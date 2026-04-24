@@ -21,7 +21,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestMatchRunRepository_FindByID_NotFound(t *testing.T) {
+func TestIntegration_Matching_MatchRunRepository_FindByID_NotFound(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := matchRunRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -31,7 +31,7 @@ func TestMatchRunRepository_FindByID_NotFound(t *testing.T) {
 	})
 }
 
-func TestMatchRunRepository_ForeignKeyConstraint(t *testing.T) {
+func TestIntegration_Matching_MatchRunRepository_ForeignKeyConstraint(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := matchRunRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -50,7 +50,7 @@ func TestMatchRunRepository_ForeignKeyConstraint(t *testing.T) {
 	})
 }
 
-func TestMatchGroupRepository_ForeignKeyConstraint_Run(t *testing.T) {
+func TestIntegration_Matching_MatchGroupRepository_ForeignKeyConstraint_Run(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		groupRepo := matchGroupRepo.NewRepository(h.Provider())
 		ruleRepo := matchRuleRepo.NewRepository(h.Provider())
@@ -106,7 +106,7 @@ func TestMatchGroupRepository_ForeignKeyConstraint_Run(t *testing.T) {
 	})
 }
 
-func TestMatchGroupRepository_ForeignKeyConstraint_Rule(t *testing.T) {
+func TestIntegration_Matching_MatchGroupRepository_ForeignKeyConstraint_Rule(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		runRepo := matchRunRepo.NewRepository(h.Provider())
 		groupRepo := matchGroupRepo.NewRepository(h.Provider())
@@ -158,7 +158,7 @@ func TestMatchGroupRepository_ForeignKeyConstraint_Rule(t *testing.T) {
 	})
 }
 
-func TestMatchGroupRepository_CreateBatch_Empty(t *testing.T) {
+func TestIntegration_Matching_MatchGroupRepository_CreateBatch_Empty(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		groupRepo := matchGroupRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -169,7 +169,7 @@ func TestMatchGroupRepository_CreateBatch_Empty(t *testing.T) {
 	})
 }
 
-func TestMatchRunRepository_ListByContextID_EmptyResult(t *testing.T) {
+func TestIntegration_Matching_MatchRunRepository_ListByContextID_EmptyResult(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := matchRunRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -185,7 +185,7 @@ func TestMatchRunRepository_ListByContextID_EmptyResult(t *testing.T) {
 	})
 }
 
-func TestMatchGroupRepository_ListByRunID_EmptyResult(t *testing.T) {
+func TestIntegration_Matching_MatchGroupRepository_ListByRunID_EmptyResult(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		groupRepo := matchGroupRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -202,7 +202,7 @@ func TestMatchGroupRepository_ListByRunID_EmptyResult(t *testing.T) {
 	})
 }
 
-func TestMatchRunRepository_UpdateNonExistent(t *testing.T) {
+func TestIntegration_Matching_MatchRunRepository_UpdateNonExistent(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := matchRunRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -221,7 +221,7 @@ func TestMatchRunRepository_UpdateNonExistent(t *testing.T) {
 	})
 }
 
-func TestMatchRunRepository_Pagination(t *testing.T) {
+func TestIntegration_Matching_MatchRunRepository_Pagination(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := matchRunRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -261,7 +261,7 @@ func TestMatchRunRepository_Pagination(t *testing.T) {
 	})
 }
 
-func TestMatchGroupRepository_Pagination(t *testing.T) {
+func TestIntegration_Matching_MatchGroupRepository_Pagination(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		runRepo := matchRunRepo.NewRepository(h.Provider())
 		groupRepo := matchGroupRepo.NewRepository(h.Provider())
@@ -358,7 +358,7 @@ func TestMatchGroupRepository_Pagination(t *testing.T) {
 	})
 }
 
-func TestConfidenceScore_Boundaries(t *testing.T) {
+func TestIntegration_Matching_ConfidenceScore_Boundaries(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		runRepo := matchRunRepo.NewRepository(h.Provider())
 		groupRepo := matchGroupRepo.NewRepository(h.Provider())
@@ -457,7 +457,7 @@ func TestConfidenceScore_Boundaries(t *testing.T) {
 	})
 }
 
-func TestMatchRun_StatusTransitions(t *testing.T) {
+func TestIntegration_Matching_MatchRun_StatusTransitions(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := matchRunRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -499,7 +499,7 @@ func TestMatchRun_StatusTransitions(t *testing.T) {
 	})
 }
 
-func TestMatchGroup_LargeConfidenceDecimal(t *testing.T) {
+func TestIntegration_Matching_MatchGroup_LargeConfidenceDecimal(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		runRepo := matchRunRepo.NewRepository(h.Provider())
 		groupRepo := matchGroupRepo.NewRepository(h.Provider())

@@ -32,7 +32,7 @@ func newTestArchiveMetadata(t *testing.T, h *integration.TestHarness) *entities.
 	return am
 }
 
-func TestArchiveMetadata_CreateAndFindByID(t *testing.T) {
+func TestIntegration_Governance_ArchiveMetadata_CreateAndFindByID(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := archiveRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -74,7 +74,7 @@ func TestArchiveMetadata_CreateAndFindByID(t *testing.T) {
 	})
 }
 
-func TestArchiveMetadata_StatusTransitions(t *testing.T) {
+func TestIntegration_Governance_ArchiveMetadata_StatusTransitions(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := archiveRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -150,7 +150,7 @@ func TestArchiveMetadata_StatusTransitions(t *testing.T) {
 	})
 }
 
-func TestArchiveMetadata_ListByStatus(t *testing.T) {
+func TestIntegration_Governance_ArchiveMetadata_ListByStatus(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := archiveRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -200,7 +200,7 @@ func TestArchiveMetadata_ListByStatus(t *testing.T) {
 	})
 }
 
-func TestArchiveMetadata_InvalidTransition(t *testing.T) {
+func TestIntegration_Governance_ArchiveMetadata_InvalidTransition(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		am := newTestArchiveMetadata(t, h)
 		require.Equal(t, entities.StatusPending, am.Status)
@@ -240,7 +240,7 @@ func TestArchiveMetadata_InvalidTransition(t *testing.T) {
 	})
 }
 
-func TestArchiveMetadata_UpdateMetadata(t *testing.T) {
+func TestIntegration_Governance_ArchiveMetadata_UpdateMetadata(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := archiveRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()

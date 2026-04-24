@@ -17,9 +17,9 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-// TestGetSummary_EmptyDatabase verifies that GetSummary returns zero counts and
+// TestIntegration_Reporting_GetSummary_EmptyDatabase verifies that GetSummary returns zero counts and
 // zero amounts when no transactions exist in the queried date range.
-func TestGetSummary_EmptyDatabase(t *testing.T) {
+func TestIntegration_Reporting_GetSummary_EmptyDatabase(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -44,9 +44,9 @@ func TestGetSummary_EmptyDatabase(t *testing.T) {
 	})
 }
 
-// TestGetSummary_OnlyUnmatched inserts 3 UNMATCHED transactions ($100, $200, $300)
+// TestIntegration_Reporting_GetSummary_OnlyUnmatched inserts 3 UNMATCHED transactions ($100, $200, $300)
 // and verifies the summary reflects only unmatched counts and amounts.
-func TestGetSummary_OnlyUnmatched(t *testing.T) {
+func TestIntegration_Reporting_GetSummary_OnlyUnmatched(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -104,9 +104,9 @@ func TestGetSummary_OnlyUnmatched(t *testing.T) {
 	})
 }
 
-// TestGetSummary_OnlyMatched inserts 2 matched transactions ($150, $250) with
+// TestIntegration_Reporting_GetSummary_OnlyMatched inserts 2 matched transactions ($150, $250) with
 // CONFIRMED match groups and verifies the summary reflects only matched data.
-func TestGetSummary_OnlyMatched(t *testing.T) {
+func TestIntegration_Reporting_GetSummary_OnlyMatched(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -194,9 +194,9 @@ func TestGetSummary_OnlyMatched(t *testing.T) {
 	})
 }
 
-// TestGetSummary_MixedMatchedAndUnmatched inserts 3 matched ($100, $200, $300)
+// TestIntegration_Reporting_GetSummary_MixedMatchedAndUnmatched inserts 3 matched ($100, $200, $300)
 // and 2 unmatched ($50, $75) transactions, then verifies all summary fields.
-func TestGetSummary_MixedMatchedAndUnmatched(t *testing.T) {
+func TestIntegration_Reporting_GetSummary_MixedMatchedAndUnmatched(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -314,9 +314,9 @@ func TestGetSummary_MixedMatchedAndUnmatched(t *testing.T) {
 	})
 }
 
-// TestGetSummary_DateRangeExcludesOutOfRange inserts transactions at different
+// TestIntegration_Reporting_GetSummary_DateRangeExcludesOutOfRange inserts transactions at different
 // dates and verifies that only in-range ones are counted by GetSummary.
-func TestGetSummary_DateRangeExcludesOutOfRange(t *testing.T) {
+func TestIntegration_Reporting_GetSummary_DateRangeExcludesOutOfRange(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {

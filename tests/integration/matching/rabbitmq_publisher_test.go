@@ -20,7 +20,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestEventPublisherPublishesMatchConfirmed(t *testing.T) {
+func TestIntegration_Matching_EventPublisherPublishesMatchConfirmed(t *testing.T) {
 	integration.RunWithHarness(t, func(t *testing.T, harness *integration.TestHarness) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()

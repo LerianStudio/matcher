@@ -40,7 +40,7 @@ var systemplaneKeyRenames = []systemplaneKeyRename{
 	{oldKey: "server.cors_allowed_headers", newKey: "cors.allowed_headers"},
 }
 
-// TestMigrations_020_SystemplaneKeyRenames_ApplyAndRollback seeds the
+// TestIntegration_Bootstrap_Migrations_020_SystemplaneKeyRenames_ApplyAndRollback seeds the
 // pre-migration key set in system.runtime_entries + system.runtime_history,
 // steps the migrator forward to apply 000020, asserts every old key was
 // renamed to its canonical form, then rolls back and asserts the state is
@@ -55,7 +55,7 @@ var systemplaneKeyRenames = []systemplaneKeyRename{
 // producing "unterminated dollar-quoted string" errors in-process. That
 // is a separate production bug; scoping to 000020 keeps this test
 // focused on the rename target.
-func TestMigrations_020_SystemplaneKeyRenames_ApplyAndRollback(t *testing.T) {
+func TestIntegration_Bootstrap_Migrations_020_SystemplaneKeyRenames_ApplyAndRollback(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -120,7 +120,7 @@ func TestMigrations_020_SystemplaneKeyRenames_ApplyAndRollback(t *testing.T) {
 	}
 }
 
-// TestMigrations_020_SystemplaneKeyRenames_Idempotent asserts that applying
+// TestIntegration_Bootstrap_Migrations_020_SystemplaneKeyRenames_Idempotent asserts that applying
 // 000020 on data already at the canonical (post-020) key names is a
 // structurally-clean no-op. After a rerun the table row count must not
 // change — the UPDATE's WHERE key = old_key filters zero rows, and the
@@ -132,7 +132,7 @@ func TestMigrations_020_SystemplaneKeyRenames_ApplyAndRollback(t *testing.T) {
 //
 // Scope: 000020 only; see TestMigrations_020_SystemplaneKeyRenames_
 // ApplyAndRollback doc for why we skip the walk to HEAD.
-func TestMigrations_020_SystemplaneKeyRenames_Idempotent(t *testing.T) {
+func TestIntegration_Bootstrap_Migrations_020_SystemplaneKeyRenames_Idempotent(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -188,7 +188,7 @@ func TestMigrations_020_SystemplaneKeyRenames_Idempotent(t *testing.T) {
 	}
 }
 
-// TestMigrations_020_SystemplaneKeyRenames_BlockOnCollision asserts the
+// TestIntegration_Bootstrap_Migrations_020_SystemplaneKeyRenames_BlockOnCollision asserts the
 // collision guard at lines 52-78 of the up SQL: when BOTH the old and new
 // key rows exist simultaneously, the migration must refuse to apply
 // (error on current_setting() lookup of the synthesized "blocked" GUC)
@@ -196,7 +196,7 @@ func TestMigrations_020_SystemplaneKeyRenames_Idempotent(t *testing.T) {
 //
 // Scope: 000020 only; see TestMigrations_020_SystemplaneKeyRenames_
 // ApplyAndRollback doc for why we skip the walk to HEAD.
-func TestMigrations_020_SystemplaneKeyRenames_BlockOnCollision(t *testing.T) {
+func TestIntegration_Bootstrap_Migrations_020_SystemplaneKeyRenames_BlockOnCollision(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -239,13 +239,13 @@ func TestMigrations_020_SystemplaneKeyRenames_BlockOnCollision(t *testing.T) {
 		"new key must remain untouched when collision blocks migration")
 }
 
-// TestMigrations_020_SystemplaneKeyRenames_RollbackBlocksOnCollision is the
+// TestIntegration_Bootstrap_Migrations_020_SystemplaneKeyRenames_RollbackBlocksOnCollision is the
 // mirror case for the down SQL at lines 43-69: a rollback must refuse when
 // both the canonical (post-020) and pre-020 keys exist.
 //
 // Scope: 000020 only; see TestMigrations_020_SystemplaneKeyRenames_
 // ApplyAndRollback doc for why we skip the walk to HEAD.
-func TestMigrations_020_SystemplaneKeyRenames_RollbackBlocksOnCollision(t *testing.T) {
+func TestIntegration_Bootstrap_Migrations_020_SystemplaneKeyRenames_RollbackBlocksOnCollision(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)

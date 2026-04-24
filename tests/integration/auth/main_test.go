@@ -38,7 +38,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestHarnessSetup(t *testing.T) {
+func TestIntegration_Auth_HarnessSetup(t *testing.T) {
 	// Validates that the integration test harness initializes correctly.
 	// Additional integration tests will be added as features are implemented.
 	infra := integration.GetSharedInfra()

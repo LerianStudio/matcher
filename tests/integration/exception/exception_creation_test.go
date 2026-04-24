@@ -19,7 +19,7 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-func TestIntegrationExceptionFromUnmatched(t *testing.T) {
+func TestIntegration_Exception_IntegrationExceptionFromUnmatched(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		seed := seedTestConfig(t, h)
@@ -82,7 +82,7 @@ func TestIntegrationExceptionFromUnmatched(t *testing.T) {
 	})
 }
 
-func TestIntegrationExceptionFromUnmatched_WithReason(t *testing.T) {
+func TestIntegration_Exception_IntegrationExceptionFromUnmatched_WithReason(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		seed := seedTestConfig(t, h)
@@ -118,7 +118,7 @@ func TestIntegrationExceptionFromUnmatched_WithReason(t *testing.T) {
 	})
 }
 
-func TestIntegrationExceptionFromUnmatched_Idempotent(t *testing.T) {
+func TestIntegration_Exception_IntegrationExceptionFromUnmatched_Idempotent(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		seed := seedTestConfig(t, h)
@@ -158,10 +158,10 @@ func TestIntegrationExceptionFromUnmatched_Idempotent(t *testing.T) {
 	})
 }
 
-// TestIntegrationExceptionSeverityBoundaryConditions tests the PRD AC-002 thresholds:
+// TestIntegration_Exception_IntegrationExceptionSeverityBoundaryConditions tests the PRD AC-002 thresholds:
 // - MEDIUM severity: amount >= 1000 OR age >= 24h
 // - LOW severity: otherwise
-func TestIntegrationExceptionSeverityBoundaryConditions(t *testing.T) {
+func TestIntegration_Exception_IntegrationExceptionSeverityBoundaryConditions(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		seed := seedTestConfig(t, h)
@@ -256,7 +256,7 @@ func TestIntegrationExceptionSeverityBoundaryConditions(t *testing.T) {
 	})
 }
 
-func TestIntegrationExceptionFromUnmatched_NoExceptionsForFullMatch(t *testing.T) {
+func TestIntegration_Exception_IntegrationExceptionFromUnmatched_NoExceptionsForFullMatch(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		seed := seedTestConfig(t, h)

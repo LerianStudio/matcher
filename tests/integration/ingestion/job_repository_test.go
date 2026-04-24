@@ -20,7 +20,7 @@ import (
 
 var errTestRollback = errors.New("rollback")
 
-func TestJobRepository_CreateAndFindByID(t *testing.T) {
+func TestIntegration_Ingestion_JobRepository_CreateAndFindByID(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := jobRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -47,7 +47,7 @@ func TestJobRepository_CreateAndFindByID(t *testing.T) {
 	})
 }
 
-func TestJobRepository_Update(t *testing.T) {
+func TestIntegration_Ingestion_JobRepository_Update(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := jobRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -74,7 +74,7 @@ func TestJobRepository_Update(t *testing.T) {
 	})
 }
 
-func TestJobRepository_FindByID_NotFound(t *testing.T) {
+func TestIntegration_Ingestion_JobRepository_FindByID_NotFound(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := jobRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -84,7 +84,7 @@ func TestJobRepository_FindByID_NotFound(t *testing.T) {
 	})
 }
 
-func TestJobRepository_FindByContextID_Empty(t *testing.T) {
+func TestIntegration_Ingestion_JobRepository_FindByContextID_Empty(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := jobRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -100,7 +100,7 @@ func TestJobRepository_FindByContextID_Empty(t *testing.T) {
 	})
 }
 
-func TestJobRepository_Create_DuplicateKey(t *testing.T) {
+func TestIntegration_Ingestion_JobRepository_Create_DuplicateKey(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := jobRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -118,7 +118,7 @@ func TestJobRepository_Create_DuplicateKey(t *testing.T) {
 	})
 }
 
-func TestJobRepository_FindByContextID_Pagination(t *testing.T) {
+func TestIntegration_Ingestion_JobRepository_FindByContextID_Pagination(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := jobRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -171,7 +171,7 @@ func TestJobRepository_FindByContextID_Pagination(t *testing.T) {
 	})
 }
 
-func TestJobRepository_WithTx(t *testing.T) {
+func TestIntegration_Ingestion_JobRepository_WithTx(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := jobRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()
@@ -197,7 +197,7 @@ func TestJobRepository_WithTx(t *testing.T) {
 	})
 }
 
-func TestJobRepository_WithTxRollback(t *testing.T) {
+func TestIntegration_Ingestion_JobRepository_WithTxRollback(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := jobRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()

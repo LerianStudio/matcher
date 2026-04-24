@@ -82,7 +82,7 @@ func seedSearchTransactions(t *testing.T, h *integration.TestHarness) {
 	require.NoError(t, err)
 }
 
-func TestSearchTransactions_ByCurrency(t *testing.T) {
+func TestIntegration_Ingestion_SearchTransactions_ByCurrency(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -104,7 +104,7 @@ func TestSearchTransactions_ByCurrency(t *testing.T) {
 	})
 }
 
-func TestSearchTransactions_ByAmountRange(t *testing.T) {
+func TestIntegration_Ingestion_SearchTransactions_ByAmountRange(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -133,7 +133,7 @@ func TestSearchTransactions_ByAmountRange(t *testing.T) {
 	})
 }
 
-func TestSearchTransactions_ByDateRange(t *testing.T) {
+func TestIntegration_Ingestion_SearchTransactions_ByDateRange(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -162,7 +162,7 @@ func TestSearchTransactions_ByDateRange(t *testing.T) {
 	})
 }
 
-func TestSearchTransactions_ByStatus(t *testing.T) {
+func TestIntegration_Ingestion_SearchTransactions_ByStatus(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -186,7 +186,7 @@ func TestSearchTransactions_ByStatus(t *testing.T) {
 	})
 }
 
-func TestSearchTransactions_ByTextQuery(t *testing.T) {
+func TestIntegration_Ingestion_SearchTransactions_ByTextQuery(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -206,7 +206,7 @@ func TestSearchTransactions_ByTextQuery(t *testing.T) {
 	})
 }
 
-func TestSearchTransactions_Pagination(t *testing.T) {
+func TestIntegration_Ingestion_SearchTransactions_Pagination(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -245,7 +245,7 @@ func TestSearchTransactions_Pagination(t *testing.T) {
 	})
 }
 
-func TestSearchTransactions_NoResults(t *testing.T) {
+func TestIntegration_Ingestion_SearchTransactions_NoResults(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -263,7 +263,7 @@ func TestSearchTransactions_NoResults(t *testing.T) {
 	})
 }
 
-func TestSearchTransactions_CombinedFilters(t *testing.T) {
+func TestIntegration_Ingestion_SearchTransactions_CombinedFilters(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {

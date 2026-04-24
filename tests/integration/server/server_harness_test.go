@@ -13,7 +13,7 @@ var (
 	_ = (*ServerHarness)(nil)
 )
 
-func TestServerHarness_TypesExist(t *testing.T) {
+func TestIntegration_Server_ServerHarness_TypesExist(t *testing.T) {
 	t.Parallel()
 
 	t.Run("ServerHarness embeds TestHarness", func(t *testing.T) {
@@ -30,7 +30,7 @@ func TestServerHarness_TypesExist(t *testing.T) {
 	})
 }
 
-func TestServerHarness_Constants(t *testing.T) {
+func TestIntegration_Server_ServerHarness_Constants(t *testing.T) {
 	t.Parallel()
 
 	t.Run("Exchange and routing key constants are defined", func(t *testing.T) {
@@ -42,7 +42,7 @@ func TestServerHarness_Constants(t *testing.T) {
 	})
 }
 
-func TestServerHarness_CompatibilityWithTestHarness(t *testing.T) {
+func TestIntegration_Server_ServerHarness_CompatibilityWithTestHarness(t *testing.T) {
 	t.Parallel()
 
 	t.Run("TestHarness fields accessible through ServerHarness", func(t *testing.T) {

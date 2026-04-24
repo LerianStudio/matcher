@@ -55,7 +55,7 @@ func newDedupeService(t *testing.T, h *integration.TestHarness) *ingestionRedis.
 	return ingestionRedis.NewDedupeService(provider)
 }
 
-func TestDedupe_CalculateHash_Deterministic(t *testing.T) {
+func TestIntegration_Ingestion_Dedupe_CalculateHash_Deterministic(t *testing.T) {
 	integration.RunWithHarness(t, func(t *testing.T, h *integration.TestHarness) {
 		dedupe := newDedupeService(t, h)
 
@@ -79,7 +79,7 @@ func TestDedupe_CalculateHash_Deterministic(t *testing.T) {
 	})
 }
 
-func TestDedupe_MarkSeenAndIsDuplicate(t *testing.T) {
+func TestIntegration_Ingestion_Dedupe_MarkSeenAndIsDuplicate(t *testing.T) {
 	integration.RunWithHarness(t, func(t *testing.T, h *integration.TestHarness) {
 		dedupe := newDedupeService(t, h)
 
@@ -107,7 +107,7 @@ func TestDedupe_MarkSeenAndIsDuplicate(t *testing.T) {
 	})
 }
 
-func TestDedupe_IsDuplicate_NotSeen(t *testing.T) {
+func TestIntegration_Ingestion_Dedupe_IsDuplicate_NotSeen(t *testing.T) {
 	integration.RunWithHarness(t, func(t *testing.T, h *integration.TestHarness) {
 		dedupe := newDedupeService(t, h)
 
@@ -121,7 +121,7 @@ func TestDedupe_IsDuplicate_NotSeen(t *testing.T) {
 	})
 }
 
-func TestDedupe_MarkSeenWithRetry_DuplicateReject(t *testing.T) {
+func TestIntegration_Ingestion_Dedupe_MarkSeenWithRetry_DuplicateReject(t *testing.T) {
 	integration.RunWithHarness(t, func(t *testing.T, h *integration.TestHarness) {
 		dedupe := newDedupeService(t, h)
 
@@ -143,7 +143,7 @@ func TestDedupe_MarkSeenWithRetry_DuplicateReject(t *testing.T) {
 	})
 }
 
-func TestDedupe_TTLExpiry(t *testing.T) {
+func TestIntegration_Ingestion_Dedupe_TTLExpiry(t *testing.T) {
 	integration.RunWithHarness(t, func(t *testing.T, h *integration.TestHarness) {
 		dedupe := newDedupeService(t, h)
 
@@ -179,7 +179,7 @@ func TestDedupe_TTLExpiry(t *testing.T) {
 	})
 }
 
-func TestDedupe_ClearBatch(t *testing.T) {
+func TestIntegration_Ingestion_Dedupe_ClearBatch(t *testing.T) {
 	integration.RunWithHarness(t, func(t *testing.T, h *integration.TestHarness) {
 		dedupe := newDedupeService(t, h)
 

@@ -20,7 +20,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 )
 
-func TestNewTestOutboxRepository_PublicSchemaLifecycle(t *testing.T) {
+func TestIntegration_Flow_NewTestOutboxRepository_PublicSchemaLifecycle(t *testing.T) {
 	RunWithDatabase(t, func(t *testing.T, h *TestHarness) {
 		repo := NewTestOutboxRepository(t, h.Connection)
 		ctx := h.Ctx()
@@ -51,7 +51,7 @@ func TestNewTestOutboxRepository_PublicSchemaLifecycle(t *testing.T) {
 	})
 }
 
-func TestNewTestOutboxRepository_ResetForRetry(t *testing.T) {
+func TestIntegration_Flow_NewTestOutboxRepository_ResetForRetry(t *testing.T) {
 	RunWithDatabase(t, func(t *testing.T, h *TestHarness) {
 		repo := NewTestOutboxRepository(t, h.Connection)
 		ctx := h.Ctx()
@@ -75,7 +75,7 @@ func TestNewTestOutboxRepository_ResetForRetry(t *testing.T) {
 	})
 }
 
-func TestNewTestOutboxRepository_MarkInvalidRemovesPending(t *testing.T) {
+func TestIntegration_Flow_NewTestOutboxRepository_MarkInvalidRemovesPending(t *testing.T) {
 	RunWithDatabase(t, func(t *testing.T, h *TestHarness) {
 		repo := NewTestOutboxRepository(t, h.Connection)
 		ctx := h.Ctx()
@@ -102,13 +102,13 @@ func TestNewTestOutboxRepository_MarkInvalidRemovesPending(t *testing.T) {
 	})
 }
 
-// TestTestDefaultTenantDiscoverer_AppendsDefaultTenant asserts that the test
+// TestIntegration_Flow_TestDefaultTenantDiscoverer_AppendsDefaultTenant asserts that the test
 // helper's internal discoverer mirrors production tenant-discovery semantics:
 // the outbox dispatcher must always see the matcher default tenant (public
 // schema), even when the inner discoverer returns an empty list. Regression
 // guard for the bug where NewTestOutboxRepository used a bare SchemaResolver
 // and therefore missed the default tenant.
-func TestTestDefaultTenantDiscoverer_AppendsDefaultTenant(t *testing.T) {
+func TestIntegration_Flow_TestDefaultTenantDiscoverer_AppendsDefaultTenant(t *testing.T) {
 	RunWithDatabase(t, func(t *testing.T, h *TestHarness) {
 		ctx := h.Ctx()
 

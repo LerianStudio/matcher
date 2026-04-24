@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestServiceStartup_Integration(t *testing.T) {
+func TestIntegration_Flow_ServiceStartup_Integration(t *testing.T) {
 	RunWithHarness(t, func(t *testing.T, h *TestHarness) {
 		setProjectRoot(t)
 		postgresHost, postgresPort := extractHostPort(t, h.PostgresDSN)
@@ -176,7 +176,7 @@ func hasStatus(client *http.Client, target string, expected int) bool {
 	return resp.StatusCode == expected
 }
 
-func TestServiceStartupAndShutdown_Integration(t *testing.T) {
+func TestIntegration_Flow_ServiceStartupAndShutdown_Integration(t *testing.T) {
 	RunWithHarness(t, func(t *testing.T, h *TestHarness) {
 		setProjectRoot(t)
 		postgresHost, postgresPort := extractHostPort(t, h.PostgresDSN)

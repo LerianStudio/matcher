@@ -51,7 +51,7 @@ func rateLimitCtx(t *testing.T, h *integration.TestHarness) context.Context {
 // --- Tests ----------------------------------------------------------------
 
 //nolint:paralleltest // integration tests share testcontainer infrastructure
-func TestRateLimiter_AllowsWithinLimit(t *testing.T) {
+func TestIntegration_Exception_RateLimiter_AllowsWithinLimit(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) { //nolint:thelper
 		const rateLimit = 5
 
@@ -73,7 +73,7 @@ func TestRateLimiter_AllowsWithinLimit(t *testing.T) {
 }
 
 //nolint:paralleltest // integration tests share testcontainer infrastructure
-func TestRateLimiter_BlocksAfterLimit(t *testing.T) {
+func TestIntegration_Exception_RateLimiter_BlocksAfterLimit(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) { //nolint:thelper
 		const rateLimit = 3
 
@@ -102,7 +102,7 @@ func TestRateLimiter_BlocksAfterLimit(t *testing.T) {
 }
 
 //nolint:paralleltest // integration tests share testcontainer infrastructure
-func TestRateLimiter_ResetsAfterWindow(t *testing.T) {
+func TestIntegration_Exception_RateLimiter_ResetsAfterWindow(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) { //nolint:thelper
 		// Use a very short window so the test completes quickly.
 		const (
@@ -138,7 +138,7 @@ func TestRateLimiter_ResetsAfterWindow(t *testing.T) {
 }
 
 //nolint:paralleltest // integration tests share testcontainer infrastructure
-func TestRateLimiter_DifferentKeysIndependent(t *testing.T) {
+func TestIntegration_Exception_RateLimiter_DifferentKeysIndependent(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) { //nolint:thelper
 		const rateLimit = 2
 

@@ -33,7 +33,7 @@ import (
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
-func TestCrossDomainFlow_EndToEndReconciliation(t *testing.T) {
+func TestIntegration_Flow_CrossDomainFlow_EndToEndReconciliation(t *testing.T) {
 	RunWithDatabase(t, func(t *testing.T, h *TestHarness) {
 		provider := h.Provider()
 		ctxRepo := contextRepo.NewRepository(provider)
@@ -471,7 +471,7 @@ func buildExceptionInputFromTx(
 	}
 }
 
-func TestCrossDomainFlow_FeeScheduleInvariant(t *testing.T) {
+func TestIntegration_Flow_CrossDomainFlow_FeeScheduleInvariant(t *testing.T) {
 	RunWithDatabase(t, func(t *testing.T, h *TestHarness) {
 		ctx := h.Ctx()
 
@@ -510,7 +510,7 @@ func TestCrossDomainFlow_FeeScheduleInvariant(t *testing.T) {
 	})
 }
 
-func TestCrossDomainFlow_MultiTenantIsolation(t *testing.T) {
+func TestIntegration_Flow_CrossDomainFlow_MultiTenantIsolation(t *testing.T) {
 	RunWithDatabase(t, func(t *testing.T, h *TestHarness) {
 		ctxRepo := contextRepo.NewRepository(h.Provider())
 		ctx := h.Ctx()

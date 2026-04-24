@@ -23,7 +23,7 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 )
 
-func TestRunMigrations_DiscoverySlice_ApplyRollbackAndReapply(t *testing.T) {
+func TestIntegration_Bootstrap_RunMigrations_DiscoverySlice_ApplyRollbackAndReapply(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -222,7 +222,7 @@ func TestRunMigrations_DiscoverySlice_ApplyRollbackAndReapply(t *testing.T) {
 	})
 }
 
-// TestMigrations_017_AddsNullableSideColumn verifies the two-phase source-side cutover:
+// TestIntegration_Bootstrap_Migrations_017_AddsNullableSideColumn verifies the two-phase source-side cutover:
 //
 //  1. Migration 017 adds a nullable "side" column to reconciliation_sources.
 //     Sources created without a side value are valid at this point.
@@ -231,7 +231,7 @@ func TestRunMigrations_DiscoverySlice_ApplyRollbackAndReapply(t *testing.T) {
 //
 // The test walks the migrator to just-after-017, inserts a side-less source,
 // then applies 018 only if no NULL rows remain (backfill first).
-func TestMigrations_017_AddsNullableSideColumn(t *testing.T) {
+func TestIntegration_Bootstrap_Migrations_017_AddsNullableSideColumn(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -501,13 +501,13 @@ func uniqueName(prefix string) string {
 	return fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano())
 }
 
-// TestMigrations_016_FeeRulesBlocker verifies the pre-launch hard cutover guard:
+// TestIntegration_Bootstrap_Migrations_016_FeeRulesBlocker verifies the pre-launch hard cutover guard:
 //
 //  1. Migration 016 refuses to run when reconciliation_sources have a non-NULL
 //     fee_schedule_id (the blocker SELECT … current_setting pattern).
 //  2. After clearing the legacy column, migration 016 succeeds and creates the
 //     fee_rules table with the expected constraints and index.
-func TestMigrations_016_FeeRulesBlocker(t *testing.T) {
+func TestIntegration_Bootstrap_Migrations_016_FeeRulesBlocker(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -601,9 +601,9 @@ func TestMigrations_016_FeeRulesBlocker(t *testing.T) {
 	})
 }
 
-// TestMigrations_019_DropLegacySourceFeeSchedule verifies that migration 019
+// TestIntegration_Bootstrap_Migrations_019_DropLegacySourceFeeSchedule verifies that migration 019
 // successfully drops the fee_schedule_id column from reconciliation_sources.
-func TestMigrations_019_DropLegacySourceFeeSchedule(t *testing.T) {
+func TestIntegration_Bootstrap_Migrations_019_DropLegacySourceFeeSchedule(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -664,7 +664,7 @@ func TestMigrations_019_DropLegacySourceFeeSchedule(t *testing.T) {
 	})
 }
 
-func TestMigrations_022_RemoveRateUnifyFeeSchedule_BlocksLegacyContextRates(t *testing.T) {
+func TestIntegration_Bootstrap_Migrations_022_RemoveRateUnifyFeeSchedule_BlocksLegacyContextRates(t *testing.T) {
 	t.Parallel()
 
 	harness := setupMigration022Harness(t)
@@ -684,7 +684,7 @@ func TestMigrations_022_RemoveRateUnifyFeeSchedule_BlocksLegacyContextRates(t *t
 	assert.True(t, columnExists(t, harness.ctx, harness.db, "match_fee_variances", "rate_id"), "blocked migration must preserve variance rate_id")
 }
 
-func TestPreflightMigrationUp_022_BlocksLegacyContextRates_WithoutDirtyingState(t *testing.T) {
+func TestIntegration_Bootstrap_PreflightMigrationUp_022_BlocksLegacyContextRates_WithoutDirtyingState(t *testing.T) {
 	t.Parallel()
 
 	harness := setupMigration022Harness(t)
@@ -701,7 +701,7 @@ func TestPreflightMigrationUp_022_BlocksLegacyContextRates_WithoutDirtyingState(
 	assertMigrationState(t, harness.ctx, harness.db, 21, false)
 }
 
-func TestMigrations_022_RemoveRateUnifyFeeSchedule_BlocksLegacyFeeVariances(t *testing.T) {
+func TestIntegration_Bootstrap_Migrations_022_RemoveRateUnifyFeeSchedule_BlocksLegacyFeeVariances(t *testing.T) {
 	t.Parallel()
 
 	harness := setupMigration022Harness(t)
@@ -736,7 +736,7 @@ func TestMigrations_022_RemoveRateUnifyFeeSchedule_BlocksLegacyFeeVariances(t *t
 	assert.Equal(t, 1, remainingCount, "blocked migration must preserve legacy variance rows")
 }
 
-func TestPreflightMigrationUp_022_BlocksLegacyFeeVariances_WithoutDirtyingState(t *testing.T) {
+func TestIntegration_Bootstrap_PreflightMigrationUp_022_BlocksLegacyFeeVariances_WithoutDirtyingState(t *testing.T) {
 	t.Parallel()
 
 	harness := setupMigration022Harness(t)
@@ -764,7 +764,7 @@ func TestPreflightMigrationUp_022_BlocksLegacyFeeVariances_WithoutDirtyingState(
 	assertMigrationState(t, harness.ctx, harness.db, 21, false)
 }
 
-func TestPreflightMigrationGoto_022_BlocksForwardCutoverWithoutDirtyingState(t *testing.T) {
+func TestIntegration_Bootstrap_PreflightMigrationGoto_022_BlocksForwardCutoverWithoutDirtyingState(t *testing.T) {
 	t.Parallel()
 
 	harness := setupMigration022Harness(t)
@@ -781,7 +781,7 @@ func TestPreflightMigrationGoto_022_BlocksForwardCutoverWithoutDirtyingState(t *
 	assertMigrationState(t, harness.ctx, harness.db, 21, false)
 }
 
-func TestRunMigrations_022_BlocksLegacyContextRates_WithoutDirtyingState(t *testing.T) {
+func TestIntegration_Bootstrap_RunMigrations_022_BlocksLegacyContextRates_WithoutDirtyingState(t *testing.T) {
 	t.Parallel()
 
 	harness := setupMigration022Harness(t)
@@ -799,7 +799,7 @@ func TestRunMigrations_022_BlocksLegacyContextRates_WithoutDirtyingState(t *test
 	assertMigrationState(t, harness.ctx, harness.db, 21, false)
 }
 
-func TestMigrations_022_RemoveRateUnifyFeeSchedule_SucceedsWithScheduleBackedVariances(t *testing.T) {
+func TestIntegration_Bootstrap_Migrations_022_RemoveRateUnifyFeeSchedule_SucceedsWithScheduleBackedVariances(t *testing.T) {
 	t.Parallel()
 
 	harness := setupMigration022Harness(t)
@@ -856,7 +856,7 @@ func TestMigrations_022_RemoveRateUnifyFeeSchedule_SucceedsWithScheduleBackedVar
 	assert.Contains(t, err.Error(), "migration_000022_rollback_blocked_legacy_rate_schema_is_non_reversible")
 }
 
-func TestMigrations_022_RemoveRateUnifyFeeSchedule_SucceedsWithEmptyVarianceTable(t *testing.T) {
+func TestIntegration_Bootstrap_Migrations_022_RemoveRateUnifyFeeSchedule_SucceedsWithEmptyVarianceTable(t *testing.T) {
 	t.Parallel()
 
 	harness := setupMigration022Harness(t)
@@ -873,7 +873,7 @@ func TestMigrations_022_RemoveRateUnifyFeeSchedule_SucceedsWithEmptyVarianceTabl
 	assertMigrationState(t, harness.ctx, harness.db, 22, false)
 }
 
-func TestPreflightMigrationDown_022_BlocksRollbackWithoutDirtyingState(t *testing.T) {
+func TestIntegration_Bootstrap_PreflightMigrationDown_022_BlocksRollbackWithoutDirtyingState(t *testing.T) {
 	t.Parallel()
 
 	harness := setupMigration022Harness(t)

@@ -96,7 +96,7 @@ func latestAuditLogCreatedAt(
 	return createdAt
 }
 
-func TestAuditConsumerDedup_FirstEventPersisted(t *testing.T) {
+func TestIntegration_Governance_AuditConsumerDedup_FirstEventPersisted(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -122,7 +122,7 @@ func TestAuditConsumerDedup_FirstEventPersisted(t *testing.T) {
 	})
 }
 
-func TestAuditConsumerDedup_DuplicateWithinWindow(t *testing.T) {
+func TestIntegration_Governance_AuditConsumerDedup_DuplicateWithinWindow(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -153,7 +153,7 @@ func TestAuditConsumerDedup_DuplicateWithinWindow(t *testing.T) {
 	})
 }
 
-func TestAuditConsumerDedup_DifferentActionNotDeduped(t *testing.T) {
+func TestIntegration_Governance_AuditConsumerDedup_DifferentActionNotDeduped(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -185,7 +185,7 @@ func TestAuditConsumerDedup_DifferentActionNotDeduped(t *testing.T) {
 	})
 }
 
-func TestAuditConsumerDedup_DifferentEntityNotDeduped(t *testing.T) {
+func TestIntegration_Governance_AuditConsumerDedup_DifferentEntityNotDeduped(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -221,7 +221,7 @@ func TestAuditConsumerDedup_DifferentEntityNotDeduped(t *testing.T) {
 	})
 }
 
-func TestAuditConsumerDedup_AfterWindowExpiry(t *testing.T) {
+func TestIntegration_Governance_AuditConsumerDedup_AfterWindowExpiry(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {

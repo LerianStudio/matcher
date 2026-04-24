@@ -17,10 +17,10 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-// TestReportCountFunctions_EmptyDatabase verifies that all four count functions
+// TestIntegration_Reporting_ReportCountFunctions_EmptyDatabase verifies that all four count functions
 // return zero when no transactions exist in the filtered date range.
 // Uses a date window far from seed data to guarantee isolation.
-func TestReportCountFunctions_EmptyDatabase(t *testing.T) {
+func TestIntegration_Reporting_ReportCountFunctions_EmptyDatabase(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -52,9 +52,9 @@ func TestReportCountFunctions_EmptyDatabase(t *testing.T) {
 	})
 }
 
-// TestReportCountFunctions_CountTransactions inserts transactions via SQL within
+// TestIntegration_Reporting_ReportCountFunctions_CountTransactions inserts transactions via SQL within
 // a tenant transaction, then verifies CountTransactions returns the exact count.
-func TestReportCountFunctions_CountTransactions(t *testing.T) {
+func TestIntegration_Reporting_ReportCountFunctions_CountTransactions(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -106,9 +106,9 @@ func TestReportCountFunctions_CountTransactions(t *testing.T) {
 	})
 }
 
-// TestReportCountFunctions_CountMatched inserts transactions linked to CONFIRMED
+// TestIntegration_Reporting_ReportCountFunctions_CountMatched inserts transactions linked to CONFIRMED
 // match groups through match_items, then verifies CountMatched returns the correct count.
-func TestReportCountFunctions_CountMatched(t *testing.T) {
+func TestIntegration_Reporting_ReportCountFunctions_CountMatched(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		repo := reportRepo.NewRepository(h.Provider())
@@ -188,9 +188,9 @@ func TestReportCountFunctions_CountMatched(t *testing.T) {
 	})
 }
 
-// TestReportCountFunctions_CountUnmatched inserts transactions with status UNMATCHED
+// TestIntegration_Reporting_ReportCountFunctions_CountUnmatched inserts transactions with status UNMATCHED
 // and verifies CountUnmatched correctly counts them while excluding MATCHED ones.
-func TestReportCountFunctions_CountUnmatched(t *testing.T) {
+func TestIntegration_Reporting_ReportCountFunctions_CountUnmatched(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		repo := reportRepo.NewRepository(h.Provider())
@@ -261,9 +261,9 @@ func TestReportCountFunctions_CountUnmatched(t *testing.T) {
 	})
 }
 
-// TestReportCountFunctions_CountExceptions inserts transactions with linked exceptions,
+// TestIntegration_Reporting_ReportCountFunctions_CountExceptions inserts transactions with linked exceptions,
 // then verifies CountExceptions returns the exception count.
-func TestReportCountFunctions_CountExceptions(t *testing.T) {
+func TestIntegration_Reporting_ReportCountFunctions_CountExceptions(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -341,9 +341,9 @@ func TestReportCountFunctions_CountExceptions(t *testing.T) {
 	})
 }
 
-// TestReportCountFunctions_DateRangeFilter inserts transactions across different
+// TestIntegration_Reporting_ReportCountFunctions_DateRangeFilter inserts transactions across different
 // months and verifies that all count functions respect DateFrom/DateTo boundaries.
-func TestReportCountFunctions_DateRangeFilter(t *testing.T) {
+func TestIntegration_Reporting_ReportCountFunctions_DateRangeFilter(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 		repo := reportRepo.NewRepository(h.Provider())

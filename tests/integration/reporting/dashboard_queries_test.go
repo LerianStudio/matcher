@@ -168,8 +168,8 @@ func seedTransactionsAndMatches(
 	require.NoError(t, err)
 }
 
-// TestDashboard_VolumeStats verifies volume aggregation over seeded transactions.
-func TestDashboard_VolumeStats(t *testing.T) {
+// TestIntegration_Reporting_Dashboard_VolumeStats verifies volume aggregation over seeded transactions.
+func TestIntegration_Reporting_Dashboard_VolumeStats(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -208,8 +208,8 @@ func TestDashboard_VolumeStats(t *testing.T) {
 	})
 }
 
-// TestDashboard_MatchRateStats verifies the computed match rate percentage.
-func TestDashboard_MatchRateStats(t *testing.T) {
+// TestIntegration_Reporting_Dashboard_MatchRateStats verifies the computed match rate percentage.
+func TestIntegration_Reporting_Dashboard_MatchRateStats(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -241,8 +241,8 @@ func TestDashboard_MatchRateStats(t *testing.T) {
 	})
 }
 
-// TestDashboard_EmptyContext verifies that querying a context with no data returns zero values.
-func TestDashboard_EmptyContext(t *testing.T) {
+// TestIntegration_Reporting_Dashboard_EmptyContext verifies that querying a context with no data returns zero values.
+func TestIntegration_Reporting_Dashboard_EmptyContext(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -283,8 +283,8 @@ func TestDashboard_EmptyContext(t *testing.T) {
 	})
 }
 
-// TestReport_CountMatched verifies counting match_items in CONFIRMED groups.
-func TestReport_CountMatched(t *testing.T) {
+// TestIntegration_Reporting_Report_CountMatched verifies counting match_items in CONFIRMED groups.
+func TestIntegration_Reporting_Report_CountMatched(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -308,8 +308,8 @@ func TestReport_CountMatched(t *testing.T) {
 	})
 }
 
-// TestReport_CountUnmatched verifies counting transactions with status != MATCHED.
-func TestReport_CountUnmatched(t *testing.T) {
+// TestIntegration_Reporting_Report_CountUnmatched verifies counting transactions with status != MATCHED.
+func TestIntegration_Reporting_Report_CountUnmatched(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -333,8 +333,8 @@ func TestReport_CountUnmatched(t *testing.T) {
 	})
 }
 
-// TestReport_CountWithDateFilter verifies that date-range filtering scopes counts correctly.
-func TestReport_CountWithDateFilter(t *testing.T) {
+// TestIntegration_Reporting_Report_CountWithDateFilter verifies that date-range filtering scopes counts correctly.
+func TestIntegration_Reporting_Report_CountWithDateFilter(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		seed := seedDashboardConfig(t, h)
 

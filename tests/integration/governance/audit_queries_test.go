@@ -50,7 +50,7 @@ func createAuditLog(
 	return created
 }
 
-func TestAuditQuery_FilterByEntityType(t *testing.T) {
+func TestIntegration_Governance_AuditQuery_FilterByEntityType(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -82,7 +82,7 @@ func TestAuditQuery_FilterByEntityType(t *testing.T) {
 	})
 }
 
-func TestAuditQuery_FilterByAction(t *testing.T) {
+func TestIntegration_Governance_AuditQuery_FilterByAction(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -111,7 +111,7 @@ func TestAuditQuery_FilterByAction(t *testing.T) {
 	})
 }
 
-func TestAuditQuery_FilterByDateRange(t *testing.T) {
+func TestIntegration_Governance_AuditQuery_FilterByDateRange(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -159,7 +159,7 @@ func TestAuditQuery_FilterByDateRange(t *testing.T) {
 	})
 }
 
-func TestAuditQuery_FilterByActor(t *testing.T) {
+func TestIntegration_Governance_AuditQuery_FilterByActor(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -203,7 +203,7 @@ func TestAuditQuery_FilterByActor(t *testing.T) {
 	})
 }
 
-func TestAuditQuery_PaginationByEntity(t *testing.T) {
+func TestIntegration_Governance_AuditQuery_PaginationByEntity(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -261,7 +261,7 @@ func TestAuditQuery_PaginationByEntity(t *testing.T) {
 	})
 }
 
-func TestAuditQuery_EmptyResult(t *testing.T) {
+func TestIntegration_Governance_AuditQuery_EmptyResult(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {

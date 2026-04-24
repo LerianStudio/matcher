@@ -77,7 +77,7 @@ func setupExceptionForComments(t *testing.T, h *integration.TestHarness) uuid.UU
 	return exc.ID
 }
 
-func TestCommentCRUD_AddComment(t *testing.T) {
+func TestIntegration_Exception_CommentCRUD_AddComment(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		excID := setupExceptionForComments(t, h)
 		ctx := testCtxWithActor(t, h, "commenter-1")
@@ -98,7 +98,7 @@ func TestCommentCRUD_AddComment(t *testing.T) {
 	})
 }
 
-func TestCommentCRUD_ListComments(t *testing.T) {
+func TestIntegration_Exception_CommentCRUD_ListComments(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		excID := setupExceptionForComments(t, h)
 		ctx := testCtxWithActor(t, h, "lister-user")
@@ -134,7 +134,7 @@ func TestCommentCRUD_ListComments(t *testing.T) {
 	})
 }
 
-func TestCommentCRUD_DeleteOwnComment(t *testing.T) {
+func TestIntegration_Exception_CommentCRUD_DeleteOwnComment(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		excID := setupExceptionForComments(t, h)
 		ctx := testCtxWithActor(t, h, "delete-user")
@@ -158,7 +158,7 @@ func TestCommentCRUD_DeleteOwnComment(t *testing.T) {
 	})
 }
 
-func TestCommentCRUD_DeleteOtherActorComment_Fails(t *testing.T) {
+func TestIntegration_Exception_CommentCRUD_DeleteOtherActorComment_Fails(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		excID := setupExceptionForComments(t, h)
 		cmdUC, _ := wireCommentUseCase(t, h)
@@ -181,7 +181,7 @@ func TestCommentCRUD_DeleteOtherActorComment_Fails(t *testing.T) {
 	})
 }
 
-func TestCommentCRUD_AddCommentToResolvedExceptionFails(t *testing.T) {
+func TestIntegration_Exception_CommentCRUD_AddCommentToResolvedExceptionFails(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		excID := setupExceptionForComments(t, h)
 		ctx := testCtxWithActor(t, h, "resolved-commenter")
@@ -205,7 +205,7 @@ func TestCommentCRUD_AddCommentToResolvedExceptionFails(t *testing.T) {
 	})
 }
 
-func TestCommentCRUD_AddCommentEmptyContent_Fails(t *testing.T) {
+func TestIntegration_Exception_CommentCRUD_AddCommentEmptyContent_Fails(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		excID := setupExceptionForComments(t, h)
 		ctx := testCtxWithActor(t, h, "empty-commenter")
@@ -220,7 +220,7 @@ func TestCommentCRUD_AddCommentEmptyContent_Fails(t *testing.T) {
 	})
 }
 
-func TestCommentCRUD_ListCommentsEmptyException(t *testing.T) {
+func TestIntegration_Exception_CommentCRUD_ListCommentsEmptyException(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		excID := setupExceptionForComments(t, h)
 		ctx := testCtxWithActor(t, h, "empty-lister")

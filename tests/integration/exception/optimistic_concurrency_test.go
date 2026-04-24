@@ -20,9 +20,9 @@ import (
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
-// TestOptimisticConcurrency_SuccessfulUpdate verifies that a single update
+// TestIntegration_Exception_OptimisticConcurrency_SuccessfulUpdate verifies that a single update
 // increments the version from 0 to 1 and persists the field changes.
-func TestOptimisticConcurrency_SuccessfulUpdate(t *testing.T) {
+func TestIntegration_Exception_OptimisticConcurrency_SuccessfulUpdate(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 
@@ -56,9 +56,9 @@ func TestOptimisticConcurrency_SuccessfulUpdate(t *testing.T) {
 	})
 }
 
-// TestOptimisticConcurrency_StaleVersionFails verifies that updating with a stale
+// TestIntegration_Exception_OptimisticConcurrency_StaleVersionFails verifies that updating with a stale
 // version (version mismatch) returns ErrConcurrentModification.
-func TestOptimisticConcurrency_StaleVersionFails(t *testing.T) {
+func TestIntegration_Exception_OptimisticConcurrency_StaleVersionFails(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 
@@ -93,11 +93,11 @@ func TestOptimisticConcurrency_StaleVersionFails(t *testing.T) {
 	})
 }
 
-// TestOptimisticConcurrency_ConcurrentUpdateRace launches two goroutines that
+// TestIntegration_Exception_OptimisticConcurrency_ConcurrentUpdateRace launches two goroutines that
 // simultaneously try to update the same exception row with the same initial
 // version. Exactly one must succeed, the other must fail with
 // ErrConcurrentModification.
-func TestOptimisticConcurrency_ConcurrentUpdateRace(t *testing.T) {
+func TestIntegration_Exception_OptimisticConcurrency_ConcurrentUpdateRace(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 
@@ -167,10 +167,10 @@ func TestOptimisticConcurrency_ConcurrentUpdateRace(t *testing.T) {
 	})
 }
 
-// TestOptimisticConcurrency_SequentialUpdatesSucceed verifies that three sequential
+// TestIntegration_Exception_OptimisticConcurrency_SequentialUpdatesSucceed verifies that three sequential
 // updates (each using the returned entity with the fresh version) all succeed.
 // The final version must be 3.
-func TestOptimisticConcurrency_SequentialUpdatesSucceed(t *testing.T) {
+func TestIntegration_Exception_OptimisticConcurrency_SequentialUpdatesSucceed(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 
@@ -211,10 +211,10 @@ func TestOptimisticConcurrency_SequentialUpdatesSucceed(t *testing.T) {
 	})
 }
 
-// TestOptimisticConcurrency_UpdateNonExistentException verifies that updating an
+// TestIntegration_Exception_OptimisticConcurrency_UpdateNonExistentException verifies that updating an
 // exception that does not exist returns ErrExceptionNotFound, not
 // ErrConcurrentModification.
-func TestOptimisticConcurrency_UpdateNonExistentException(t *testing.T) {
+func TestIntegration_Exception_OptimisticConcurrency_UpdateNonExistentException(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := testCtx(t, h)
 
