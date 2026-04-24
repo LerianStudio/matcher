@@ -34,9 +34,15 @@ import (
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
 	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
+	workermetrics "github.com/LerianStudio/matcher/internal/shared/observability/workermetrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
+
+// archivalWorkerName is the stable label value emitted on matcher.worker.*
+// metrics from this worker. Kept as a package constant so dashboards and
+// alert rules can reference it textually.
+const archivalWorkerName = "archival_worker"
 
 const (
 	// lockKey is the global distributed lock for archival.
@@ -87,6 +93,7 @@ type ArchivalWorker struct {
 	cfg           ArchivalWorkerConfig
 	logger        libLog.Logger
 	tracer        trace.Tracer
+	metrics       *workermetrics.Recorder
 
 	running  atomic.Bool
 	stopOnce sync.Once
@@ -212,6 +219,7 @@ func NewArchivalWorker(
 		cfg:           cfg,
 		logger:        logger,
 		tracer:        otel.Tracer("governance.archival_worker"),
+		metrics:       workermetrics.NewRecorder(archivalWorkerName),
 		stopCh:        make(chan struct{}),
 		doneCh:        make(chan struct{}),
 	}, nil
@@ -289,12 +297,24 @@ func (aw *ArchivalWorker) archiveCycle(ctx context.Context) {
 	ctx, span := tracer.Start(ctx, "governance.archival.cycle")
 	defer span.End()
 
+	startedAt := time.Now()
+	outcome := workermetrics.OutcomeSuccess
+
+	var processed, failed int
+
+	defer func() {
+		aw.metrics.RecordCycle(ctx, startedAt, outcome)
+		aw.metrics.RecordItems(ctx, processed, failed)
+	}()
+
 	ctx = libCommons.ContextWithLogger(ctx, logger)
 	ctx = libCommons.ContextWithTracer(ctx, tracer)
 
 	// 1. Acquire distributed lock.
 	acquired, lockToken, err := aw.acquireLock(ctx)
 	if err != nil {
+		outcome = workermetrics.OutcomeFailure
+
 		libOpentelemetry.HandleSpanError(span, "failed to acquire archival lock", err)
 
 		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to acquire archival lock")
@@ -303,6 +323,8 @@ func (aw *ArchivalWorker) archiveCycle(ctx context.Context) {
 	}
 
 	if !acquired {
+		outcome = workermetrics.OutcomeSkipped
+
 		logger.Log(ctx, libLog.LevelInfo, "archival lock held by another instance, skipping cycle")
 
 		return
@@ -316,6 +338,8 @@ func (aw *ArchivalWorker) archiveCycle(ctx context.Context) {
 	// 3. List all tenants and process each.
 	tenants, err := aw.listTenants(ctx)
 	if err != nil {
+		outcome = workermetrics.OutcomeFailure
+
 		libOpentelemetry.HandleSpanError(span, "failed to list tenants", err)
 
 		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list tenants for archival")
@@ -335,7 +359,9 @@ func (aw *ArchivalWorker) archiveCycle(ctx context.Context) {
 		tenantCtx, tenantSpan := tracer.Start(tenantCtx, "governance.archival.tenant")
 		tenantSpan.SetAttributes(attribute.String("tenant.id", tenantID))
 
-		aw.processTenant(tenantCtx, tenantID)
+		tenantProcessed, tenantFailed := aw.processTenant(tenantCtx, tenantID)
+		processed += tenantProcessed
+		failed += tenantFailed
 
 		tenantSpan.End()
 	}
@@ -343,7 +369,9 @@ func (aw *ArchivalWorker) archiveCycle(ctx context.Context) {
 
 // processTenant handles partition provisioning and archival for a single tenant.
 // Errors are logged but do not propagate; one tenant's failure does not block others.
-func (aw *ArchivalWorker) processTenant(ctx context.Context, tenantID string) {
+// Returns (processed, failed) partition counts so the cycle can aggregate into
+// matcher.worker.items_processed_total / items_failed_total.
+func (aw *ArchivalWorker) processTenant(ctx context.Context, tenantID string) (int, int) {
 	logger, _ := aw.tracking(ctx)
 
 	// Provision future partitions.
@@ -362,15 +390,18 @@ func (aw *ArchivalWorker) processTenant(ctx context.Context, tenantID string) {
 			libLog.Err(parseErr),
 		).Log(ctx, libLog.LevelWarn, "invalid tenant ID, skipping archival")
 
-		return
+		return 0, 0
 	}
 
-	if err := aw.archiveTenant(ctx, tid); err != nil {
+	processed, failed, err := aw.archiveTenant(ctx, tid)
+	if err != nil {
 		logger.With(
 			libLog.String("tenant_id", tenantID),
 			libLog.Err(err),
 		).Log(ctx, libLog.LevelWarn, "archival failed for tenant")
 	}
+
+	return processed, failed
 }
 
 // provisionPartitions ensures future partitions exist for the tenant in context.
@@ -383,7 +414,11 @@ func (aw *ArchivalWorker) provisionPartitions(ctx context.Context) error {
 }
 
 // archiveTenant identifies and processes partitions eligible for cold archival.
-func (aw *ArchivalWorker) archiveTenant(ctx context.Context, tenantID uuid.UUID) error {
+// Returns (processed, failed, err) partition counts. A partition counts as
+// processed when archivePartition returns nil; it counts as failed when the
+// metadata lookup or archivePartition surfaces an error. Already-complete
+// partitions are a no-op in both directions.
+func (aw *ArchivalWorker) archiveTenant(ctx context.Context, tenantID uuid.UUID) (int, int, error) {
 	logger, tracer := aw.tracking(ctx)
 
 	ctx, span := tracer.Start(ctx, "governance.archival.archive_tenant")
@@ -392,10 +427,12 @@ func (aw *ArchivalWorker) archiveTenant(ctx context.Context, tenantID uuid.UUID)
 	partitions, err := aw.partitionMgr.ListPartitions(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list partitions", err)
-		return fmt.Errorf("list partitions: %w", err)
+		return 0, 0, fmt.Errorf("list partitions: %w", err)
 	}
 
 	warmCutoff := time.Now().UTC().AddDate(0, -aw.cfg.WarmRetentionMonths, 0)
+
+	var processed, failed int
 
 	for i := range partitions {
 		partition := &partitions[i]
@@ -408,6 +445,8 @@ func (aw *ArchivalWorker) archiveTenant(ctx context.Context, tenantID uuid.UUID)
 
 		metadata, err := aw.getOrCreateMetadata(ctx, tenantID, partition)
 		if err != nil {
+			failed++
+
 			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to get/create archive metadata for partition %s: %v", partition.Name, err))
 
 			continue
@@ -419,11 +458,17 @@ func (aw *ArchivalWorker) archiveTenant(ctx context.Context, tenantID uuid.UUID)
 		}
 
 		if err := aw.archivePartition(ctx, metadata); err != nil {
+			failed++
+
 			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to archive partition %s: %v", partition.Name, err))
+
+			continue
 		}
+
+		processed++
 	}
 
-	return nil
+	return processed, failed, nil
 }
 
 // getOrCreateMetadata retrieves existing archive metadata or creates a new record.

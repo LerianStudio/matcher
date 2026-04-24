@@ -409,9 +409,11 @@ func TestArchiveTenantCov_ListPartitionsError(t *testing.T) {
 	deps.pmMock.ExpectQuery("SELECT").WillReturnError(errors.New("db error"))
 	deps.pmMock.ExpectRollback()
 
-	err = w.archiveTenant(ctx, tenantID)
+	processed, failed, err := w.archiveTenant(ctx, tenantID)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "list partitions")
+	assert.Zero(t, processed)
+	assert.Zero(t, failed)
 }
 
 // --- processTenant Tests ---
@@ -429,7 +431,9 @@ func TestProcessTenantCov_InvalidTenantID(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should log a warning but not panic.
-	w.processTenant(context.Background(), "not-a-uuid")
+	processed, failed := w.processTenant(context.Background(), "not-a-uuid")
+	assert.Zero(t, processed)
+	assert.Zero(t, failed)
 }
 
 // --- provisionPartitions Tests ---
