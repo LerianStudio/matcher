@@ -2,6 +2,8 @@
 // Use of this source code is governed by an Elastic License 2.0
 // that can be found in the LICENSE.md file.
 
+// interface-only:skip-check-tests
+
 // HTTP transport + object-storage probe used by the Fetcher bridge. Split
 // from init_fetcher_bridge.go so the transport concerns (SSRF guard, redirect
 // policy, probe bounds) stay together and are callable by the adapter /

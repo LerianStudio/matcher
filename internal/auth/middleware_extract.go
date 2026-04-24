@@ -39,15 +39,18 @@ func (te *TenantExtractor) ExtractTenant() fiber.Handler {
 
 		defer span.End()
 
+		defaultTenantID := getDefaultTenantID()
+		defaultTenantSlug := getDefaultTenantSlug()
+
 		span.SetAttributes(attribute.Bool("auth.enabled", te.authEnabled))
 
 		if !te.authEnabled {
-			ctx = context.WithValue(ctx, TenantIDKey, te.defaultTenantID)
-			ctx = context.WithValue(ctx, TenantSlugKey, te.defaultTenantSlug)
+			ctx = context.WithValue(ctx, TenantIDKey, defaultTenantID)
+			ctx = context.WithValue(ctx, TenantSlugKey, defaultTenantSlug)
 
 			span.SetAttributes(
-				attribute.String("tenant.id", te.defaultTenantID),
-				attribute.String("tenant.slug", te.defaultTenantSlug),
+				attribute.String("tenant.id", defaultTenantID),
+				attribute.String("tenant.slug", defaultTenantSlug),
 				attribute.String("auth.mode", "disabled"),
 			)
 
@@ -83,8 +86,8 @@ func (te *TenantExtractor) ExtractTenant() fiber.Handler {
 
 		tenantID, tenantSlug, userID, err := extractClaimsFromToken(
 			token,
-			te.defaultTenantID,
-			te.defaultTenantSlug,
+			defaultTenantID,
+			defaultTenantSlug,
 			te.tokenSecret,
 			te.requireTenantClaims,
 		)
@@ -147,10 +150,13 @@ func (te *TenantExtractor) validateTenantClaims() fiber.Handler {
 			return fiber.NewError(fiber.StatusUnauthorized, ErrMissingToken.Error())
 		}
 
+		defaultTenantID := getDefaultTenantID()
+		defaultTenantSlug := getDefaultTenantSlug()
+
 		_, _, _, err := extractClaimsFromToken(
 			token,
-			te.defaultTenantID,
-			te.defaultTenantSlug,
+			defaultTenantID,
+			defaultTenantSlug,
 			te.tokenSecret,
 			te.requireTenantClaims,
 		)

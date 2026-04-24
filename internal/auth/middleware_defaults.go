@@ -42,11 +42,12 @@ func SetDefaultTenantSlug(tenantSlug string) error {
 		return nil
 	}
 
-	if strings.TrimSpace(tenantSlug) == "" {
+	trimmed := strings.TrimSpace(tenantSlug)
+	if trimmed == "" {
 		return fmt.Errorf("set default tenant slug: %w", ErrInvalidTenantSlug)
 	}
 
-	defaultTenantSlug = tenantSlug
+	defaultTenantSlug = trimmed
 
 	return nil
 }

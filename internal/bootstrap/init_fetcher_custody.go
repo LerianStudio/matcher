@@ -339,6 +339,10 @@ func initCustodyRetentionWorker(
 		return nil, fmt.Errorf("%w: infrastructure provider is nil", ErrFetcherBridgeNotOperational)
 	}
 
+	if logger == nil {
+		return nil, fmt.Errorf("%w: logger is nil", ErrFetcherBridgeNotOperational)
+	}
+
 	// The custody store wired into bundle.ArtifactCustody already satisfies
 	// CustodyKeyBuilder (compile-time checked in the custody adapter). Pass
 	// it via the dedicated port parameter so the worker never imports the

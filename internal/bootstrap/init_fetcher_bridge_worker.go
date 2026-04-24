@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/discovery/adapters/fetcher"
 	discoveryExtractionRepo "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres/extraction"
@@ -155,15 +156,16 @@ func wireBridgeHeartbeatWriter(
 		return
 	}
 
-	writer, err := resolveBridgeHeartbeat(ctx, provider)
+	writer, lease, err := resolveBridgeHeartbeat(ctx, provider)
 	if err != nil {
-		logger.Log(ctx, libLog.LevelWarn,
-			fmt.Sprintf("bridge heartbeat writer not wired: %v", err))
+		libLog.SafeError(logger, ctx, "bridge heartbeat writer not wired", err, runtime.IsProductionMode())
 
 		return
 	}
 
 	worker.WithHeartbeatWriter(writer)
+	// Lease ownership: tied to worker lifecycle — released when worker.Stop() runs.
+	worker.RegisterCleanup(lease.Release)
 
 	logger.Log(ctx, libLog.LevelInfo, "bridge heartbeat writer wired")
 }
@@ -176,30 +178,39 @@ func wireBridgeHeartbeatWriter(
 // both BridgeHeartbeatWriter and BridgeHeartbeatReader — callers pick
 // whichever port their dependency needs. Keeping one construction site
 // guarantees the two sides agree on the Redis key and TTL format.
+//
+// Lease ownership: the redis connection lease is returned to the caller.
+// Callers MUST Release() it when the heartbeat adapter is no longer used —
+// on the writer path by registering the release as a worker cleanup, on the
+// reader path by holding it for the query use case's process lifetime.
+// Releasing inside this function would leave the adapter using a released
+// lease during its entire operating window.
 func resolveBridgeHeartbeat(
 	ctx context.Context,
 	provider sharedPorts.InfrastructureProvider,
-) (*discoveryRedis.BridgeHeartbeat, error) {
+) (*discoveryRedis.BridgeHeartbeat, *sharedPorts.RedisConnectionLease, error) {
 	lease, leaseErr := provider.GetRedisConnection(ctx)
 	if leaseErr != nil {
-		return nil, fmt.Errorf("get redis connection: %w", leaseErr)
+		return nil, nil, fmt.Errorf("get redis connection: %w", leaseErr)
 	}
 
 	if lease == nil {
-		return nil, fmt.Errorf("resolve bridge heartbeat: %w", errRedisConnectionLeaseNil)
+		return nil, nil, fmt.Errorf("resolve bridge heartbeat: %w", errRedisConnectionLeaseNil)
 	}
-
-	defer lease.Release()
 
 	client, clientErr := lease.GetClient(ctx)
 	if clientErr != nil {
-		return nil, fmt.Errorf("get redis client: %w", clientErr)
+		lease.Release()
+
+		return nil, nil, fmt.Errorf("get redis client: %w", clientErr)
 	}
 
 	hb, hbErr := discoveryRedis.NewBridgeHeartbeat(client)
 	if hbErr != nil {
-		return nil, fmt.Errorf("construct bridge heartbeat adapter: %w", hbErr)
+		lease.Release()
+
+		return nil, nil, fmt.Errorf("construct bridge heartbeat adapter: %w", hbErr)
 	}
 
-	return hb, nil
+	return hb, lease, nil
 }

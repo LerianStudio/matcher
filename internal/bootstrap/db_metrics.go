@@ -100,6 +100,10 @@ func NewDBMetricsCollector(
 		return nil, nil
 	}
 
+	if interval <= 0 {
+		interval = DefaultMetricsCollectionInterval
+	}
+
 	connected, connErr := postgres.IsConnected()
 	if connErr != nil || !connected {
 		return nil, nil //nolint:nilerr // nil collector is acceptable when not connected
@@ -329,6 +333,10 @@ func (collector *DBMetricsCollector) recordRoleStats(ctx context.Context, role s
 	// Counters: calculate deltas from per-role cumulative values.
 	collector.lastStatsMu.Lock()
 	defer collector.lastStatsMu.Unlock()
+
+	if collector.lastStatsByRole == nil {
+		collector.lastStatsByRole = newRoleStatsMap()
+	}
 
 	last, ok := collector.lastStatsByRole[role]
 	if !ok {

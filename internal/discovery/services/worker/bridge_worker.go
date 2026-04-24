@@ -183,6 +183,12 @@ type BridgeWorker struct {
 	tracer          trace.Tracer
 	metrics         *workermetrics.Recorder
 
+	// cleanups holds release callbacks registered by bootstrap wiring so
+	// resources whose lifetime is bound to the worker (e.g. a Redis
+	// connection lease held by the heartbeat writer) are freed on Stop.
+	// Appended under mu; iterated in Stop under mu.
+	cleanups []func()
+
 	running  atomic.Bool
 	stopOnce sync.Once
 	stopCh   chan struct{}
@@ -272,6 +278,17 @@ func (worker *BridgeWorker) Stop() error {
 	})
 	<-worker.doneCh
 
+	worker.mu.Lock()
+	cleanups := worker.cleanups
+	worker.cleanups = nil
+	worker.mu.Unlock()
+
+	for _, cleanup := range cleanups {
+		if cleanup != nil {
+			cleanup()
+		}
+	}
+
 	worker.logger.Log(context.Background(), libLog.LevelInfo, "bridge worker stopped")
 
 	return nil
@@ -305,6 +322,24 @@ func (worker *BridgeWorker) WithHeartbeatWriter(writer discoveryPorts.BridgeHear
 	defer worker.mu.Unlock()
 
 	worker.heartbeatWriter = writer
+}
+
+// RegisterCleanup registers a callback invoked after the run loop terminates
+// during Stop. Bootstrap uses this to tie externally-owned resources (e.g. a
+// Redis connection lease held by the heartbeat writer) to the worker's
+// lifecycle so they release exactly once when the worker stops.
+//
+// Callbacks run sequentially in registration order under Stop's finalization
+// path. A nil callback is accepted and skipped.
+func (worker *BridgeWorker) RegisterCleanup(cleanup func()) {
+	if worker == nil || cleanup == nil {
+		return
+	}
+
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
+
+	worker.cleanups = append(worker.cleanups, cleanup)
 }
 
 // UpdateRuntimeConfig swaps the tick interval / batch size for the next

@@ -19,7 +19,7 @@ Point them here. A Prometheus-compatible scrape surface CAN be added later — v
 
 | Key | Default | Purpose |
 |-----|---------|---------|
-| `ENABLE_TELEMETRY` | `true` | Master switch for OTLP exporters |
+| `ENABLE_TELEMETRY` | `false` | Master switch for OTLP exporters |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `localhost:4317` | OTLP gRPC collector target |
 | `OTEL_LIBRARY_NAME` | `github.com/LerianStudio/matcher` | Instrumentation library identifier |
 | `OTEL_RESOURCE_SERVICE_NAME` | `matcher` | Service name resource attribute |

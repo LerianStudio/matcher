@@ -158,7 +158,7 @@ func TestConfig_ValidateArchivalConfig(t *testing.T) {
 		assert.Contains(t, err.Error(), "ARCHIVAL_COLD_RETENTION_MONTHS must be >= ARCHIVAL_WARM_RETENTION_MONTHS")
 	})
 
-	t.Run("fails when hot retention days is zero", func(t *testing.T) {
+	t.Run("fails when hot retention days is negative", func(t *testing.T) {
 		t.Parallel()
 
 		cfg := buildConfig(flatConfig{
@@ -181,7 +181,7 @@ func TestConfig_ValidateArchivalConfig(t *testing.T) {
 		assert.Contains(t, err.Error(), "ARCHIVAL_HOT_RETENTION_DAYS must be positive")
 	})
 
-	t.Run("fails when batch size is zero", func(t *testing.T) {
+	t.Run("fails when batch size is negative", func(t *testing.T) {
 		t.Parallel()
 
 		cfg := buildConfig(flatConfig{
@@ -204,7 +204,7 @@ func TestConfig_ValidateArchivalConfig(t *testing.T) {
 		assert.Contains(t, err.Error(), "ARCHIVAL_BATCH_SIZE must be positive")
 	})
 
-	t.Run("fails when partition lookahead is zero", func(t *testing.T) {
+	t.Run("fails when partition lookahead is negative", func(t *testing.T) {
 		t.Parallel()
 
 		cfg := buildConfig(flatConfig{

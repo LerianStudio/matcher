@@ -113,7 +113,7 @@ func TestConfig_ArchivalPresignExpiry_NilConfigUsesDefault(t *testing.T) {
 	assert.Equal(t, 3600*time.Second, cfg.ArchivalPresignExpiry())
 }
 
-func TestConfig_ArchivalPresignExpiry_LogsWarningOnCap(t *testing.T) {
+func TestConfig_ArchivalPresignExpiry_CapOnly(t *testing.T) {
 	t.Parallel()
 
 	cfg := buildConfig(flatConfig{ArchivalPresignExpirySec: 700000})
@@ -233,7 +233,7 @@ func TestConfig_ExportPresignExpiry_NilConfigUsesDefault(t *testing.T) {
 	assert.Equal(t, 3600*time.Second, cfg.ExportPresignExpiry())
 }
 
-func TestConfig_ExportPresignExpiry_LogsWarningOnCap(t *testing.T) {
+func TestConfig_ExportPresignExpiry_CapOnly(t *testing.T) {
 	t.Parallel()
 
 	cfg := Config{}

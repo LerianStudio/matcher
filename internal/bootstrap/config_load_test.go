@@ -92,7 +92,7 @@ func TestConfig_LoadConfigWithLogger(t *testing.T) {
 	t.Run("applies default body limit when zero", func(t *testing.T) {
 		t.Setenv("DEFAULT_TENANT_ID", "11111111-1111-1111-1111-111111111111")
 		t.Setenv("DEFAULT_TENANT_SLUG", "default")
-		t.Setenv("HTTP_BODY_LIMIT_BYTES", "-1")
+		t.Setenv("HTTP_BODY_LIMIT_BYTES", "0")
 		t.Setenv("LOG_LEVEL", "info")
 		t.Setenv("RATE_LIMIT_MAX", "100")
 		t.Setenv("RATE_LIMIT_EXPIRY_SEC", "60")
@@ -161,7 +161,7 @@ func TestConfig_RabbitMQDSN_EdgeCases(t *testing.T) {
 
 		dsn := cfg.RabbitMQDSN()
 
-		assert.Contains(t, dsn, "amqp://guest:guest@localhost:5672")
+		assert.Equal(t, "amqp://guest:guest@localhost:5672", dsn)
 	})
 
 	t.Run("handles vhost with leading slash", func(t *testing.T) {
@@ -179,6 +179,7 @@ func TestConfig_RabbitMQDSN_EdgeCases(t *testing.T) {
 		dsn := cfg.RabbitMQDSN()
 
 		assert.Contains(t, dsn, "/production")
+		assert.NotContains(t, dsn, "//production")
 	})
 
 	t.Run("handles vhost without leading slash", func(t *testing.T) {
@@ -196,6 +197,7 @@ func TestConfig_RabbitMQDSN_EdgeCases(t *testing.T) {
 		dsn := cfg.RabbitMQDSN()
 
 		assert.Contains(t, dsn, "/myapp")
+		assert.NotContains(t, dsn, "//myapp")
 	})
 }
 

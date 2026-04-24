@@ -212,31 +212,5 @@ func TestConfig_ProductionCORSWildcard(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "CORS_ALLOWED_ORIGINS must be restricted in production")
 	})
-
-	t.Run("fails with empty CORS in production", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := buildConfig(flatConfig{
-			EnvName:               "production",
-			DefaultTenantID:       validTenantID,
-			PrimaryDBPassword:     "pr0d-s3cure-p@ss!",
-			PrimaryDBSSLMode:      "require",
-			RedisTLS:              true,
-			RabbitMQURI:           "amqps",
-			RabbitMQUser:          "matcher",
-			RabbitMQPassword:      "rabbitsecret",
-			AuthEnabled:           true,
-			AuthHost:              "http://auth:8080",
-			AuthTokenSecret:       "jwtsecret",
-			CORSAllowedOrigins:    "",
-			BodyLimitBytes:        1024,
-			LogLevel:              "info",
-			TLSTerminatedUpstream: true,
-		})
-
-		err := cfg.Validate()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "CORS_ALLOWED_ORIGINS must be restricted in production")
-	})
 }
 

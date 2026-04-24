@@ -117,7 +117,6 @@ func TestConfig_RabbitMQDSN(t *testing.T) {
 	})
 }
 
-//nolint:paralleltest // Cannot use t.Parallel() with t.Setenv
 func TestConfig_ReplicaDSN_ExtendedCases(t *testing.T) {
 	t.Parallel()
 

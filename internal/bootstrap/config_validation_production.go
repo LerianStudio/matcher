@@ -41,7 +41,8 @@ func (cfg *Config) validateProductionCoreConfig(ctx context.Context, asserter *a
 		return fmt.Errorf("production config validation: %w", err)
 	}
 
-	if err := asserter.That(ctx, strings.TrimSpace(cfg.Server.CORSAllowedOrigins) != "" && !corsContainsWildcard(cfg.Server.CORSAllowedOrigins), "CORS_ALLOWED_ORIGINS must be restricted in production (exact \"*\" not allowed)", "cors_origins", cfg.Server.CORSAllowedOrigins); err != nil {
+	origins := strings.TrimSpace(cfg.Server.CORSAllowedOrigins)
+	if err := asserter.That(ctx, origins == "" || !corsContainsWildcard(origins), "CORS_ALLOWED_ORIGINS must be restricted in production (exact \"*\" not allowed)", "cors_origins", origins); err != nil {
 		return fmt.Errorf("production config validation: %w", err)
 	}
 
@@ -153,8 +154,8 @@ func requireProductionHTTPS(ctx context.Context, asserter *assert.Asserter, rawU
 	}
 
 	if err := asserter.That(ctx,
-		strings.EqualFold(parsed.Scheme, "https"),
-		envVar+" must use HTTPS in production",
+		strings.EqualFold(parsed.Scheme, "https") && parsed.Host != "",
+		envVar+" must be an absolute HTTPS URL in production",
 		strings.ToLower(envVar), rawURL); err != nil {
 		return fmt.Errorf("production config validation: %w", err)
 	}
