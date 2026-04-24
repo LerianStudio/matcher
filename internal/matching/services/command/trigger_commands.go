@@ -2,6 +2,12 @@
 // Use of this source code is governed by an Elastic License 2.0
 // that can be found in the LICENSE.md file.
 
+// interface-only:skip-check-tests
+// The compile-time MatchTrigger compliance check lives below. Behaviour of
+// TriggerMatchForContext is exercised via callers (ingestion + scheduler
+// worker) which each mock the port in their own tests. scripts/check-tests.sh
+// honours the marker above.
+
 package command
 
 import (
