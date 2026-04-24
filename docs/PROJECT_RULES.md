@@ -258,6 +258,14 @@ Removing `t.Parallel()` categorically would extend CI wall-clock by ~8x with no 
 
 **Policy:** `t.Parallel()` IS allowed in matcher's integration tests. Unit tests MUST NOT call `t.Parallel()` (Ring default applies).
 
+### Integration Test Location
+
+Most integration tests live under `tests/integration/**` and use the shared harness (`tests/integration/shared_harness.go`).
+
+**Exception:** `internal/discovery/**/*_integration_test.go` stays co-located inside the discovery package. These tests exercise the Fetcher bridge worker with purpose-built fixtures — an httptest Fetcher impersonator emitting contract-locked HMAC + IV headers, a MinIO custody bucket testcontainer, and in-package access to the worker's unexported `pollCycle` helper. Moving them under `tests/integration/discovery/` would force the helper to be exported (widening the surface area of an internal API) and duplicate the bridge-specific fixtures, with no correctness or maintainability benefit.
+
+**Policy:** New integration tests should default to `tests/integration/`. Co-location is only justified when tests require access to unexported helpers or use purpose-built fixtures that do not compose with the shared harness.
+
 ## 15. File Naming Conventions
 
 ### Postgres Adapter Files
