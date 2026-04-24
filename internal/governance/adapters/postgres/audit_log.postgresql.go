@@ -17,6 +17,7 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	sharedhttp "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
@@ -237,7 +238,7 @@ func (repo *Repository) Create(
 		wrappedErr := fmt.Errorf("create audit log transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create audit log", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to create audit log: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to create audit log", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -281,7 +282,7 @@ func (repo *Repository) CreateWithTx(
 		wrappedErr := fmt.Errorf("create audit log transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create audit log", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to create audit log: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to create audit log", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -502,7 +503,7 @@ func (repo *Repository) GetByID(ctx context.Context, id uuid.UUID) (*entities.Au
 		wrappedErr := fmt.Errorf("get audit log by id transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to get audit log by id", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get audit log by id: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to get audit log by id", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -597,7 +598,7 @@ func (repo *Repository) ListByEntity(
 		wrappedErr := fmt.Errorf("list audit logs by entity transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list audit logs by entity", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list audit logs: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to list audit logs", wrappedErr, runtime.IsProductionMode())
 
 		return nil, "", wrappedErr
 	}
@@ -722,7 +723,7 @@ func (repo *Repository) List(
 		wrappedErr := fmt.Errorf("list audit logs transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list audit logs", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list audit logs: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to list audit logs", wrappedErr, runtime.IsProductionMode())
 
 		return nil, "", wrappedErr
 	}

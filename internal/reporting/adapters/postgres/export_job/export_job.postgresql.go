@@ -17,6 +17,7 @@ import (
 	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 	"github.com/LerianStudio/lib-commons/v5/commons/pointers"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
@@ -92,7 +93,7 @@ func (repo *Repository) Create(ctx context.Context, job *entities.ExportJob) err
 		wrappedErr := fmt.Errorf("create export job: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create export job", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to create export job: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to create export job", wrappedErr, runtime.IsProductionMode())
 
 		return wrappedErr
 	}
@@ -168,7 +169,7 @@ func (repo *Repository) GetByID(
 		wrappedErr := fmt.Errorf("get export job by id: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to get export job", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get export job: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to get export job", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -210,7 +211,7 @@ func (repo *Repository) Update(ctx context.Context, job *entities.ExportJob) err
 		wrappedErr := fmt.Errorf("update export job: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to update export job", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to update export job: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to update export job", wrappedErr, runtime.IsProductionMode())
 
 		return wrappedErr
 	}
@@ -308,7 +309,7 @@ func (repo *Repository) UpdateProgress(
 		wrappedErr := fmt.Errorf("update export job progress: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to update export job progress", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to update export job progress: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to update export job progress", wrappedErr, runtime.IsProductionMode())
 
 		return wrappedErr
 	}
@@ -373,7 +374,7 @@ func (repo *Repository) List(
 		wrappedErr := fmt.Errorf("parse tenant ID from context: %w", err)
 		libOpentelemetry.HandleSpanError(span, "invalid tenant ID in context", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("invalid tenant ID in context: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "invalid tenant ID in context", wrappedErr, runtime.IsProductionMode())
 
 		return nil, libHTTP.CursorPagination{}, wrappedErr
 	}
@@ -440,7 +441,7 @@ func (repo *Repository) List(
 		wrappedErr := fmt.Errorf("list export jobs: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list export jobs", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list export jobs: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to list export jobs", wrappedErr, runtime.IsProductionMode())
 
 		return nil, libHTTP.CursorPagination{}, wrappedErr
 	}
@@ -522,7 +523,7 @@ func (repo *Repository) ListByContext(
 		wrappedErr := fmt.Errorf("list export jobs by context: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list export jobs", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list export jobs: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to list export jobs", wrappedErr, runtime.IsProductionMode())
 
 		return nil, libHTTP.CursorPagination{}, wrappedErr
 	}
@@ -564,7 +565,7 @@ func (repo *Repository) ListExpired(
 		wrappedErr := fmt.Errorf("list expired export jobs: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list expired jobs", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list expired export jobs: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to list expired export jobs", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -620,7 +621,7 @@ func (repo *Repository) ListTenants(ctx context.Context) ([]string, error) {
 	if err != nil {
 		wrappedErr := fmt.Errorf("list export job tenants: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list export job tenants", wrappedErr)
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list export job tenants: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to list export job tenants", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -674,7 +675,7 @@ func (repo *Repository) ClaimNextQueued(ctx context.Context) (*entities.ExportJo
 		wrappedErr := fmt.Errorf("claim next queued export job: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to claim queued job", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to claim next queued export job: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to claim next queued export job", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -696,7 +697,7 @@ func (repo *Repository) Delete(ctx context.Context, id uuid.UUID) error {
 		wrappedErr := fmt.Errorf("delete export job: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to delete export job", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to delete export job: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to delete export job", wrappedErr, runtime.IsProductionMode())
 
 		return wrappedErr
 	}
@@ -774,7 +775,7 @@ func (repo *Repository) RequeueForRetry(
 		wrappedErr := fmt.Errorf("requeue export job for retry: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to requeue export job", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to requeue export job for retry: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to requeue export job for retry", wrappedErr, runtime.IsProductionMode())
 
 		return wrappedErr
 	}

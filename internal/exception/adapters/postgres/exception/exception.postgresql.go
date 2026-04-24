@@ -15,6 +15,7 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
@@ -67,7 +68,7 @@ func (repo *Repository) FindByID(ctx context.Context, id uuid.UUID) (*entities.E
 		wrappedErr := fmt.Errorf("failed to find exception: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to find exception", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to find exception: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to find exception", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -140,7 +141,7 @@ func (repo *Repository) FindByIDs(
 		wrappedErr := fmt.Errorf("failed to find exceptions by ids: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to find exceptions by ids", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to find exceptions by ids: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to find exceptions by ids", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -230,16 +231,12 @@ func (repo *Repository) List(
 		wrappedErr := fmt.Errorf("failed to list exceptions: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list exceptions", wrappedErr)
 
-		logError(ctx, logger, "failed to list exceptions: %v", wrappedErr)
+		libLog.SafeError(logger, ctx, "failed to list exceptions", wrappedErr, runtime.IsProductionMode())
 
 		return nil, libHTTP.CursorPagination{}, wrappedErr
 	}
 
 	return result, pagination, nil
-}
-
-func logError(ctx context.Context, logger libLog.Logger, format string, args ...any) {
-	logger.Log(ctx, libLog.LevelError, fmt.Sprintf(format, args...))
 }
 
 func (repo *Repository) executeListQuery(
@@ -495,7 +492,7 @@ func (repo *Repository) Update(
 		wrappedErr := fmt.Errorf("failed to update exception: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to update exception", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to update exception: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to update exception", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -538,7 +535,7 @@ func (repo *Repository) UpdateWithTx(
 		wrappedErr := fmt.Errorf("failed to update exception: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to update exception", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to update exception: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to update exception", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -646,7 +643,7 @@ func (repo *Repository) ExistsForTenant(ctx context.Context, id uuid.UUID) (bool
 		wrappedErr := fmt.Errorf("failed to check exception existence: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to check exception existence", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to check exception existence: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to check exception existence", wrappedErr, runtime.IsProductionMode())
 
 		return false, wrappedErr
 	}

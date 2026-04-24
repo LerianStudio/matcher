@@ -11,6 +11,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
@@ -57,7 +58,7 @@ func (repo *Repository) Create(
 		wrappedErr := fmt.Errorf("create comment: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create comment", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to create comment: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to create comment", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -101,7 +102,7 @@ func (repo *Repository) CreateWithTx(
 		wrappedErr := fmt.Errorf("create comment with tx: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create comment", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to create comment: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to create comment", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -171,7 +172,7 @@ func (repo *Repository) FindByID(
 		wrappedErr := fmt.Errorf("find comment by id: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to find comment", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to find comment: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to find comment", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -235,7 +236,7 @@ func (repo *Repository) FindByExceptionID(
 		wrappedErr := fmt.Errorf("find comments by exception id: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to find comments", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to find comments: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to find comments", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -269,7 +270,7 @@ func (repo *Repository) Delete(ctx context.Context, id uuid.UUID) error {
 		wrappedErr := fmt.Errorf("delete comment: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to delete comment", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to delete comment: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to delete comment", wrappedErr, runtime.IsProductionMode())
 
 		return wrappedErr
 	}
@@ -309,7 +310,7 @@ func (repo *Repository) DeleteWithTx(ctx context.Context, tx *sql.Tx, id uuid.UU
 		wrappedErr := fmt.Errorf("delete comment with tx: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to delete comment", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to delete comment: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to delete comment", wrappedErr, runtime.IsProductionMode())
 
 		return wrappedErr
 	}

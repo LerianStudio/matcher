@@ -206,7 +206,7 @@ func (worker *CleanupWorker) cleanupExpired(ctx context.Context) {
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list expired jobs", err)
 
-		worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list expired jobs: %v", err))
+		libLog.SafeError(worker.logger, ctx, "failed to list expired jobs", err, runtime.IsProductionMode())
 
 		return
 	}
@@ -295,13 +295,13 @@ func (worker *CleanupWorker) markJobExpiredIfNeeded(ctx context.Context, job *en
 	}
 
 	if err := job.MarkExpired(); err != nil {
-		worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to transition job %s to expired: %v", job.ID, err))
+		libLog.SafeError(worker.logger, ctx, fmt.Sprintf("failed to transition job %s to expired", job.ID), err, runtime.IsProductionMode())
 
 		return
 	}
 
 	if err := worker.jobRepo.Update(ctx, job); err != nil {
-		worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to persist job %s expired status: %v", job.ID, err))
+		libLog.SafeError(worker.logger, ctx, fmt.Sprintf("failed to persist job %s expired status", job.ID), err, runtime.IsProductionMode())
 
 		return
 	}

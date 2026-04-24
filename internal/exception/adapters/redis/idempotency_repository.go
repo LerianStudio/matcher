@@ -14,6 +14,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
@@ -223,7 +224,7 @@ func (repo *IdempotencyRepository) TryAcquire(
 		wrappedErr := fmt.Errorf("failed to acquire idempotency lock: %w", err)
 		libOpentelemetry.HandleSpanError(span, "redis setnx failed", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to acquire idempotency lock: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to acquire idempotency lock", wrappedErr, runtime.IsProductionMode())
 
 		return false, wrappedErr
 	}
@@ -302,7 +303,7 @@ return 1
 		wrappedErr := fmt.Errorf("failed to reacquire failed idempotency key: %w", err)
 		libOpentelemetry.HandleSpanError(span, "redis eval failed", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to reacquire failed idempotency key: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to reacquire failed idempotency key", wrappedErr, runtime.IsProductionMode())
 
 		return false, wrappedErr
 	}
@@ -362,7 +363,7 @@ func (repo *IdempotencyRepository) MarkComplete(
 		wrappedErr := fmt.Errorf("failed to mark idempotency complete: %w", err)
 		libOpentelemetry.HandleSpanError(span, "redis set failed", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to mark idempotency complete: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to mark idempotency complete", wrappedErr, runtime.IsProductionMode())
 
 		return wrappedErr
 	}
@@ -418,7 +419,7 @@ func (repo *IdempotencyRepository) MarkFailed(
 		wrappedErr := fmt.Errorf("failed to mark idempotency as failed: %w", err)
 		libOpentelemetry.HandleSpanError(span, "redis set failed status failed", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to mark idempotency as failed: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to mark idempotency as failed", wrappedErr, runtime.IsProductionMode())
 
 		return wrappedErr
 	}
@@ -472,7 +473,7 @@ func (repo *IdempotencyRepository) GetCachedResult(
 		wrappedErr := fmt.Errorf("failed to get cached result: %w", err)
 		libOpentelemetry.HandleSpanError(span, "redis get failed", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get cached result: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to get cached result", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}

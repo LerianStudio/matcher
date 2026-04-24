@@ -276,7 +276,7 @@ func (worker *ExportWorker) pollAndProcess(ctx context.Context) {
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to claim job", err)
 
-		worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to claim queued job: %v", err))
+		libLog.SafeError(worker.logger, ctx, "failed to claim queued job", err, runtime.IsProductionMode())
 
 		return
 	}
@@ -433,7 +433,7 @@ func (worker *ExportWorker) processJob(ctx context.Context, job *entities.Export
 	}
 
 	if err := job.MarkSucceeded(fileKey, fileName, sha256Hash, recordCount, bytesWritten); err != nil {
-		worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to mark job %s as succeeded: %v", job.ID, err))
+		libLog.SafeError(worker.logger, ctx, fmt.Sprintf("failed to mark job %s as succeeded", job.ID), err, runtime.IsProductionMode())
 
 		return
 	}
@@ -441,7 +441,7 @@ func (worker *ExportWorker) processJob(ctx context.Context, job *entities.Export
 	if err := worker.jobRepo.Update(ctx, job); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to update job status", err)
 
-		worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to persist job %s succeeded status: %v", job.ID, err))
+		libLog.SafeError(worker.logger, ctx, fmt.Sprintf("failed to persist job %s succeeded status", job.ID), err, runtime.IsProductionMode())
 
 		return
 	}
@@ -1069,25 +1069,28 @@ func (worker *ExportWorker) failJob(ctx context.Context, job *entities.ExportJob
 				updateErr,
 			)
 
-			worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf(
-				"failed to requeue export job %s for retry: %v",
-				job.ID,
+			libLog.SafeError(
+				worker.logger,
+				ctx,
+				fmt.Sprintf("failed to requeue export job %s for retry", job.ID),
 				updateErr,
-			))
+				runtime.IsProductionMode(),
+			)
 		}
 
 		return
 	}
 
-	worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf(
-		"export job %s permanently failed after %d attempts: %v",
-		job.ID,
-		job.Attempts,
+	libLog.SafeError(
+		worker.logger,
+		ctx,
+		fmt.Sprintf("export job %s permanently failed after %d attempts", job.ID, job.Attempts),
 		err,
-	))
+		runtime.IsProductionMode(),
+	)
 
 	if markErr := job.MarkFailed(err.Error()); markErr != nil {
-		worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to mark job %s as failed: %v", job.ID, markErr))
+		libLog.SafeError(worker.logger, ctx, fmt.Sprintf("failed to mark job %s as failed", job.ID), markErr, runtime.IsProductionMode())
 
 		return
 	}
@@ -1095,7 +1098,7 @@ func (worker *ExportWorker) failJob(ctx context.Context, job *entities.ExportJob
 	if updateErr := worker.jobRepo.UpdateStatus(ctx, job); updateErr != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to update job status to failed", updateErr)
 
-		worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to update job %s status to failed: %v", job.ID, updateErr))
+		libLog.SafeError(worker.logger, ctx, fmt.Sprintf("failed to update job %s status to failed", job.ID), updateErr, runtime.IsProductionMode())
 	}
 }
 
@@ -1129,7 +1132,7 @@ func (worker *ExportWorker) handleRequeueFailure(
 	job *entities.ExportJob,
 	originalErr, updateErr error,
 ) {
-	worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to requeue job %s for retry: %v", job.ID, updateErr))
+	libLog.SafeError(worker.logger, ctx, fmt.Sprintf("failed to requeue job %s for retry", job.ID), updateErr, runtime.IsProductionMode())
 
 	errMsg := fmt.Sprintf(
 		"failed to requeue export job after error: %v (requeue error: %v)",
@@ -1137,21 +1140,25 @@ func (worker *ExportWorker) handleRequeueFailure(
 		updateErr,
 	)
 	if markErr := job.MarkFailed(errMsg); markErr != nil {
-		worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf(
-			"failed to mark job %s as failed after requeue error (transition rejected: %v)",
-			job.ID,
+		libLog.SafeError(
+			worker.logger,
+			ctx,
+			fmt.Sprintf("failed to mark job %s as failed after requeue error (transition rejected)", job.ID),
 			markErr,
-		))
+			runtime.IsProductionMode(),
+		)
 
 		return
 	}
 
 	if failErr := worker.jobRepo.UpdateStatus(ctx, job); failErr != nil {
-		worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf(
-			"failed to persist job %s failed status after requeue error: %v",
-			job.ID,
+		libLog.SafeError(
+			worker.logger,
+			ctx,
+			fmt.Sprintf("failed to persist job %s failed status after requeue error", job.ID),
 			failErr,
-		))
+			runtime.IsProductionMode(),
+		)
 	}
 }
 

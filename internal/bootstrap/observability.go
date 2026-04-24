@@ -65,7 +65,7 @@ func InitTelemetry(cfg *Config, logger libLog.Logger) *libOpentelemetry.Telemetr
 	})
 	if err != nil {
 		if logger != nil {
-			logger.Log(context.Background(), libLog.LevelError, fmt.Sprintf("failed to initialize telemetry: %v", err))
+			libLog.SafeError(logger, context.Background(), "failed to initialize telemetry", err, runtime.IsProductionMode())
 		}
 
 		return nil

@@ -15,6 +15,7 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/dispute"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
@@ -62,7 +63,7 @@ func (repo *Repository) Create(
 		wrappedErr := fmt.Errorf("create dispute: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create dispute", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to create dispute: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to create dispute", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -105,7 +106,7 @@ func (repo *Repository) CreateWithTx(
 		wrappedErr := fmt.Errorf("create dispute: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create dispute", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to create dispute: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to create dispute", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -175,7 +176,7 @@ func (repo *Repository) FindByID(ctx context.Context, id uuid.UUID) (*dispute.Di
 		wrappedErr := fmt.Errorf("find dispute by id: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to find dispute", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to find dispute: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to find dispute", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -221,7 +222,7 @@ func (repo *Repository) FindByExceptionID(
 		wrappedErr := fmt.Errorf("find dispute by exception id: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to find dispute by exception", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to find dispute by exception: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to find dispute by exception", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -258,7 +259,7 @@ func (repo *Repository) Update(
 		wrappedErr := fmt.Errorf("update dispute: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to update dispute", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to update dispute: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to update dispute", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -301,7 +302,7 @@ func (repo *Repository) UpdateWithTx(
 		wrappedErr := fmt.Errorf("update dispute: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to update dispute", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to update dispute: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to update dispute", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -395,7 +396,7 @@ func (repo *Repository) List(
 		wrappedErr := fmt.Errorf("failed to list disputes: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list disputes", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list disputes: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to list disputes", wrappedErr, runtime.IsProductionMode())
 
 		return nil, libHTTP.CursorPagination{}, wrappedErr
 	}
@@ -723,7 +724,7 @@ func (repo *Repository) ExistsForTenant(ctx context.Context, id uuid.UUID) (bool
 		wrappedErr := fmt.Errorf("failed to check dispute existence: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to check dispute existence", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to check dispute existence: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to check dispute existence", wrappedErr, runtime.IsProductionMode())
 
 		return false, wrappedErr
 	}

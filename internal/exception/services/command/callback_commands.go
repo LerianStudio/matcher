@@ -17,6 +17,7 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 	"github.com/LerianStudio/lib-commons/v5/commons/pointers"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
@@ -503,7 +504,7 @@ func (uc *ExceptionUseCase) processCallback(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to find exception", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to find exception: %v", err))
+		libLog.SafeError(logger, ctx, "failed to find exception", err, runtime.IsProductionMode())
 
 		uc.markIdempotencyFailed(ctx, params.dedupeKey)
 

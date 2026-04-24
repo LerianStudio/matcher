@@ -13,6 +13,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
@@ -173,7 +174,7 @@ func (repo *Repository) GetVolumeStats(
 		wrappedErr := fmt.Errorf("get volume stats: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to get volume stats", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get volume stats: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to get volume stats", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -248,7 +249,7 @@ func (repo *Repository) GetSLAStats(
 		wrappedErr := fmt.Errorf("get sla stats: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to get sla stats", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get sla stats: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to get sla stats", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -383,7 +384,7 @@ func (repo *Repository) GetSummaryMetrics(
 		wrappedErr := fmt.Errorf("get summary metrics: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to get summary metrics", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get summary metrics: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to get summary metrics", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -503,7 +504,7 @@ func (repo *Repository) GetTrendMetrics(
 		wrappedErr := fmt.Errorf("get trend metrics: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to get trend metrics", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get trend metrics: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to get trend metrics", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -554,7 +555,7 @@ func (repo *Repository) GetBreakdownMetrics(
 		wrappedErr := fmt.Errorf("get breakdown metrics: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to get breakdown metrics", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get breakdown metrics: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to get breakdown metrics", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -875,7 +876,7 @@ func (repo *Repository) GetSourceBreakdown(
 		wrappedErr := fmt.Errorf("get source breakdown: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to get source breakdown", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get source breakdown: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to get source breakdown", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -1024,7 +1025,7 @@ func (repo *Repository) GetCashImpactSummary(
 		wrappedErr := fmt.Errorf("get cash impact summary: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to get cash impact summary", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get cash impact summary: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to get cash impact summary", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}

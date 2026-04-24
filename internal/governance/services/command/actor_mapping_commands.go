@@ -8,6 +8,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
@@ -51,7 +52,7 @@ func (uc *ActorMappingUseCase) UpsertActorMapping(ctx context.Context, actorID s
 	if err != nil {
 		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid actor mapping input", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("invalid actor mapping input: %v", err))
+		libLog.SafeError(logger, ctx, "invalid actor mapping input", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("create actor mapping entity: %w", err)
 	}
@@ -60,7 +61,7 @@ func (uc *ActorMappingUseCase) UpsertActorMapping(ctx context.Context, actorID s
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to upsert actor mapping", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to upsert actor mapping: %v", err))
+		libLog.SafeError(logger, ctx, "failed to upsert actor mapping", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("upsert actor mapping: %w", err)
 	}
@@ -86,7 +87,7 @@ func (uc *ActorMappingUseCase) PseudonymizeActor(ctx context.Context, actorID st
 	if err := uc.repo.Pseudonymize(ctx, actorID); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to pseudonymize actor", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to pseudonymize actor [id_prefix=%s]: %v", entities.SafeActorIDPrefix(actorID), err))
+		libLog.SafeError(logger, ctx, fmt.Sprintf("failed to pseudonymize actor [id_prefix=%s]", entities.SafeActorIDPrefix(actorID)), err, runtime.IsProductionMode())
 
 		return fmt.Errorf("pseudonymize actor: %w", err)
 	}
@@ -104,7 +105,7 @@ func (uc *ActorMappingUseCase) DeleteActorMapping(ctx context.Context, actorID s
 	if err := uc.repo.Delete(ctx, actorID); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to delete actor mapping", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to delete actor mapping [id_prefix=%s]: %v", entities.SafeActorIDPrefix(actorID), err))
+		libLog.SafeError(logger, ctx, fmt.Sprintf("failed to delete actor mapping [id_prefix=%s]", entities.SafeActorIDPrefix(actorID)), err, runtime.IsProductionMode())
 
 		return fmt.Errorf("delete actor mapping: %w", err)
 	}

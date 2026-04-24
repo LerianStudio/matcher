@@ -1301,7 +1301,7 @@ func createPostgresReplicaHealthCheck(
 	cleanup := func() {
 		if healthDB != nil {
 			if err := healthDB.Close(); err != nil {
-				logger.Log(logCtx, libLog.LevelError, fmt.Sprintf("failed to close postgres replica health check connection: %v", err))
+				libLog.SafeError(logger, logCtx, "failed to close postgres replica health check connection", err, runtime.IsProductionMode())
 			}
 		}
 	}
@@ -1868,7 +1868,7 @@ func cleanupPostgres(ctx context.Context, postgres *libPostgres.Client, logger l
 	duration := time.Since(start)
 
 	if err != nil {
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to close postgres connection: %v", err))
+		libLog.SafeError(logger, ctx, "failed to close postgres connection", err, runtime.IsProductionMode())
 		recordCleanup(ctx, "postgres", false, duration)
 
 		return
@@ -1887,7 +1887,7 @@ func cleanupRedis(ctx context.Context, redis *libRedis.Client, logger libLog.Log
 	duration := time.Since(start)
 
 	if err != nil {
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to close redis connection: %v", err))
+		libLog.SafeError(logger, ctx, "failed to close redis connection", err, runtime.IsProductionMode())
 		recordCleanup(ctx, "redis", false, duration)
 
 		return
@@ -1906,7 +1906,7 @@ func cleanupRabbitMQ(ctx context.Context, rabbitmq *libRabbitmq.RabbitMQConnecti
 
 	if rabbitmq.Channel != nil {
 		if err := rabbitmq.Channel.Close(); err != nil {
-			logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to close rabbitmq channel: %v", err))
+			libLog.SafeError(logger, ctx, "failed to close rabbitmq channel", err, runtime.IsProductionMode())
 
 			hasError = true
 		}
@@ -1914,7 +1914,7 @@ func cleanupRabbitMQ(ctx context.Context, rabbitmq *libRabbitmq.RabbitMQConnecti
 
 	if rabbitmq.Connection != nil {
 		if err := rabbitmq.Connection.Close(); err != nil {
-			logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to close rabbitmq connection: %v", err))
+			libLog.SafeError(logger, ctx, "failed to close rabbitmq connection", err, runtime.IsProductionMode())
 
 			hasError = true
 		}
@@ -2422,9 +2422,7 @@ func initModulesAndMessaging(
 // "if err; if logger" pattern that otherwise inflates cognitive complexity.
 func logCloseErr(ctx context.Context, logger libLog.Logger, msg string, closeFn func() error) {
 	if err := closeFn(); err != nil {
-		if logger != nil {
-			logger.Log(ctx, libLog.LevelError, fmt.Sprintf("%s: %v", msg, err))
-		}
+		libLog.SafeError(logger, ctx, msg, err, runtime.IsProductionMode())
 	}
 }
 
@@ -2663,8 +2661,14 @@ func createIdempotencyRepository(
 		cfg.Idempotency.HMACSecret,
 	)
 	if err != nil {
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to create idempotency repository (retryWindow=%v, successTTL=%v): %v",
-			cfg.IdempotencyRetryWindow(), cfg.IdempotencySuccessTTL(), err))
+		libLog.SafeError(
+			logger,
+			ctx,
+			fmt.Sprintf("failed to create idempotency repository (retryWindow=%v, successTTL=%v)",
+				cfg.IdempotencyRetryWindow(), cfg.IdempotencySuccessTTL()),
+			err,
+			runtime.IsProductionMode(),
+		)
 
 		return nil
 	}

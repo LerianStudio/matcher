@@ -13,6 +13,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
@@ -136,7 +137,7 @@ func (repo *Repository) Create(ctx context.Context, metadata *entities.ArchiveMe
 		wrappedErr := fmt.Errorf("create archive metadata: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create archive metadata", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to create archive metadata: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to create archive metadata", wrappedErr, runtime.IsProductionMode())
 
 		return wrappedErr
 	}
@@ -175,7 +176,7 @@ func (repo *Repository) CreateWithTx(ctx context.Context, tx *sql.Tx, metadata *
 		wrappedErr := fmt.Errorf("create archive metadata with tx: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create archive metadata with tx", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to create archive metadata with tx: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to create archive metadata with tx", wrappedErr, runtime.IsProductionMode())
 
 		return wrappedErr
 	}
@@ -209,7 +210,7 @@ func (repo *Repository) Update(ctx context.Context, metadata *entities.ArchiveMe
 		wrappedErr := fmt.Errorf("update archive metadata: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to update archive metadata", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to update archive metadata: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to update archive metadata", wrappedErr, runtime.IsProductionMode())
 
 		return wrappedErr
 	}
@@ -248,7 +249,7 @@ func (repo *Repository) UpdateWithTx(ctx context.Context, tx *sql.Tx, metadata *
 		wrappedErr := fmt.Errorf("update archive metadata with tx: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to update archive metadata with tx", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to update archive metadata with tx: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to update archive metadata with tx", wrappedErr, runtime.IsProductionMode())
 
 		return wrappedErr
 	}
@@ -306,7 +307,7 @@ func (repo *Repository) GetByID(ctx context.Context, id uuid.UUID) (*entities.Ar
 		wrappedErr := fmt.Errorf("get archive metadata by id: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to get archive metadata by id", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get archive metadata by id: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to get archive metadata by id", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -366,7 +367,7 @@ func (repo *Repository) GetByPartition(
 		wrappedErr := fmt.Errorf("get archive metadata by partition: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to get archive metadata by partition", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get archive metadata by partition: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to get archive metadata by partition", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -470,7 +471,7 @@ func (repo *Repository) ListByTenant(
 		wrappedErr := fmt.Errorf("list archive metadata by tenant: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list archive metadata by tenant", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list archive metadata by tenant: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to list archive metadata by tenant", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -513,7 +514,7 @@ func (repo *Repository) ListPending(ctx context.Context) ([]*entities.ArchiveMet
 		wrappedErr := fmt.Errorf("list pending archive metadata: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list pending archive metadata", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list pending archive metadata: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to list pending archive metadata", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -556,7 +557,7 @@ func (repo *Repository) ListIncomplete(ctx context.Context) ([]*entities.Archive
 		wrappedErr := fmt.Errorf("list incomplete archive metadata: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list incomplete archive metadata", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list incomplete archive metadata: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to list incomplete archive metadata", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}

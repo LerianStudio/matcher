@@ -14,6 +14,7 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
@@ -238,7 +239,7 @@ func (repo *Repository) ListMatched(
 		wrappedErr := fmt.Errorf("list matched transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list matched items", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list matched items: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to list matched items", wrappedErr, runtime.IsProductionMode())
 
 		return nil, libHTTP.CursorPagination{}, wrappedErr
 	}
@@ -271,7 +272,7 @@ func (repo *Repository) ListUnmatched(
 		wrappedErr := fmt.Errorf("list unmatched transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list unmatched items", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list unmatched items: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to list unmatched items", wrappedErr, runtime.IsProductionMode())
 
 		return nil, libHTTP.CursorPagination{}, wrappedErr
 	}
@@ -555,7 +556,7 @@ func (repo *Repository) GetSummary(
 		wrappedErr := fmt.Errorf("get summary transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to get summary", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get summary: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to get summary", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -747,7 +748,7 @@ func (repo *Repository) GetVarianceReport(
 		wrappedErr := fmt.Errorf("get variance report transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to get variance report", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get variance report: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to get variance report", wrappedErr, runtime.IsProductionMode())
 
 		return nil, libHTTP.CursorPagination{}, wrappedErr
 	}
@@ -1018,7 +1019,7 @@ func (repo *Repository) ListMatchedForExport(
 			wrappedErr,
 		)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list matched items for export: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to list matched items for export", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -1087,7 +1088,7 @@ func (repo *Repository) ListUnmatchedForExport(
 			wrappedErr,
 		)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list unmatched items for export: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to list unmatched items for export", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -1178,7 +1179,7 @@ func (repo *Repository) ListVarianceForExport(
 			wrappedErr,
 		)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list variance rows for export: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to list variance rows for export", wrappedErr, runtime.IsProductionMode())
 
 		return nil, wrappedErr
 	}
@@ -1291,7 +1292,7 @@ func (repo *Repository) ListMatchedPage(
 		wrappedErr := fmt.Errorf("list matched page transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list matched page", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list matched page: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to list matched page", wrappedErr, runtime.IsProductionMode())
 
 		return nil, "", wrappedErr
 	}
@@ -1411,7 +1412,7 @@ func (repo *Repository) ListUnmatchedPage(
 		wrappedErr := fmt.Errorf("list unmatched page transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list unmatched page", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list unmatched page: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to list unmatched page", wrappedErr, runtime.IsProductionMode())
 
 		return nil, "", wrappedErr
 	}
@@ -1578,7 +1579,7 @@ func (repo *Repository) ListVariancePage(
 		wrappedErr := fmt.Errorf("list variance page transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list variance page", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list variance page: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to list variance page", wrappedErr, runtime.IsProductionMode())
 
 		return nil, "", wrappedErr
 	}
@@ -1638,7 +1639,7 @@ func (repo *Repository) CountMatched(
 		wrappedErr := fmt.Errorf("count matched transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to count matched", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to count matched: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to count matched", wrappedErr, runtime.IsProductionMode())
 
 		return 0, wrappedErr
 	}
@@ -1702,7 +1703,7 @@ func (repo *Repository) CountUnmatched(
 		wrappedErr := fmt.Errorf("count unmatched transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to count unmatched", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to count unmatched: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to count unmatched", wrappedErr, runtime.IsProductionMode())
 
 		return 0, wrappedErr
 	}
@@ -1761,7 +1762,7 @@ func (repo *Repository) CountTransactions(
 		wrappedErr := fmt.Errorf("count transactions: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to count transactions", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to count transactions: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to count transactions", wrappedErr, runtime.IsProductionMode())
 
 		return 0, wrappedErr
 	}
@@ -1821,7 +1822,7 @@ func (repo *Repository) CountExceptions(
 		wrappedErr := fmt.Errorf("count exceptions: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to count exceptions", wrappedErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to count exceptions: %v", wrappedErr))
+		libLog.SafeError(logger, ctx, "failed to count exceptions", wrappedErr, runtime.IsProductionMode())
 
 		return 0, wrappedErr
 	}

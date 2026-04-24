@@ -10,6 +10,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
@@ -92,7 +93,7 @@ func (uc *UseCase) ExportMatchedCSV(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list matched items for CSV export", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list matched items for CSV export: %v", err))
+		libLog.SafeError(logger, ctx, "failed to list matched items for CSV export", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("listing matched items for CSV export: %w", err)
 	}
@@ -101,7 +102,7 @@ func (uc *UseCase) ExportMatchedCSV(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to build matched CSV", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to build matched CSV: %v", err))
+		libLog.SafeError(logger, ctx, "failed to build matched CSV", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("building matched CSV: %w", err)
 	}
@@ -155,7 +156,7 @@ func (uc *UseCase) ExportUnmatchedCSV(
 			err,
 		)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list unmatched items for CSV export: %v", err))
+		libLog.SafeError(logger, ctx, "failed to list unmatched items for CSV export", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("listing unmatched items for CSV export: %w", err)
 	}
@@ -164,7 +165,7 @@ func (uc *UseCase) ExportUnmatchedCSV(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to build unmatched CSV", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to build unmatched CSV: %v", err))
+		libLog.SafeError(logger, ctx, "failed to build unmatched CSV", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("building unmatched CSV: %w", err)
 	}
@@ -199,7 +200,7 @@ func (uc *UseCase) ExportSummaryCSV(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get summary for CSV export", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get summary for CSV export: %v", err))
+		libLog.SafeError(logger, ctx, "failed to get summary for CSV export", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("getting summary for CSV export: %w", err)
 	}
@@ -208,7 +209,7 @@ func (uc *UseCase) ExportSummaryCSV(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to build summary CSV", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to build summary CSV: %v", err))
+		libLog.SafeError(logger, ctx, "failed to build summary CSV", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("building summary CSV: %w", err)
 	}
@@ -245,7 +246,7 @@ func (uc *UseCase) ExportMatchedPDF(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list matched items for PDF export", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list matched items for PDF export: %v", err))
+		libLog.SafeError(logger, ctx, "failed to list matched items for PDF export", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("listing matched items for PDF export: %w", err)
 	}
@@ -254,7 +255,7 @@ func (uc *UseCase) ExportMatchedPDF(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to build matched PDF", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to build matched PDF: %v", err))
+		libLog.SafeError(logger, ctx, "failed to build matched PDF", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("building matched PDF: %w", err)
 	}
@@ -308,7 +309,7 @@ func (uc *UseCase) ExportUnmatchedPDF(
 			err,
 		)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list unmatched items for PDF export: %v", err))
+		libLog.SafeError(logger, ctx, "failed to list unmatched items for PDF export", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("listing unmatched items for PDF export: %w", err)
 	}
@@ -317,7 +318,7 @@ func (uc *UseCase) ExportUnmatchedPDF(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to build unmatched PDF", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to build unmatched PDF: %v", err))
+		libLog.SafeError(logger, ctx, "failed to build unmatched PDF", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("building unmatched PDF: %w", err)
 	}
@@ -352,7 +353,7 @@ func (uc *UseCase) ExportSummaryPDF(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get summary for PDF export", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get summary for PDF export: %v", err))
+		libLog.SafeError(logger, ctx, "failed to get summary for PDF export", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("getting summary for PDF export: %w", err)
 	}
@@ -361,7 +362,7 @@ func (uc *UseCase) ExportSummaryPDF(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to build summary PDF", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to build summary PDF: %v", err))
+		libLog.SafeError(logger, ctx, "failed to build summary PDF", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("building summary PDF: %w", err)
 	}
@@ -398,7 +399,7 @@ func (uc *UseCase) ExportVarianceCSV(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get variance report for CSV export", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get variance report for CSV export: %v", err))
+		libLog.SafeError(logger, ctx, "failed to get variance report for CSV export", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("getting variance report for CSV export: %w", err)
 	}
@@ -407,7 +408,7 @@ func (uc *UseCase) ExportVarianceCSV(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to build variance CSV", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to build variance CSV: %v", err))
+		libLog.SafeError(logger, ctx, "failed to build variance CSV", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("building variance CSV: %w", err)
 	}
@@ -457,7 +458,7 @@ func (uc *UseCase) ExportVariancePDF(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get variance report for PDF export", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get variance report for PDF export: %v", err))
+		libLog.SafeError(logger, ctx, "failed to get variance report for PDF export", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("getting variance report for PDF export: %w", err)
 	}
@@ -466,7 +467,7 @@ func (uc *UseCase) ExportVariancePDF(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to build variance PDF", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to build variance PDF: %v", err))
+		libLog.SafeError(logger, ctx, "failed to build variance PDF", err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("building variance PDF: %w", err)
 	}
@@ -524,7 +525,7 @@ func (uc *UseCase) StreamMatchedCSV(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to stream matched items", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to stream matched items for CSV export: %v", err))
+		libLog.SafeError(logger, ctx, "failed to stream matched items for CSV export", err, runtime.IsProductionMode())
 
 		return fmt.Errorf("streaming matched items for CSV export: %w", err)
 	}
@@ -534,7 +535,7 @@ func (uc *UseCase) StreamMatchedCSV(
 	if err := exports.StreamMatchedCSV(writer, iter); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to write matched CSV", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to write matched CSV: %v", err))
+		libLog.SafeError(logger, ctx, "failed to write matched CSV", err, runtime.IsProductionMode())
 
 		return fmt.Errorf("writing matched CSV: %w", err)
 	}
@@ -578,7 +579,7 @@ func (uc *UseCase) StreamUnmatchedCSV(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to stream unmatched items", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to stream unmatched items for CSV export: %v", err))
+		libLog.SafeError(logger, ctx, "failed to stream unmatched items for CSV export", err, runtime.IsProductionMode())
 
 		return fmt.Errorf("streaming unmatched items for CSV export: %w", err)
 	}
@@ -588,7 +589,7 @@ func (uc *UseCase) StreamUnmatchedCSV(
 	if err := exports.StreamUnmatchedCSV(writer, iter); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to write unmatched CSV", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to write unmatched CSV: %v", err))
+		libLog.SafeError(logger, ctx, "failed to write unmatched CSV", err, runtime.IsProductionMode())
 
 		return fmt.Errorf("writing unmatched CSV: %w", err)
 	}
@@ -632,7 +633,7 @@ func (uc *UseCase) StreamVarianceCSV(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to stream variance rows", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to stream variance rows for CSV export: %v", err))
+		libLog.SafeError(logger, ctx, "failed to stream variance rows for CSV export", err, runtime.IsProductionMode())
 
 		return fmt.Errorf("streaming variance rows for CSV export: %w", err)
 	}
@@ -642,7 +643,7 @@ func (uc *UseCase) StreamVarianceCSV(
 	if err := exports.StreamVarianceCSV(writer, iter); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to write variance CSV", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to write variance CSV: %v", err))
+		libLog.SafeError(logger, ctx, "failed to write variance CSV", err, runtime.IsProductionMode())
 
 		return fmt.Errorf("writing variance CSV: %w", err)
 	}

@@ -21,6 +21,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
@@ -200,7 +201,7 @@ func (client *S3Client) Upload(
 	if _, err := client.s3.PutObject(ctx, input); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to upload object", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to upload object %s: %v", key, err))
+		libLog.SafeError(logger, ctx, "failed to upload object "+key, err, runtime.IsProductionMode())
 
 		return "", fmt.Errorf("uploading object: %w", err)
 	}
@@ -275,7 +276,7 @@ func (client *S3Client) UploadIfAbsent(
 
 		libOpentelemetry.HandleSpanError(span, "failed to upload object conditionally", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to conditionally upload object %s: %v", key, err))
+		libLog.SafeError(logger, ctx, "failed to conditionally upload object "+key, err, runtime.IsProductionMode())
 
 		return "", fmt.Errorf("uploading object (conditional): %w", err)
 	}
@@ -331,7 +332,7 @@ func (client *S3Client) UploadWithOptions(
 	if _, err := client.s3.PutObject(ctx, input); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to upload object with options", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to upload object %s: %v", key, err))
+		libLog.SafeError(logger, ctx, "failed to upload object "+key, err, runtime.IsProductionMode())
 
 		return "", fmt.Errorf("uploading object with options: %w", err)
 	}
@@ -370,7 +371,7 @@ func (client *S3Client) Download(ctx context.Context, key string) (io.ReadCloser
 
 		libOpentelemetry.HandleSpanError(span, "failed to download object", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to download object %s: %v", key, err))
+		libLog.SafeError(logger, ctx, "failed to download object "+key, err, runtime.IsProductionMode())
 
 		return nil, fmt.Errorf("downloading object: %w", err)
 	}
@@ -401,7 +402,7 @@ func (client *S3Client) Delete(ctx context.Context, key string) error {
 	if _, err := client.s3.DeleteObject(ctx, input); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to delete object", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to delete object %s: %v", key, err))
+		libLog.SafeError(logger, ctx, "failed to delete object "+key, err, runtime.IsProductionMode())
 
 		return fmt.Errorf("deleting object: %w", err)
 	}
@@ -441,7 +442,7 @@ func (client *S3Client) GeneratePresignedURL(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to generate presigned url", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to generate presigned url for %s: %v", key, err))
+		libLog.SafeError(logger, ctx, "failed to generate presigned url for "+key, err, runtime.IsProductionMode())
 
 		return "", fmt.Errorf("generating presigned url: %w", err)
 	}
@@ -482,7 +483,7 @@ func (client *S3Client) Exists(ctx context.Context, key string) (bool, error) {
 
 		libOpentelemetry.HandleSpanError(span, "failed to check object existence", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to check existence of %s: %v", key, err))
+		libLog.SafeError(logger, ctx, "failed to check existence of "+key, err, runtime.IsProductionMode())
 
 		return false, fmt.Errorf("checking object existence: %w", err)
 	}

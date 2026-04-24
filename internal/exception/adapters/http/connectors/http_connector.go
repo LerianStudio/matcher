@@ -26,6 +26,7 @@ import (
 	"github.com/LerianStudio/lib-commons/v5/commons/circuitbreaker"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/services"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
@@ -233,7 +234,7 @@ func (conn *HTTPConnector) dispatchToJira(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "jira dispatch failed", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to dispatch to JIRA: %v", err))
+		libLog.SafeError(logger, ctx, "failed to dispatch to JIRA", err, runtime.IsProductionMode())
 
 		return ports.DispatchResult{}, fmt.Errorf("dispatch to jira: %w", err)
 	}
@@ -345,7 +346,7 @@ func (conn *HTTPConnector) dispatchToWebhook(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "webhook dispatch failed", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to dispatch to webhook: %v", err))
+		libLog.SafeError(logger, ctx, "failed to dispatch to webhook", err, runtime.IsProductionMode())
 
 		return ports.DispatchResult{}, fmt.Errorf("dispatch to webhook: %w", err)
 	}

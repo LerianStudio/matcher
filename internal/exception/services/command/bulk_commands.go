@@ -12,6 +12,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
@@ -164,7 +165,7 @@ func (uc *ExceptionUseCase) BulkAssign(ctx context.Context, input BulkAssignInpu
 				libOpentelemetry.HandleSpanError(span, "bulk assign item failed", err)
 			}
 
-			logger.Log(ctx, libLog.LevelError, fmt.Sprintf("bulk assign failed for %s: %v", exceptionID, err))
+			libLog.SafeError(logger, ctx, fmt.Sprintf("bulk assign failed for %s", exceptionID), err, runtime.IsProductionMode())
 
 			result.Failed = append(result.Failed, BulkItemFailure{
 				ExceptionID: exceptionID,
@@ -279,7 +280,7 @@ func (uc *ExceptionUseCase) BulkResolve(ctx context.Context, input BulkResolveIn
 				libOpentelemetry.HandleSpanError(span, "bulk resolve item failed", err)
 			}
 
-			logger.Log(ctx, libLog.LevelError, fmt.Sprintf("bulk resolve failed for %s: %v", exceptionID, err))
+			libLog.SafeError(logger, ctx, fmt.Sprintf("bulk resolve failed for %s", exceptionID), err, runtime.IsProductionMode())
 
 			result.Failed = append(result.Failed, BulkItemFailure{
 				ExceptionID: exceptionID,
