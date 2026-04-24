@@ -156,4 +156,3 @@ func TestGetFieldMapBySource_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expected, result)
 }
-

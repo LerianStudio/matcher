@@ -9,9 +9,9 @@ package bootstrap
 import (
 	"testing"
 
+	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
 	matchingCommand "github.com/LerianStudio/matcher/internal/matching/services/command"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
-	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
 )
 
 // TestInitIngestionModule_Signature locks the signature of initIngestionModule

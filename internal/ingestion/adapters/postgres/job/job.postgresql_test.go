@@ -256,7 +256,6 @@ func TestJobModelToEntity_NilModel(t *testing.T) {
 	require.ErrorIs(t, err, errJobModelRequired)
 }
 
-
 func TestJobModelToEntity_InvalidStatus(t *testing.T) {
 	t.Parallel()
 

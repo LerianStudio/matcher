@@ -47,4 +47,3 @@ func TestDynamicFetcherClient_Current_ReusesUntilConfigChanges(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotSame(t, first, third)
 }
-

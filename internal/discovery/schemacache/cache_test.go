@@ -127,8 +127,8 @@ func TestCache_ConcurrentReloadAndCurrentTTL(t *testing.T) {
 	}
 
 	const (
-		readers         = 16
-		readsPerReader  = 500
+		readers        = 16
+		readsPerReader = 500
 	)
 
 	var (

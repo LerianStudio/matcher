@@ -25,8 +25,8 @@ import (
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
-	"github.com/LerianStudio/matcher/internal/shared/ports"
 	storageMocks "github.com/LerianStudio/matcher/internal/shared/objectstorage/mocks"
+	"github.com/LerianStudio/matcher/internal/shared/ports"
 	sharedTestutil "github.com/LerianStudio/matcher/internal/shared/testutil"
 
 	"go.uber.org/mock/gomock"

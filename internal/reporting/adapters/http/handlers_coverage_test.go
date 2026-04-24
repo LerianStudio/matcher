@@ -232,9 +232,9 @@ func setupDashboardHandlers(
 	require.NoError(t, ucErr)
 
 	var (
-		exportUC     *query.UseCase
-		handlerRepo  reporting.ReportRepository
-		err          error
+		exportUC    *query.UseCase
+		handlerRepo reporting.ReportRepository
+		err         error
 	)
 
 	if reportRepo != nil {

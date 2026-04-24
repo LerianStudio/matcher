@@ -118,4 +118,3 @@ func TestExportJobQueryService_GetByID(t *testing.T) {
 		require.ErrorIs(t, err, repositories.ErrExportJobNotFound)
 	})
 }
-

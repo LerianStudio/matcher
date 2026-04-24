@@ -37,8 +37,8 @@ func TestRecordRowsProcessed_DoesNotPanic(t *testing.T) {
 
 	assert.NotPanics(t, func() {
 		ingestionMetrics.RecordRowsProcessed(ctx, "csv", 100)
-		ingestionMetrics.RecordRowsProcessed(ctx, "json", 0)   // skipped
-		ingestionMetrics.RecordRowsProcessed(ctx, "xml", -1)   // skipped
+		ingestionMetrics.RecordRowsProcessed(ctx, "json", 0) // skipped
+		ingestionMetrics.RecordRowsProcessed(ctx, "xml", -1) // skipped
 		ingestionMetrics.RecordRowsProcessed(ctx, "", 50)
 	})
 }

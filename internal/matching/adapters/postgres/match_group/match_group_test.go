@@ -16,7 +16,6 @@ import (
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 )
 
-
 func TestPostgreSQLModel_RoundTrip(t *testing.T) {
 	t.Parallel()
 
