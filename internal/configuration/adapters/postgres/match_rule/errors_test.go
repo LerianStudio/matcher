@@ -10,8 +10,9 @@ import (
 	"errors"
 	"testing"
 
-	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	"github.com/stretchr/testify/assert"
+
+	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 )
 
 func TestMatchRuleSentinelErrors(t *testing.T) {

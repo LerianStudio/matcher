@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	pkgHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
