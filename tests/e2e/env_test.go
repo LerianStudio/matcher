@@ -3,7 +3,6 @@
 package e2e
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -21,18 +20,13 @@ func TestLoadConfig_Defaults(t *testing.T) {
 		"DEFAULT_TENANT_ID", "DEFAULT_TENANT_SLUG",
 	}
 
-	originalValues := make(map[string]string)
+	// Clear each env var for the scope of this test. Consumers treat empty
+	// string as "unset" (getEnv / getDurationEnv / getBoolEnv all gate on
+	// val != ""). t.Setenv restores the prior value automatically when the
+	// test ends.
 	for _, key := range unsetEnvVars {
-		originalValues[key] = os.Getenv(key)
-		os.Unsetenv(key)
+		t.Setenv(key, "")
 	}
-	defer func() {
-		for key, val := range originalValues {
-			if val != "" {
-				os.Setenv(key, val)
-			}
-		}
-	}()
 
 	cfg := LoadConfig()
 
@@ -67,20 +61,9 @@ func TestLoadConfig_FromEnvironment(t *testing.T) {
 		"DEFAULT_TENANT_ID": "custom-tenant-id",
 	}
 
-	originalValues := make(map[string]string)
 	for key, val := range envVars {
-		originalValues[key] = os.Getenv(key)
-		os.Setenv(key, val)
+		t.Setenv(key, val)
 	}
-	defer func() {
-		for key := range envVars {
-			if orig, ok := originalValues[key]; ok && orig != "" {
-				os.Setenv(key, orig)
-			} else {
-				os.Unsetenv(key)
-			}
-		}
-	}()
 
 	cfg := LoadConfig()
 
@@ -93,51 +76,49 @@ func TestLoadConfig_FromEnvironment(t *testing.T) {
 }
 
 func TestGetEnv_ReturnsDefaultWhenEmpty(t *testing.T) {
-	os.Unsetenv("TEST_EMPTY_ENV_VAR")
+	t.Setenv("TEST_EMPTY_ENV_VAR", "")
+
 	result := getEnv("TEST_EMPTY_ENV_VAR", "default-value")
 	assert.Equal(t, "default-value", result)
 }
 
 func TestGetEnv_ReturnsValueWhenSet(t *testing.T) {
-	os.Setenv("TEST_SET_ENV_VAR", "actual-value")
-	defer os.Unsetenv("TEST_SET_ENV_VAR")
+	t.Setenv("TEST_SET_ENV_VAR", "actual-value")
 
 	result := getEnv("TEST_SET_ENV_VAR", "default-value")
 	assert.Equal(t, "actual-value", result)
 }
 
 func TestGetDurationEnv_ReturnsDefaultWhenEmpty(t *testing.T) {
-	os.Unsetenv("TEST_DURATION_EMPTY")
+	t.Setenv("TEST_DURATION_EMPTY", "")
+
 	result := getDurationEnv("TEST_DURATION_EMPTY", 5*time.Second)
 	assert.Equal(t, 5*time.Second, result)
 }
 
 func TestGetDurationEnv_ParsesIntAsSeconds(t *testing.T) {
-	os.Setenv("TEST_DURATION_INT", "30")
-	defer os.Unsetenv("TEST_DURATION_INT")
+	t.Setenv("TEST_DURATION_INT", "30")
 
 	result := getDurationEnv("TEST_DURATION_INT", 5*time.Second)
 	assert.Equal(t, 30*time.Second, result)
 }
 
 func TestGetDurationEnv_ParsesDurationString(t *testing.T) {
-	os.Setenv("TEST_DURATION_STRING", "2m30s")
-	defer os.Unsetenv("TEST_DURATION_STRING")
+	t.Setenv("TEST_DURATION_STRING", "2m30s")
 
 	result := getDurationEnv("TEST_DURATION_STRING", 5*time.Second)
 	assert.Equal(t, 2*time.Minute+30*time.Second, result)
 }
 
 func TestGetDurationEnv_ReturnsDefaultOnInvalidValue(t *testing.T) {
-	os.Setenv("TEST_DURATION_INVALID", "not-a-duration")
-	defer os.Unsetenv("TEST_DURATION_INVALID")
+	t.Setenv("TEST_DURATION_INVALID", "not-a-duration")
 
 	result := getDurationEnv("TEST_DURATION_INVALID", 5*time.Second)
 	assert.Equal(t, 5*time.Second, result)
 }
 
 func TestGetBoolEnv_ReturnsDefaultWhenEmpty(t *testing.T) {
-	os.Unsetenv("TEST_BOOL_EMPTY")
+	t.Setenv("TEST_BOOL_EMPTY", "")
 
 	result := getBoolEnv("TEST_BOOL_EMPTY", true)
 
@@ -145,8 +126,7 @@ func TestGetBoolEnv_ReturnsDefaultWhenEmpty(t *testing.T) {
 }
 
 func TestGetBoolEnv_ParsesBoolean(t *testing.T) {
-	os.Setenv("TEST_BOOL_SET", "false")
-	defer os.Unsetenv("TEST_BOOL_SET")
+	t.Setenv("TEST_BOOL_SET", "false")
 
 	result := getBoolEnv("TEST_BOOL_SET", true)
 
@@ -154,8 +134,7 @@ func TestGetBoolEnv_ParsesBoolean(t *testing.T) {
 }
 
 func TestGetBoolEnv_ReturnsDefaultOnInvalidValue(t *testing.T) {
-	os.Setenv("TEST_BOOL_INVALID", "not-bool")
-	defer os.Unsetenv("TEST_BOOL_INVALID")
+	t.Setenv("TEST_BOOL_INVALID", "not-bool")
 
 	result := getBoolEnv("TEST_BOOL_INVALID", true)
 
