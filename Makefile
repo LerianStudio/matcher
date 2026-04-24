@@ -120,6 +120,8 @@ help:
 	@echo "  make clean                       - Remove build artifacts and temp files"
 	@echo "  make dev                         - Run with live reload (air)"
 	@echo "  make tidy                        - Clean go module dependencies"
+	@echo "  make dev-setup                   - Install all required dev tools (one-time onboarding)"
+	@echo "  make check-tools                 - Verify all required dev tools are installed"
 	@echo ""
 	@echo ""
 	@echo "Code Quality Commands:"
@@ -214,6 +216,61 @@ tidy:
 	@go mod tidy
 	@cd tools && go mod tidy
 	@echo "[ok] Go modules tidied successfully"
+
+#-------------------------------------------------------
+# Dev Tool Setup
+#-------------------------------------------------------
+
+.PHONY: dev-setup check-tools
+
+# dev-setup installs every CLI tool the Makefile expects to find on PATH.
+# golangci-lint is pinned to $(GOLANGCI_LINT_VERSION). Other tools use @latest
+# to match the pattern already used by `make sec`, `make vulncheck`, etc.
+dev-setup:
+	$(call print_title,Installing dev tools)
+	@echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION)..."
+	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	@echo "Installing gosec..."
+	@go install github.com/securego/gosec/v2/cmd/gosec@latest
+	@echo "Installing govulncheck..."
+	@go install golang.org/x/vuln/cmd/govulncheck@latest
+	@echo "Installing swag..."
+	@go install github.com/swaggo/swag/cmd/swag@latest
+	@echo "Installing golang-migrate..."
+	@go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+	@echo "Installing mockgen..."
+	@go install go.uber.org/mock/mockgen@latest
+	@echo "Installing goimports..."
+	@go install golang.org/x/tools/cmd/goimports@latest
+	@echo "Installing gci..."
+	@go install github.com/daixiang0/gci@latest
+	@echo "Installing air..."
+	@go install github.com/air-verse/air@latest
+	@echo "Installing gocovmerge..."
+	@go install github.com/wadey/gocovmerge@latest
+	@echo "[ok] dev-setup complete"
+	@echo ""
+	@echo "Run 'make check-tools' to verify every tool is on PATH."
+
+# check-tools verifies every tool dev-setup installs is reachable on PATH.
+# Fails fast with a single clear message naming the missing tool.
+check-tools:
+	$(call print_title,Checking dev tools)
+	@missing=0; \
+	for tool in golangci-lint gosec govulncheck swag migrate mockgen goimports gci air gocovmerge; do \
+		if command -v $$tool >/dev/null 2>&1; then \
+			echo "  [ok] $$tool"; \
+		else \
+			echo "  [missing] $$tool"; \
+			missing=1; \
+		fi; \
+	done; \
+	if [ "$$missing" -ne 0 ]; then \
+		echo ""; \
+		echo "One or more dev tools are missing. Run: make dev-setup"; \
+		exit 1; \
+	fi
+	@echo "[ok] all dev tools present"
 
 #-------------------------------------------------------
 # Code Quality Commands
