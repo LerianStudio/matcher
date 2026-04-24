@@ -1,0 +1,10 @@
+# Coverage threshold enforced by `make check-coverage`.
+# Matches PROJECT_RULES.md §14 baseline.
+# Consumed by github.com/vladopajic/go-test-coverage/v2.
+# Note: Makefile passes --profile coverage.total.out via CLI, so the `profile`
+# field below is a default fallback for invocations without --profile.
+profile: coverage.total.out
+threshold:
+  file: 0
+  package: 0
+  total: 70
