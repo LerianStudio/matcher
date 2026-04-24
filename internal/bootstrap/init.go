@@ -696,6 +696,16 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		})
 	}
 
+	// Redis pool metrics ride the same cadence as DB pool metrics — operators
+	// inspect both together, so splitting the interval would be a knob with no
+	// user. A connect failure at bootstrap is non-fatal: the collector is nil
+	// and service.Start skips it, preserving the connection-optional contract
+	// enforced for integration tests and standalone dev runs.
+	redisMetricsCollector, err := NewRedisMetricsCollector(redisConnection, cfg.DBMetricsInterval())
+	if err != nil {
+		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("Failed to create Redis metrics collector: %v", err))
+	}
+
 	server := NewServer(
 		cfg,
 		app,
@@ -749,18 +759,19 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	success = true
 
 	return &Service{
-		Server:             server,
-		Logger:             logger,
-		Config:             cfg,
-		Routes:             routes,
-		ConfigManager:      configManager,
-		outboxRunner:       modules.outboxDispatcher,
-		dbMetricsCollector: dbMetricsCollector,
-		workerManager:      wm,
-		connectionManager:  connCloser,
-		cleanupFuncs:       cleanups,
-		readinessState:     readiness,
-		spClient:           spClient,
+		Server:                server,
+		Logger:                logger,
+		Config:                cfg,
+		Routes:                routes,
+		ConfigManager:         configManager,
+		outboxRunner:          modules.outboxDispatcher,
+		dbMetricsCollector:    dbMetricsCollector,
+		redisMetricsCollector: redisMetricsCollector,
+		workerManager:         wm,
+		connectionManager:     connCloser,
+		cleanupFuncs:          cleanups,
+		readinessState:        readiness,
+		spClient:              spClient,
 	}, nil
 }
 
