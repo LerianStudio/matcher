@@ -30,9 +30,14 @@ import (
 	reportingMetrics "github.com/LerianStudio/matcher/internal/reporting/services/metrics"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query/exports"
 	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
+	workermetrics "github.com/LerianStudio/matcher/internal/shared/observability/workermetrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
+
+// exportWorkerName is the stable label value emitted on matcher.worker.*
+// metrics from this worker.
+const exportWorkerName = "export_worker"
 
 const (
 	defaultPollInterval      = 5 * time.Second
@@ -84,6 +89,7 @@ type ExportWorker struct {
 	cfg        ExportWorkerConfig
 	logger     libLog.Logger
 	tracer     trace.Tracer
+	metrics    *workermetrics.Recorder
 
 	running    atomic.Bool
 	stopOnce   sync.Once
@@ -153,6 +159,7 @@ func NewExportWorker(
 		cfg:        cfg,
 		logger:     logger,
 		tracer:     otel.Tracer("reporting.export_worker"),
+		metrics:    workermetrics.NewRecorder(exportWorkerName),
 		stopCh:     make(chan struct{}),
 		doneCh:     make(chan struct{}),
 	}, nil
@@ -270,11 +277,23 @@ func (worker *ExportWorker) pollAndProcess(ctx context.Context) {
 	ctx, span := worker.tracer.Start(ctx, "export_worker.poll")
 	defer span.End()
 
+	startedAt := time.Now()
+	outcome := workermetrics.OutcomeSkipped
+
+	var processed, failed int
+
+	defer func() {
+		worker.metrics.RecordCycle(ctx, startedAt, outcome)
+		worker.metrics.RecordItems(ctx, processed, failed)
+	}()
+
 	ctx = libCommons.ContextWithLogger(ctx, worker.logger)
 	ctx = libCommons.ContextWithTracer(ctx, worker.tracer)
 
 	job, jobCtx, err := worker.claimNextQueuedJob(ctx)
 	if err != nil {
+		outcome = workermetrics.OutcomeFailure
+
 		libOpentelemetry.HandleSpanError(span, "failed to claim job", err)
 
 		libLog.SafeError(worker.logger, ctx, "failed to claim queued job", err, runtime.IsProductionMode())
@@ -286,7 +305,13 @@ func (worker *ExportWorker) pollAndProcess(ctx context.Context) {
 		return
 	}
 
-	worker.processJob(jobCtx, job)
+	if worker.processJob(jobCtx, job) {
+		processed = 1
+		outcome = workermetrics.OutcomeSuccess
+	} else {
+		failed = 1
+		outcome = workermetrics.OutcomeFailure
+	}
 }
 
 func (worker *ExportWorker) claimNextQueuedJob(ctx context.Context) (*entities.ExportJob, context.Context, error) {
@@ -352,7 +377,14 @@ func withTenantContext(ctx context.Context, tenantID string) context.Context {
 	return context.WithValue(ctx, auth.TenantIDKey, tenantID)
 }
 
-func (worker *ExportWorker) processJob(ctx context.Context, job *entities.ExportJob) {
+// processJob runs one export job to completion. Returns true when the job
+// uploaded, was marked succeeded, and the status update persisted; false
+// when any stage failed (temp-file / stream / sync / stat / seek / keygen /
+// upload / MarkSucceeded / persist). A MarkSucceeded/persist failure after a
+// successful upload is counted as a failed cycle item even though the file
+// is already in object storage — the user-facing job record never flipped
+// to SUCCEEDED, so operators should see it in items_failed_total.
+func (worker *ExportWorker) processJob(ctx context.Context, job *entities.ExportJob) bool {
 	ctx = withTenantContext(ctx, job.TenantID.String())
 
 	ctx, span := worker.tracer.Start(ctx, "export_worker.process_job")
@@ -378,7 +410,7 @@ func (worker *ExportWorker) processJob(ctx context.Context, job *entities.Export
 	if err != nil {
 		worker.failJob(ctx, job, fmt.Errorf("creating temp file: %w", err))
 
-		return
+		return false
 	}
 
 	tempPath := tempFile.Name()
@@ -395,20 +427,20 @@ func (worker *ExportWorker) processJob(ctx context.Context, job *entities.Export
 	if err != nil {
 		worker.failJob(ctx, job, err)
 
-		return
+		return false
 	}
 
 	if err := tempFile.Sync(); err != nil {
 		worker.failJob(ctx, job, fmt.Errorf("syncing temp file: %w", err))
 
-		return
+		return false
 	}
 
 	fileInfo, err := tempFile.Stat()
 	if err != nil {
 		worker.failJob(ctx, job, fmt.Errorf("getting file info: %w", err))
 
-		return
+		return false
 	}
 
 	bytesWritten := fileInfo.Size()
@@ -417,14 +449,14 @@ func (worker *ExportWorker) processJob(ctx context.Context, job *entities.Export
 	if _, err := tempFile.Seek(0, 0); err != nil {
 		worker.failJob(ctx, job, fmt.Errorf("seeking temp file: %w", err))
 
-		return
+		return false
 	}
 
 	fileKey, err := worker.generateFileKey(job)
 	if err != nil {
 		worker.failJob(ctx, job, fmt.Errorf("build export storage key: %w", err))
 
-		return
+		return false
 	}
 
 	fileName := entities.GenerateFileName(
@@ -439,13 +471,13 @@ func (worker *ExportWorker) processJob(ctx context.Context, job *entities.Export
 	if _, err := worker.storage.Upload(ctx, fileKey, tempFile, contentType); err != nil {
 		worker.failJob(ctx, job, fmt.Errorf("uploading to storage: %w", err))
 
-		return
+		return false
 	}
 
 	if err := job.MarkSucceeded(fileKey, fileName, sha256Hash, recordCount, bytesWritten); err != nil {
 		libLog.SafeError(worker.logger, ctx, fmt.Sprintf("failed to mark job %s as succeeded", job.ID), err, runtime.IsProductionMode())
 
-		return
+		return false
 	}
 
 	if err := worker.jobRepo.Update(ctx, job); err != nil {
@@ -453,7 +485,7 @@ func (worker *ExportWorker) processJob(ctx context.Context, job *entities.Export
 
 		libLog.SafeError(worker.logger, ctx, fmt.Sprintf("failed to persist job %s succeeded status", job.ID), err, runtime.IsProductionMode())
 
-		return
+		return false
 	}
 
 	worker.logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf(
@@ -477,6 +509,8 @@ func (worker *ExportWorker) processJob(ctx context.Context, job *entities.Export
 		string(job.Format),
 		float64(time.Since(job.CreatedAt).Milliseconds()),
 	)
+
+	return true
 }
 
 func (worker *ExportWorker) streamExport(
