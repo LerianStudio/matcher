@@ -1,3 +1,51 @@
+## [2.0.0-beta.1](https://github.com/LerianStudio/matcher/compare/v1.4.0-beta.5...v2.0.0-beta.1) (2026-04-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* **observability:** for any dashboards alerting on truncation without
+    any offsetting benefit to this task.
+  - outboxmetrics/metrics.go's package doc documents the full
+    ownership map (dispatcher vs matcher vs truncation) so future
+    maintainers can see at a glance which namespace owns what.
+
+Cardinality discipline: event_type is a bounded 5-value compile-time
+enumeration (matching.match_confirmed, matching.match_unmatched,
+ingestion.completed, ingestion.failed, governance.audit_log_created).
+No dynamic identifiers leak into labels.
+
+### Features
+
+* **observability:** introduce shared workermetrics package ([9b7800f](https://github.com/LerianStudio/matcher/commit/9b7800fe12d64a29b048be286e06a0169f428137))
+* **rabbitmq:** REFACTOR-018 add publish tracing span ([ed06f48](https://github.com/LerianStudio/matcher/commit/ed06f4806d7ed24052d0f5ae137a893c9ee7a240))
+* **observability:** REFACTOR-020 introduce matcherRedactor for span attributes ([dcea7a4](https://github.com/LerianStudio/matcher/commit/dcea7a4e10f336f3c7726140e4ea563cf36548c1))
+* **observability:** REFACTOR-021 emit db replica pool metrics ([dc3fddd](https://github.com/LerianStudio/matcher/commit/dc3fdddcedaf879e40d79398a019cf4fa0b9f1d0))
+* **observability:** REFACTOR-022 emit redis pool metrics ([edbd55f](https://github.com/LerianStudio/matcher/commit/edbd55f5da4db79115adab75904a5672bdaa70ec))
+* **observability:** REFACTOR-023 emit matching business metrics ([a39c129](https://github.com/LerianStudio/matcher/commit/a39c1299c7bc2c5b2e727a59c37672fad8bb948b))
+* **observability:** REFACTOR-024 emit ingestion business metrics ([1ee89ff](https://github.com/LerianStudio/matcher/commit/1ee89ff5f666a2d9fccc98ada5978746bcbe0ed2))
+* **observability:** REFACTOR-025 emit reporting business metrics ([8bcc183](https://github.com/LerianStudio/matcher/commit/8bcc18328a9b77b62e7b7411d360ea2e5d0bb8f9))
+* **observability:** REFACTOR-026 emit discovery business metrics ([0954516](https://github.com/LerianStudio/matcher/commit/0954516a31ccda17e4ebc4140cc20c901d07bcda))
+* **observability:** REFACTOR-027 emit configuration business metrics ([e488c2e](https://github.com/LerianStudio/matcher/commit/e488c2e4f3fcc331d1f1619e7de1ddd9eee7a402))
+* **observability:** REFACTOR-028 emit outbox handler metrics ([18c89ac](https://github.com/LerianStudio/matcher/commit/18c89ac51963257b437d294e7e17ac070b40fb52))
+* **observability:** REFACTOR-029 instrument archival worker cycle metrics ([e2bd4ba](https://github.com/LerianStudio/matcher/commit/e2bd4ba11d53582964a7ee9f5a3a67d5d53283a4))
+* **observability:** REFACTOR-030 instrument export worker cycle metrics ([72823a0](https://github.com/LerianStudio/matcher/commit/72823a0178175e36332fb46ef26a77c734587488))
+* **observability:** REFACTOR-031 instrument cleanup worker cycle metrics ([7e3b43d](https://github.com/LerianStudio/matcher/commit/7e3b43dff1649af32f5fd1f6d045f71932a30a2b))
+* **observability:** REFACTOR-032 instrument scheduler worker cycle metrics ([e110a01](https://github.com/LerianStudio/matcher/commit/e110a01de96c907b59ac11c6914b6e2db0691d0a))
+* **observability:** REFACTOR-033 instrument bridge worker cycle metrics ([76ba770](https://github.com/LerianStudio/matcher/commit/76ba770d0af9a45973541cf9461a3739582b4557))
+* **observability:** REFACTOR-034 instrument custody retention worker cycle metrics ([79f673e](https://github.com/LerianStudio/matcher/commit/79f673ef7e4067b1896788b693a6f2ceaacb4e2e))
+* **observability:** REFACTOR-035 instrument discovery worker + extraction poller ([e5341ec](https://github.com/LerianStudio/matcher/commit/e5341ec45fba3ac0594b18f122f2cb2b6bc0ba14))
+* **tools:** REFACTOR-058 add determinism linter for test-time entity construction ([1357b28](https://github.com/LerianStudio/matcher/commit/1357b28409d5745648cc77c6ae87f3ef4c3a14f6))
+
+
+### Bug Fixes
+
+* add sharedhttp imports for swag type resolution ([72647df](https://github.com/LerianStudio/matcher/commit/72647df96223f0a27f1c0adbc094a96e986adab4))
+* apply CodeRabbit review feedback on PR [#118](https://github.com/LerianStudio/matcher/issues/118) ([f6a2424](https://github.com/LerianStudio/matcher/commit/f6a2424e0160aeec6a32ca9aa8f0e1f3649890f6))
+* apply second-round CodeRabbit feedback on PR [#118](https://github.com/LerianStudio/matcher/issues/118) ([dc901bc](https://github.com/LerianStudio/matcher/commit/dc901bcba72911e610c6728a1290c29e36dccbed))
+* **workers:** REFACTOR-015 correct defer order so RecoverAndLogWithContext runs last ([d2d49d0](https://github.com/LerianStudio/matcher/commit/d2d49d0652fed7d19a3dcb48947bd7fbf664b1d1))
+* **linter:** REFACTOR-015.1 enable unit+leak tags in lint-custom-strict ([6d46287](https://github.com/LerianStudio/matcher/commit/6d46287cd60c1292aca3034bc0a87761ba3b76be))
+* **linter:** REFACTOR-016 detect services via path, not name allow-list ([d799e45](https://github.com/LerianStudio/matcher/commit/d799e4571d16af0df5f11d2cafdb06132054e398))
+
 ## [1.4.0-beta.5](https://github.com/LerianStudio/matcher/compare/v1.4.0-beta.4...v1.4.0-beta.5) (2026-04-23)
 
 
