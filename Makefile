@@ -184,6 +184,8 @@ help:
 	@echo "  make migrate-down                - Roll back last migration"
 	@echo "  make migrate-to VERSION=<n>      - Migrate to a specific version"
 	@echo "  make migrate-create NAME=<name>  - Create new migration files"
+	@echo "  make migrate-version             - Show current migration version"
+	@echo "  make migrate-force VERSION=<n>   - Force version (rescue stuck state; DOES NOT run SQL)"
 	@echo ""
 	@echo ""
 
@@ -611,7 +613,7 @@ generate-docs:
 # Migration Commands
 #-------------------------------------------------------
 
-.PHONY: check-db-safety migrate-up migrate-down migrate-to migrate-create
+.PHONY: check-db-safety migrate-up migrate-down migrate-to migrate-create migrate-version migrate-force
 
 check-db-safety:
 	@set -eu; \
@@ -683,3 +685,28 @@ migrate-create:
 	@echo "  1. Edit the .up.sql file with your changes"
 	@echo "  2. Edit the .down.sql file with the rollback"
 	@echo "  3. Run 'make migrate-up' to apply"
+
+# migrate-version prints the current migration version (read-only; no
+# check-db-safety dependency so it works against any DATABASE_URL).
+migrate-version:
+	$(call print_title,Current migration version)
+	$(call check_command,migrate,"https://github.com/golang-migrate/migrate")
+	@migrate -path $(MIGRATE_PATH) -database "$(DATABASE_URL)" version
+
+# migrate-force hard-sets the migration version without running SQL. Use only
+# to rescue a stuck/dirty migration state — this does NOT apply or roll back
+# anything. Requires VERSION=<n>.
+migrate-force: check-db-safety
+	$(call print_title,Forcing migration version)
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION not specified."; \
+		echo "Usage: make migrate-force VERSION=<version_number>"; \
+		echo "WARNING: this only overwrites schema_migrations; no SQL runs."; \
+		exit 1; \
+	fi
+	$(call check_command,migrate,"https://github.com/golang-migrate/migrate")
+	@echo "WARNING: forcing version $(VERSION) — schema_migrations will be"
+	@echo "         overwritten without running any up/down SQL. Use only to"
+	@echo "         rescue a stuck state (dirty flag) after manual repair."
+	@migrate -path $(MIGRATE_PATH) -database "$(DATABASE_URL)" force $(VERSION)
+	@echo "[ok] Migration version forced to $(VERSION)"
