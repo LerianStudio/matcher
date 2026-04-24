@@ -72,7 +72,7 @@ func TestInitArchivalComponents_DisabledArchival_ReturnsNil(t *testing.T) {
 
 	var cleanups []func()
 
-	worker, err := initArchivalComponents(nil, cfg, nil, nil, nil, nil, &cleanups, false)
+	worker, err := initArchivalComponents(nil, cfg, nil, nil, nil, nil, &cleanups, false, nil)
 
 	assert.NoError(t, err)
 	assert.Nil(t, worker)
@@ -90,7 +90,7 @@ func TestInitArchivalComponents_DisabledArchivalWithRuntimeConfig_ReturnsNil(t *
 
 	var cleanups []func()
 
-	worker, err := initArchivalComponents(nil, cfg, func() *Config { return cfg }, nil, nil, nil, &cleanups, false)
+	worker, err := initArchivalComponents(nil, cfg, func() *Config { return cfg }, nil, nil, nil, &cleanups, false, nil)
 
 	assert.NoError(t, err)
 	assert.Nil(t, worker)

@@ -74,6 +74,10 @@ type WorkerManager struct {
 	parentCtx     context.Context
 	cancel        context.CancelFunc
 	running       bool
+	// infraConnector supplies runtime-time infrastructure primitives (e.g.,
+	// rebuilding the archival S3 client during config hot-reload). Defaults
+	// to DefaultInfraConnector(); tests inject fakes via SetInfraConnector.
+	infraConnector InfraConnector
 }
 
 // NewWorkerManager creates a WorkerManager. If configManager is non-nil,
@@ -84,9 +88,41 @@ func NewWorkerManager(logger libLog.Logger, configManager *ConfigManager) *Worke
 	}
 
 	return &WorkerManager{
-		logger:        logger,
-		configManager: configManager,
+		logger:         logger,
+		configManager:  configManager,
+		infraConnector: DefaultInfraConnector(),
 	}
+}
+
+// SetInfraConnector overrides the InfraConnector used by worker runtime-config
+// hot-reload paths (currently only archival storage rebuild). Intended for
+// bootstrap wiring and tests; no-op when passed nil.
+func (wm *WorkerManager) SetInfraConnector(connector InfraConnector) {
+	if wm == nil || connector == nil {
+		return
+	}
+
+	wm.mu.Lock()
+	defer wm.mu.Unlock()
+
+	wm.infraConnector = connector
+}
+
+// resolveInfraConnector returns wm.infraConnector, falling back to the default
+// if it is somehow nil (e.g., manually-constructed WorkerManager in older tests).
+func (wm *WorkerManager) resolveInfraConnector() InfraConnector {
+	if wm == nil {
+		return DefaultInfraConnector()
+	}
+
+	wm.mu.Lock()
+	defer wm.mu.Unlock()
+
+	if wm.infraConnector == nil {
+		wm.infraConnector = DefaultInfraConnector()
+	}
+
+	return wm.infraConnector
 }
 
 // Register adds a worker slot. Must be called before Start().
@@ -289,7 +325,7 @@ func (wm *WorkerManager) startSlotLocked(ctx context.Context, slot *workerSlot, 
 		return fmt.Errorf("worker %q: %w", slot.name, errWorkerDependencyUnavailable)
 	}
 
-	if err := applyWorkerRuntimeConfig(ctx, slot.name, worker, cfg); err != nil {
+	if err := applyWorkerRuntimeConfig(ctx, slot.name, worker, cfg, wm.resolveInfraConnector()); err != nil {
 		return fmt.Errorf("apply worker %q runtime config: %w", slot.name, err)
 	}
 

@@ -47,7 +47,6 @@ import (
 	tmpostgres "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/postgres"
 	tmrabbitmq "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/rabbitmq"
 	"github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/tenantcache"
-	libZap "github.com/LerianStudio/lib-commons/v5/commons/zap"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	configContextRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/context"
@@ -126,145 +125,7 @@ var (
 	// Lazily initialized on first cleanup call.
 	cleanupMetrics     *cleanupMetricsCollector
 	cleanupMetricsOnce sync.Once
-
-	runMigrationsFn = RunMigrations
-
-	eventPublisherFnMu sync.RWMutex
-
-	connectPostgresFn = func(ctx context.Context, postgres *libPostgres.Client) error {
-		return postgres.Connect(ctx)
-	}
-
-	ensureRabbitChannelFn = func(rabbitmq *libRabbitmq.RabbitMQConnection) error {
-		return rabbitmq.EnsureChannel()
-	}
-
-	openDedicatedChannelFn = openDedicatedChannel
-
-	newMatchingEventPublisherFromChannelFn = matchingRabbitmq.NewEventPublisherFromChannel
-
-	newIngestionEventPublisherFromChannelFn = ingestionRabbitmq.NewEventPublisherFromChannel
-
-	closeAMQPChannelFn = func(ch *amqp.Channel) error {
-		if ch == nil {
-			return nil
-		}
-
-		return ch.Close()
-	}
-
-	closeMatchingEventPublisherFn = func(publisher *matchingRabbitmq.EventPublisher) error {
-		if publisher == nil {
-			return nil
-		}
-
-		return publisher.Close()
-	}
-
-	closeIngestionEventPublisherFn = func(publisher *ingestionRabbitmq.EventPublisher) error {
-		if publisher == nil {
-			return nil
-		}
-
-		return publisher.Close()
-	}
-
-	initializeAuthBoundaryLoggerFn = func() (libLog.Logger, error) {
-		return libZap.New(libZap.Config{})
-	}
-
-	newS3ClientFn = reportingStorage.NewS3Client
 )
-
-func loadOpenDedicatedChannelFn() func(*libRabbitmq.RabbitMQConnection) (*amqp.Channel, error) {
-	eventPublisherFnMu.RLock()
-	defer eventPublisherFnMu.RUnlock()
-
-	if openDedicatedChannelFn == nil {
-		return openDedicatedChannel
-	}
-
-	return openDedicatedChannelFn
-}
-
-func loadNewMatchingEventPublisherFromChannelFn() func(
-	*amqp.Channel,
-	...sharedRabbitmq.ConfirmablePublisherOption,
-) (*matchingRabbitmq.EventPublisher, error) {
-	eventPublisherFnMu.RLock()
-	defer eventPublisherFnMu.RUnlock()
-
-	if newMatchingEventPublisherFromChannelFn == nil {
-		return matchingRabbitmq.NewEventPublisherFromChannel
-	}
-
-	return newMatchingEventPublisherFromChannelFn
-}
-
-func loadNewIngestionEventPublisherFromChannelFn() func(
-	*amqp.Channel,
-	...sharedRabbitmq.ConfirmablePublisherOption,
-) (*ingestionRabbitmq.EventPublisher, error) {
-	eventPublisherFnMu.RLock()
-	defer eventPublisherFnMu.RUnlock()
-
-	if newIngestionEventPublisherFromChannelFn == nil {
-		return ingestionRabbitmq.NewEventPublisherFromChannel
-	}
-
-	return newIngestionEventPublisherFromChannelFn
-}
-
-func loadCloseAMQPChannelFn() func(*amqp.Channel) error {
-	eventPublisherFnMu.RLock()
-	defer eventPublisherFnMu.RUnlock()
-
-	if closeAMQPChannelFn == nil {
-		return func(ch *amqp.Channel) error {
-			if ch == nil {
-				return nil
-			}
-
-			return ch.Close()
-		}
-	}
-
-	return closeAMQPChannelFn
-}
-
-func loadCloseMatchingEventPublisherFn() func(*matchingRabbitmq.EventPublisher) error {
-	eventPublisherFnMu.RLock()
-	defer eventPublisherFnMu.RUnlock()
-
-	if closeMatchingEventPublisherFn == nil {
-		return func(publisher *matchingRabbitmq.EventPublisher) error {
-			if publisher == nil {
-				return nil
-			}
-
-			return publisher.Close()
-		}
-	}
-
-	return closeMatchingEventPublisherFn
-}
-
-func loadCloseIngestionEventPublisherFn() func(*ingestionRabbitmq.EventPublisher) error {
-	eventPublisherFnMu.RLock()
-	defer eventPublisherFnMu.RUnlock()
-
-	if closeIngestionEventPublisherFn == nil {
-		return func(publisher *ingestionRabbitmq.EventPublisher) error {
-			if publisher == nil {
-				return nil
-			}
-
-			return publisher.Close()
-		}
-	}
-
-	return closeIngestionEventPublisherFn
-}
 
 // cleanupMetricsCollector tracks cleanup operation metrics.
 type cleanupMetricsCollector struct {
@@ -390,6 +251,11 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	ctx := context.Background()
 	timer := newStartupTimer()
 
+	// Normalize factories on Options so every downstream helper receives a
+	// non-nil InfraConnector / EventPublisherFactory. Tests may supply fakes;
+	// production calls hit the default implementations.
+	opts = opts.ensureDefaults()
+
 	done := timer.track("logger")
 
 	logger, err := initLogger(opts)
@@ -420,6 +286,8 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		wm       = NewWorkerManager(logger, configManager)
 		spClient *systemplane.Client
 	)
+
+	wm.SetInfraConnector(opts.InfraConnector)
 
 	// Configure runtime for production mode (redacts sensitive data in error reports)
 	if IsProductionEnvironment(cfg.App.EnvName) {
@@ -456,7 +324,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	asserter := assert.New(ctx, logger, constants.ApplicationName, "bootstrap")
 
-	telemetry := initTelemetryAndMetrics(ctx, cfg, logger)
+	telemetry := initTelemetryAndMetrics(ctx, cfg, logger, opts.InfraConnector)
 
 	done()
 
@@ -515,7 +383,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	done = timer.track("infra_connect")
 
-	if err := connectInfrastructure(infraCtx, asserter, cfg, postgresConnection, rabbitMQConnection, logger); err != nil {
+	if err := connectInfrastructure(infraCtx, asserter, cfg, postgresConnection, rabbitMQConnection, logger, opts.InfraConnector); err != nil {
 		return nil, err
 	}
 
@@ -582,7 +450,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	done = timer.track("auth_and_routes")
 
-	authClient := createAuthClient(ctx, cfg, logger)
+	authClient := createAuthClient(ctx, cfg, logger, opts.InfraConnector)
 
 	tenantExtractor, err := buildTenantExtractor(cfg)
 	if err != nil {
@@ -597,6 +465,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		redisConnection,
 		rabbitMQConnection,
 		&cleanups,
+		opts.InfraConnector,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create health dependencies: %w", err)
@@ -663,12 +532,14 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		rabbitMQConnection,
 		rateLimiterGetter,
 		logger,
+		opts.InfraConnector,
+		opts.EventPublishers,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	archivalWorker, archivalErr := initArchivalComponents(routes, cfg, configManager.Get, settingsResolver, infraProvider, logger, &cleanups, IsProductionEnvironment(cfg.App.EnvName))
+	archivalWorker, archivalErr := initArchivalComponents(routes, cfg, configManager.Get, settingsResolver, infraProvider, logger, &cleanups, IsProductionEnvironment(cfg.App.EnvName), opts.InfraConnector)
 	if archivalErr != nil {
 		if cfg.Archival.Enabled {
 			return nil, fmt.Errorf("init archival components: %w", archivalErr)
@@ -890,11 +761,16 @@ func buildWorkerManager(modules *modulesResult, existing *WorkerManager, configM
 
 // initTelemetryAndMetrics initializes OpenTelemetry with timeout protection and
 // registers assertion/panic metrics if telemetry is available.
-func initTelemetryAndMetrics(ctx context.Context, cfg *Config, logger libLog.Logger) *libOpentelemetry.Telemetry {
+func initTelemetryAndMetrics(
+	ctx context.Context,
+	cfg *Config,
+	logger libLog.Logger,
+	connector InfraConnector,
+) *libOpentelemetry.Telemetry {
 	telemetryCtx, telemetryCancel := context.WithTimeout(ctx, cfg.InfraConnectTimeout()) //nolint:contextcheck // InfraConnectTimeout is a pure config accessor
 	defer telemetryCancel()
 
-	telemetry := InitTelemetryWithTimeout(telemetryCtx, cfg, logger)
+	telemetry := InitTelemetryWithTimeout(telemetryCtx, cfg, logger, connector)
 
 	if telemetry != nil {
 		assert.InitAssertionMetrics(telemetry.MetricsFactory)
@@ -906,8 +782,13 @@ func initTelemetryAndMetrics(ctx context.Context, cfg *Config, logger libLog.Log
 
 // createAuthClient builds the authentication middleware client with a bridge logger
 // for the auth boundary.
-func createAuthClient(ctx context.Context, cfg *Config, logger libLog.Logger) *middleware.AuthClient {
-	authLogger, authLoggerErr := initializeAuthBoundaryLogger()
+func createAuthClient(
+	ctx context.Context,
+	cfg *Config,
+	logger libLog.Logger,
+	connector InfraConnector,
+) *middleware.AuthClient {
+	authLogger, authLoggerErr := initializeAuthBoundaryLogger(connector)
 	if authLoggerErr != nil {
 		logger.Log(
 			ctx,
@@ -1200,8 +1081,9 @@ func configureObjectStorageHealthChecks(
 	cfg *Config,
 	deps *HealthDependencies,
 	logger libLog.Logger,
+	connector InfraConnector,
 ) error {
-	objectStorage, err := createObjectStorageForHealth(ctx, cfg)
+	objectStorage, err := createObjectStorageForHealth(ctx, cfg, connector)
 	if err != nil {
 		if cfg.ExportWorker.Enabled {
 			return fmt.Errorf("object storage required when EXPORT_WORKER_ENABLED=true: %w", err)
@@ -1236,6 +1118,7 @@ func createHealthDependencies(
 	redis *libRedis.Client,
 	rabbitmq *libRabbitmq.RabbitMQConnection,
 	cleanups *[]func(),
+	connector InfraConnector,
 ) (*HealthDependencies, error) {
 	deps := NewHealthDependencies(postgres, nil, redis, rabbitmq, nil)
 
@@ -1248,7 +1131,7 @@ func createHealthDependencies(
 	assignReplicaHealthCheck(ctx, cfg, logger, deps, cleanups)
 	attachBundleHealthChecks(cfg, deps, postgres, redis, rabbitmq)
 
-	if err := configureObjectStorageHealthChecks(ctx, cfg, deps, logger); err != nil {
+	if err := configureObjectStorageHealthChecks(ctx, cfg, deps, logger, connector); err != nil {
 		return nil, err
 	}
 
@@ -1323,6 +1206,7 @@ func createPostgresReplicaHealthCheck(
 func createObjectStorageForHealth(
 	ctx context.Context,
 	cfg *Config,
+	connector InfraConnector,
 ) (ObjectStorageHealthChecker, error) {
 	if cfg.ObjectStorage.Endpoint == "" {
 		return nil, nil
@@ -1330,6 +1214,10 @@ func createObjectStorageForHealth(
 
 	if cfg.ObjectStorage.Bucket == "" {
 		return nil, nil
+	}
+
+	if connector == nil {
+		connector = DefaultInfraConnector()
 	}
 
 	s3Cfg := reportingStorage.S3Config{
@@ -1342,7 +1230,7 @@ func createObjectStorageForHealth(
 		AllowInsecure:   allowInsecureObjectStorageEndpoint(cfg),
 	}
 
-	client, err := newS3ClientFn(detachedContext(ctx), s3Cfg)
+	client, err := connector.NewS3Client(detachedContext(ctx), s3Cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create S3 client for health check: %w", err)
 	}
@@ -1644,8 +1532,12 @@ func createRabbitMQConnection(cfg *Config, logger libLog.Logger) *libRabbitmq.Ra
 	}
 }
 
-func initializeAuthBoundaryLogger() (libLog.Logger, error) {
-	authLogger, authLoggerErr := initializeAuthBoundaryLoggerFn()
+func initializeAuthBoundaryLogger(connector InfraConnector) (libLog.Logger, error) {
+	if connector == nil {
+		connector = DefaultInfraConnector()
+	}
+
+	authLogger, authLoggerErr := connector.InitializeAuthBoundaryLogger()
 	if authLoggerErr != nil {
 		return nil, fmt.Errorf("initialize auth boundary logger: %w", authLoggerErr)
 	}
@@ -1960,6 +1852,7 @@ func connectInfrastructure(
 	postgres *libPostgres.Client,
 	rabbitmq *libRabbitmq.RabbitMQConnection,
 	logger libLog.Logger,
+	connector InfraConnector,
 ) error {
 	if postgres == nil {
 		return errPostgresClientRequired
@@ -1967,6 +1860,10 @@ func connectInfrastructure(
 
 	if rabbitmq == nil {
 		return errRabbitMQClientRequired
+	}
+
+	if connector == nil {
+		connector = DefaultInfraConnector()
 	}
 
 	// Each infrastructure service gets its own timeout budget to prevent
@@ -1978,7 +1875,7 @@ func connectInfrastructure(
 	}
 
 	allowDirtyRecovery := shouldAllowDirtyMigrationRecovery(cfg.App.EnvName)
-	if err := runMigrationsFn(
+	if err := connector.RunMigrations(
 		ctx,
 		cfg.PrimaryDSN(),
 		cfg.Postgres.PrimaryDB,
@@ -1996,7 +1893,7 @@ func connectInfrastructure(
 		pgCtx, pgCancel := context.WithTimeout(groupCtx, perServiceTimeout)
 		defer pgCancel()
 
-		if err := asserter.NoError(pgCtx, connectPostgresFn(pgCtx, postgres), "failed to connect postgres"); err != nil {
+		if err := asserter.NoError(pgCtx, connector.ConnectPostgres(pgCtx, postgres), "failed to connect postgres"); err != nil {
 			return fmt.Errorf("connect postgres: %w", err)
 		}
 
@@ -2008,7 +1905,7 @@ func connectInfrastructure(
 		rabbitCtx, rabbitCancel := context.WithTimeout(groupCtx, perServiceTimeout)
 		defer rabbitCancel()
 
-		if err := asserter.NoError(rabbitCtx, ensureRabbitChannelFn(rabbitmq), "failed to connect rabbitmq"); err != nil {
+		if err := asserter.NoError(rabbitCtx, connector.EnsureRabbitChannel(rabbitmq), "failed to connect rabbitmq"); err != nil {
 			return fmt.Errorf("connect rabbitmq: %w", err)
 		}
 
@@ -2181,6 +2078,8 @@ func initModulesAndMessaging(
 	rabbitMQConnection *libRabbitmq.RabbitMQConnection,
 	rateLimiterGetter func() *ratelimit.RateLimiter,
 	logger libLog.Logger,
+	connector InfraConnector,
+	publishers EventPublisherFactory,
 ) (*modulesResult, error) {
 	// Build canonical outbox repository using the lib-commons outbox/postgres package.
 	// SchemaResolver provides both TenantResolver and TenantDiscoverer for schema-per-tenant.
@@ -2220,7 +2119,7 @@ func initModulesAndMessaging(
 	// This provides Layer 1 (vhost isolation) for event publishers.
 	rmqManager := buildAndAttachRabbitMQTenantManager(ctx, cfg, provider, logger)
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(ctx, rabbitMQConnection, logger, rmqManager)
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(ctx, rabbitMQConnection, logger, rmqManager, publishers)
 	if err != nil {
 		return nil, err
 	}
@@ -2235,7 +2134,7 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
-	storageBackend, err := createObjectStorage(ctx, cfg)
+	storageBackend, err := createObjectStorage(ctx, cfg, connector)
 	if err != nil {
 		if reportingStorageRequired(cfg) {
 			return nil, fmt.Errorf("create object storage: %w", err)
@@ -2251,7 +2150,7 @@ func initModulesAndMessaging(
 	// invocation time. The Client's resolver re-reads object_storage.* config
 	// on each call, so /system changes propagate without a restart; the swap
 	// itself uses atomic.Pointer so in-flight operations never race.
-	storage := newRuntimeReportingStorageClient(cfg, configGetter, storageBackend)
+	storage := newRuntimeReportingStorageClient(cfg, configGetter, storageBackend, connector)
 
 	//nolint:contextcheck // Reporting config accessors are not context-aware.
 	exportWorker, cleanupWorker, err := initReportingModule(
@@ -2464,31 +2363,32 @@ func openChannelForPublisher(
 func cleanupPublishersOnFailure(
 	ctx context.Context,
 	logger libLog.Logger,
+	publishers EventPublisherFactory,
 	matchingPublisher *matchingRabbitmq.EventPublisher,
 	ingestionPublisher *ingestionRabbitmq.EventPublisher,
 	matchingChannel, ingestionChannel *amqp.Channel,
 ) {
-	closeMatchingPublisherFn := loadCloseMatchingEventPublisherFn()
-	closeIngestionPublisherFn := loadCloseIngestionEventPublisherFn()
-	closeChannelFn := loadCloseAMQPChannelFn()
+	if publishers == nil {
+		publishers = DefaultEventPublisherFactory()
+	}
 
 	logCloseErr(ctx, logger, "failed to close matching publisher during cleanup", func() error {
-		return closeMatchingPublisherFn(matchingPublisher)
+		return publishers.CloseMatchingEventPublisher(matchingPublisher)
 	})
 
 	logCloseErr(ctx, logger, "failed to close ingestion publisher during cleanup", func() error {
-		return closeIngestionPublisherFn(ingestionPublisher)
+		return publishers.CloseIngestionEventPublisher(ingestionPublisher)
 	})
 
 	if matchingChannel != nil {
 		logCloseErr(ctx, logger, "failed to close matching channel", func() error {
-			return closeChannelFn(matchingChannel)
+			return publishers.CloseAMQPChannel(matchingChannel)
 		})
 	}
 
 	if ingestionChannel != nil {
 		logCloseErr(ctx, logger, "failed to close ingestion channel", func() error {
-			return closeChannelFn(ingestionChannel)
+			return publishers.CloseAMQPChannel(ingestionChannel)
 		})
 	}
 }
@@ -2510,7 +2410,12 @@ func initEventPublishers(
 	rabbitMQConnection *libRabbitmq.RabbitMQConnection,
 	logger libLog.Logger,
 	rmqManager *tmrabbitmq.Manager,
+	publishers EventPublisherFactory,
 ) (*matchingRabbitmq.EventPublisher, *ingestionRabbitmq.EventPublisher, error) {
+	if publishers == nil {
+		publishers = DefaultEventPublisherFactory()
+	}
+
 	// Multi-tenant mode: use per-tenant vhost channels via tmrabbitmq.Manager.
 	// No dedicated AMQP channels or confirmable publishers are needed because
 	// each publish call resolves a tenant-specific channel on demand.
@@ -2530,9 +2435,6 @@ func initEventPublishers(
 
 	// Single-tenant mode: existing behavior with dedicated AMQP channels.
 	success := false
-	openChannelFn := loadOpenDedicatedChannelFn()
-	newMatchingPublisherFn := loadNewMatchingEventPublisherFromChannelFn()
-	newIngestionPublisherFn := loadNewIngestionEventPublisherFromChannelFn()
 
 	var matchingPublisher *matchingRabbitmq.EventPublisher
 
@@ -2543,7 +2445,7 @@ func initEventPublishers(
 
 	defer func() {
 		if !success {
-			cleanupPublishersOnFailure(ctx, logger, matchingPublisher, ingestionPublisher, matchingChannel, ingestionChannel)
+			cleanupPublishersOnFailure(ctx, logger, publishers, matchingPublisher, ingestionPublisher, matchingChannel, ingestionChannel)
 		}
 	}()
 
@@ -2551,7 +2453,7 @@ func initEventPublishers(
 	channelGroup.SetLogger(logger)
 
 	channelGroup.Go(func() error {
-		ch, err := openChannelForPublisher(groupCtx, "matching", rabbitMQConnection, openChannelFn)
+		ch, err := openChannelForPublisher(groupCtx, "matching", rabbitMQConnection, publishers.OpenDedicatedChannel)
 		if err != nil {
 			return err
 		}
@@ -2562,7 +2464,7 @@ func initEventPublishers(
 	})
 
 	channelGroup.Go(func() error {
-		ch, err := openChannelForPublisher(groupCtx, "ingestion", rabbitMQConnection, openChannelFn)
+		ch, err := openChannelForPublisher(groupCtx, "ingestion", rabbitMQConnection, publishers.OpenDedicatedChannel)
 		if err != nil {
 			return err
 		}
@@ -2580,7 +2482,7 @@ func initEventPublishers(
 	// network partition), the publisher automatically reopens a new channel
 	// from the underlying connection with exponential backoff.
 	channelRecoveryProvider := sharedRabbitmq.WithAutoRecovery(func() (sharedRabbitmq.ConfirmableChannel, error) {
-		ch, err := openChannelFn(rabbitMQConnection)
+		ch, err := publishers.OpenDedicatedChannel(rabbitMQConnection)
 		if err != nil {
 			return nil, fmt.Errorf("open dedicated channel for publisher recovery: %w", err)
 		}
@@ -2588,12 +2490,12 @@ func initEventPublishers(
 		return ch, nil
 	})
 
-	matchingPublisher, err := newMatchingPublisherFn(matchingChannel, channelRecoveryProvider)
+	matchingPublisher, err := publishers.NewMatchingEventPublisher(matchingChannel, channelRecoveryProvider)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create matching event publisher: %w", err)
 	}
 
-	ingestionPublisher, err = newIngestionPublisherFn(ingestionChannel, channelRecoveryProvider)
+	ingestionPublisher, err = publishers.NewIngestionEventPublisher(ingestionChannel, channelRecoveryProvider)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create ingestion event publisher: %w", err)
 	}
@@ -2706,6 +2608,7 @@ func createIdempotencyRepository(
 func createObjectStorage(
 	ctx context.Context,
 	cfg *Config,
+	connector InfraConnector,
 ) (objectstorage.Backend, error) {
 	if !reportingStorageRequired(cfg) {
 		return nil, nil
@@ -2713,6 +2616,10 @@ func createObjectStorage(
 
 	if cfg.ObjectStorage.Bucket == "" {
 		return nil, ErrObjectStorageBucketRequired
+	}
+
+	if connector == nil {
+		connector = DefaultInfraConnector()
 	}
 
 	s3Cfg := reportingStorage.S3Config{
@@ -2725,7 +2632,7 @@ func createObjectStorage(
 		AllowInsecure:   allowInsecureObjectStorageEndpoint(cfg),
 	}
 
-	client, err := newS3ClientFn(detachedContext(ctx), s3Cfg)
+	client, err := connector.NewS3Client(detachedContext(ctx), s3Cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create S3 client: %w", err)
 	}
@@ -2760,7 +2667,12 @@ func newRuntimeReportingStorageClient(
 	initialCfg *Config,
 	configGetter func() *Config,
 	fallback objectstorage.Backend,
+	connector InfraConnector,
 ) *objectstorage.Client {
+	if connector == nil {
+		connector = DefaultInfraConnector()
+	}
+
 	resolver := func(ctx context.Context) (objectstorage.Backend, string, error) {
 		cfg := initialCfg
 
@@ -2770,7 +2682,7 @@ func newRuntimeReportingStorageClient(
 			}
 		}
 
-		backend, err := createObjectStorage(ctx, cfg)
+		backend, err := createObjectStorage(ctx, cfg, connector)
 		if err != nil {
 			return nil, "", err
 		}

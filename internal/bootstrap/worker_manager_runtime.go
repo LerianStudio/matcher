@@ -228,7 +228,7 @@ func (wm *WorkerManager) restartSlotLocked(ctx context.Context, slot *workerSlot
 	// Always apply runtime config to the candidate before starting, regardless of
 	// whether it is the same instance. If factories are refactored to return new
 	// instances in the future, this ensures they always receive the latest config.
-	if err := applyWorkerRuntimeConfig(ctx, slot.name, candidate, newCfg); err != nil {
+	if err := applyWorkerRuntimeConfig(ctx, slot.name, candidate, newCfg, wm.resolveInfraConnector()); err != nil {
 		return fmt.Errorf("apply worker %q runtime config before restart: %w", slot.name, err)
 	}
 
@@ -262,7 +262,7 @@ func (wm *WorkerManager) rollbackAfterRestartFailureLocked(
 		return errNoPreviousWorkerForRollback
 	}
 
-	rollbackCandidate, err := prepareRollbackCandidate(ctx, slot, previous, oldCfg, sameInstance)
+	rollbackCandidate, err := wm.prepareRollbackCandidate(ctx, slot, previous, oldCfg, sameInstance)
 	if err != nil {
 		return err
 	}
@@ -283,8 +283,9 @@ func (wm *WorkerManager) rollbackAfterRestartFailureLocked(
 
 // prepareRollbackCandidate determines the best worker instance to use for
 // rollback after a restart failure. It applies runtime config to the previous
-// instance if same-instance, or rebuilds via factory otherwise.
-func prepareRollbackCandidate(
+// instance if same-instance, or rebuilds via factory otherwise. The receiver
+// provides the InfraConnector needed by archival runtime-config reapply.
+func (wm *WorkerManager) prepareRollbackCandidate(
 	ctx context.Context,
 	slot *workerSlot,
 	previous WorkerLifecycle,
@@ -296,7 +297,7 @@ func prepareRollbackCandidate(
 	}
 
 	if sameInstance {
-		if err := applyWorkerRuntimeConfig(ctx, slot.name, previous, oldCfg); err != nil {
+		if err := applyWorkerRuntimeConfig(ctx, slot.name, previous, oldCfg, wm.resolveInfraConnector()); err != nil {
 			return nil, fmt.Errorf("reapply worker %q runtime config for rollback: %w", slot.name, err)
 		}
 
@@ -316,16 +317,20 @@ func prepareRollbackCandidate(
 		return previous, nil
 	}
 
-	if err := applyWorkerRuntimeConfig(ctx, slot.name, rebuilt, oldCfg); err != nil {
+	if err := applyWorkerRuntimeConfig(ctx, slot.name, rebuilt, oldCfg, wm.resolveInfraConnector()); err != nil {
 		return nil, fmt.Errorf("apply rebuilt worker %q runtime config for rollback: %w", slot.name, err)
 	}
 
 	return rebuilt, nil
 }
 
-func applyWorkerRuntimeConfig(ctx context.Context, name string, worker WorkerLifecycle, cfg *Config) error {
+func applyWorkerRuntimeConfig(ctx context.Context, name string, worker WorkerLifecycle, cfg *Config, connector InfraConnector) error {
 	if cfg == nil || worker == nil {
 		return nil
+	}
+
+	if connector == nil {
+		connector = DefaultInfraConnector()
 	}
 
 	switch name {
@@ -334,7 +339,7 @@ func applyWorkerRuntimeConfig(ctx context.Context, name string, worker WorkerLif
 	case workerNameCleanup:
 		return applyCleanupRuntimeConfig(worker, cfg)
 	case workerNameArchival:
-		return applyArchivalRuntimeConfig(ctx, worker, cfg)
+		return applyArchivalRuntimeConfig(ctx, worker, cfg, connector)
 	case workerNameScheduler:
 		return applySchedulerRuntimeConfig(worker, cfg)
 	case workerNameDiscovery:
@@ -385,7 +390,7 @@ func applyCleanupRuntimeConfig(worker WorkerLifecycle, cfg *Config) error {
 	return nil
 }
 
-func applyArchivalRuntimeConfig(ctx context.Context, worker WorkerLifecycle, cfg *Config) error {
+func applyArchivalRuntimeConfig(ctx context.Context, worker WorkerLifecycle, cfg *Config, connector InfraConnector) error {
 	archivalWorker, ok := worker.(interface {
 		UpdateRuntimeConfig(governanceWorker.ArchivalWorkerConfig) error
 	})
@@ -396,7 +401,7 @@ func applyArchivalRuntimeConfig(ctx context.Context, worker WorkerLifecycle, cfg
 	if storageAwareWorker, storageAware := worker.(interface {
 		UpdateRuntimeStorage(objectstorage.Backend) error
 	}); storageAware {
-		storage, err := createArchivalStorage(ctx, cfg)
+		storage, err := createArchivalStorage(ctx, cfg, connector)
 		if err != nil {
 			return fmt.Errorf("update archival runtime storage: %w", err)
 		}
