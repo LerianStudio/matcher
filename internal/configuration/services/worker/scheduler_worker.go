@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/go-redsync/redsync/v4"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -21,6 +22,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/ports"
 	configCommand "github.com/LerianStudio/matcher/internal/configuration/services/command"
+	configurationMetrics "github.com/LerianStudio/matcher/internal/configuration/services/metrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
@@ -315,12 +317,33 @@ func (worker *SchedulerWorker) processSchedule(
 
 		return nil
 	})
+
+	configurationMetrics.RecordSchedulerFiring(ctx, classifySchedulerLockOutcome(lockErr))
+
 	if lockErr != nil {
 		logger.With(
 			libLog.String("schedule.id", schedule.ID.String()),
 			libLog.Err(lockErr),
 		).Log(ctx, libLog.LevelWarn, "scheduler: lock error for schedule")
 	}
+}
+
+// classifySchedulerLockOutcome maps the return of WithLockOptions into the
+// closed outcome set consumed by matcher.configuration.scheduler_firings_total.
+// It uses redsync's typed sentinels rather than string matching so lock
+// contention (a normal, expected signal on multi-replica deployments) is
+// distinguishable from actual infrastructure faults.
+func classifySchedulerLockOutcome(err error) string {
+	if err == nil {
+		return configurationMetrics.OutcomeSchedulerFired
+	}
+
+	var errTaken *redsync.ErrTaken
+	if errors.Is(err, redsync.ErrFailed) || errors.As(err, &errTaken) {
+		return configurationMetrics.OutcomeSchedulerLockContention
+	}
+
+	return configurationMetrics.OutcomeSchedulerError
 }
 
 // tracking extracts observability primitives from context.

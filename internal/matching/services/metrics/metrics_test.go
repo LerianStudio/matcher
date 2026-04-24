@@ -22,6 +22,9 @@ func TestOutcomeConstants(t *testing.T) {
 	assert.Equal(t, "manual", matchingMetrics.OutcomeManual)
 	assert.Equal(t, "dry_run", matchingMetrics.OutcomeDryRun)
 	assert.Equal(t, "failed", matchingMetrics.OutcomeFailed)
+	assert.Equal(t, "matched", matchingMetrics.OutcomeRuleMatched)
+	assert.Equal(t, "unmatched", matchingMetrics.OutcomeRuleUnmatched)
+	assert.Equal(t, "error", matchingMetrics.OutcomeRuleError)
 }
 
 func TestAttributeKeyConstants(t *testing.T) {
@@ -29,6 +32,7 @@ func TestAttributeKeyConstants(t *testing.T) {
 
 	assert.Equal(t, "outcome", matchingMetrics.AttrOutcome)
 	assert.Equal(t, "context_id", matchingMetrics.AttrContextID)
+	assert.Equal(t, "rule_type", matchingMetrics.AttrRuleType)
 }
 
 // RecordRun and RecordConfidence emit to the global OTel meter; with no
@@ -55,5 +59,33 @@ func TestRecordConfidence_DoesNotPanic(t *testing.T) {
 		matchingMetrics.RecordConfidence(ctx, "ctx-1", 85)
 		matchingMetrics.RecordConfidence(ctx, "", 0)
 		matchingMetrics.RecordConfidence(ctx, "ctx-2", 100)
+	})
+}
+
+func TestRecordRuleEvaluation_DoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	assert.NotPanics(t, func() {
+		matchingMetrics.RecordRuleEvaluation(ctx, "EXACT", matchingMetrics.OutcomeRuleMatched)
+		matchingMetrics.RecordRuleEvaluation(ctx, "TOLERANCE", matchingMetrics.OutcomeRuleUnmatched)
+		matchingMetrics.RecordRuleEvaluation(ctx, "DATE_LAG", matchingMetrics.OutcomeRuleError)
+		// Empty type/outcome are still recorded — the instrument accepts
+		// arbitrary strings. We rely on call-sites to pick from the closed set.
+		matchingMetrics.RecordRuleEvaluation(ctx, "", "")
+	})
+}
+
+func TestRecordRuleEvaluationDuration_DoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	assert.NotPanics(t, func() {
+		matchingMetrics.RecordRuleEvaluationDuration(ctx, 12.5)
+		matchingMetrics.RecordRuleEvaluationDuration(ctx, 0)
+		// Negative durations are silently dropped.
+		matchingMetrics.RecordRuleEvaluationDuration(ctx, -1)
 	})
 }

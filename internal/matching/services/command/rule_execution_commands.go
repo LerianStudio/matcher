@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -10,6 +11,7 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	matching "github.com/LerianStudio/matcher/internal/matching/domain/services"
+	matchingMetrics "github.com/LerianStudio/matcher/internal/matching/services/metrics"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
@@ -107,7 +109,56 @@ func (uc *UseCase) ExecuteRulesDetailed(
 		missingBaseCurrencyTotal,
 	)
 
-	return executeRulesEngineDetailed(ctx, span, logger, in.ContextID, defs, left, right, in.ContextType)
+	engineStart := time.Now()
+
+	result, err := executeRulesEngineDetailed(ctx, span, logger, in.ContextID, defs, left, right, in.ContextType)
+
+	matchingMetrics.RecordRuleEvaluationDuration(ctx, float64(time.Since(engineStart).Milliseconds()))
+	emitRuleEvaluationMetrics(ctx, defs, result, err)
+
+	return result, err
+}
+
+// emitRuleEvaluationMetrics fans one rule_evaluations_total emission per
+// rule in defs, labelled by rule_type and outcome. On engine error every
+// rule is recorded as "error" (the engine does not surface which rule
+// failed), else each rule's outcome is derived from whether its RuleID
+// appears in result.Proposals: "matched" if any proposal carries the
+// rule ID, "unmatched" otherwise.
+func emitRuleEvaluationMetrics(
+	ctx context.Context,
+	defs []matching.RuleDefinition,
+	result *ExecuteRulesResult,
+	err error,
+) {
+	if len(defs) == 0 {
+		return
+	}
+
+	if err != nil {
+		for _, def := range defs {
+			matchingMetrics.RecordRuleEvaluation(ctx, string(def.Type), matchingMetrics.OutcomeRuleError)
+		}
+
+		return
+	}
+
+	matchedRules := make(map[uuid.UUID]struct{})
+
+	if result != nil {
+		for _, proposal := range result.Proposals {
+			matchedRules[proposal.RuleID] = struct{}{}
+		}
+	}
+
+	for _, def := range defs {
+		outcome := matchingMetrics.OutcomeRuleUnmatched
+		if _, ok := matchedRules[def.ID]; ok {
+			outcome = matchingMetrics.OutcomeRuleMatched
+		}
+
+		matchingMetrics.RecordRuleEvaluation(ctx, string(def.Type), outcome)
+	}
 }
 
 // ExecuteRulesResult contains the result of executing match rules including any allocation failures.
