@@ -437,9 +437,10 @@ func TestCustodyRetentionWorker_SweepsOrphansFromTerminalFailedExtractions(t *te
 
 	w := newTestCustodyRetentionWorker(repo, custody)
 
-	count := w.sweepTenant(context.Background(), tenantID)
+	deleted, failed := w.sweepTenant(context.Background(), tenantID)
 
-	assert.Equal(t, 1, count, "one terminally-failed extraction's custody must be deleted")
+	assert.Equal(t, 1, deleted, "one terminally-failed extraction's custody must be deleted")
+	assert.Zero(t, failed)
 
 	custody.mu.Lock()
 	calls := custody.deleteCalls
@@ -469,9 +470,10 @@ func TestCustodyRetentionWorker_SweepsLateLinkedExtractions(t *testing.T) {
 
 	w := newTestCustodyRetentionWorker(repo, custody)
 
-	count := w.sweepTenant(context.Background(), tenantID)
+	deleted, failed := w.sweepTenant(context.Background(), tenantID)
 
-	assert.Equal(t, 1, count)
+	assert.Equal(t, 1, deleted)
+	assert.Zero(t, failed)
 
 	custody.mu.Lock()
 	defer custody.mu.Unlock()
@@ -499,9 +501,10 @@ func TestCustodyRetentionWorker_PreservesOrphansStillInFlight(t *testing.T) {
 
 	w := newTestCustodyRetentionWorker(repo, custody)
 
-	count := w.sweepTenant(context.Background(), tenantID)
+	deleted, failed := w.sweepTenant(context.Background(), tenantID)
 
-	assert.Equal(t, 0, count, "live extraction's custody must NOT be deleted")
+	assert.Zero(t, deleted, "live extraction's custody must NOT be deleted")
+	assert.Zero(t, failed)
 
 	custody.mu.Lock()
 	defer custody.mu.Unlock()
@@ -532,9 +535,10 @@ func TestCustodyRetentionWorker_HandlesTransientS3Failure(t *testing.T) {
 
 	w := newTestCustodyRetentionWorker(repo, custody)
 
-	count := w.sweepTenant(context.Background(), tenantID)
+	deleted, failed := w.sweepTenant(context.Background(), tenantID)
 
-	assert.Equal(t, 0, count, "failed delete must not be counted as deleted")
+	assert.Zero(t, deleted, "failed delete must not be counted as deleted")
+	assert.Equal(t, 1, failed, "transient delete error must count as failed item")
 
 	custody.mu.Lock()
 	defer custody.mu.Unlock()
@@ -564,7 +568,7 @@ func TestCustodyRetentionWorker_RespectsGracePeriod(t *testing.T) {
 		BatchSize:   100,
 	})
 
-	w.sweepTenant(context.Background(), tenantID)
+	_, _ = w.sweepTenant(context.Background(), tenantID)
 
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
@@ -588,9 +592,10 @@ func TestCustodyRetentionWorker_HandlesRepoError(t *testing.T) {
 
 	w := newTestCustodyRetentionWorker(repo, custody)
 
-	count := w.sweepTenant(context.Background(), tenantID)
+	deleted, failed := w.sweepTenant(context.Background(), tenantID)
 
-	assert.Equal(t, 0, count)
+	assert.Zero(t, deleted)
+	assert.Zero(t, failed, "find error returns zero candidates, not zero-failed-items")
 
 	custody.mu.Lock()
 	defer custody.mu.Unlock()
@@ -613,9 +618,10 @@ func TestCustodyRetentionWorker_SkipsNilCandidates(t *testing.T) {
 
 	w := newTestCustodyRetentionWorker(repo, custody)
 
-	count := w.sweepTenant(context.Background(), tenantID)
+	deleted, failed := w.sweepTenant(context.Background(), tenantID)
 
-	assert.Equal(t, 1, count, "nil candidates must be skipped, real one deleted")
+	assert.Equal(t, 1, deleted, "nil candidates must be skipped, real one deleted")
+	assert.Zero(t, failed)
 
 	custody.mu.Lock()
 	defer custody.mu.Unlock()
@@ -642,10 +648,11 @@ func TestCustodyRetentionWorker_MarksCustodyDeletedAfterDelete(t *testing.T) {
 	w := newTestCustodyRetentionWorker(repo, custody)
 
 	before := time.Now().UTC()
-	count := w.sweepTenant(context.Background(), tenantID)
+	deleted, failed := w.sweepTenant(context.Background(), tenantID)
 	after := time.Now().UTC()
 
-	assert.Equal(t, 1, count, "terminal orphan must be deleted and counted")
+	assert.Equal(t, 1, deleted, "terminal orphan must be deleted and counted")
+	assert.Zero(t, failed)
 
 	// Convergence marker must have been persisted for this exact extraction.
 	repo.mu.Lock()
@@ -686,8 +693,9 @@ func TestCustodyRetentionWorker_ConvergesToIdle(t *testing.T) {
 	w := newTestCustodyRetentionWorker(repo, custody)
 
 	// First sweep: both orphans deleted AND marked.
-	firstCount := w.sweepTenant(context.Background(), tenantID)
+	firstCount, firstFailed := w.sweepTenant(context.Background(), tenantID)
 	assert.Equal(t, 2, firstCount, "first sweep must delete both orphan buckets")
+	assert.Zero(t, firstFailed)
 
 	custody.mu.Lock()
 	firstDeleteCount := len(custody.deleteCalls)
@@ -696,8 +704,9 @@ func TestCustodyRetentionWorker_ConvergesToIdle(t *testing.T) {
 
 	// Second sweep: rows are already marked, stub filters them out,
 	// worker does nothing. This is the convergence property.
-	secondCount := w.sweepTenant(context.Background(), tenantID)
-	assert.Equal(t, 0, secondCount, "second sweep MUST converge to zero deletions")
+	secondCount, secondFailed := w.sweepTenant(context.Background(), tenantID)
+	assert.Zero(t, secondCount, "second sweep MUST converge to zero deletions")
+	assert.Zero(t, secondFailed)
 
 	custody.mu.Lock()
 	secondDeleteCount := len(custody.deleteCalls)
@@ -727,13 +736,14 @@ func TestCustodyRetentionWorker_MarkerFailureIsNonFatal(t *testing.T) {
 
 	w := newTestCustodyRetentionWorker(repo, custody)
 
-	count := w.sweepTenant(context.Background(), tenantID)
+	deleted, failed := w.sweepTenant(context.Background(), tenantID)
 
 	// Delete succeeded even though marker write failed: count must reflect
 	// that (retention is best-effort; we prefer retrying the marker over
 	// rolling back a successful S3 delete).
-	assert.Equal(t, 1, count,
+	assert.Equal(t, 1, deleted,
 		"marker write failure must not un-count a successful Delete")
+	assert.Zero(t, failed)
 
 	// The marker write MUST have been attempted — "non-fatal" means the
 	// failure is swallowed, not that the attempt was skipped. Without this
@@ -767,9 +777,10 @@ func TestCustodyRetentionWorker_BuildKeyFailureLoggedAndSkipped(t *testing.T) {
 
 	w := newTestCustodyRetentionWorker(repo, custody)
 
-	count := w.sweepTenant(context.Background(), badTenant)
+	deleted, failed := w.sweepTenant(context.Background(), badTenant)
 
-	assert.Equal(t, 0, count, "build-key failure must not count as delete")
+	assert.Zero(t, deleted, "build-key failure must not count as delete")
+	assert.Equal(t, 1, failed, "build-key failure counts as failed item")
 
 	custody.mu.Lock()
 	defer custody.mu.Unlock()
