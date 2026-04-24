@@ -92,6 +92,19 @@ site is added or an existing struct is extended. Consider adding a custom
 linter to `tools/linters/observability` if the call-site count grows
 materially (>100) or if a sensitive field leaks into a span attribute.
 
+### /readyz 250ms response cache (K8s probe amplification dampening)
+
+Matcher's `/readyz` handler caches its rendered response for 250ms to dampen Kubernetes probe amplification — five probes per second across many pods would otherwise hammer Postgres/Redis/RabbitMQ connection pools with redundant health checks when nothing has changed.
+
+Invariants:
+
+- **Cache TTL = 250ms.** See `readyzCacheTTL` in `internal/bootstrap/health_check.go` line 331.
+- **Wall-clock cap = 900ms** (under kubelet's default 1s probe budget). See `readyzHandlerWallClockCap` in `internal/bootstrap/health_check.go` line 326.
+- **Drain short-circuit bypasses the cache.** When `drainingGetter()` returns `true` (SIGTERM received, in-flight requests draining), the handler skips the cache entirely and returns 503 immediately. See `internal/bootstrap/health_check.go` lines 270-279.
+- **Per-handler cache instance** — mounting a new handler (e.g. in tests) always starts with an empty cache.
+
+This deviates from Ring's default "always recompute health" guidance, but is justified under probe-amplification-in-K8s conditions. **Do not extend the cache beyond 250ms without load-testing justification**, and do not remove the drain short-circuit — a pod that is draining must report unhealthy on the very next probe, not up to 250ms later.
+
 ## 4. HTTP Handler Patterns
 
 - Framework: Fiber v2 (`gofiber/fiber/v2`).
