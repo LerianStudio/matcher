@@ -23,9 +23,14 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/ports"
 	configCommand "github.com/LerianStudio/matcher/internal/configuration/services/command"
 	configurationMetrics "github.com/LerianStudio/matcher/internal/configuration/services/metrics"
+	workermetrics "github.com/LerianStudio/matcher/internal/shared/observability/workermetrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
+
+// schedulerWorkerName is the stable label value emitted on matcher.worker.*
+// metrics from this worker.
+const schedulerWorkerName = "scheduler_worker"
 
 const (
 	// schedulerLockKeyPrefix is the Redis lock key prefix for schedule execution.
@@ -81,6 +86,7 @@ type SchedulerWorker struct {
 	cfg          SchedulerWorkerConfig
 	logger       libLog.Logger
 	tracer       trace.Tracer
+	metrics      *workermetrics.Recorder
 
 	running  atomic.Bool
 	stopOnce sync.Once
@@ -129,6 +135,7 @@ func NewSchedulerWorker(
 		cfg:          cfg,
 		logger:       logger,
 		tracer:       otel.Tracer("configuration.scheduler_worker"),
+		metrics:      workermetrics.NewRecorder(schedulerWorkerName),
 		stopCh:       make(chan struct{}),
 		doneCh:       make(chan struct{}),
 	}, nil
@@ -245,10 +252,22 @@ func (worker *SchedulerWorker) pollCycle(ctx context.Context) {
 	ctx, span := tracer.Start(ctx, "configuration.scheduler.poll_cycle")
 	defer span.End()
 
+	startedAt := time.Now()
+	outcome := workermetrics.OutcomeSuccess
+
+	var processed, failed int
+
+	defer func() {
+		worker.metrics.RecordCycle(ctx, startedAt, outcome)
+		worker.metrics.RecordItems(ctx, processed, failed)
+	}()
+
 	now := time.Now().UTC()
 
 	schedules, err := worker.scheduleRepo.FindDueSchedules(ctx, now)
 	if err != nil {
+		outcome = workermetrics.OutcomeFailure
+
 		libOpentelemetry.HandleSpanError(span, "failed to find due schedules", err)
 
 		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "scheduler: failed to find due schedules")
@@ -256,23 +275,37 @@ func (worker *SchedulerWorker) pollCycle(ctx context.Context) {
 		return
 	}
 
+	// A cycle that finds nothing due is a valid "success": the worker is
+	// alive and scanned, nothing needed firing. Still count zero items.
 	span.SetAttributes(attribute.Int("scheduler.due_count", len(schedules)))
+	worker.metrics.RecordBacklog(ctx, int64(len(schedules)))
 
 	for _, schedule := range schedules {
 		if schedule == nil {
 			continue
 		}
 
-		worker.processSchedule(ctx, schedule, now)
+		if worker.processSchedule(ctx, schedule, now) {
+			processed++
+		} else {
+			failed++
+		}
 	}
 }
 
 // processSchedule acquires a lock and triggers a match run for a single schedule.
+// Returns true when the schedule actually fired (lock acquired + match
+// triggered, with the schedule.Update best-effort persisted); returns false
+// when the lock was contended OR the lock manager surfaced an error. Lock
+// contention is normal on multi-replica deployments — it maps to "the other
+// replica fired this schedule" — but from THIS worker's perspective no item
+// was processed, so it goes into items_failed_total alongside genuine errors.
+// The per-outcome breakdown remains visible on matcher.configuration.scheduler_firings_total.
 func (worker *SchedulerWorker) processSchedule(
 	ctx context.Context,
 	schedule *entities.ReconciliationSchedule,
 	now time.Time,
-) {
+) bool {
 	logger, tracer := worker.tracking(ctx)
 
 	ctx, span := tracer.Start(ctx, "configuration.scheduler.process_schedule")
@@ -325,7 +358,11 @@ func (worker *SchedulerWorker) processSchedule(
 			libLog.String("schedule.id", schedule.ID.String()),
 			libLog.Err(lockErr),
 		).Log(ctx, libLog.LevelWarn, "scheduler: lock error for schedule")
+
+		return false
 	}
+
+	return true
 }
 
 // classifySchedulerLockOutcome maps the return of WithLockOptions into the
