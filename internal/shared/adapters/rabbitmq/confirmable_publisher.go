@@ -9,9 +9,12 @@ import (
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel/attribute"
 
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	"github.com/LerianStudio/lib-commons/v5/commons/backoff"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 	libRabbitmq "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
 	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
@@ -722,11 +725,31 @@ func (pub *ConfirmablePublisher) Publish(
 	confirmTimeout := pub.confirmTimeout
 	pub.mu.RUnlock()
 
+	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled // only tracer needed here; publisher uses caller's logger
+	ctx, span := tracer.Start(ctx, "rabbitmq.publish")
+
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("exchange", exchange),
+		attribute.String("routing_key", routingKey),
+		attribute.Int64("confirm_timeout_ms", confirmTimeout.Milliseconds()),
+	)
+
 	if err := publishChannel.PublishWithContext(ctx, exchange, routingKey, mandatory, immediate, msg); err != nil {
-		return fmt.Errorf("publish: %w", err)
+		wrappedErr := fmt.Errorf("publish: %w", err)
+		libOpentelemetry.HandleSpanError(span, "failed to publish", wrappedErr)
+
+		return wrappedErr
 	}
 
-	return waitForConfirm(ctx, confirms, closedCh, confirmTimeout)
+	if err := waitForConfirm(ctx, confirms, closedCh, confirmTimeout); err != nil {
+		libOpentelemetry.HandleSpanError(span, "failed to confirm publish", err)
+
+		return err
+	}
+
+	return nil
 }
 
 // waitForConfirm waits for broker confirmation of the last published message.
