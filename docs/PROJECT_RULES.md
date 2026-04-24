@@ -266,6 +266,16 @@ Most integration tests live under `tests/integration/**` and use the shared harn
 
 **Policy:** New integration tests should default to `tests/integration/`. Co-location is only justified when tests require access to unexported helpers or use purpose-built fixtures that do not compose with the shared harness.
 
+### Integration Test Fixtures
+
+Integration test fixtures (`createTest*` / `newTest*` / `seedTest*` / `wireServices` helpers) live per-context in `tests/integration/{context}/helpers_test.go` rather than a centralized `tests/utils/fixtures.go`. Rationale:
+
+1. Matcher's bounded contexts enforce import isolation via depguard rules. Centralizing fixtures would force `tests/utils/` to import from every context, re-coupling what production code deliberately keeps separate.
+2. Per-context fixtures encode domain knowledge — `runMatchAndGetGroup` (matching) knows the match-group aggregate structure, `createExceptionForTransaction` (exception) knows the exception lifecycle, `seedTestConfig` (exception) and `seedE4T9Config` (matching) seed different aggregates even when their signatures look similar.
+3. Deduplication pressure is low. A survey across the four `helpers_test.go` files (matching, exception, flow, reporting) found only a handful of genuinely identical helpers (`mustRedisConn`, `buildCSV`, `countInt`, `noopIngestionPublisher`). The rest are semantically distinct.
+
+**When to promote a helper to shared scope:** Only if the fixture is genuinely context-agnostic — e.g. tenant-header generation, JWT builders, time/UUID fakes. Cross-context helpers of that kind already live in `tests/integration/shared_harness.go` (tenant + harness setup) and `internal/testutil/` (`Ptr[T]`, deterministic time). A new shared helper must add value to at least three contexts and avoid importing any bounded-context domain types.
+
 ## 15. File Naming Conventions
 
 ### Postgres Adapter Files
