@@ -6,6 +6,7 @@ package bootstrap
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"reflect"
@@ -14,10 +15,18 @@ import (
 
 	"github.com/bxcodec/dbresolver/v2"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
 	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
+)
+
+// Pool role labels emitted on every db.pool.* metric so dashboards can split
+// primary-vs-replica saturation without sampling separate metric names.
+const (
+	dbPoolRolePrimary = "primary"
+	dbPoolRoleReplica = "replica"
 )
 
 // ErrNilResolverWithoutError is returned when Resolver returns nil without an error.
@@ -32,6 +41,10 @@ const DefaultMetricsCollectionInterval = 15 * time.Second
 // DBMetricsCollector collects and reports database connection pool metrics
 // to OpenTelemetry. It tracks open, idle, and in-use connections, as well as
 // wait counts, wait durations, and connection closures due to pool limits.
+//
+// Each metric is emitted with a role attribute (primary / replica) so a
+// single connection-pool-saturation dashboard can split by role without
+// needing separate metric names.
 type DBMetricsCollector struct {
 	db        dbresolver.DB
 	currentDB func(context.Context) (dbresolver.DB, error)
@@ -49,13 +62,33 @@ type DBMetricsCollector struct {
 	maxIdleClosed metric.Int64Counter
 	maxLifeClosed metric.Int64Counter
 
-	// Previous values for delta calculation (cumulative counters)
-	lastWaitCount     int64
-	lastWaitDuration  float64
-	lastMaxIdleClosed int64
-	lastMaxLifeClosed int64
-	lastStatsMu       sync.Mutex
-	lastResolverID    uintptr
+	// lastStatsByRole holds per-role cumulative counter state so delta
+	// calculation doesn't mix primary and replica counters into a single
+	// accumulator. Keyed by dbPoolRole* constants.
+	lastStatsByRole map[string]*cumulativeStats
+	lastStatsMu     sync.Mutex
+	lastResolverID  uintptr
+}
+
+// cumulativeStats tracks the last observed value of each cumulative counter
+// so collect() can emit deltas rather than totals.
+type cumulativeStats struct {
+	waitCount     int64
+	waitDuration  float64
+	maxIdleClosed int64
+	maxLifeClosed int64
+}
+
+// newRoleStatsMap returns a ready-to-use per-role stats map pre-populated
+// with zero entries for both primary and replica so callers can Lookup
+// without nil-checking. Exposed within the package so tests that construct
+// DBMetricsCollector by struct literal can initialize it the same way
+// the production constructor does.
+func newRoleStatsMap() map[string]*cumulativeStats {
+	return map[string]*cumulativeStats{
+		dbPoolRolePrimary: {},
+		dbPoolRoleReplica: {},
+	}
 }
 
 // NewDBMetricsCollector creates a new collector for the given PostgreSQL connection.
@@ -86,10 +119,11 @@ func NewDBMetricsCollector(
 	meter := otel.Meter("matcher.db.pool")
 
 	collector := &DBMetricsCollector{
-		db:       db,
-		meter:    meter,
-		interval: interval,
-		stopCh:   make(chan struct{}),
+		db:              db,
+		meter:           meter,
+		interval:        interval,
+		stopCh:          make(chan struct{}),
+		lastStatsByRole: newRoleStatsMap(),
 	}
 
 	if err := collector.initMetrics(); err != nil {
@@ -212,6 +246,10 @@ func (collector *DBMetricsCollector) Stop() {
 // collect gathers current stats and records them.
 // For cumulative counters (WaitCount, WaitDuration, MaxIdleClosed, MaxLifetimeClosed),
 // we calculate deltas to avoid double-counting since sql.DBStats returns totals.
+//
+// Primary and replica pools are emitted independently, each tagged with a
+// role attribute so saturation dashboards can surface which side of the
+// replication topology is running hot.
 func (collector *DBMetricsCollector) collect(ctx context.Context) {
 	if collector.currentDB != nil {
 		db, err := collector.currentDB(ctx)
@@ -220,10 +258,12 @@ func (collector *DBMetricsCollector) collect(ctx context.Context) {
 
 			currentID := resolverIdentity(db)
 			if collector.lastResolverID != 0 && collector.lastResolverID != currentID {
-				collector.lastWaitCount = 0
-				collector.lastWaitDuration = 0
-				collector.lastMaxIdleClosed = 0
-				collector.lastMaxLifeClosed = 0
+				// Resolver swapped (reconnect, failover). Reset both
+				// role accumulators so the next cycle emits full values
+				// rather than a negative delta against the old pool.
+				for _, stats := range collector.lastStatsByRole {
+					*stats = cumulativeStats{}
+				}
 			}
 
 			collector.lastResolverID = currentID
@@ -236,46 +276,90 @@ func (collector *DBMetricsCollector) collect(ctx context.Context) {
 		return
 	}
 
-	stats := collector.db.Stats()
+	// Primary: the dbresolver Stats() contract returns primary[0].Stats() —
+	// faithfully reporting the primary's pool keeps prior dashboards whole
+	// and lets mock-based tests (which only implement Stats) remain valid.
+	collector.recordRoleStats(ctx, dbPoolRolePrimary, collector.db.Stats())
 
-	// Gauges: record current values directly
-	collector.openConns.Record(ctx, int64(stats.OpenConnections))
-	collector.idleConns.Record(ctx, int64(stats.Idle))
-	collector.inUseConns.Record(ctx, int64(stats.InUse))
+	// Replica: walk the individual replica *sql.DB handles and sum them
+	// so a topology with multiple read replicas surfaces aggregate pool
+	// pressure under a single role="replica" series.
+	collector.recordRoleStats(ctx, dbPoolRoleReplica, aggregateStats(collector.db.ReplicaDBs()))
+}
 
-	// Counters: calculate deltas from cumulative values
+// aggregateStats folds sql.DBStats from every non-nil *sql.DB in dbs into a
+// single cumulative snapshot. Returns a zero value when dbs is empty so
+// recordRoleStats can emit nothing for a role that has no backing DBs.
+func aggregateStats(dbs []*sql.DB) sql.DBStats {
+	var aggregated sql.DBStats
+
+	for _, db := range dbs {
+		if db == nil {
+			continue
+		}
+
+		stats := db.Stats()
+		aggregated.OpenConnections += stats.OpenConnections
+		aggregated.Idle += stats.Idle
+		aggregated.InUse += stats.InUse
+		aggregated.WaitCount += stats.WaitCount
+		aggregated.WaitDuration += stats.WaitDuration
+		aggregated.MaxIdleClosed += stats.MaxIdleClosed
+		aggregated.MaxLifetimeClosed += stats.MaxLifetimeClosed
+	}
+
+	return aggregated
+}
+
+// recordRoleStats emits one round of metrics for the given role. Gauges are
+// recorded directly; cumulative counters emit deltas against the per-role
+// accumulator so primary and replica counter histories do not mix.
+//
+// A zero-valued stats snapshot is still recorded so dashboards can
+// distinguish "no replicas configured, zero activity" from "replica failed
+// to report" (the latter would stop emitting entirely).
+func (collector *DBMetricsCollector) recordRoleStats(ctx context.Context, role string, aggregated sql.DBStats) {
+	roleAttr := metric.WithAttributes(attribute.String("role", role))
+
+	// Gauges: record current values directly.
+	collector.openConns.Record(ctx, int64(aggregated.OpenConnections), roleAttr)
+	collector.idleConns.Record(ctx, int64(aggregated.Idle), roleAttr)
+	collector.inUseConns.Record(ctx, int64(aggregated.InUse), roleAttr)
+
+	// Counters: calculate deltas from per-role cumulative values.
 	collector.lastStatsMu.Lock()
 	defer collector.lastStatsMu.Unlock()
 
-	waitCountDelta := stats.WaitCount - collector.lastWaitCount
-	if waitCountDelta > 0 {
-		collector.waitCount.Add(ctx, waitCountDelta)
+	last, ok := collector.lastStatsByRole[role]
+	if !ok {
+		last = &cumulativeStats{}
+		collector.lastStatsByRole[role] = last
 	}
 
-	collector.lastWaitCount = stats.WaitCount
-
-	waitDurationSecs := stats.WaitDuration.Seconds()
-	waitDurationDelta := waitDurationSecs - collector.lastWaitDuration
-
-	if waitDurationDelta > 0 {
-		collector.waitDuration.Add(ctx, waitDurationDelta)
+	if waitCountDelta := aggregated.WaitCount - last.waitCount; waitCountDelta > 0 {
+		collector.waitCount.Add(ctx, waitCountDelta, roleAttr)
 	}
 
-	collector.lastWaitDuration = waitDurationSecs
+	last.waitCount = aggregated.WaitCount
 
-	maxIdleClosedDelta := stats.MaxIdleClosed - collector.lastMaxIdleClosed
-	if maxIdleClosedDelta > 0 {
-		collector.maxIdleClosed.Add(ctx, maxIdleClosedDelta)
+	waitDurationSecs := aggregated.WaitDuration.Seconds()
+	if waitDurationDelta := waitDurationSecs - last.waitDuration; waitDurationDelta > 0 {
+		collector.waitDuration.Add(ctx, waitDurationDelta, roleAttr)
 	}
 
-	collector.lastMaxIdleClosed = stats.MaxIdleClosed
+	last.waitDuration = waitDurationSecs
 
-	maxLifeClosedDelta := stats.MaxLifetimeClosed - collector.lastMaxLifeClosed
-	if maxLifeClosedDelta > 0 {
-		collector.maxLifeClosed.Add(ctx, maxLifeClosedDelta)
+	if maxIdleClosedDelta := aggregated.MaxIdleClosed - last.maxIdleClosed; maxIdleClosedDelta > 0 {
+		collector.maxIdleClosed.Add(ctx, maxIdleClosedDelta, roleAttr)
 	}
 
-	collector.lastMaxLifeClosed = stats.MaxLifetimeClosed
+	last.maxIdleClosed = aggregated.MaxIdleClosed
+
+	if maxLifeClosedDelta := aggregated.MaxLifetimeClosed - last.maxLifeClosed; maxLifeClosedDelta > 0 {
+		collector.maxLifeClosed.Add(ctx, maxLifeClosedDelta, roleAttr)
+	}
+
+	last.maxLifeClosed = aggregated.MaxLifetimeClosed
 }
 
 func resolverIdentity(db dbresolver.DB) uintptr {
