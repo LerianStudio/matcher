@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
@@ -17,6 +18,7 @@ import (
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
+	matchingMetrics "github.com/LerianStudio/matcher/internal/matching/services/metrics"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	sharedObservability "github.com/LerianStudio/matcher/internal/shared/observability"
@@ -28,7 +30,7 @@ import (
 func (uc *UseCase) RunMatch(
 	ctx context.Context,
 	in RunMatchInput,
-) (*matchingEntities.MatchRun, []*matchingEntities.MatchGroup, error) {
+) (run *matchingEntities.MatchRun, groups []*matchingEntities.MatchGroup, err error) {
 	if err := uc.validateRunMatchDependencies(); err != nil {
 		return nil, nil, err
 	}
@@ -37,6 +39,16 @@ func (uc *UseCase) RunMatch(
 
 	ctx, span := tracer.Start(ctx, "command.matching.run_match")
 	defer span.End()
+
+	// Business metrics: emit runs_total + run_duration_ms exactly once per
+	// call, regardless of which return path fires. Outcome is derived from
+	// the final (err, mode, groups) tuple so dashboards can distinguish
+	// dry_run from commit-success from failure without inspecting spans.
+	startedAt := time.Now()
+
+	defer func() {
+		emitRunMatchMetrics(ctx, in, groups, err, startedAt)
+	}()
 
 	_ = libOpentelemetry.SetSpanAttributesFromValue(
 		span,
@@ -53,8 +65,6 @@ func (uc *UseCase) RunMatch(
 
 	ctx, cancelRun := context.WithCancel(ctx)
 	defer cancelRun()
-
-	var err error
 
 	ctx, err = uc.validateAndEnrichTenant(ctx, &in)
 	if err != nil {
@@ -122,7 +132,7 @@ func (uc *UseCase) RunMatch(
 		return nil, nil, err
 	}
 
-	run, err := matchingEntities.NewMatchRun(ctx, in.ContextID, in.Mode)
+	run, err = matchingEntities.NewMatchRun(ctx, in.ContextID, in.Mode)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create match run entity: %w", err)
 	}
@@ -462,4 +472,55 @@ func (uc *UseCase) loadAndClassifyCandidates(
 	}
 
 	return leftCandidates, rightCandidates, unmatchedIDs, externalTxByID, nil
+}
+
+// emitRunMatchMetrics records the runs_total counter, run_duration_ms
+// histogram, and confidence histogram for a completed RunMatch call.
+// Extracted from the deferred block inside RunMatch so the top-level
+// function keeps its cognitive complexity within budget.
+func emitRunMatchMetrics(
+	ctx context.Context,
+	in RunMatchInput,
+	groups []*matchingEntities.MatchGroup,
+	err error,
+	startedAt time.Time,
+) {
+	outcome := runMatchOutcome(in.Mode, err)
+
+	matchingMetrics.RecordRun(
+		ctx,
+		outcome,
+		in.ContextID.String(),
+		float64(time.Since(startedAt).Milliseconds()),
+	)
+
+	if err != nil {
+		return
+	}
+
+	// Confidence histogram: emit one sample per produced group so
+	// low-confidence matches surface even when the run succeeds.
+	for _, group := range groups {
+		if group == nil {
+			continue
+		}
+
+		matchingMetrics.RecordConfidence(
+			ctx,
+			in.ContextID.String(),
+			float64(group.Confidence.Value()),
+		)
+	}
+}
+
+func runMatchOutcome(mode matchingVO.MatchRunMode, err error) string {
+	if err != nil {
+		return matchingMetrics.OutcomeFailed
+	}
+
+	if mode == matchingVO.MatchRunModeDryRun {
+		return matchingMetrics.OutcomeDryRun
+	}
+
+	return matchingMetrics.OutcomeConfirmed
 }

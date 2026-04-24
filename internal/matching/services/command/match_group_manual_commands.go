@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -14,6 +15,7 @@ import (
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	"github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
+	matchingMetrics "github.com/LerianStudio/matcher/internal/matching/services/metrics"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedObservability "github.com/LerianStudio/matcher/internal/shared/observability"
 )
@@ -53,7 +55,7 @@ var (
 func (uc *UseCase) ManualMatch(
 	ctx context.Context,
 	in ManualMatchInput,
-) (*matchingEntities.MatchGroup, error) {
+) (group *matchingEntities.MatchGroup, err error) {
 	if err := uc.validateManualMatchInput(in); err != nil {
 		return nil, err
 	}
@@ -66,6 +68,34 @@ func (uc *UseCase) ManualMatch(
 
 	ctx, span := tracer.Start(ctx, "command.matching.manual_match")
 	defer span.End()
+
+	// Business metrics: emit manual-match outcome once per call, regardless
+	// of which return path fires. Confidence is fixed at 100 for manual
+	// matches (manualMatchConfidence) but we still emit the histogram so
+	// the same dashboards can slice by context_id without a special case.
+	startedAt := time.Now()
+
+	defer func() {
+		outcome := matchingMetrics.OutcomeManual
+		if err != nil {
+			outcome = matchingMetrics.OutcomeFailed
+		}
+
+		matchingMetrics.RecordRun(
+			ctx,
+			outcome,
+			in.ContextID.String(),
+			float64(time.Since(startedAt).Milliseconds()),
+		)
+
+		if err == nil && group != nil {
+			matchingMetrics.RecordConfidence(
+				ctx,
+				in.ContextID.String(),
+				float64(group.Confidence.Value()),
+			)
+		}
+	}()
 
 	_ = libOpentelemetry.SetSpanAttributesFromValue(span, "matcher", in, sharedObservability.NewMatcherRedactor())
 
@@ -165,7 +195,7 @@ func (uc *UseCase) ManualMatch(
 			return fmt.Errorf("parse confidence score: %w", confErr)
 		}
 
-		group, groupErr := matchingEntities.NewMatchGroup(
+		newGroup, groupErr := matchingEntities.NewMatchGroup(
 			ctx,
 			in.ContextID,
 			createdRun.ID,
@@ -177,14 +207,14 @@ func (uc *UseCase) ManualMatch(
 			return fmt.Errorf("create match group: %w", groupErr)
 		}
 
-		if confirmErr := group.Confirm(ctx); confirmErr != nil {
+		if confirmErr := newGroup.Confirm(ctx); confirmErr != nil {
 			return fmt.Errorf("confirm match group: %w", confirmErr)
 		}
 
 		createdGroups, batchErr := uc.matchGroupRepo.CreateBatchWithTx(
 			ctx,
 			tx,
-			[]*matchingEntities.MatchGroup{group},
+			[]*matchingEntities.MatchGroup{newGroup},
 		)
 		if batchErr != nil {
 			return fmt.Errorf("persist match group: %w", batchErr)
@@ -242,7 +272,11 @@ func (uc *UseCase) ManualMatch(
 		libLog.Any("transactions", len(in.TransactionIDs)),
 	).Log(ctx, libLog.LevelInfo, "manual match created")
 
-	return createdGroup, nil
+	// Assign to the named return so the deferred metrics emitter observes
+	// the final group (including its Confidence value).
+	group = createdGroup
+
+	return group, nil
 }
 
 func (uc *UseCase) validateManualMatchInput(in ManualMatchInput) error {
