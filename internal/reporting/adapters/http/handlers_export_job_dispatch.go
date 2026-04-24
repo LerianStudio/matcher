@@ -16,8 +16,11 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/reporting/services/command"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
+
+var _ = sharedhttp.ErrorResponse{}
 
 // CancelExportJob handles POST /v1/export-jobs/:jobId/cancel
 // @ID cancelExportJob

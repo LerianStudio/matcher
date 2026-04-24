@@ -23,7 +23,10 @@ import (
 	"github.com/LerianStudio/matcher/internal/ingestion/adapters/http/dto"
 	ingestionRepositories "github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/ingestion/services/command"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
+
+var _ = sharedhttp.ErrorResponse{}
 
 // IgnoreTransaction handles POST /v1/imports/contexts/:contextId/transactions/:transactionId/ignore
 // @Summary Ignore a transaction

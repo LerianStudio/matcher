@@ -22,7 +22,10 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
 	crossAdapters "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
+
+var _ = sharedhttp.ErrorResponse{}
 
 type errorResponseHandler func(*Handlers, context.Context, *fiber.Ctx, trace.Span, libLog.Logger, string, error) error
 

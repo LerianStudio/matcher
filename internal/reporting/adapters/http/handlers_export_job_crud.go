@@ -15,7 +15,10 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/services/command"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
+
+var _ = sharedhttp.ErrorResponse{}
 
 // CreateExportJob handles POST /v1/contexts/:contextId/export-jobs
 // @ID createExportJob

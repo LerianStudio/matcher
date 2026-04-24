@@ -15,7 +15,10 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
+
+var _ = sharedhttp.ErrorResponse{}
 
 // exportFn produces export data for a given format.
 // Return ErrInvalidExportFormat for unsupported formats.

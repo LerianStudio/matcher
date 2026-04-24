@@ -16,8 +16,11 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
+
+var _ = sharedhttp.ErrorResponse{}
 
 // GetExportJob handles GET /v1/export-jobs/:jobId
 // @ID getExportJob

@@ -22,7 +22,10 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/ingestion/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/ingestion/services/query"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
+
+var _ = sharedhttp.ErrorResponse{}
 
 // PreviewFile handles POST /v1/imports/contexts/:contextId/sources/:sourceId/preview
 // @Summary Preview uploaded file

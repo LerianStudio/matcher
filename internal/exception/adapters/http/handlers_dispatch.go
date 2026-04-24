@@ -21,7 +21,10 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
+
+var _ = sharedhttp.ErrorResponse{}
 
 // DispatchToExternal dispatches an exception to an external system.
 // @Summary Dispatch exception to external system

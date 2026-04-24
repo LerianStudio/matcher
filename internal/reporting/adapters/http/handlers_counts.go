@@ -15,7 +15,10 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
+
+var _ = sharedhttp.ErrorResponse{}
 
 // countFn produces a count for a given report filter.
 type countFn func(ctx context.Context, filter entities.ReportFilter) (int64, error)
