@@ -20,9 +20,14 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	discoveryPorts "github.com/LerianStudio/matcher/internal/discovery/ports"
+	workermetrics "github.com/LerianStudio/matcher/internal/shared/observability/workermetrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
+
+// bridgeWorkerName is the stable label value emitted on matcher.worker.*
+// metrics from this worker.
+const bridgeWorkerName = "bridge_worker"
 
 const (
 	// bridgeWorkerLockKey is the global distributed lock key for the bridge
@@ -176,6 +181,7 @@ type BridgeWorker struct {
 	cfg             BridgeWorkerConfig
 	logger          libLog.Logger
 	tracer          trace.Tracer
+	metrics         *workermetrics.Recorder
 
 	running  atomic.Bool
 	stopOnce sync.Once
@@ -222,6 +228,7 @@ func NewBridgeWorker(
 		cfg:            cfg,
 		logger:         logger,
 		tracer:         otel.Tracer("discovery.bridge_worker"),
+		metrics:        workermetrics.NewRecorder(bridgeWorkerName),
 		stopCh:         make(chan struct{}),
 		doneCh:         make(chan struct{}),
 	}, nil
