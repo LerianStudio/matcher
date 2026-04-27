@@ -21,8 +21,8 @@ github.com/KyleBanks/depth v1.2.1 h1:5h8fQADFrWtarTdtDudMmGsC7GPbOAu6RVB3ffsVFHc
 github.com/KyleBanks/depth v1.2.1/go.mod h1:jzSb9d0L43HxTQfT+oSA1EEp2q+ne2uh6XgeJcm8brE=
 github.com/LerianStudio/lib-auth/v3 v3.0.0-20260415175119-1568b252d48a h1:IxZm5p2DNRpiqdu4HvZh7j3ThzyiRyM1AY0eXOd61mM=
 github.com/LerianStudio/lib-auth/v3 v3.0.0-20260415175119-1568b252d48a/go.mod h1:MBI6mnwzIXsRln/VNpnOU5l+2rHW7fE1I7OXEEAtqHw=
-github.com/LerianStudio/lib-commons/v5 v5.0.2 h1:7xjw67VzBcZz9/vo2BaghiLLKlqeoUrG4HcZ6spojK4=
-github.com/LerianStudio/lib-commons/v5 v5.0.2/go.mod h1:VKACUO0KsfDQMiMb8wjtKjZqCSNUOcV8WSggaDU36UQ=
+github.com/LerianStudio/lib-commons/v5 v5.1.0 h1:ORsQGox4YqxeqG6BqcJrBI+4zorw+OYmJxzZUpPq2SY=
+github.com/LerianStudio/lib-commons/v5 v5.1.0/go.mod h1:2Snd37QiChK5NwyHcqcO/QbAJRd0mS/7X/F7rmhTZ/E=
 github.com/Masterminds/squirrel v1.5.4 h1:uUcX/aBc8O7Fg9kaISIUsHXdKuqehiXAMQTYX8afzqM=
 github.com/Masterminds/squirrel v1.5.4/go.mod h1:NNaOrjSoIDfDA40n7sr2tPNZRfjzjA400rg+riTZj10=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
@@ -227,6 +227,8 @@ github.com/hashicorp/errwrap v1.1.0 h1:OxrOeh75EUXMY8TBjag2fzXGZ40LB6IKw45YeGUDY
 github.com/hashicorp/errwrap v1.1.0/go.mod h1:YH+1FKiLXxHSkmPseP+kNlulaMuP3n2brvKWEqk/Jc4=
 github.com/hashicorp/go-multierror v1.1.1 h1:H5DkEtf6CXdFp0N0Em5UCwQpXMWke8IA0+lD48awMYo=
 github.com/hashicorp/go-multierror v1.1.1/go.mod h1:iw975J/qwKPdAO1clOe2L8331t/9/fmwbPZ6JB6eMoM=
+github.com/hashicorp/golang-lru/v2 v2.0.7 h1:a+bsQ5rvGLjzHuww6tVxozPZFVghXaHOwFs4luLUK2k=
+github.com/hashicorp/golang-lru/v2 v2.0.7/go.mod h1:QeFd9opnmA6QUJc5vARoKUSoFhyfM2/ZepoAG6RGpeM=
 github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=
 github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
 github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 h1:iCEnooe7UlwOQYpKFhBabPMi4aNAfoODPEFNiAnClxo=
