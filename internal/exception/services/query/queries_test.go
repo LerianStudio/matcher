@@ -881,6 +881,14 @@ func (repo *stubDisputeRepository) FindByID(
 	return repo.findDispute, nil
 }
 
+func (repo *stubDisputeRepository) FindByIDWithTx(
+	ctx context.Context,
+	_ repositories.Tx,
+	id uuid.UUID,
+) (*dispute.Dispute, error) {
+	return repo.FindByID(ctx, id)
+}
+
 func (repo *stubDisputeRepository) FindByExceptionID(
 	_ context.Context,
 	_ uuid.UUID,

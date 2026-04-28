@@ -234,6 +234,7 @@ func (uc *ExceptionUseCase) validateCloseDispute(
 		return nil, ErrDisputeIDRequired
 	}
 
+	// Actor captured pre-tx; JWT subject is immutable for the request lifetime.
 	actor := strings.TrimSpace(uc.actorExtractor.GetActor(ctx))
 	if actor == "" {
 		return nil, ErrActorRequired
@@ -272,7 +273,23 @@ func (uc *ExceptionUseCase) processCloseDispute(
 	logger libLog.Logger,
 	span trace.Span,
 ) (*dispute.Dispute, error) {
-	existingDispute, err := uc.disputeRepo.FindByID(ctx, cmd.DisputeID)
+	// Atomic transaction: load dispute on primary, mutate, update, and create audit log.
+	// Loading inside the transaction avoids replica lag causing stale evidence reads.
+	// This ensures SOX compliance - if either fails, both are rolled back.
+	txLease, err := uc.infraProvider.BeginTx(ctx)
+	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "failed to begin transaction", err)
+
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+
+	defer func() {
+		if rbErr := txLease.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+			libOpentelemetry.HandleSpanError(span, "tx.Rollback failed", rbErr)
+		}
+	}()
+
+	existingDispute, err := uc.disputeRepo.FindByIDWithTx(ctx, txLease.SQLTx(), cmd.DisputeID)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to load dispute", err)
 
@@ -298,21 +315,6 @@ func (uc *ExceptionUseCase) processCloseDispute(
 			return nil, fmt.Errorf("lose dispute: %w", err)
 		}
 	}
-
-	// Atomic transaction: update dispute state AND create audit log in same transaction.
-	// This ensures SOX compliance - if either fails, both are rolled back.
-	txLease, err := uc.infraProvider.BeginTx(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to begin transaction", err)
-
-		return nil, fmt.Errorf("begin transaction: %w", err)
-	}
-
-	defer func() {
-		if rbErr := txLease.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
-			libOpentelemetry.HandleSpanError(span, "tx.Rollback failed", rbErr)
-		}
-	}()
 
 	updated, err := uc.disputeRepo.UpdateWithTx(ctx, txLease.SQLTx(), existingDispute)
 	if err != nil {
@@ -372,6 +374,7 @@ func (uc *ExceptionUseCase) validateSubmitEvidence(
 		return nil, ErrDisputeIDRequired
 	}
 
+	// Actor captured pre-tx; JWT subject is immutable for the request lifetime.
 	actor := strings.TrimSpace(uc.actorExtractor.GetActor(ctx))
 	if actor == "" {
 		return nil, ErrActorRequired
@@ -425,22 +428,9 @@ func (uc *ExceptionUseCase) processSubmitEvidence(
 	logger libLog.Logger,
 	span trace.Span,
 ) (*dispute.Dispute, error) {
-	existingDispute, err := uc.disputeRepo.FindByID(ctx, cmd.DisputeID)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to load dispute", err)
-
-		libLog.SafeError(logger, ctx, "failed to load dispute", err, runtime.IsProductionMode())
-
-		return nil, fmt.Errorf("find dispute: %w", err)
-	}
-
-	if err := existingDispute.AddEvidence(ctx, params.comment, params.actor, params.fileURL); err != nil {
-		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "failed to add evidence", err)
-
-		return nil, fmt.Errorf("add evidence: %w", err)
-	}
-
-	// Atomic transaction: update dispute state AND create audit log in same transaction.
+	// Atomic transaction: load dispute on primary, append evidence, update, and create audit log.
+	// Loading inside the transaction guarantees we read from the primary, avoiding replica lag
+	// that would cause evidence items from prior submissions to be silently lost.
 	// This ensures SOX compliance - if either fails, both are rolled back.
 	txLease, err := uc.infraProvider.BeginTx(ctx)
 	if err != nil {
@@ -454,6 +444,21 @@ func (uc *ExceptionUseCase) processSubmitEvidence(
 			libOpentelemetry.HandleSpanError(span, "tx.Rollback failed", rbErr)
 		}
 	}()
+
+	existingDispute, err := uc.disputeRepo.FindByIDWithTx(ctx, txLease.SQLTx(), cmd.DisputeID)
+	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "failed to load dispute", err)
+
+		libLog.SafeError(logger, ctx, "failed to load dispute", err, runtime.IsProductionMode())
+
+		return nil, fmt.Errorf("find dispute: %w", err)
+	}
+
+	if err := existingDispute.AddEvidence(ctx, params.comment, params.actor, params.fileURL); err != nil {
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "failed to add evidence", err)
+
+		return nil, fmt.Errorf("add evidence: %w", err)
+	}
 
 	updated, err := uc.disputeRepo.UpdateWithTx(ctx, txLease.SQLTx(), existingDispute)
 	if err != nil {

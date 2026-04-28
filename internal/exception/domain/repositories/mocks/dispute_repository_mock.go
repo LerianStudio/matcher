@@ -104,6 +104,21 @@ func (mr *MockDisputeRepositoryMockRecorder) FindByID(ctx, id any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByID", reflect.TypeOf((*MockDisputeRepository)(nil).FindByID), ctx, id)
 }
 
+// FindByIDWithTx mocks base method.
+func (m *MockDisputeRepository) FindByIDWithTx(ctx context.Context, tx repositories.Tx, id uuid.UUID) (*dispute.Dispute, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindByIDWithTx", ctx, tx, id)
+	ret0, _ := ret[0].(*dispute.Dispute)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindByIDWithTx indicates an expected call of FindByIDWithTx.
+func (mr *MockDisputeRepositoryMockRecorder) FindByIDWithTx(ctx, tx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByIDWithTx", reflect.TypeOf((*MockDisputeRepository)(nil).FindByIDWithTx), ctx, tx, id)
+}
+
 // List mocks base method.
 func (m *MockDisputeRepository) List(ctx context.Context, filter repositories.DisputeFilter, cursor repositories.CursorFilter) ([]*dispute.Dispute, http.CursorPagination, error) {
 	m.ctrl.T.Helper()

@@ -26,12 +26,15 @@ var (
 )
 
 type stubDisputeRepo struct {
-	dispute    *dispute.Dispute
-	findErr    error
-	createErr  error
-	updateErr  error
-	listResult []*dispute.Dispute
-	listErr    error
+	dispute         *dispute.Dispute
+	findErr         error
+	createErr       error
+	updateErr       error
+	listResult      []*dispute.Dispute
+	listErr         error
+	findCalls       int
+	findWithTxCalls int
+	findWithTxTx    repositories.Tx
 }
 
 func (repo *stubDisputeRepo) Create(
@@ -54,6 +57,23 @@ func (repo *stubDisputeRepo) CreateWithTx(
 }
 
 func (repo *stubDisputeRepo) FindByID(_ context.Context, _ uuid.UUID) (*dispute.Dispute, error) {
+	repo.findCalls++
+
+	if repo.findErr != nil {
+		return nil, repo.findErr
+	}
+
+	return repo.dispute, nil
+}
+
+func (repo *stubDisputeRepo) FindByIDWithTx(
+	_ context.Context,
+	tx repositories.Tx,
+	_ uuid.UUID,
+) (*dispute.Dispute, error) {
+	repo.findWithTxCalls++
+	repo.findWithTxTx = tx
+
 	if repo.findErr != nil {
 		return nil, repo.findErr
 	}

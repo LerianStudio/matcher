@@ -59,6 +59,15 @@ func TestSubmitEvidence_Success(t *testing.T) {
 	require.NotNil(t, audit.lastEvent)
 	require.Equal(t, "EVIDENCE_SUBMITTED", audit.lastEvent.Action)
 	require.Equal(t, "analyst-1", audit.lastEvent.Actor)
+	// Regression guard: dispute MUST be loaded via FindByIDWithTx on the primary
+	// inside the same tx that mutates it. Loading via FindByID hits the replica,
+	// causing replica-lag races on multi-evidence and rapid-close paths (silent
+	// evidence loss when concurrent submitters land within replication lag).
+	// Do NOT delete these assertions during refactoring without an integration
+	// test that exercises real replica lag.
+	require.Equal(t, 1, disputeRepo.findWithTxCalls)
+	require.Same(t, tx, disputeRepo.findWithTxTx)
+	require.Zero(t, disputeRepo.findCalls)
 }
 
 func TestSubmitEvidence_WithFileURL(t *testing.T) {
@@ -102,6 +111,15 @@ func TestSubmitEvidence_WithFileURL(t *testing.T) {
 	require.Equal(t, fileURL, *result.Evidence[0].FileURL)
 	require.NotNil(t, audit.lastEvent)
 	require.Equal(t, fileURL, audit.lastEvent.Metadata["file_url"])
+	// Regression guard: dispute MUST be loaded via FindByIDWithTx on the primary
+	// inside the same tx that mutates it. Loading via FindByID hits the replica,
+	// causing replica-lag races on multi-evidence and rapid-close paths (silent
+	// evidence loss when concurrent submitters land within replication lag).
+	// Do NOT delete these assertions during refactoring without an integration
+	// test that exercises real replica lag.
+	require.Equal(t, 1, disputeRepo.findWithTxCalls)
+	require.Same(t, tx, disputeRepo.findWithTxTx)
+	require.Zero(t, disputeRepo.findCalls)
 }
 
 func TestSubmitEvidence_ValidationErrors(t *testing.T) {
