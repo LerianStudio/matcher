@@ -104,6 +104,11 @@ func TestRegisterRoutes_DomainNativePathsExist_LegacyPathsAbsent(t *testing.T) {
 	// Domain-native paths MUST exist.
 	assert.True(t, routeSet["POST /v1/contexts"], "POST /v1/contexts should be registered")
 	assert.True(t, routeSet["GET /v1/contexts"], "GET /v1/contexts should be registered")
+	assert.True(t, routeSet["POST /v1/contexts/:contextId/fee-rules"], "POST /v1/contexts/:contextId/fee-rules should be registered")
+	assert.True(t, routeSet["GET /v1/contexts/:contextId/fee-rules"], "GET /v1/contexts/:contextId/fee-rules should be registered")
+	assert.True(t, routeSet["GET /v1/fee-rules/:feeRuleId"], "GET /v1/fee-rules/:feeRuleId should be registered")
+	assert.True(t, routeSet["PATCH /v1/fee-rules/:feeRuleId"], "PATCH /v1/fee-rules/:feeRuleId should be registered")
+	assert.True(t, routeSet["DELETE /v1/fee-rules/:feeRuleId"], "DELETE /v1/fee-rules/:feeRuleId should be registered")
 	assert.True(t, routeSet["GET /v1/fee-schedules"], "GET /v1/fee-schedules should be registered")
 	assert.True(t, routeSet["POST /v1/fee-schedules"], "POST /v1/fee-schedules should be registered")
 	assert.True(t, routeSet["PATCH /v1/field-maps/:fieldMapId"], "PATCH /v1/field-maps/:fieldMapId should be registered")
@@ -111,5 +116,10 @@ func TestRegisterRoutes_DomainNativePathsExist_LegacyPathsAbsent(t *testing.T) {
 	// Legacy paths MUST NOT exist.
 	assert.False(t, routeSet["POST /v1/config/contexts"], "legacy POST /v1/config/contexts should NOT be registered")
 	assert.False(t, routeSet["GET /v1/config/contexts"], "legacy GET /v1/config/contexts should NOT be registered")
+	assert.False(t, routeSet["POST /v1/config/contexts/:contextId/fee-rules"], "legacy POST /v1/config/contexts/:contextId/fee-rules should NOT be registered")
+	assert.False(t, routeSet["GET /v1/config/contexts/:contextId/fee-rules"], "legacy GET /v1/config/contexts/:contextId/fee-rules should NOT be registered")
+	assert.False(t, routeSet["GET /v1/config/fee-rules/:feeRuleId"], "legacy GET /v1/config/fee-rules/:feeRuleId should NOT be registered")
+	assert.False(t, routeSet["PATCH /v1/config/fee-rules/:feeRuleId"], "legacy PATCH /v1/config/fee-rules/:feeRuleId should NOT be registered")
+	assert.False(t, routeSet["DELETE /v1/config/fee-rules/:feeRuleId"], "legacy DELETE /v1/config/fee-rules/:feeRuleId should NOT be registered")
 	assert.False(t, routeSet["GET /v1/config/fee-schedules"], "legacy GET /v1/config/fee-schedules should NOT be registered")
 }

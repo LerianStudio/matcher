@@ -426,7 +426,7 @@ func TestIntegration_Flow_ConfigurationFlow_Integration(t *testing.T) {
 			t,
 			client,
 			"POST",
-			fmt.Sprintf("%s/v1/config/contexts/%s/fee-rules", baseURL, contextID),
+			fmt.Sprintf("%s/v1/contexts/%s/fee-rules", baseURL, contextID),
 			feeRulePayload,
 			http.StatusCreated,
 		)
@@ -444,7 +444,7 @@ func TestIntegration_Flow_ConfigurationFlow_Integration(t *testing.T) {
 					t,
 					client,
 					"DELETE",
-					fmt.Sprintf("%s/v1/config/fee-rules/%s", baseURL, feeRuleID),
+					fmt.Sprintf("%s/v1/fee-rules/%s", baseURL, feeRuleID),
 					nil,
 					http.StatusNoContent,
 				)
@@ -465,7 +465,7 @@ func TestIntegration_Flow_ConfigurationFlow_Integration(t *testing.T) {
 			t,
 			client,
 			"GET",
-			fmt.Sprintf("%s/v1/config/fee-rules/%s", baseURL, feeRuleID),
+			fmt.Sprintf("%s/v1/fee-rules/%s", baseURL, feeRuleID),
 			nil,
 			http.StatusOK,
 		)
@@ -484,7 +484,7 @@ func TestIntegration_Flow_ConfigurationFlow_Integration(t *testing.T) {
 			t,
 			client,
 			"PATCH",
-			fmt.Sprintf("%s/v1/config/fee-rules/%s", baseURL, feeRuleID),
+			fmt.Sprintf("%s/v1/fee-rules/%s", baseURL, feeRuleID),
 			updateFeeRulePayload,
 			http.StatusOK,
 		)
@@ -502,7 +502,7 @@ func TestIntegration_Flow_ConfigurationFlow_Integration(t *testing.T) {
 			t,
 			client,
 			"GET",
-			fmt.Sprintf("%s/v1/config/contexts/%s/fee-rules", baseURL, contextID),
+			fmt.Sprintf("%s/v1/contexts/%s/fee-rules", baseURL, contextID),
 			nil,
 			http.StatusOK,
 		)
@@ -514,7 +514,7 @@ func TestIntegration_Flow_ConfigurationFlow_Integration(t *testing.T) {
 			t,
 			client,
 			"DELETE",
-			fmt.Sprintf("%s/v1/config/fee-rules/%s", baseURL, feeRuleID),
+			fmt.Sprintf("%s/v1/fee-rules/%s", baseURL, feeRuleID),
 			nil,
 			http.StatusNoContent,
 		)
@@ -551,7 +551,7 @@ func TestIntegration_Flow_ConfigurationFlow_Integration(t *testing.T) {
 			t,
 			client,
 			"GET",
-			fmt.Sprintf("%s/v1/config/fee-rules/%s", baseURL, feeRuleID),
+			fmt.Sprintf("%s/v1/fee-rules/%s", baseURL, feeRuleID),
 			nil,
 			http.StatusNotFound,
 		)

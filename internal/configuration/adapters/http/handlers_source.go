@@ -42,7 +42,7 @@ import (
 // @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
 // @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/sources [post]
+// @Router /v1/contexts/{contextId}/sources [post]
 func (handler *Handler) CreateSource(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.source.create")
 	defer span.End()
@@ -105,7 +105,7 @@ func (handler *Handler) CreateSource(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
 // @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/sources [get]
+// @Router /v1/contexts/{contextId}/sources [get]
 func (handler *Handler) ListSources(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.source.list")
 	defer span.End()
@@ -203,7 +203,7 @@ func (handler *Handler) ListSources(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
 // @Failure 404 {object} sharedhttp.ErrorResponse "Source not found"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/sources/{sourceId} [get]
+// @Router /v1/contexts/{contextId}/sources/{sourceId} [get]
 func (handler *Handler) GetSource(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.source.get")
 	defer span.End()
@@ -267,7 +267,7 @@ func (handler *Handler) GetSource(fiberCtx *fiber.Ctx) error {
 // @Failure 404 {object} sharedhttp.ErrorResponse "Source not found"
 // @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/sources/{sourceId} [patch]
+// @Router /v1/contexts/{contextId}/sources/{sourceId} [patch]
 func (handler *Handler) UpdateSource(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.source.update")
 	defer span.End()
@@ -337,7 +337,7 @@ func (handler *Handler) UpdateSource(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
 // @Failure 404 {object} sharedhttp.ErrorResponse "Source not found"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/sources/{sourceId} [delete]
+// @Router /v1/contexts/{contextId}/sources/{sourceId} [delete]
 func (handler *Handler) DeleteSource(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.source.delete")
 	defer span.End()

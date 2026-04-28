@@ -10,7 +10,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
-// CreateFeeRuleRequest is the request body for POST /v1/config/contexts/:contextId/fee-rules.
+// CreateFeeRuleRequest is the request body for POST /v1/contexts/:contextId/fee-rules.
 type CreateFeeRuleRequest struct {
 	Side          string `json:"side"          validate:"required,oneof=LEFT RIGHT ANY" example:"RIGHT" enums:"LEFT,RIGHT,ANY"`
 	FeeScheduleID string `json:"feeScheduleId" validate:"required,uuid"                 example:"550e8400-e29b-41d4-a716-446655440000"`
@@ -28,7 +28,7 @@ type FieldPredicateRequest struct {
 	Values   []string `json:"values,omitempty"   validate:"omitempty,max=100,dive,max=1024"`
 }
 
-// UpdateFeeRuleRequest is the request body for PATCH /v1/config/fee-rules/:feeRuleId.
+// UpdateFeeRuleRequest is the request body for PATCH /v1/fee-rules/:feeRuleId.
 type UpdateFeeRuleRequest struct {
 	Side          *string `json:"side,omitempty"          validate:"omitempty,oneof=LEFT RIGHT ANY" example:"LEFT"   enums:"LEFT,RIGHT,ANY"`
 	FeeScheduleID *string `json:"feeScheduleId,omitempty" validate:"omitempty,uuid"`

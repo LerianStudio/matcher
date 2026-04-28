@@ -152,24 +152,24 @@ func RegisterRoutes(protected func(resource string, actions ...string) fiber.Rou
 		auth.ResourceConfiguration,
 		auth.ActionFeeRuleCreate,
 		auth.ActionFeeScheduleRead,
-	).Post("/v1/config/contexts/:contextId/fee-rules", handler.CreateFeeRule)
+	).Post("/v1/contexts/:contextId/fee-rules", handler.CreateFeeRule)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionFeeRuleRead,
-	).Get("/v1/config/contexts/:contextId/fee-rules", handler.ListFeeRules)
+	).Get("/v1/contexts/:contextId/fee-rules", handler.ListFeeRules)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionFeeRuleRead,
-	).Get("/v1/config/fee-rules/:feeRuleId", handler.GetFeeRule)
+	).Get("/v1/fee-rules/:feeRuleId", handler.GetFeeRule)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionFeeRuleUpdate,
 		auth.ActionFeeScheduleRead,
-	).Patch("/v1/config/fee-rules/:feeRuleId", handler.UpdateFeeRule)
+	).Patch("/v1/fee-rules/:feeRuleId", handler.UpdateFeeRule)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionFeeRuleDelete,
-	).Delete("/v1/config/fee-rules/:feeRuleId", handler.DeleteFeeRule)
+	).Delete("/v1/fee-rules/:feeRuleId", handler.DeleteFeeRule)
 
 	// Schedule routes
 	protected(

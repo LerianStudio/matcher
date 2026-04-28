@@ -28,11 +28,11 @@ func TestSwagger_FeeRuleEndpointsExist(t *testing.T) {
 		description string
 	}{
 		{
-			path:        "/v1/config/contexts/{contextId}/fee-rules:",
+			path:        "/v1/contexts/{contextId}/fee-rules:",
 			description: "context-scoped fee-rule collection (POST + GET)",
 		},
 		{
-			path:        "/v1/config/fee-rules/{feeRuleId}:",
+			path:        "/v1/fee-rules/{feeRuleId}:",
 			description: "fee-rule resource (GET + PATCH + DELETE)",
 		},
 	}

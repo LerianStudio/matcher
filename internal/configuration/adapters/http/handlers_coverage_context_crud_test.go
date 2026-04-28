@@ -90,10 +90,10 @@ func TestCreateContext_DeprecatedRateID_ReturnsExplicitBadRequest(t *testing.T) 
 	app := newTestApp(ctx)
 	fixture := newHandlerFixture(t)
 
-	app.Post("/v1/config/contexts", fixture.handler.CreateContext)
+	app.Post("/v1/contexts", fixture.handler.CreateContext)
 
 	payload := []byte(`{"name":"Context","type":"1:1","interval":"daily","rateId":"550e8400-e29b-41d4-a716-446655440000"}`)
-	resp := performRequest(t, app, http.MethodPost, "/v1/config/contexts", payload)
+	resp := performRequest(t, app, http.MethodPost, "/v1/contexts", payload)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
@@ -115,10 +115,10 @@ func TestUpdateContext_DeprecatedRateID_ReturnsExplicitBadRequest(t *testing.T) 
 	fixture := newHandlerFixture(t)
 	contextEntity := fixture.seedContext(t, tenantID)
 
-	app.Patch("/v1/config/contexts/:contextId", fixture.handler.UpdateContext)
+	app.Patch("/v1/contexts/:contextId", fixture.handler.UpdateContext)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId",
+		"/v1/contexts/:contextId",
 		contextEntity.ID.String(),
 	)
 	payload := []byte(`{"status":"ACTIVE","rateId":"550e8400-e29b-41d4-a716-446655440000"}`)

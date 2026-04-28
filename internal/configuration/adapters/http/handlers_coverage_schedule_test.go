@@ -304,4 +304,3 @@ func TestListSchedules_Empty(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
 	assert.Empty(t, response)
 }
-

@@ -19,7 +19,7 @@ func TestConfigurationClient_CreateFeeRule(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/config/contexts/ctx-abc/fee-rules", r.URL.Path)
+		assert.Equal(t, "/v1/contexts/ctx-abc/fee-rules", r.URL.Path)
 		assert.Equal(t, http.MethodPost, r.Method)
 
 		var req CreateFeeRuleRequest
@@ -67,7 +67,7 @@ func TestConfigurationClient_GetFeeRule(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/config/fee-rules/rule-xyz", r.URL.Path)
+		assert.Equal(t, "/v1/fee-rules/rule-xyz", r.URL.Path)
 		assert.Equal(t, http.MethodGet, r.Method)
 
 		resp := FeeRuleResponse{
@@ -95,7 +95,7 @@ func TestConfigurationClient_ListFeeRules(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/config/contexts/ctx-abc/fee-rules", r.URL.Path)
+		assert.Equal(t, "/v1/contexts/ctx-abc/fee-rules", r.URL.Path)
 		assert.Equal(t, http.MethodGet, r.Method)
 
 		resp := []FeeRuleResponse{
@@ -119,7 +119,7 @@ func TestConfigurationClient_UpdateFeeRule(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/config/fee-rules/rule-xyz", r.URL.Path)
+		assert.Equal(t, "/v1/fee-rules/rule-xyz", r.URL.Path)
 		assert.Equal(t, http.MethodPatch, r.Method)
 
 		var req UpdateFeeRuleRequest
@@ -151,7 +151,7 @@ func TestConfigurationClient_DeleteFeeRule(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/config/fee-rules/rule-xyz", r.URL.Path)
+		assert.Equal(t, "/v1/fee-rules/rule-xyz", r.URL.Path)
 		assert.Equal(t, http.MethodDelete, r.Method)
 		w.WriteHeader(http.StatusNoContent)
 	}))

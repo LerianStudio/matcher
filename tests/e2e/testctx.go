@@ -17,6 +17,7 @@ import (
 type TestContext struct {
 	t          *testing.T
 	cfg        *E2EConfig
+	ctx        context.Context
 	runID      string
 	tenantID   string
 	namePrefix string
@@ -29,10 +30,21 @@ type TestContext struct {
 func NewTestContext(t *testing.T, cfg *E2EConfig) *TestContext {
 	t.Helper()
 
+	return newTestContext(t, cfg, context.Background())
+}
+
+func newTestContext(t *testing.T, cfg *E2EConfig, ctx context.Context) *TestContext {
+	t.Helper()
+
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	runID := uuid.New().String()[:8]
 	tc := &TestContext{
 		t:          t,
 		cfg:        cfg,
+		ctx:        ctx,
 		runID:      runID,
 		tenantID:   cfg.DefaultTenantID,
 		namePrefix: fmt.Sprintf("e2e-%s", runID),
@@ -73,14 +85,18 @@ func (tc *TestContext) Config() *E2EConfig {
 
 // Context returns a background context with test timeout.
 func (tc *TestContext) Context() context.Context {
-	return context.Background()
+	if tc.ctx == nil {
+		return context.Background()
+	}
+
+	return tc.ctx
 }
 
 // ContextWithTimeout returns a context with the specified timeout.
 func (tc *TestContext) ContextWithTimeout(
 	timeout time.Duration,
 ) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), timeout)
+	return context.WithTimeout(tc.Context(), timeout)
 }
 
 // RegisterCleanup adds a cleanup function to be called in LIFO order when the test ends.

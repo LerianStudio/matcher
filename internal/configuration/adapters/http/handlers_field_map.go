@@ -40,7 +40,7 @@ var _ = sharedhttp.ErrorResponse{}
 // @Failure 404 {object} sharedhttp.ErrorResponse "Context or source not found"
 // @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/sources/{sourceId}/field-maps [post]
+// @Router /v1/contexts/{contextId}/sources/{sourceId}/field-maps [post]
 func (handler *Handler) CreateFieldMap(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fieldmap.create")
 	defer span.End()
@@ -105,7 +105,7 @@ func (handler *Handler) CreateFieldMap(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
 // @Failure 404 {object} sharedhttp.ErrorResponse "Field map not found"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/sources/{sourceId}/field-maps [get]
+// @Router /v1/contexts/{contextId}/sources/{sourceId}/field-maps [get]
 func (handler *Handler) GetFieldMapBySource(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fieldmap.get_by_source")
 	defer span.End()
@@ -172,7 +172,7 @@ func (handler *Handler) GetFieldMapBySource(fiberCtx *fiber.Ctx) error {
 // @Failure 404 {object} sharedhttp.ErrorResponse "Field map not found"
 // @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/field-maps/{fieldMapId} [patch]
+// @Router /v1/field-maps/{fieldMapId} [patch]
 func (handler *Handler) UpdateFieldMap(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fieldmap.update")
 	defer span.End()
@@ -242,7 +242,7 @@ func (handler *Handler) UpdateFieldMap(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
 // @Failure 404 {object} sharedhttp.ErrorResponse "Field map not found"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/field-maps/{fieldMapId} [delete]
+// @Router /v1/field-maps/{fieldMapId} [delete]
 func (handler *Handler) DeleteFieldMap(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fieldmap.delete")
 	defer span.End()
