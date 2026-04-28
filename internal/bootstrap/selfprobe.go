@@ -15,7 +15,8 @@ package bootstrap
 //     lets K8s livenessProbe restart the pod on sustained /health 503.
 //
 // The probe reuses the same resolvePostgresCheck / resolveRedisCheck helpers
-// as /readyz so both endpoints reflect the same truth.
+// as /readyz so both endpoints reflect the same truth across all 6 deps
+// (postgres, postgres_replica, redis, rabbitmq, fetcher, object_storage).
 
 import (
 	"context"
@@ -58,21 +59,61 @@ func SelfProbeOK() bool {
 
 // selfprobeSpec binds a dep name to its resolver, mirroring depSpec but
 // without the TLS posture helper /readyz uses. Hoisted below as a package-
-// level slice so RunSelfProbe does not rebuild per startup.
+// level slice so RunSelfProbe does not rebuild per startup. The fetcher dep
+// needs cfg to honor the Enabled+URL precedence, so resolve and optional
+// take the same (cfg, deps) pair as readyzSpecs.
 type selfprobeSpec struct {
 	name     string
-	resolve  func(*HealthDependencies) (HealthCheckFunc, bool)
-	optional func(*HealthDependencies) bool
+	resolve  func(*Config, *HealthDependencies) (HealthCheckFunc, bool)
+	optional func(*Config, *HealthDependencies) bool
 }
 
 // selfprobeSpecs is the canonical dep-order for the startup self-probe.
-// Package-level so RunSelfProbe does not allocate per call.
+// Package-level so RunSelfProbe does not allocate per call. Mirrors
+// readyzSpecs entry-for-entry so /readyz and /health observe the same
+// dependency set; the fetcher entry honors the same Enabled/URL gating
+// readyzSpecs uses.
 var selfprobeSpecs = []selfprobeSpec{ //nolint:gochecknoglobals // immutable package-local constant
-	{name: "postgres", resolve: resolvePostgresCheck, optional: func(d *HealthDependencies) bool { return d.PostgresOptional }},
-	{name: "postgres_replica", resolve: resolvePostgresReplicaCheck, optional: func(d *HealthDependencies) bool { return d.PostgresReplicaOptional }},
-	{name: "redis", resolve: resolveRedisCheck, optional: func(d *HealthDependencies) bool { return d.RedisOptional }},
-	{name: "rabbitmq", resolve: resolveRabbitMQCheck, optional: func(d *HealthDependencies) bool { return d.RabbitMQOptional }},
-	{name: "object_storage", resolve: resolveObjectStorageCheck, optional: func(d *HealthDependencies) bool { return d.ObjectStorageOptional }},
+	{
+		name:     "postgres",
+		resolve:  func(_ *Config, d *HealthDependencies) (HealthCheckFunc, bool) { return resolvePostgresCheck(d) },
+		optional: func(_ *Config, d *HealthDependencies) bool { return d != nil && d.PostgresOptional },
+	},
+	{
+		name:     "postgres_replica",
+		resolve:  func(_ *Config, d *HealthDependencies) (HealthCheckFunc, bool) { return resolvePostgresReplicaCheck(d) },
+		optional: func(_ *Config, d *HealthDependencies) bool { return d != nil && d.PostgresReplicaOptional },
+	},
+	{
+		name:     "redis",
+		resolve:  func(_ *Config, d *HealthDependencies) (HealthCheckFunc, bool) { return resolveRedisCheck(d) },
+		optional: func(_ *Config, d *HealthDependencies) bool { return d != nil && d.RedisOptional },
+	},
+	{
+		name:     "rabbitmq",
+		resolve:  func(_ *Config, d *HealthDependencies) (HealthCheckFunc, bool) { return resolveRabbitMQCheck(d) },
+		optional: func(_ *Config, d *HealthDependencies) bool { return d != nil && d.RabbitMQOptional },
+	},
+	{
+		name:    "fetcher",
+		resolve: resolveFetcherCheck,
+		optional: func(cfg *Config, d *HealthDependencies) bool {
+			if d != nil && d.FetcherOptional {
+				return true
+			}
+
+			if cfg == nil {
+				return false
+			}
+
+			return !cfg.Fetcher.Enabled
+		},
+	},
+	{
+		name:     "object_storage",
+		resolve:  func(_ *Config, d *HealthDependencies) (HealthCheckFunc, bool) { return resolveObjectStorageCheck(d) },
+		optional: func(_ *Config, d *HealthDependencies) bool { return d != nil && d.ObjectStorageOptional },
+	},
 }
 
 // RunSelfProbe probes every resolvable dependency exactly once and sets
@@ -80,6 +121,10 @@ var selfprobeSpecs = []selfprobeSpec{ //nolint:gochecknoglobals // immutable pac
 // deps that are unresolvable are treated as "not configured" (skipped), while
 // required deps that are unresolvable are treated as down and fail the probe.
 // Returns an error naming offending deps when at least one required dep fails.
+//
+// cfg is read-only and feeds the fetcher resolver's Enabled+URL precedence.
+// Tests may pass nil; resolvers tolerate nil cfg by treating fetcher as
+// unresolved (matching readyz behavior).
 //
 // The probe ALWAYS runs to completion — one failing dep does not short-circuit
 // the others — so the emitted selfprobe_result gauge covers every dep on
@@ -97,7 +142,7 @@ var selfprobeSpecs = []selfprobeSpec{ //nolint:gochecknoglobals // immutable pac
 // every dep on every startup — ordering between deps is no longer guaranteed
 // since goroutines race, but ordering across deps was never an observable
 // contract (tests assert on final state, not on log interleaving).
-func RunSelfProbe(ctx context.Context, deps *HealthDependencies, logger libLog.Logger) error {
+func RunSelfProbe(ctx context.Context, cfg *Config, deps *HealthDependencies, logger libLog.Logger) error {
 	selfProbeOK.Store(false)
 
 	if logger == nil {
@@ -119,8 +164,8 @@ func RunSelfProbe(ctx context.Context, deps *HealthDependencies, logger libLog.L
 	var wg sync.WaitGroup
 
 	for idx, spec := range specs {
-		check, available := spec.resolve(deps)
-		optional := spec.optional(deps)
+		check, available := spec.resolve(cfg, deps)
+		optional := spec.optional(cfg, deps)
 
 		if !available || check == nil {
 			if optional {
@@ -183,7 +228,7 @@ func RunSelfProbe(ctx context.Context, deps *HealthDependencies, logger libLog.L
 			continue
 		}
 
-		if !spec.optional(deps) {
+		if !spec.optional(cfg, deps) {
 			downRequired = append(downRequired, spec.name)
 		}
 	}

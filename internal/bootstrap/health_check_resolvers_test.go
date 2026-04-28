@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	libRabbitmq "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -179,12 +180,132 @@ func TestResolveRabbitMQCheck_UsesHTTPProbeWhenAllowed(t *testing.T) {
 	assert.Equal(t, int32(1), requests.Load())
 }
 
+func TestResolveFetcherCheck_DisabledFetcherIsSkipped(t *testing.T) {
+	t.Parallel()
+
+	deps := &HealthDependencies{
+		FetcherCheck: func(_ context.Context) error { return nil },
+	}
+
+	fn, ok := resolveFetcherCheck(&Config{}, deps)
+	assert.Nil(t, fn)
+	assert.False(t, ok)
+}
+
+func TestResolveFetcherCheck_CustomCheckUsedWhenEnabled(t *testing.T) {
+	t.Parallel()
+
+	deps := &HealthDependencies{
+		FetcherCheck: func(_ context.Context) error { return nil },
+	}
+
+	fn, ok := resolveFetcherCheck(&Config{Fetcher: FetcherConfig{Enabled: true, URL: "https://fetcher.internal"}}, deps)
+	assert.NotNil(t, fn)
+	assert.True(t, ok)
+	assert.NoError(t, fn(context.Background()))
+}
+
+func TestResolveFetcherCheck_EnabledFetcherWithoutURLFails(t *testing.T) {
+	t.Parallel()
+
+	deps := &HealthDependencies{
+		FetcherCheck: func(_ context.Context) error { return nil },
+	}
+
+	fn, ok := resolveFetcherCheck(&Config{Fetcher: FetcherConfig{Enabled: true}}, deps)
+	assert.NotNil(t, fn)
+	assert.True(t, ok)
+	assert.ErrorIs(t, fn(context.Background()), errFetcherURLRequired)
+}
+
+func TestResolveFetcherCheck_UsesFetcherClientHealth(t *testing.T) {
+	t.Parallel()
+
+	deps := &HealthDependencies{
+		Fetcher: stubFetcherClient{healthy: true},
+	}
+
+	fn, ok := resolveFetcherCheck(&Config{Fetcher: FetcherConfig{Enabled: true, URL: "https://fetcher.internal"}}, deps)
+	assert.NotNil(t, fn)
+	assert.True(t, ok)
+	assert.NoError(t, fn(context.Background()))
+
+	deps.Fetcher = stubFetcherClient{healthy: false}
+	fn, ok = resolveFetcherCheck(&Config{Fetcher: FetcherConfig{Enabled: true, URL: "https://fetcher.internal"}}, deps)
+	assert.NotNil(t, fn)
+	assert.True(t, ok)
+	assert.ErrorIs(t, fn(context.Background()), sharedPorts.ErrFetcherUnavailable)
+}
+
+func TestResolveFetcherCheck_TypedNilFetcherClientIsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	var fetcher *nilFetcherClient
+	deps := &HealthDependencies{Fetcher: fetcher}
+
+	fn, ok := resolveFetcherCheck(&Config{Fetcher: FetcherConfig{Enabled: true, URL: "https://fetcher.internal"}}, deps)
+	assert.Nil(t, fn)
+	assert.False(t, ok)
+}
+
 func TestResolveObjectStorageCheck_NilDeps(t *testing.T) {
 	t.Parallel()
 
 	fn, ok := resolveObjectStorageCheck(nil)
 	assert.Nil(t, fn)
 	assert.False(t, ok)
+}
+
+type stubFetcherClient struct {
+	healthy bool
+}
+
+type nilFetcherClient struct{}
+
+func (client stubFetcherClient) IsHealthy(context.Context) bool { return client.healthy }
+
+func (client stubFetcherClient) ListConnections(context.Context, string) ([]*sharedPorts.FetcherConnection, error) {
+	return nil, nil
+}
+
+func (client stubFetcherClient) GetSchema(context.Context, string) (*sharedPorts.FetcherSchema, error) {
+	return nil, nil
+}
+
+func (client stubFetcherClient) TestConnection(context.Context, string) (*sharedPorts.FetcherTestResult, error) {
+	return nil, nil
+}
+
+func (client stubFetcherClient) SubmitExtractionJob(context.Context, sharedPorts.ExtractionJobInput) (string, error) {
+	return "", nil
+}
+
+func (client stubFetcherClient) GetExtractionJobStatus(context.Context, string) (*sharedPorts.ExtractionJobStatus, error) {
+	return nil, nil
+}
+
+func (client *nilFetcherClient) IsHealthy(context.Context) bool {
+	panic("typed nil fetcher client used")
+}
+
+func (client *nilFetcherClient) ListConnections(context.Context, string) ([]*sharedPorts.FetcherConnection, error) {
+	return nil, nil
+}
+
+func (client *nilFetcherClient) GetSchema(context.Context, string) (*sharedPorts.FetcherSchema, error) {
+	return nil, nil
+}
+
+func (client *nilFetcherClient) TestConnection(context.Context, string) (*sharedPorts.FetcherTestResult, error) {
+	return nil, nil
+}
+
+func (client *nilFetcherClient) SubmitExtractionJob(context.Context, sharedPorts.ExtractionJobInput) (string, error) {
+	return "", nil
+}
+
+func (client *nilFetcherClient) GetExtractionJobStatus(context.Context, string) (*sharedPorts.ExtractionJobStatus, error) {
+	return nil, nil
 }
 
 func TestResolveObjectStorageCheck_NilStorage(t *testing.T) {

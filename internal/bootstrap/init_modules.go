@@ -132,6 +132,7 @@ func initModulesAndMessaging(
 	cfg *Config,
 	configGetter func() *Config,
 	settingsResolver *runtimeSettingsResolver,
+	healthDeps *HealthDependencies,
 	provider sharedPorts.InfrastructureProvider,
 	postgresConnection *libPostgres.Client,
 	rabbitMQConnection *libRabbitmq.RabbitMQConnection,
@@ -245,7 +246,7 @@ func initModulesAndMessaging(
 	extractionRepo := discoveryExtractionRepo.NewRepository(provider)
 
 	// Discovery module (optional — non-critical, gated by FETCHER_ENABLED).
-	discWorker, err := initOptionalDiscoveryWorker(routes, cfg, configGetter, provider, sharedOutboxRepository, extractionRepo, logger, initDiscoveryModule)
+	discWorker, err := initOptionalDiscoveryWorker(routes, cfg, configGetter, healthDeps, provider, sharedOutboxRepository, extractionRepo, logger, initDiscoveryModule)
 	if err != nil {
 		return nil, fmt.Errorf("init optional discovery worker: %w", err)
 	}

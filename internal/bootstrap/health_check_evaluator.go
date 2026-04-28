@@ -19,17 +19,17 @@ import (
 )
 
 // readyzDepCount is the fixed number of dependencies probed by /readyz:
-// postgres, postgres_replica, redis, rabbitmq, object_storage. Used as the
-// initial capacity hint for the checks map.
-const readyzDepCount = 5
+// postgres, postgres_replica, redis, rabbitmq, fetcher, object_storage. Used
+// as the initial capacity hint for the checks map.
+const readyzDepCount = 6
 
 // depSpec binds a dep name to its resolver, optional-check, and TLS posture
 // helpers. Hoisted to package level so evaluateReadinessChecks does not
 // rebuild the slice per /readyz hit.
 type depSpec struct {
 	name     string
-	resolve  func(*HealthDependencies) (HealthCheckFunc, bool)
-	optional func(*HealthDependencies) bool
+	resolve  func(*Config, *HealthDependencies) (HealthCheckFunc, bool)
+	optional func(*Config, *HealthDependencies) bool
 	tlsPost  func(*Config) (*bool, string)
 }
 
@@ -39,32 +39,48 @@ type depSpec struct {
 var readyzSpecs = []depSpec{ //nolint:gochecknoglobals // immutable package-local constant
 	{
 		name:     "postgres",
-		resolve:  resolvePostgresCheck,
-		optional: func(d *HealthDependencies) bool { return d != nil && d.PostgresOptional },
+		resolve:  func(_ *Config, d *HealthDependencies) (HealthCheckFunc, bool) { return resolvePostgresCheck(d) },
+		optional: func(_ *Config, d *HealthDependencies) bool { return d != nil && d.PostgresOptional },
 		tlsPost:  postgresTLSPosture,
 	},
 	{
 		name:     "postgres_replica",
-		resolve:  resolvePostgresReplicaCheck,
-		optional: func(d *HealthDependencies) bool { return d != nil && d.PostgresReplicaOptional },
+		resolve:  func(_ *Config, d *HealthDependencies) (HealthCheckFunc, bool) { return resolvePostgresReplicaCheck(d) },
+		optional: func(_ *Config, d *HealthDependencies) bool { return d != nil && d.PostgresReplicaOptional },
 		tlsPost:  postgresReplicaTLSPosture,
 	},
 	{
 		name:     "redis",
-		resolve:  resolveRedisCheck,
-		optional: func(d *HealthDependencies) bool { return d != nil && d.RedisOptional },
+		resolve:  func(_ *Config, d *HealthDependencies) (HealthCheckFunc, bool) { return resolveRedisCheck(d) },
+		optional: func(_ *Config, d *HealthDependencies) bool { return d != nil && d.RedisOptional },
 		tlsPost:  redisTLSPosture,
 	},
 	{
 		name:     "rabbitmq",
-		resolve:  resolveRabbitMQCheck,
-		optional: func(d *HealthDependencies) bool { return d != nil && d.RabbitMQOptional },
+		resolve:  func(_ *Config, d *HealthDependencies) (HealthCheckFunc, bool) { return resolveRabbitMQCheck(d) },
+		optional: func(_ *Config, d *HealthDependencies) bool { return d != nil && d.RabbitMQOptional },
 		tlsPost:  rabbitMQTLSPosture,
 	},
 	{
+		name:    "fetcher",
+		resolve: resolveFetcherCheck,
+		optional: func(cfg *Config, d *HealthDependencies) bool {
+			if d != nil && d.FetcherOptional {
+				return true
+			}
+
+			if cfg == nil {
+				return false
+			}
+
+			return !cfg.Fetcher.Enabled
+		},
+		tlsPost: fetcherTLSPosture,
+	},
+	{
 		name:     "object_storage",
-		resolve:  resolveObjectStorageCheck,
-		optional: func(d *HealthDependencies) bool { return d != nil && d.ObjectStorageOptional },
+		resolve:  func(_ *Config, d *HealthDependencies) (HealthCheckFunc, bool) { return resolveObjectStorageCheck(d) },
+		optional: func(_ *Config, d *HealthDependencies) bool { return d != nil && d.ObjectStorageOptional },
 		tlsPost:  objectStorageTLSPosture,
 	},
 }
@@ -76,7 +92,7 @@ var readyzSpecs = []depSpec{ //nolint:gochecknoglobals // immutable package-loca
 // Per-dep probes run in parallel via goroutines with a sync.WaitGroup join.
 // Worst-case handler latency is max(per-check timeout) — NOT n_deps × timeout.
 // This matters because K8s readinessProbe.periodSeconds=5 would back up
-// under the sequential 5 × 5s = 25s worst case on degraded deps.
+// under the sequential 6 × 5s = 30s worst case on degraded deps.
 //
 // Panic recovery is provided by SafeGoWithContextAndComponent (via its
 // internal RecoverWithPolicyAndContext defer). A panic in a probe is caught
@@ -105,13 +121,13 @@ func evaluateReadinessChecks(
 			func(_ context.Context) {
 				defer wg.Done()
 
-				check, available := spec.resolve(deps)
+				check, available := spec.resolve(cfg, deps)
 				results[idx], aggOK[idx] = applyReadinessCheckResult(
 					ctx,
 					spec.name,
 					check,
 					available,
-					spec.optional(deps),
+					spec.optional(cfg, deps),
 					cfg,
 					spec.tlsPost,
 					logger,

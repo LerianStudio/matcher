@@ -182,4 +182,3 @@ func TestConfig_InfraConnectTimeout(t *testing.T) {
 		})
 	}
 }
-

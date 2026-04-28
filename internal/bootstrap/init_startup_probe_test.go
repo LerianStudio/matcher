@@ -23,8 +23,8 @@ func TestRunStartupSelfProbe_ContinuesOnError(t *testing.T) {
 	logger := &recordingInitLogger{}
 	runnerCalled := false
 
-	runStartupSelfProbe(context.Background(), &HealthDependencies{}, logger,
-		func(context.Context, *HealthDependencies, libLog.Logger) error {
+	runStartupSelfProbe(context.Background(), nil, &HealthDependencies{}, logger,
+		func(context.Context, *Config, *HealthDependencies, libLog.Logger) error {
 			runnerCalled = true
 			return errors.New("boom")
 		})

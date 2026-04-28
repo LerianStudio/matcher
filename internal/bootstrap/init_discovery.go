@@ -50,6 +50,7 @@ type discoveryModuleInitFunc func(
 	routes *Routes,
 	cfg *Config,
 	configGetter func() *Config,
+	healthDeps *HealthDependencies,
 	provider sharedPorts.InfrastructureProvider,
 	tenantLister sharedPorts.TenantLister,
 	extractionRepo *discoveryExtractionRepo.Repository,
@@ -61,6 +62,7 @@ func initOptionalDiscoveryWorker(
 	routes *Routes,
 	cfg *Config,
 	configGetter func() *Config,
+	healthDeps *HealthDependencies,
 	provider sharedPorts.InfrastructureProvider,
 	tenantLister sharedPorts.TenantLister,
 	extractionRepo *discoveryExtractionRepo.Repository,
@@ -76,7 +78,7 @@ func initOptionalDiscoveryWorker(
 		return nil, nil
 	}
 
-	worker, err := initFn(routes, cfg, configGetter, provider, tenantLister, extractionRepo, logger, m2mProvider...)
+	worker, err := initFn(routes, cfg, configGetter, healthDeps, provider, tenantLister, extractionRepo, logger, m2mProvider...)
 	if err != nil {
 		return nil, fmt.Errorf("initialize discovery module: %w", err)
 	}
@@ -201,6 +203,7 @@ func initDiscoveryModule(
 	routes *Routes,
 	cfg *Config,
 	configGetter func() *Config,
+	healthDeps *HealthDependencies,
 	provider sharedPorts.InfrastructureProvider,
 	tenantLister sharedPorts.TenantLister,
 	extractionRepo *discoveryExtractionRepo.Repository,
@@ -213,6 +216,9 @@ func initDiscoveryModule(
 	}
 
 	fetcherClient := newDynamicFetcherClient(cfg, configGetter, logger, m2m)
+	if healthDeps != nil {
+		healthDeps.Fetcher = fetcherClient
+	}
 
 	wireDiscoveryTokenExchanger(fetcherClient, cfg, logger)
 

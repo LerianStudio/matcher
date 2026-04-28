@@ -418,6 +418,7 @@ func initServerModules(state *bootstrapState) error {
 		state.cfg,
 		moduleConfigGetter,
 		state.settingsResolver,
+		state.healthDeps,
 		state.infraProvider,
 		state.postgresConnection,
 		state.rabbitMQConnection,
@@ -561,7 +562,7 @@ func assembleService(state *bootstrapState) *Service {
 	// Keeping startup non-abortive preserves log collection for post-mortem.
 	selfProbeDone := state.timer.track("self_probe")
 
-	runStartupSelfProbe(state.ctx, state.healthDeps, state.logger, RunSelfProbe)
+	runStartupSelfProbe(state.ctx, state.cfg, state.healthDeps, state.logger, RunSelfProbe)
 
 	selfProbeDone()
 

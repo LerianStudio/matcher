@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
+	"net/url"
 	"os"
 	"strings"
 	"syscall"
@@ -36,7 +37,11 @@ import (
 // probeErrorTokenTLSHandshake is the bounded token for any TLS-handshake
 // failure surfaced via /readyz. Kept in one place so typed and substring
 // detection paths agree.
-const probeErrorTokenTLSHandshake = "tls handshake failed" // #nosec G101 -- bounded error token, not a credential
+const (
+	probeErrorTokenTLSHandshake = "tls handshake failed" // #nosec G101 -- bounded error token, not a credential
+	fetcherURLSchemeHTTP        = "http"
+	fetcherURLSchemeHTTPS       = "https"
+)
 
 // Category priority (DNS → timeout → econnrefused → tls → default) is
 // intentional. DNS surfaces first because it is the most actionable for
@@ -145,6 +150,28 @@ func rabbitMQTLSPosture(cfg *Config) (*bool, string) {
 	}
 
 	return &tlsOn, ""
+}
+
+func fetcherTLSPosture(cfg *Config) (*bool, string) {
+	if cfg == nil || strings.TrimSpace(cfg.Fetcher.URL) == "" {
+		return nil, ""
+	}
+
+	parsedURL, err := url.Parse(cfg.Fetcher.URL)
+	if err != nil {
+		return nil, "unparseable fetcher url"
+	}
+
+	switch strings.ToLower(parsedURL.Scheme) {
+	case fetcherURLSchemeHTTPS:
+		tlsOn := true
+		return &tlsOn, ""
+	case fetcherURLSchemeHTTP:
+		tlsOn := false
+		return &tlsOn, ""
+	default:
+		return nil, "unsupported fetcher scheme"
+	}
 }
 
 func objectStorageTLSPosture(cfg *Config) (*bool, string) {

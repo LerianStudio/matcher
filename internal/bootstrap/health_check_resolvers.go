@@ -6,11 +6,18 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
+	"strings"
 	"time"
+
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
+
+var errFetcherURLRequired = errors.New("fetcher url required when fetcher is enabled")
 
 func resolvePostgresCheck(deps *HealthDependencies) (HealthCheckFunc, bool) {
 	if deps == nil {
@@ -147,6 +154,70 @@ func resolveRabbitMQCheck(deps *HealthDependencies) (HealthCheckFunc, bool) {
 
 		return deps.RabbitMQ.EnsureChannel()
 	}, true
+}
+
+// resolveFetcherCheck returns the readiness check for the fetcher dependency.
+//
+// Precedence (highest to lowest):
+//  1. deps == nil → unresolved (caller treats as required-missing).
+//  2. cfg.Fetcher.Enabled == false → unresolved (caller's optional() reports
+//     skipped, so /readyz stays healthy when fetcher is disabled).
+//  3. cfg.Fetcher.Enabled && URL == "" → fail-closed with errFetcherURLRequired
+//     (misconfiguration must surface as required-failure).
+//  4. deps.FetcherCheck (custom override, used by tests) wins over the live
+//     client.
+//  5. deps.Fetcher == nil → unresolved (fetcher enabled but no probe wired —
+//     bootstrap-time misconfiguration).
+//  6. Otherwise: probe deps.Fetcher.IsHealthy.
+func resolveFetcherCheck(cfg *Config, deps *HealthDependencies) (HealthCheckFunc, bool) {
+	if deps == nil {
+		return nil, false
+	}
+
+	if cfg != nil && !cfg.Fetcher.Enabled {
+		return nil, false
+	}
+
+	if cfg != nil && strings.TrimSpace(cfg.Fetcher.URL) == "" {
+		return func(context.Context) error { return errFetcherURLRequired }, true
+	}
+
+	if deps.FetcherCheck != nil {
+		return deps.FetcherCheck, true
+	}
+
+	if isNilFetcherClient(deps.Fetcher) {
+		return nil, false
+	}
+
+	// Capture the client outside the closure so a swap of deps.Fetcher (e.g.,
+	// in a test that mutates deps after resolve) cannot race with an
+	// in-flight probe. Defense-in-depth — the resolver/probe pair is single-
+	// threaded today, but capturing keeps the contract independent of caller
+	// ordering.
+	client := deps.Fetcher
+
+	return func(ctx context.Context) error {
+		if client.IsHealthy(ctx) {
+			return nil
+		}
+
+		return sharedPorts.ErrFetcherUnavailable
+	}, true
+}
+
+func isNilFetcherClient(client sharedPorts.FetcherClient) bool {
+	if client == nil {
+		return true
+	}
+
+	value := reflect.ValueOf(client)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
 
 func resolveObjectStorageCheck(deps *HealthDependencies) (HealthCheckFunc, bool) {

@@ -41,3 +41,21 @@ func TestHealthCheckTLSPosture_RedisMalformedConfigReturnsUnknownReason(t *testi
 	assert.Nil(t, checks["redis"].TLS)
 	assert.Contains(t, checks["redis"].Reason, "TLS posture unknown")
 }
+
+func TestFetcherTLSPosture_InvalidScheme_ReturnsReason(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{Fetcher: FetcherConfig{URL: "ftp://example.com"}}
+	tlsPtr, reason := fetcherTLSPosture(cfg)
+	assert.Nil(t, tlsPtr)
+	assert.Equal(t, "unsupported fetcher scheme", reason)
+}
+
+func TestFetcherTLSPosture_UnparseableURL_ReturnsReason(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{Fetcher: FetcherConfig{URL: "://malformed"}}
+	tlsPtr, reason := fetcherTLSPosture(cfg)
+	assert.Nil(t, tlsPtr)
+	assert.Equal(t, "unparseable fetcher url", reason)
+}
