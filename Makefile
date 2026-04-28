@@ -131,6 +131,7 @@ help:
 	@echo "  make format                      - Format code in all packages"
 	@echo "  make sec                         - Run security checks using gosec"
 	@echo "  make check-tests                 - Verify test coverage for components"
+	@echo "  make check-tests-self            - Run check-tests.sh self-test fixtures"
 	@echo "  make check-migrations            - Verify migration pairs and sequential numbering"
 	@echo "  make check-license               - Verify every Go file has an Elastic License 2.0 header"
 	@echo "  make check-coverage              - Check coverage against thresholds"
@@ -278,7 +279,7 @@ check-tools:
 # Code Quality Commands
 #-------------------------------------------------------
 
-.PHONY: lint lint-fix lint-custom format sec vet vulncheck check-tests check-test-tags check-migrations check-generated-artifacts check-license check-coverage
+.PHONY: lint lint-fix lint-custom format sec vet vulncheck check-tests check-tests-self check-test-tags check-migrations check-generated-artifacts check-license check-coverage
 
 vet:
 	$(call print_title,Running go vet)
@@ -356,6 +357,10 @@ check-tests:
 	$(call print_title,Checking test coverage for components)
 	@./scripts/check-tests.sh
 	@echo "[ok] Test coverage check completed"
+
+check-tests-self:
+	$(call print_title,Checking check-tests.sh self-test)
+	@bash ./scripts/check-tests_test.sh
 
 check-test-tags:
 	$(call print_title,Checking test build tags)
@@ -499,6 +504,7 @@ ci:
 	@$(MAKE) test-leak
 	@$(MAKE) test-int
 	@$(MAKE) check-tests
+	@$(MAKE) check-tests-self
 	@$(MAKE) check-test-tags
 	@$(MAKE) check-migrations
 	@$(MAKE) check-generated-artifacts
