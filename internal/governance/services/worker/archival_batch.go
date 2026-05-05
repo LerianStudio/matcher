@@ -107,6 +107,7 @@ func (aw *ArchivalWorker) getOrCreateMetadata(
 		if txLease == nil || txLease.SQLTx() == nil {
 			return nil, fmt.Errorf("begin archive metadata transaction: %w", emission.ErrCriticalOutboxTxRequired)
 		}
+
 		defer func() { _ = txLease.Rollback() }()
 
 		if err := aw.archiveRepo.CreateWithTx(ctx, txLease.SQLTx(), metadata); err != nil {
@@ -293,6 +294,7 @@ func (aw *ArchivalWorker) completeArchiveWithPartitionDropTx(ctx context.Context
 	if txLease == nil || txLease.SQLTx() == nil {
 		return fmt.Errorf("begin archive completion transaction: %w", emission.ErrCriticalOutboxTxRequired)
 	}
+
 	defer func() { _ = txLease.Rollback() }()
 
 	if err := aw.partitionMgr.DetachPartitionWithTx(ctx, txLease.SQLTx(), metadata.PartitionName); err != nil {
@@ -393,6 +395,7 @@ func (aw *ArchivalWorker) transitionToUploaded(
 			*metadata = before
 			return fmt.Errorf("begin archive uploaded transaction: %w", emission.ErrCriticalOutboxTxRequired)
 		}
+
 		defer func() { _ = txLease.Rollback() }()
 
 		if err := aw.archiveRepo.UpdateWithTx(ctx, txLease.SQLTx(), metadata); err != nil {

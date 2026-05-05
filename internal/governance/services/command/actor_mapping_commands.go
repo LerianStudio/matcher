@@ -150,6 +150,7 @@ func (uc *ActorMappingUseCase) PseudonymizeActor(ctx context.Context, actorID st
 	if txLease == nil || txLease.SQLTx() == nil {
 		return fmt.Errorf("begin pseudonymize actor transaction: %w", emission.ErrCriticalOutboxTxRequired)
 	}
+
 	defer func() { _ = txLease.Rollback() }()
 
 	if err := uc.repo.PseudonymizeWithTx(ctx, txLease.SQLTx(), actorID); err != nil {

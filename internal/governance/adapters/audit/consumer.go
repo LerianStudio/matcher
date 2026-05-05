@@ -242,6 +242,7 @@ func (consumer *Consumer) createAuditLogAndEmit(ctx context.Context, span trace.
 	if txLease == nil || txLease.SQLTx() == nil {
 		return fmt.Errorf("begin audit log streaming transaction: %w", emission.ErrCriticalOutboxTxRequired)
 	}
+
 	defer func() { _ = txLease.Rollback() }()
 
 	created, err := consumer.auditLogRepo.CreateWithTx(ctx, txLease.SQLTx(), auditLog)
