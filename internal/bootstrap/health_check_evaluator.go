@@ -164,50 +164,52 @@ func evaluateReadinessChecks(
 	// performs a non-blocking ctx check before every group.Go so it exits
 	// cleanly on cancellation; remaining specs are then materialised as "down"
 	// by the ctx.Done branch in the receive loop.
-	go func() {
-		defer runtime.RecoverWithPolicyAndContext(
-			ctx,
-			logger,
-			constants.ApplicationName,
-			"readyz_dispatch",
-			runtime.KeepRunning,
-		)
+	//
+	// SafeGoWithContextAndComponent provides the panic-recovery defer
+	// internally — bare `go` is forbidden by tests/static/goroutine_guard.
+	runtime.SafeGoWithContextAndComponent(
+		ctx,
+		logger,
+		constants.ApplicationName,
+		"readyz_dispatch",
+		runtime.KeepRunning,
+		func(dispatchCtx context.Context) {
+			for idx := range readyzSpecs {
+				select {
+				case <-dispatchCtx.Done():
+					return
+				default:
+				}
 
-		for idx := range readyzSpecs {
-			select {
-			case <-ctx.Done():
-				return
-			default:
+				group.Go(func() error {
+					defer runtime.RecoverWithPolicyAndContext(
+						dispatchCtx,
+						logger,
+						constants.ApplicationName,
+						"readyz_probe",
+						runtime.KeepRunning,
+					)
+
+					check, available := readyzSpecs[idx].resolve(cfg, deps)
+					result, aggregate := applyReadinessCheckResult(
+						dispatchCtx,
+						readyzSpecs[idx].name,
+						check,
+						available,
+						readyzSpecs[idx].optional(cfg, deps),
+						cfg,
+						readyzSpecs[idx].tlsPost,
+						logger,
+						timeout,
+					)
+
+					outcomes <- readinessProbeOutcome{index: idx, result: result, aggregate: aggregate}
+
+					return nil
+				})
 			}
-
-			group.Go(func() error {
-				defer runtime.RecoverWithPolicyAndContext(
-					ctx,
-					logger,
-					constants.ApplicationName,
-					"readyz_probe",
-					runtime.KeepRunning,
-				)
-
-				check, available := readyzSpecs[idx].resolve(cfg, deps)
-				result, aggregate := applyReadinessCheckResult(
-					ctx,
-					readyzSpecs[idx].name,
-					check,
-					available,
-					readyzSpecs[idx].optional(cfg, deps),
-					cfg,
-					readyzSpecs[idx].tlsPost,
-					logger,
-					timeout,
-				)
-
-				outcomes <- readinessProbeOutcome{index: idx, result: result, aggregate: aggregate}
-
-				return nil
-			})
-		}
-	}()
+		},
+	)
 
 	received := make([]bool, len(readyzSpecs))
 	pending := len(readyzSpecs)
