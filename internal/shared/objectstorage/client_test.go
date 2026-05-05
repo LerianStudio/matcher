@@ -346,6 +346,12 @@ func TestClient_ConcurrentReloadReload(t *testing.T) {
 // against concurrent method calls. The resolver's cache key flips
 // between two values so the CAS path is hit frequently. Race detector
 // plus prefix check catches any torn state.
+//
+// To remove timing dependency on goroutine scheduling order, we
+// deterministically prove each backend has served at least one call
+// before unleashing the contended workload. The contention loop then
+// validates the absence of torn state under load; the per-backend
+// "must have served" assertions are no longer time-sensitive.
 func TestClient_ConcurrentResolverAndCalls(t *testing.T) {
 	t.Parallel()
 
@@ -363,6 +369,20 @@ func TestClient_ConcurrentResolverAndCalls(t *testing.T) {
 	}
 
 	client := NewClientWithResolver(nil, resolver)
+
+	// Deterministic warm-up: prove v1 serves with flip=false, then v2 with flip=true.
+	// Without this, slow CI runners can schedule all caller goroutines after the
+	// flipper has already advanced past flip=false, leaving v1.calls == 0.
+	_, err := client.Upload(context.Background(), "warmup-v1", strings.NewReader(""), "text/plain")
+	require.NoError(t, err)
+	require.Positive(t, v1.calls.Load(), "warmup must hit v1 with flip=false")
+
+	flip.Store(true)
+	_, err = client.Upload(context.Background(), "warmup-v2", strings.NewReader(""), "text/plain")
+	require.NoError(t, err)
+	require.Positive(t, v2.calls.Load(), "warmup must hit v2 with flip=true")
+
+	flip.Store(false)
 
 	const (
 		callers        = 16
