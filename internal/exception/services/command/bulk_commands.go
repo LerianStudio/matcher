@@ -206,13 +206,20 @@ func (uc *ExceptionUseCase) assignSingle(
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 
+	// Arm the rollback BEFORE validating the lease: validateCriticalTxLease
+	// can return early when SQLTx() is nil, and at that point the lease's
+	// release callback (the connection-pool reservation guard) has not run.
+	// A nil-guarded Rollback is safe — TxLease.Rollback handles nil tx by
+	// just invoking release once.
+	defer func() {
+		if txLease != nil {
+			_ = txLease.Rollback()
+		}
+	}()
+
 	if err := validateCriticalTxLease(txLease, "begin bulk assign transaction"); err != nil {
 		return err
 	}
-
-	defer func() {
-		_ = txLease.Rollback()
-	}()
 
 	if _, err := uc.exceptionRepo.UpdateWithTx(ctx, txLease.SQLTx(), exception); err != nil {
 		return fmt.Errorf("update exception: %w", err)
@@ -347,13 +354,18 @@ func (uc *ExceptionUseCase) resolveSingle(
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 
+	// Arm the rollback BEFORE validating the lease (see assignSingle for the
+	// full rationale): validateCriticalTxLease can return before the release
+	// callback runs, leaking the connection-pool reservation otherwise.
+	defer func() {
+		if txLease != nil {
+			_ = txLease.Rollback()
+		}
+	}()
+
 	if err := validateCriticalTxLease(txLease, "begin bulk resolve transaction"); err != nil {
 		return err
 	}
-
-	defer func() {
-		_ = txLease.Rollback()
-	}()
 
 	if _, err := uc.exceptionRepo.UpdateWithTx(ctx, txLease.SQLTx(), exception); err != nil {
 		return fmt.Errorf("update exception: %w", err)

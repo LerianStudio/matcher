@@ -119,6 +119,7 @@ func (uc *ExceptionUseCase) OpenDispute(
 	return uc.processOpenDispute(ctx, cmd, params, logger, span)
 }
 
+//nolint:cyclop // Transactional critical streaming guard is intentionally colocated with dispute state-machine write path.
 func (uc *ExceptionUseCase) processOpenDispute(
 	ctx context.Context,
 	cmd OpenDisputeCommand,
@@ -170,17 +171,27 @@ func (uc *ExceptionUseCase) processOpenDispute(
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 
+	// Arm the rollback BEFORE validating the lease. validateCriticalTxLease
+	// can return early when SQLTx() is nil, which would otherwise leak the
+	// lease's release callback (the connection-pool reservation guard). The
+	// nil-guarded Rollback is safe — TxLease.Rollback handles nil tx by
+	// invoking release once. sql.ErrTxDone filtering preserves the existing
+	// post-commit no-op semantics.
+	defer func() {
+		if txLease == nil {
+			return
+		}
+
+		if rbErr := txLease.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+			libOpentelemetry.HandleSpanError(span, "tx.Rollback failed", rbErr)
+		}
+	}()
+
 	if err := validateCriticalTxLease(txLease, "begin open dispute transaction"); err != nil {
 		libOpentelemetry.HandleSpanError(span, "invalid critical streaming transaction", err)
 
 		return nil, err
 	}
-
-	defer func() {
-		if rbErr := txLease.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
-			libOpentelemetry.HandleSpanError(span, "tx.Rollback failed", rbErr)
-		}
-	}()
 
 	created, err := uc.disputeRepo.CreateWithTx(ctx, txLease.SQLTx(), newDispute)
 	if err != nil {
@@ -297,17 +308,24 @@ func (uc *ExceptionUseCase) processCloseDispute(
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 
+	// Arm the rollback BEFORE validating the lease (see openDispute for the
+	// full rationale): validateCriticalTxLease can return before the release
+	// callback runs, leaking the connection-pool reservation otherwise.
+	defer func() {
+		if txLease == nil {
+			return
+		}
+
+		if rbErr := txLease.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+			libOpentelemetry.HandleSpanError(span, "tx.Rollback failed", rbErr)
+		}
+	}()
+
 	if err := validateCriticalTxLease(txLease, "begin close dispute transaction"); err != nil {
 		libOpentelemetry.HandleSpanError(span, "invalid critical streaming transaction", err)
 
 		return nil, err
 	}
-
-	defer func() {
-		if rbErr := txLease.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
-			libOpentelemetry.HandleSpanError(span, "tx.Rollback failed", rbErr)
-		}
-	}()
 
 	existingDispute, err := uc.disputeRepo.FindByIDWithTx(ctx, txLease.SQLTx(), cmd.DisputeID)
 	if err != nil {
@@ -471,17 +489,24 @@ func (uc *ExceptionUseCase) processSubmitEvidence(
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 
+	// Arm the rollback BEFORE validating the lease (see openDispute for the
+	// full rationale): validateCriticalTxLease can return before the release
+	// callback runs, leaking the connection-pool reservation otherwise.
+	defer func() {
+		if txLease == nil {
+			return
+		}
+
+		if rbErr := txLease.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+			libOpentelemetry.HandleSpanError(span, "tx.Rollback failed", rbErr)
+		}
+	}()
+
 	if err := validateCriticalTxLease(txLease, "begin submit evidence transaction"); err != nil {
 		libOpentelemetry.HandleSpanError(span, "invalid critical streaming transaction", err)
 
 		return nil, err
 	}
-
-	defer func() {
-		if rbErr := txLease.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
-			libOpentelemetry.HandleSpanError(span, "tx.Rollback failed", rbErr)
-		}
-	}()
 
 	existingDispute, err := uc.disputeRepo.FindByIDWithTx(ctx, txLease.SQLTx(), cmd.DisputeID)
 	if err != nil {

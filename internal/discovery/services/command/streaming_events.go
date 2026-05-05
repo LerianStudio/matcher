@@ -13,6 +13,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
@@ -177,7 +178,10 @@ func emitWarnNoSpan(ctx context.Context, definitionKey string, err error) {
 		return
 	}
 
-	logger.With(libLog.Err(err)).Log(ctx, libLog.LevelWarn, "failed to emit streaming event "+definitionKey+" without span")
+	// Broker/client errors can carry connection or tenant context; route the
+	// log through SafeError so the production-mode redactor strips sensitive
+	// fields, matching the rest of the service-layer error logs in matcher.
+	libLog.SafeError(logger, ctx, "failed to emit streaming event "+definitionKey+" without span", err, runtime.IsProductionMode())
 }
 
 // formatDiscoveryTime delegates to emission.FormatTime; preserved as a thin

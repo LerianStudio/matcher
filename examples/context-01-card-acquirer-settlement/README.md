@@ -36,7 +36,7 @@ Optional auxiliary checks:
 | File | `external_id` | `amount` | `currency` | `date` | `description` | Metadata worth keeping |
 | --- | --- | --- | --- | --- | --- | --- |
 | `ledger-midaz.csv` | `ledger_tx_id` | `amount` | `currency` | `occurred_at` | `description` | `order_id`, `merchant_id`, `authorization_code`, `scenario` |
-| `acquirer-settlement.json` | `acquirer_tx_id` | `gross_amount` or `net_amount` depending the rule | `currency` | `settlement_date` | empty or generated from `order_id` | `order_id`, `fee_amount`, `settlement_id`, `merchant_id`, `authorization_code`, `scenario` |
+| `acquirer-settlement.json` | `acquirer_tx_id` | `gross_amount` or `net_amount` depending on the rule | `currency` | `settlement_date` | empty or generated from `order_id` | `order_id`, `fee_amount`, `settlement_id`, `merchant_id`, `authorization_code`, `scenario` |
 | `acquirer-fees.csv` | `fee_id` | `fee_amount` | fixed `BRL` for BRL demos or metadata-only | `charged_at` | `fee_type` | `order_id`, `settlement_id`, `scenario` |
 | `chargebacks.csv` | `chargeback_id` | `amount` | `currency` | `occurred_at` | `reason_code` | `order_id`, `authorization_code`, `scenario` |
 

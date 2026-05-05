@@ -32,11 +32,17 @@ CONFIG_DIR := ./config
 BINARY_NAME ?= matcher
 BIN_DIR ?= bin
 GOLANGCI_LINT_VERSION ?= v2.10.1
-# GOPATH_BIN points at the Go install directory (`go env GOPATH`/bin) so we
-# can invoke pinned tool versions explicitly, bypassing whatever an OS
-# package manager (brew, apt) might have put earlier on PATH. Critical
-# for keeping local lint runs identical to CI.
-GOPATH_BIN := $(shell go env GOPATH)/bin
+# GOPATH_BIN points at the directory `go install` writes to so we can invoke
+# pinned tool versions explicitly, bypassing whatever an OS package manager
+# (brew, apt) might have put earlier on PATH. Critical for keeping local
+# lint runs identical to CI.
+#
+# Resolution order matches `go install`'s own contract:
+#   1. $GOBIN if set (overrides everything)
+#   2. first GOPATH entry + /bin (GOPATH may be a colon-separated list)
+# Hard-coding `$(go env GOPATH)/bin` would silently break `lint`/`lint-fix`
+# for any developer or CI environment that exports GOBIN.
+GOPATH_BIN := $(shell GOBIN="$$(go env GOBIN)"; if [ -n "$$GOBIN" ]; then echo "$$GOBIN"; else echo "$$(go env GOPATH | cut -d: -f1)/bin"; fi)
 GO_CI_PACKAGES := ./cmd/... ./internal/... ./migrations/... ./pkg/... ./tests/...
 
 # Migration configuration

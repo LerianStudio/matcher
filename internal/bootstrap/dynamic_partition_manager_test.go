@@ -74,9 +74,56 @@ func TestDynamicPartitionManager_ListPartitions_NilProvider(t *testing.T) {
 
 // Tests for DetachPartition / DropPartition (non-WithTx) were removed when
 // those methods were deleted as Ring-2 orphans on the dynamicPartitionManager
-// wrapper. Their WithTx counterparts share the same `current()` resolution
-// path, so the nil-manager / nil-provider invariants are still covered by the
-// EnsurePartitionsExist, ListPartitions, and Current tests in this file.
+// wrapper. Their WithTx counterparts route through the same `current()`
+// resolver, so the nil-manager / nil-provider invariants are exercised both
+// indirectly (via the Current tests below) and directly (via the four
+// DetachPartitionWithTx / DropPartitionWithTx tests immediately below) so a
+// future refactor that bypasses `current()` cannot silently regress the
+// guard.
+
+func TestDynamicPartitionManager_DetachPartitionWithTx_NilManager(t *testing.T) {
+	t.Parallel()
+
+	var manager *dynamicPartitionManager
+
+	err := manager.DetachPartitionWithTx(context.Background(), nil, "audit_log_p2026_05")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errPartitionManagerProviderUnavailable)
+}
+
+func TestDynamicPartitionManager_DetachPartitionWithTx_NilProvider(t *testing.T) {
+	t.Parallel()
+
+	manager := &dynamicPartitionManager{provider: nil}
+
+	err := manager.DetachPartitionWithTx(context.Background(), nil, "audit_log_p2026_05")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errPartitionManagerProviderUnavailable)
+}
+
+func TestDynamicPartitionManager_DropPartitionWithTx_NilManager(t *testing.T) {
+	t.Parallel()
+
+	var manager *dynamicPartitionManager
+
+	err := manager.DropPartitionWithTx(context.Background(), nil, "audit_log_p2026_05")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errPartitionManagerProviderUnavailable)
+}
+
+func TestDynamicPartitionManager_DropPartitionWithTx_NilProvider(t *testing.T) {
+	t.Parallel()
+
+	manager := &dynamicPartitionManager{provider: nil}
+
+	err := manager.DropPartitionWithTx(context.Background(), nil, "audit_log_p2026_05")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errPartitionManagerProviderUnavailable)
+}
 
 func TestDynamicPartitionManager_Current_NilManager(t *testing.T) {
 	t.Parallel()

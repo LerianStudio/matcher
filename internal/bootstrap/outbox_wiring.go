@@ -143,8 +143,14 @@ var matcherNonRetryableErrors = []error{
 // them explicitly so the retry classifier does not depend on that helper for
 // every sentinel — IsCallerError is checked separately as a structural
 // safety net for new caller-side errors that lib-streaming may add upstream.
+//
+// streaming.ErrEventDisabled is intentionally excluded: it is an operational
+// state (delivery policy toggled off), not a malformed envelope. Outbox rows
+// that surface this sentinel must remain retryable so they drain after the
+// event is re-enabled. See isNonRetryableOutboxError for the explicit
+// short-circuit that overrides the structural IsCallerError(true) verdict
+// lib-streaming returns for this sentinel.
 var streamingNonRetryableErrors = []error{
-	streaming.ErrEventDisabled,
 	streaming.ErrInvalidOutboxEnvelope,
 	streaming.ErrInvalidDeliveryPolicy,
 	streaming.ErrUnknownEventDefinition,
@@ -175,6 +181,15 @@ var nonRetryableErrors = func() []error {
 // isNonRetryableOutboxError checks if an error is a permanent validation failure.
 func isNonRetryableOutboxError(err error) bool {
 	if err == nil {
+		return false
+	}
+
+	// ErrEventDisabled is an operational toggle (delivery policy off), not a
+	// malformed envelope. lib-streaming's IsCallerError truth table classifies
+	// it as caller-side, but for matcher's outbox semantics this would mean
+	// silent event loss when streaming is re-enabled. Short-circuit BEFORE the
+	// IsCallerError check so the dispatcher keeps the row retryable.
+	if errors.Is(err, streaming.ErrEventDisabled) {
 		return false
 	}
 

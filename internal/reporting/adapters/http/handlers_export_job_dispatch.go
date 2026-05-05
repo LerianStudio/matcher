@@ -30,6 +30,7 @@ var _ = sharedhttp.ErrorResponse{}
 // @Produce json
 // @Security BearerAuth
 // @Param X-Request-Id header string false "Request ID for tracing"
+// @Param X-Idempotency-Key header string false "Idempotency key for safe retries"
 // @Param jobId path string true "Export Job ID" format(uuid)
 // @Success 200 {object} ExportJobResponse
 // @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"

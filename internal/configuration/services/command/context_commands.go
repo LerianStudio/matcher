@@ -39,6 +39,10 @@ var (
 	ErrCreateContextReturnedNil = errors.New("context repository returned nil context")
 	// ErrCreateSourceReturnedNil indicates the source repository returned a nil entity without an error.
 	ErrCreateSourceReturnedNil = errors.New("source repository returned nil source")
+	// ErrCreateRuleReturnedNil indicates the match-rule repository returned a nil entity without an error.
+	// Failing fast here prevents the streaming-emission loop downstream from
+	// dereferencing a nil rule pointer.
+	ErrCreateRuleReturnedNil = errors.New("rule repository returned nil rule")
 )
 
 // publishAudit publishes an audit event if the publisher is configured.
@@ -374,6 +378,10 @@ func createInlineRules(
 		createdRule, ruleErr := txRuleCreator.CreateWithTx(ctx, tx, ruleEntity)
 		if ruleErr != nil {
 			return nil, fmt.Errorf("creating rule: %w", ruleErr)
+		}
+
+		if createdRule == nil {
+			return nil, ErrCreateRuleReturnedNil
 		}
 
 		createdRules = append(createdRules, createdRule)

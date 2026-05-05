@@ -146,16 +146,23 @@ func (uc *ExceptionUseCase) processCallback(
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 
+	// Arm the rollback BEFORE validating the lease. validateCriticalTxLease
+	// can return early when SQLTx() is nil; without this defer, the lease's
+	// release callback (the connection-pool reservation guard) is skipped on
+	// that failure path, leaking the lease. Rollback is a no-op when the tx
+	// is already committed and is nil-safe by the TxLease contract.
+	defer func() {
+		if txLease != nil {
+			_ = txLease.Rollback() // No-op if already committed
+		}
+	}()
+
 	if err := validateCriticalTxLease(txLease, "begin callback transaction"); err != nil {
 		libOpentelemetry.HandleSpanError(span, "invalid critical streaming transaction", err)
 		uc.markIdempotencyFailed(ctx, params.dedupeKey)
 
 		return err
 	}
-
-	defer func() {
-		_ = txLease.Rollback() // No-op if already committed
-	}()
 
 	updated, err := uc.exceptionRepo.UpdateWithTx(ctx, txLease.SQLTx(), exception)
 	if err != nil {

@@ -3194,7 +3194,7 @@ definitions:
         example: QUEUED
         type: string
       statusUrl:
-        example: /v1/contexts/550e8400-e29b-41d4-a716-446655440000/export-jobs/550e8400-e29b-41d4-a716-446655440001
+        example: /v1/export-jobs/550e8400-e29b-41d4-a716-446655440001
         type: string
     type: object
   internal_reporting_adapters_http.DownloadExportJobResponse:
@@ -3278,6 +3278,9 @@ definitions:
         - UNMATCHED
         - SUMMARY
         - VARIANCE
+        - EXCEPTIONS
+        - MATCHES
+        - UNMATCHED_TRANSACTIONS
         example: MATCHED
         type: string
       startedAt:
@@ -3746,6 +3749,10 @@ paths:
       - description: Request ID for tracing
         in: header
         name: X-Request-Id
+        type: string
+      - description: Idempotency key for safe retries
+        in: header
+        name: X-Idempotency-Key
         type: string
       - description: Context ID
         format: uuid
@@ -6639,6 +6646,10 @@ paths:
       - description: Request ID for tracing
         in: header
         name: X-Request-Id
+        type: string
+      - description: Idempotency key for safe retries
+        in: header
+        name: X-Idempotency-Key
         type: string
       - description: Export Job ID
         format: uuid

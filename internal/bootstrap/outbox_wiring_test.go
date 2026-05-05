@@ -288,6 +288,20 @@ func TestIsNonRetryableOutboxError_LibStreamingCallerError(t *testing.T) {
 	assert.True(t, isNonRetryableOutboxError(wrapped))
 }
 
+// TestIsNonRetryableOutboxError_ErrEventDisabledIsRetryable pins the override
+// that classifies streaming.ErrEventDisabled as RETRYABLE despite
+// lib-streaming's IsCallerError truth table marking it caller-side. Treating
+// this operational toggle as terminal would silently lose outbox rows when an
+// event is re-enabled mid-flight.
+func TestIsNonRetryableOutboxError_ErrEventDisabledIsRetryable(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, isNonRetryableOutboxError(streaming.ErrEventDisabled))
+
+	wrapped := fmt.Errorf("emit failed: %w", streaming.ErrEventDisabled)
+	assert.False(t, isNonRetryableOutboxError(wrapped))
+}
+
 // TestIsNonRetryableOutboxError_ExportedDelegates pins that the exported
 // wrapper (used by integration tests wiring production-identical
 // dispatchers) delegates identically to the unexported func — a regression

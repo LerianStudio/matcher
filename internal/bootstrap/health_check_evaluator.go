@@ -156,34 +156,58 @@ func evaluateReadinessChecks(
 	group := new(errgroup.Group)
 	group.SetLimit(readyzProbeConcurrency)
 
-	for idx := range readyzSpecs {
-		group.Go(func() error {
-			defer runtime.RecoverWithPolicyAndContext(
-				ctx,
-				logger,
-				constants.ApplicationName,
-				"readyz_probe",
-				runtime.KeepRunning,
-			)
+	// Dispatch probes from a dedicated goroutine so the receive loop below can
+	// observe ctx.Done() promptly even when errgroup.SetLimit blocks group.Go.
+	// Without this, a cluster of hung probes that ignore checkCtx would stall
+	// the spawn loop and prevent the fan-in select from synthesising "down"
+	// outcomes within the readyz wall-clock budget. The dispatch goroutine
+	// performs a non-blocking ctx check before every group.Go so it exits
+	// cleanly on cancellation; remaining specs are then materialised as "down"
+	// by the ctx.Done branch in the receive loop.
+	go func() {
+		defer runtime.RecoverWithPolicyAndContext(
+			ctx,
+			logger,
+			constants.ApplicationName,
+			"readyz_dispatch",
+			runtime.KeepRunning,
+		)
 
-			check, available := readyzSpecs[idx].resolve(cfg, deps)
-			result, aggregate := applyReadinessCheckResult(
-				ctx,
-				readyzSpecs[idx].name,
-				check,
-				available,
-				readyzSpecs[idx].optional(cfg, deps),
-				cfg,
-				readyzSpecs[idx].tlsPost,
-				logger,
-				timeout,
-			)
+		for idx := range readyzSpecs {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 
-			outcomes <- readinessProbeOutcome{index: idx, result: result, aggregate: aggregate}
+			group.Go(func() error {
+				defer runtime.RecoverWithPolicyAndContext(
+					ctx,
+					logger,
+					constants.ApplicationName,
+					"readyz_probe",
+					runtime.KeepRunning,
+				)
 
-			return nil
-		})
-	}
+				check, available := readyzSpecs[idx].resolve(cfg, deps)
+				result, aggregate := applyReadinessCheckResult(
+					ctx,
+					readyzSpecs[idx].name,
+					check,
+					available,
+					readyzSpecs[idx].optional(cfg, deps),
+					cfg,
+					readyzSpecs[idx].tlsPost,
+					logger,
+					timeout,
+				)
+
+				outcomes <- readinessProbeOutcome{index: idx, result: result, aggregate: aggregate}
+
+				return nil
+			})
+		}
+	}()
 
 	received := make([]bool, len(readyzSpecs))
 	pending := len(readyzSpecs)

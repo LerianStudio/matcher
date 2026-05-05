@@ -129,10 +129,16 @@ func formatConfigurationTime(value time.Time) string {
 	return emission.FormatTime(value)
 }
 
+// hashConfigurationPayloadErrorSentinel is returned when the input cannot be
+// JSON-marshalled. Returning a fixed non-empty sentinel (instead of an empty
+// string) prevents two distinct unmarshalable inputs from colliding into the
+// same hash bucket and skewing config_hash / priority_version diffing.
+const hashConfigurationPayloadErrorSentinel = "hash-error"
+
 func hashConfigurationPayload(value any) string {
 	payload, err := json.Marshal(value)
 	if err != nil {
-		return ""
+		return hashConfigurationPayloadErrorSentinel
 	}
 
 	sum := sha256.Sum256(payload)

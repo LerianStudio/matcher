@@ -212,7 +212,11 @@ func (svc *Service) Shutdown(ctx context.Context) error {
 
 	svc.readinessState.beginDraining()
 
-	svc.stopBackgroundWorkers(ctx, logger)
+	var shutdownErr error
+
+	if err := svc.stopBackgroundWorkers(ctx, logger); err != nil {
+		shutdownErr = errors.Join(shutdownErr, err)
+	}
 
 	// Allow background workers time to complete in-flight operations
 	// before closing infrastructure connections they depend on.
@@ -232,8 +236,6 @@ func (svc *Service) Shutdown(ctx context.Context) error {
 	case <-timer.C:
 	}
 
-	var shutdownErr error
-
 	shutdownErr = svc.shutdownServerAndConnections(ctx, logger, shutdownErr)
 
 	return shutdownErr
@@ -251,7 +253,7 @@ func (svc *Service) Shutdown(ctx context.Context) error {
 // config-change subscriber from restarting workers while we're shutting them down.
 // Systemplane change feed stops before the supervisor to prevent reload triggers
 // during shutdown.
-func (svc *Service) stopBackgroundWorkers(ctx context.Context, logger libLog.Logger) {
+func (svc *Service) stopBackgroundWorkers(ctx context.Context, logger libLog.Logger) error {
 	// Step 1: Stop ConfigManager first (see ordering contract above).
 	if svc.ConfigManager != nil {
 		svc.ConfigManager.Stop()
@@ -272,11 +274,20 @@ func (svc *Service) stopBackgroundWorkers(ctx context.Context, logger libLog.Log
 
 	if outbox := svc.outboxShutdowner(); outbox != nil {
 		if err := outbox.Shutdown(ctx); err != nil {
+			// Log here so operators see the failure timestamped at the
+			// shutdown stage; propagate the error so Service.Shutdown()
+			// surfaces partial-drain / lost-event scenarios to callers
+			// and tests instead of returning nil after the dispatcher
+			// refused to stop.
 			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("outbox dispatcher shutdown failed: %v", err))
+
+			return fmt.Errorf("shutdown outbox dispatcher: %w", err)
 		}
 	} else if outbox := svc.outboxStoppable(); outbox != nil {
 		outbox.Stop()
 	}
+
+	return nil
 }
 
 // stopSystemplane gracefully shuts down the systemplane client.
@@ -330,6 +341,20 @@ func (svc *Service) outboxShutdowner() shutdowner {
 
 func (svc *Service) closeStreamingApp(ctx context.Context) error {
 	if svc == nil || svc.streamingApp == nil {
+		return nil
+	}
+
+	// Prefer the shutdowner contract: lib-streaming/v2 producers expose
+	// Shutdown(ctx) for graceful flush + broker disconnect, which is
+	// strictly richer than CloseContext/Close (those just tear down the
+	// underlying connection without ensuring in-flight envelopes drain).
+	// Falling through to CloseContext/Close after a successful shutdown
+	// would double-stop the producer.
+	if shutdown, ok := svc.streamingApp.(shutdowner); ok {
+		if err := shutdown.Shutdown(ctx); err != nil {
+			return fmt.Errorf("shutdown streaming app: %w", err)
+		}
+
 		return nil
 	}
 

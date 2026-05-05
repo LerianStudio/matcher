@@ -675,6 +675,12 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
+                        "description": "Idempotency key for safe retries",
+                        "name": "X-Idempotency-Key",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
                         "format": "uuid",
                         "description": "Context ID",
                         "name": "contextId",
@@ -5001,6 +5007,12 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Request ID for tracing",
                         "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Idempotency key for safe retries",
+                        "name": "X-Idempotency-Key",
                         "in": "header"
                     },
                     {
@@ -14222,7 +14234,7 @@ const docTemplate = `{
                 },
                 "statusUrl": {
                     "type": "string",
-                    "example": "/v1/contexts/550e8400-e29b-41d4-a716-446655440000/export-jobs/550e8400-e29b-41d4-a716-446655440001"
+                    "example": "/v1/export-jobs/550e8400-e29b-41d4-a716-446655440001"
                 }
             }
         },
@@ -14332,7 +14344,10 @@ const docTemplate = `{
                         "MATCHED",
                         "UNMATCHED",
                         "SUMMARY",
-                        "VARIANCE"
+                        "VARIANCE",
+                        "EXCEPTIONS",
+                        "MATCHES",
+                        "UNMATCHED_TRANSACTIONS"
                     ],
                     "example": "MATCHED"
                 },

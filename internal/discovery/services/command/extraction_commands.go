@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
 
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
@@ -109,14 +110,7 @@ func (uc *UseCase) StartExtraction(
 	jobID, err := uc.fetcherClient.SubmitExtractionJob(ctx, input)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "submit extraction job", err)
-
-		if markErr := extractionReq.MarkFailed(entities.SanitizedExtractionFailureMessage); markErr == nil {
-			discoveryMetrics.RecordExtractionState(ctx, extractionReq.Status.String())
-
-			if updateErr := uc.extractionRepo.Update(ctx, extractionReq); updateErr != nil {
-				libOpentelemetry.HandleSpanError(span, "persist failed extraction request", updateErr)
-			}
-		}
+		uc.recordExtractionSubmissionFailure(ctx, span, extractionReq)
 
 		return nil, fmt.Errorf("submit extraction job: %w", err)
 	}
@@ -141,4 +135,38 @@ func (uc *UseCase) StartExtraction(
 	}
 
 	return extractionReq, nil
+}
+
+// recordExtractionSubmissionFailure marks the extraction request as FAILED,
+// persists it, and emits the terminal lifecycle event so consumers see a
+// consistent created -> failed transition. Best-effort: any persistence error
+// is attached to the active span and the function returns silently — the
+// caller is already returning an error to the client.
+//
+// Extracted from RequestExtraction's SubmitExtractionJob error branch to keep
+// that branch flat (nestif/cyclop) and to make the "created event must have a
+// matching terminal event" invariant explicit at a single call site.
+func (uc *UseCase) recordExtractionSubmissionFailure(
+	ctx context.Context,
+	span trace.Span,
+	extractionReq *entities.ExtractionRequest,
+) {
+	if extractionReq == nil {
+		return
+	}
+
+	if err := extractionReq.MarkFailed(entities.SanitizedExtractionFailureMessage); err != nil {
+		// Domain refused the transition (already-terminal); nothing to persist or emit.
+		return
+	}
+
+	discoveryMetrics.RecordExtractionState(ctx, extractionReq.Status.String())
+
+	if err := uc.extractionRepo.Update(ctx, extractionReq); err != nil {
+		libOpentelemetry.HandleSpanError(span, "persist failed extraction request", err)
+
+		return
+	}
+
+	uc.emitExtractionTerminal(ctx, span, extractionReq, "PENDING")
 }

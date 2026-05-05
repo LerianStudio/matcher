@@ -153,11 +153,19 @@ func rabbitMQTLSPosture(cfg *Config) (*bool, string) {
 }
 
 func fetcherTLSPosture(cfg *Config) (*bool, string) {
-	if cfg == nil || strings.TrimSpace(cfg.Fetcher.URL) == "" {
+	if cfg == nil {
 		return nil, ""
 	}
 
-	parsedURL, err := url.Parse(cfg.Fetcher.URL)
+	// Parse the trimmed value: leading/trailing whitespace would otherwise
+	// produce a misleading "unparseable fetcher url" verdict for a URL that
+	// is actually well-formed once the surrounding spaces are removed.
+	fetcherURL := strings.TrimSpace(cfg.Fetcher.URL)
+	if fetcherURL == "" {
+		return nil, ""
+	}
+
+	parsedURL, err := url.Parse(fetcherURL)
 	if err != nil {
 		return nil, "unparseable fetcher url"
 	}
