@@ -134,6 +134,16 @@ main() {
       continue
     fi
 
+    # //go:build ignore — file is explicitly excluded from compilation by the
+    # Go toolchain (utility scripts run via `go run`, code generators, etc.).
+    # Such files are not part of the production binary and cannot be linked
+    # into a regular test binary, so requiring a _test.go counterpart is
+    # incoherent. We honour both the modern `//go:build ignore` directive and
+    # the legacy `// +build ignore` form.
+    if rg -q '^//go:build ignore\b' "$file" || rg -q '^// \+build ignore\b' "$file"; then
+      continue
+    fi
+
     dir="$(dirname "$file")"
     base="$(basename "$file" .go)"
     if ! has_matching_test_file "$dir" "$base"; then
