@@ -232,3 +232,44 @@ Connection Health (background):
     v
   Apply updated settings (no connection restart)
 ```
+
+## 10. Tenant Context Setup (Manual Construction)
+
+When constructing a `context.Context` manually — in tests, fixtures, migration scripts, or any code path that does not flow through HTTP middleware or the worker tenant-binding helpers — and you need streaming emission, repository tenant scoping, or any cross-context call to work, you MUST set BOTH the legacy `auth.TenantIDKey` AND the lib-commons `tmcore` tenant context:
+
+```go
+ctx = context.WithValue(parent, auth.TenantIDKey, tenantID)
+ctx = context.WithValue(ctx, auth.TenantSlugKey, tenantSlug) // when slug is also needed
+ctx = tmcore.ContextWithTenantID(ctx, tenantID)
+```
+
+### Why two keys?
+
+Matcher reads tenant identity from two distinct context keys depending on the consumer:
+
+| Consumer | Reads from | Why |
+|----------|------------|-----|
+| `auth.GetTenantID(ctx)`, repositories, tenant schema isolation | `auth.TenantIDKey` (matcher-internal `contextKey`) | Predates lib-commons tenant-manager; the matcher repository layer was built around this key. |
+| `emission.Emit` (streaming), lib-commons tenant-manager helpers, `tmcore.GetTenantIDContext` | tmcore context value (set via `tmcore.ContextWithTenantID`) | lib-streaming and lib-commons v5 standardised on tmcore as the cross-library tenant carrier. |
+
+The auth middleware (`internal/auth/middleware_extract.go:51,110`) does this automatically for every authenticated HTTP request. The worker tenant-binding code in `internal/bootstrap/dynamic_infrastructure_multi_tenant.go` does it for background tasks. But hand-rolled contexts that set only one key will silently fail downstream:
+
+- **Only `auth.TenantIDKey` set:** repositories work, but `emission.Emit` returns `emission.ErrTenantIDMissing` and the streaming event never lands.
+- **Only tmcore set:** streaming works, but `auth.GetTenantID(ctx)` falls back to the default tenant — repository writes go to the wrong schema.
+
+### Recommended pattern
+
+For non-trivial test fixtures, prefer a small helper that sets both keys atomically:
+
+```go
+// auth.TenantContext returns a context with both matcher-internal and
+// tmcore tenant keys populated. Use this in tests/fixtures instead of
+// constructing tenant contexts inline.
+func TenantContext(parent context.Context, tenantID string) context.Context {
+    ctx := context.WithValue(parent, TenantIDKey, tenantID)
+    return tmcore.ContextWithTenantID(ctx, tenantID)
+}
+```
+
+If you find yourself writing the dual-key incantation more than twice, factor it out — silent tenant-failures are operationally expensive and difficult to detect in CI.
+

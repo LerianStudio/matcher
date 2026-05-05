@@ -11,6 +11,7 @@ import (
 	"time"
 
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	streaming "github.com/LerianStudio/lib-streaming/v2"
 
 	discoveryFetcher "github.com/LerianStudio/matcher/internal/discovery/adapters/fetcher"
 	discoveryHTTP "github.com/LerianStudio/matcher/internal/discovery/adapters/http"
@@ -98,7 +99,7 @@ func initOptionalDiscoveryWorker(
 //
 // Failures (missing host, exchanger creation error) are logged as warnings and
 // fall back to BasicAuth, letting startup succeed.
-func wireDiscoveryTokenExchanger(fetcherClient sharedPorts.FetcherClient, cfg *Config, logger libLog.Logger) {
+func wireDiscoveryTokenExchanger(ctx context.Context, fetcherClient sharedPorts.FetcherClient, cfg *Config, logger libLog.Logger) {
 	if !cfg.Auth.Enabled || cfg.Auth.Host == "" {
 		return
 	}
@@ -111,7 +112,7 @@ func wireDiscoveryTokenExchanger(fetcherClient sharedPorts.FetcherClient, cfg *C
 
 	te, teErr := discoveryM2M.NewTokenExchanger(cfg.Auth.Host, teOpts...)
 	if teErr != nil {
-		logger.Log(context.Background(), libLog.LevelWarn,
+		logger.Log(ctx, libLog.LevelWarn,
 			fmt.Sprintf("discovery: failed to create token exchanger: %v -- falling back to BasicAuth", teErr))
 
 		return
@@ -119,7 +120,7 @@ func wireDiscoveryTokenExchanger(fetcherClient sharedPorts.FetcherClient, cfg *C
 
 	dfc, ok := fetcherClient.(*dynamicFetcherClient)
 	if !ok {
-		logger.Log(context.Background(), libLog.LevelWarn,
+		logger.Log(ctx, libLog.LevelWarn,
 			"discovery: token exchanger not wired — FetcherClient is not *dynamicFetcherClient")
 
 		return
@@ -127,12 +128,13 @@ func wireDiscoveryTokenExchanger(fetcherClient sharedPorts.FetcherClient, cfg *C
 
 	dfc.tokenExchanger = te
 
-	logger.Log(context.Background(), libLog.LevelInfo, "discovery: token exchanger wired for Bearer auth")
+	logger.Log(ctx, libLog.LevelInfo, "discovery: token exchanger wired for Bearer auth")
 }
 
 // wireDiscoveryExtractionPoller creates the extraction poller and wires it into the
 // command use case. The poller monitors extraction job completion asynchronously.
 func wireDiscoveryExtractionPoller(
+	ctx context.Context,
 	fetcherClient sharedPorts.FetcherClient,
 	extractionRepo *discoveryExtractionRepo.Repository,
 	cmdUseCase *discoveryCommand.UseCase,
@@ -163,7 +165,7 @@ func wireDiscoveryExtractionPoller(
 
 	cmdUseCase.WithExtractionPoller(extractionPoller)
 
-	logger.Log(context.Background(), libLog.LevelInfo,
+	logger.Log(ctx, libLog.LevelInfo,
 		fmt.Sprintf("discovery: extraction poller wired into command use case (poll: %s, timeout: %s)",
 			cfg.FetcherExtractionPollInterval(), cfg.FetcherExtractionTimeout()))
 }
@@ -199,6 +201,8 @@ func newExtractionPollerRunnerFactory() extractionpoller.RunnerFactory {
 // initDiscoveryModule initializes the Fetcher discovery module including HTTP handlers,
 // PG repositories, the Fetcher HTTP client, command/query use cases, and the background
 // discovery worker. This module is non-critical: failures are logged but do not prevent startup.
+//
+//nolint:unused // Kept for legacy tests and nil-emitter bootstrap compatibility.
 func initDiscoveryModule(
 	routes *Routes,
 	cfg *Config,
@@ -208,6 +212,22 @@ func initDiscoveryModule(
 	tenantLister sharedPorts.TenantLister,
 	extractionRepo *discoveryExtractionRepo.Repository,
 	logger libLog.Logger,
+	m2mProvider ...sharedPorts.M2MProvider,
+) (*discoveryWorker.DiscoveryWorker, error) {
+	return initDiscoveryModuleWithEmitter(context.Background(), routes, cfg, configGetter, healthDeps, provider, tenantLister, extractionRepo, logger, nil, m2mProvider...)
+}
+
+func initDiscoveryModuleWithEmitter(
+	ctx context.Context,
+	routes *Routes,
+	cfg *Config,
+	configGetter func() *Config,
+	healthDeps *HealthDependencies,
+	provider sharedPorts.InfrastructureProvider,
+	tenantLister sharedPorts.TenantLister,
+	extractionRepo *discoveryExtractionRepo.Repository,
+	logger libLog.Logger,
+	streamEmitter streaming.Emitter,
 	m2mProvider ...sharedPorts.M2MProvider,
 ) (*discoveryWorker.DiscoveryWorker, error) {
 	var m2m sharedPorts.M2MProvider
@@ -220,12 +240,19 @@ func initDiscoveryModule(
 		healthDeps.Fetcher = fetcherClient
 	}
 
-	wireDiscoveryTokenExchanger(fetcherClient, cfg, logger)
+	wireDiscoveryTokenExchanger(ctx, fetcherClient, cfg, logger)
 
 	connRepo := discoveryConnRepo.NewRepository(provider)
 	schemaRepo := discoverySchemaRepo.NewRepository(provider)
 
-	cmdUseCase, err := discoveryCommand.NewUseCase(fetcherClient, connRepo, schemaRepo, extractionRepo, logger)
+	cmdUseCase, err := discoveryCommand.NewUseCase(
+		fetcherClient,
+		connRepo,
+		schemaRepo,
+		extractionRepo,
+		logger,
+		discoveryCommand.WithStreamingEmitter(streamEmitter),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("create discovery command use case: %w", err)
 	}
@@ -261,10 +288,10 @@ func initDiscoveryModule(
 	// "worker healthy" without waiting for staleThreshold to fire. Non-
 	// fatal: if Redis is not reachable, the query use case simply reports
 	// the heartbeat fields as nil and the dashboard renders "unknown".
-	wireBridgeHeartbeatReader(context.Background(), provider, queryUseCase, cfg, configGetter, logger)
+	wireBridgeHeartbeatReader(ctx, provider, queryUseCase, cfg, configGetter, logger)
 
 	if cfg.Auth.Enabled {
-		logger.Log(context.Background(), libLog.LevelWarn,
+		logger.Log(ctx, libLog.LevelWarn,
 			"discovery: auth is enabled; ensure RBAC resource 'discovery' with actions 'discovery:read' and 'discovery:write' is provisioned before exposing discovery routes")
 	}
 
@@ -272,7 +299,7 @@ func initDiscoveryModule(
 		return nil, fmt.Errorf("register discovery routes: %w", err)
 	}
 
-	wireDiscoveryExtractionPoller(fetcherClient, extractionRepo, cmdUseCase, cfg, configGetter, logger)
+	wireDiscoveryExtractionPoller(ctx, fetcherClient, extractionRepo, cmdUseCase, cfg, configGetter, logger)
 
 	cmdUseCase.WithDiscoveryRefreshLock(provider, cfg.FetcherDiscoveryInterval())
 	cmdUseCase.WithDiscoveryRefreshLockGetter(func() time.Duration {
@@ -295,12 +322,13 @@ func initDiscoveryModule(
 		provider,
 		discoveryWorker.DiscoveryWorkerConfig{Interval: cfg.FetcherDiscoveryInterval()},
 		logger,
+		discoveryWorker.WithDiscoveryStreamingEmitter(streamEmitter),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create discovery worker: %w", err)
 	}
 
-	wireDiscoverySchemaCacheFromRedis(provider, cmdUseCase, queryUseCase, worker, cfg, configGetter, logger)
+	wireDiscoverySchemaCacheFromRedis(ctx, provider, cmdUseCase, queryUseCase, worker, cfg, configGetter, logger)
 
 	return worker, nil
 }
@@ -377,6 +405,7 @@ func computeBridgeHeartbeatStaleAfter(cfg *Config, configGetter func() *Config) 
 // wireDiscoverySchemaCacheFromRedis attempts to create a Redis-backed schema cache and
 // wire it into the query use case. This is non-critical: failures are logged as warnings.
 func wireDiscoverySchemaCacheFromRedis(
+	ctx context.Context,
 	provider sharedPorts.InfrastructureProvider,
 	cmdUseCase *discoveryCommand.UseCase,
 	queryUseCase *discoveryQuery.UseCase,
@@ -385,8 +414,6 @@ func wireDiscoverySchemaCacheFromRedis(
 	configGetter func() *Config,
 	logger libLog.Logger,
 ) {
-	ctx := context.Background()
-
 	redisLease, redisErr := provider.GetRedisConnection(ctx)
 	if redisErr != nil {
 		logger.Log(ctx, libLog.LevelWarn,

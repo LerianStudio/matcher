@@ -46,6 +46,7 @@ type Service struct {
 	connectionManager     connectionCloser
 	cleanupFuncs          []func()
 	readinessState        *readinessState
+	streamingApp          libCommons.App
 
 	// Systemplane client for centralized runtime configuration.
 	// Nil when systemplane initialization fails (graceful degradation).
@@ -80,6 +81,14 @@ type connectionCloser interface {
 // during graceful shutdown (e.g., the outbox dispatcher).
 type stoppable interface {
 	Stop()
+}
+
+type shutdowner interface {
+	Shutdown(context.Context) error
+}
+
+type closeContexter interface {
+	CloseContext(context.Context) error
 }
 
 // GetOutboxRunner returns the outbox dispatcher as a libCommons.App.
@@ -149,6 +158,14 @@ func (svc *Service) Run() error {
 		}
 	}
 
+	opts := svc.launcherOptions()
+
+	libCommons.NewLauncher(opts...).Run()
+
+	return nil
+}
+
+func (svc *Service) launcherOptions() []libCommons.LauncherOption {
 	opts := []libCommons.LauncherOption{
 		libCommons.WithLogger(svc.Logger),
 		libCommons.RunApp("Fiber HTTP Server", svc.Server),
@@ -157,9 +174,11 @@ func (svc *Service) Run() error {
 		opts = append(opts, libCommons.RunApp("Outbox Dispatcher", svc.outboxRunner))
 	}
 
-	libCommons.NewLauncher(opts...).Run()
+	if svc.streamingApp != nil {
+		opts = append(opts, libCommons.RunApp("Streaming Producer", svc.streamingApp))
+	}
 
-	return nil
+	return opts
 }
 
 func (svc *Service) resolveActiveConfig() *Config {
@@ -251,7 +270,11 @@ func (svc *Service) stopBackgroundWorkers(ctx context.Context, logger libLog.Log
 		svc.redisMetricsCollector.Stop()
 	}
 
-	if outbox := svc.outboxStoppable(); outbox != nil {
+	if outbox := svc.outboxShutdowner(); outbox != nil {
+		if err := outbox.Shutdown(ctx); err != nil {
+			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("outbox dispatcher shutdown failed: %v", err))
+		}
+	} else if outbox := svc.outboxStoppable(); outbox != nil {
 		outbox.Stop()
 	}
 }
@@ -292,12 +315,54 @@ func (svc *Service) outboxStoppable() stoppable {
 	return s
 }
 
+func (svc *Service) outboxShutdowner() shutdowner {
+	if svc.outboxRunner == nil {
+		return nil
+	}
+
+	shutdown, ok := svc.outboxRunner.(shutdowner)
+	if !ok {
+		return nil
+	}
+
+	return shutdown
+}
+
+func (svc *Service) closeStreamingApp(ctx context.Context) error {
+	if svc == nil || svc.streamingApp == nil {
+		return nil
+	}
+
+	if closer, ok := svc.streamingApp.(closeContexter); ok {
+		if err := closer.CloseContext(ctx); err != nil {
+			return fmt.Errorf("close streaming app with context: %w", err)
+		}
+
+		return nil
+	}
+
+	if closer, ok := svc.streamingApp.(connectionCloser); ok {
+		if err := closer.Close(); err != nil {
+			return fmt.Errorf("close streaming app: %w", err)
+		}
+
+		return nil
+	}
+
+	return nil
+}
+
 // shutdownServerAndConnections shuts down the HTTP server and closes all connections.
 func (svc *Service) shutdownServerAndConnections(ctx context.Context, logger libLog.Logger, shutdownErr error) error {
 	if svc.Server != nil {
 		if err := svc.Server.Shutdown(ctx); err != nil {
 			shutdownErr = errors.Join(shutdownErr, err)
 		}
+	}
+
+	if err := svc.closeStreamingApp(ctx); err != nil {
+		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("streaming producer close failed: %v", err))
+		shutdownErr = errors.Join(shutdownErr, err)
 	}
 
 	if svc.connectionManager != nil {

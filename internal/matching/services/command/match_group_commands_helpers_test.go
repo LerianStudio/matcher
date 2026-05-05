@@ -585,7 +585,7 @@ func TestPerformFeeVerification_NilFeeInput(t *testing.T) {
 	t.Parallel()
 
 	uc := &UseCase{}
-	err := uc.performFeeVerification(context.Background(), nil, nil, nil, nil)
+	_, err := uc.performFeeVerification(context.Background(), nil, nil, nil, nil)
 	require.NoError(t, err)
 }
 
@@ -593,7 +593,7 @@ func TestPerformFeeVerification_NilCtxInfo(t *testing.T) {
 	t.Parallel()
 
 	uc := &UseCase{}
-	err := uc.performFeeVerification(context.Background(), nil, nil, nil, &feeVerificationInput{
+	_, err := uc.performFeeVerification(context.Background(), nil, nil, nil, &feeVerificationInput{
 		ctxInfo: nil,
 	})
 	require.NoError(t, err)
@@ -603,7 +603,7 @@ func TestPerformFeeVerification_EmptyFeeRules(t *testing.T) {
 	t.Parallel()
 
 	uc := &UseCase{}
-	err := uc.performFeeVerification(context.Background(), nil, nil, nil, &feeVerificationInput{
+	_, err := uc.performFeeVerification(context.Background(), nil, nil, nil, &feeVerificationInput{
 		ctxInfo:    &ports.ReconciliationContextInfo{},
 		leftRules:  nil,
 		rightRules: nil,
@@ -715,7 +715,7 @@ func TestPerformFeeVerification_FatalFindingDoesNotPersistPartialResults(t *test
 		exceptionCreator: exceptionCreator,
 	}
 
-	err = uc.performFeeVerification(
+	_, err = uc.performFeeVerification(
 		context.Background(),
 		nil,
 		&matchingEntities.MatchRun{ID: runID, ContextID: contextID},

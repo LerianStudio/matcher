@@ -12,16 +12,20 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/lib-commons/v5/commons/outbox"
+	streaming "github.com/LerianStudio/lib-streaming/v2"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	streamingbootstrap "github.com/LerianStudio/matcher/internal/streaming/bootstrap"
+	streamingcatalog "github.com/LerianStudio/matcher/internal/streaming/catalog"
 )
 
 // --- Fakes ---
@@ -275,6 +279,12 @@ func TestIsNonRetryableOutboxError_PayloadNotJSON(t *testing.T) {
 	// structural defect no retry will repair.
 	assert.True(t, isNonRetryableOutboxError(outbox.ErrOutboxEventPayloadNotJSON))
 	wrapped := fmt.Errorf("persist outbox event: %w", outbox.ErrOutboxEventPayloadNotJSON)
+	assert.True(t, isNonRetryableOutboxError(wrapped))
+}
+
+func TestIsNonRetryableOutboxError_LibStreamingCallerError(t *testing.T) {
+	wrapped := fmt.Errorf("streaming replay failed: %w", streaming.ErrInvalidSubject)
+
 	assert.True(t, isNonRetryableOutboxError(wrapped))
 }
 
@@ -1051,4 +1061,104 @@ func TestRegisterOutboxHandlers_DuplicateRegistrationFails(t *testing.T) {
 	// Second call should fail because the first already claimed every event type.
 	err := registerOutboxHandlers(registry, &fakeIngestionPub{}, &fakeMatchPub{}, &fakeAuditPub{})
 	require.Error(t, err)
+}
+
+func TestRegisterStreamingOutboxRelayPreservesMatcherHandlers(t *testing.T) {
+	registry := outbox.NewHandlerRegistry()
+	ingestPub := &fakeIngestionPub{}
+	matchPub := &fakeMatchPub{}
+	auditPub := &fakeAuditPub{}
+	require.NoError(t, registerOutboxHandlers(registry, ingestPub, matchPub, auditPub))
+
+	catalog, err := streamingcatalog.NewCatalog()
+	require.NoError(t, err)
+	bundle, err := streamingbootstrap.NewEmitterWithCatalog(context.Background(), streamingOutboxRelayTestConfig(), catalog)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, bundle.Emitter.Close()) })
+
+	require.NoError(t, streamingbootstrap.RegisterOutboxRelay(bundle, registry))
+	require.NoError(t, bundle.Emitter.Close())
+
+	streamingErr := registry.Handle(context.Background(), validStreamingOutboxRelayRow(t))
+	require.Error(t, streamingErr)
+	assert.ErrorIs(t, streamingErr, streaming.ErrEmitterClosed)
+
+	matchPayload, err := json.Marshal(validMatchConfirmedEvent())
+	require.NoError(t, err)
+	require.NoError(t, registry.Handle(context.Background(), &outbox.OutboxEvent{
+		ID:        uuid.New(),
+		EventType: sharedDomain.EventTypeMatchConfirmed,
+		Payload:   matchPayload,
+	}))
+	assert.Equal(t, 1, matchPub.confirmed)
+
+	ingestionPayload, err := json.Marshal(validIngestionCompletedEvent())
+	require.NoError(t, err)
+	require.NoError(t, registry.Handle(context.Background(), &outbox.OutboxEvent{
+		ID:        uuid.New(),
+		EventType: sharedDomain.EventTypeIngestionCompleted,
+		Payload:   ingestionPayload,
+	}))
+	assert.Equal(t, 1, ingestPub.completed)
+
+	auditPayload, err := json.Marshal(validAuditLogCreatedEvent())
+	require.NoError(t, err)
+	require.NoError(t, registry.Handle(context.Background(), &outbox.OutboxEvent{
+		ID:        uuid.New(),
+		EventType: sharedDomain.EventTypeAuditLogCreated,
+		Payload:   auditPayload,
+	}))
+	assert.Equal(t, 1, auditPub.created)
+}
+
+func streamingOutboxRelayTestConfig() streaming.Config {
+	return streaming.Config{
+		Enabled:               true,
+		Brokers:               []string{"localhost:9092"},
+		ClientID:              "matcher-outbox-relay-unit-test",
+		BatchLingerMs:         5,
+		BatchMaxBytes:         1_048_576,
+		MaxBufferedRecords:    10_000,
+		Compression:           "lz4",
+		RecordRetries:         10,
+		RecordDeliveryTimeout: 30 * time.Second,
+		RequiredAcks:          "all",
+		CBFailureRatio:        0.5,
+		CBMinRequests:         10,
+		CBTimeout:             30 * time.Second,
+		CloseTimeout:          30 * time.Second,
+		CloudEventsSource:     "matcher",
+	}
+}
+
+func validStreamingOutboxRelayRow(t *testing.T) *outbox.OutboxEvent {
+	t.Helper()
+
+	event := streaming.Event{
+		TenantID:     "00000000-0000-0000-0000-000000000001",
+		ResourceType: "reconciliation_context",
+		EventType:    "created",
+		Source:       "matcher",
+		Subject:      "ctx-1",
+		Payload:      json.RawMessage(`{"context_id":"ctx-1"}`),
+	}
+	event.ApplyDefaults()
+
+	envelope := streaming.OutboxEnvelope{
+		Version:       1,
+		Topic:         event.Topic(),
+		DefinitionKey: "reconciliation_context.created",
+		AggregateID:   uuid.New(),
+		Policy:        streaming.DefaultDeliveryPolicy(),
+		Event:         event,
+	}
+	payload, err := json.Marshal(envelope)
+	require.NoError(t, err)
+
+	return &outbox.OutboxEvent{
+		ID:          uuid.New(),
+		EventType:   streaming.StreamingOutboxEventType,
+		AggregateID: envelope.AggregateID,
+		Payload:     payload,
+	}
 }

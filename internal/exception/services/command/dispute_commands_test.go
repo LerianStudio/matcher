@@ -7,8 +7,9 @@
 package command
 
 import (
-	"context"
 	"testing"
+
+	streaming "github.com/LerianStudio/lib-streaming/v2"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -24,7 +25,7 @@ func TestNewDisputeUseCase_Success(t *testing.T) {
 	actor := actorExtractor("analyst-1")
 	infra := &stubInfraProvider{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actor, audit, infra, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, audit, infra, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 	require.NoError(t, err)
 	require.NotNil(t, uc)
@@ -46,11 +47,11 @@ func TestNewDisputeUseCase_NilDisputeRepository(t *testing.T) {
 	actor := actorExtractor("analyst-1")
 	infra := &stubInfraProvider{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actor, audit, infra)
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, audit, infra, WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 	require.NotNil(t, uc)
 
-	_, err = uc.OpenDispute(context.Background(), OpenDisputeCommand{
+	_, err = uc.OpenDispute(testStreamingContext(), OpenDisputeCommand{
 		ExceptionID: uuid.New(),
 		Category:    "BANK_FEE_ERROR",
 		Description: "test",
@@ -67,7 +68,7 @@ func TestNewDisputeUseCase_NilExceptionRepository(t *testing.T) {
 	actor := actorExtractor("analyst-1")
 	infra := &stubInfraProvider{}
 
-	uc, err := NewExceptionUseCase(nil, actor, audit, infra, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(nil, actor, audit, infra, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 	require.ErrorIs(t, err, ErrNilExceptionRepository)
 	assert.Nil(t, uc)
@@ -81,7 +82,7 @@ func TestNewDisputeUseCase_NilAuditPublisher(t *testing.T) {
 	actor := actorExtractor("analyst-1")
 	infra := &stubInfraProvider{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actor, nil, infra, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, nil, infra, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 	require.ErrorIs(t, err, ErrNilAuditPublisher)
 	assert.Nil(t, uc)
@@ -95,7 +96,7 @@ func TestNewDisputeUseCase_NilActorExtractor(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	infra := &stubInfraProvider{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, nil, audit, infra, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, nil, audit, infra, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 	require.ErrorIs(t, err, ErrNilActorExtractor)
 	assert.Nil(t, uc)
@@ -109,7 +110,7 @@ func TestNewDisputeUseCase_NilInfraProvider(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst-1")
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actor, audit, nil, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, audit, nil, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 	require.ErrorIs(t, err, ErrNilInfraProvider)
 	assert.Nil(t, uc)

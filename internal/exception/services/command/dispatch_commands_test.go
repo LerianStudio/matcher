@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	streaming "github.com/LerianStudio/lib-streaming/v2"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -67,7 +69,7 @@ func TestNewDispatchUseCase_Success(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst-1")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 	require.NoError(t, err)
 	require.NotNil(t, uc)
@@ -87,7 +89,7 @@ func TestNewDispatchUseCase_NilExceptionFinder(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst-1")
 
-	uc, err := NewExceptionUseCase(nil, actor, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(nil, actor, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 	require.ErrorIs(t, err, ErrNilExceptionRepository)
 	assert.Nil(t, uc)
@@ -104,11 +106,11 @@ func TestNewDispatchUseCase_NilExternalConnector(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst-1")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 	require.NotNil(t, uc)
 
-	_, err = uc.Dispatch(context.Background(), DispatchCommand{
+	_, err = uc.Dispatch(testStreamingContext(), DispatchCommand{
 		ExceptionID:  uuid.New(),
 		TargetSystem: "JIRA",
 	})
@@ -122,7 +124,7 @@ func TestNewDispatchUseCase_NilAuditPublisher(t *testing.T) {
 	finder, connector := newDispatchMocks(t)
 	actor := actorExtractor("analyst-1")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, nil, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, nil, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 	require.ErrorIs(t, err, ErrNilAuditPublisher)
 	assert.Nil(t, uc)
@@ -134,7 +136,7 @@ func TestNewDispatchUseCase_NilActorExtractor(t *testing.T) {
 	finder, connector := newDispatchMocks(t)
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), nil, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), nil, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 	require.ErrorIs(t, err, ErrNilActorExtractor)
 	assert.Nil(t, uc)
@@ -147,7 +149,7 @@ func TestNewDispatchUseCase_NilInfraProvider(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst-1")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, nil, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, nil, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 	require.ErrorIs(t, err, ErrNilInfraProvider)
 	assert.Nil(t, uc)
@@ -156,7 +158,7 @@ func TestNewDispatchUseCase_NilInfraProvider(t *testing.T) {
 func TestNewDispatchUseCase_AllDependenciesNil(t *testing.T) {
 	t.Parallel()
 
-	uc, err := NewExceptionUseCase(nil, nil, nil, nil, WithExternalConnector(nil))
+	uc, err := NewExceptionUseCase(nil, nil, nil, nil, WithExternalConnector(nil), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 	require.ErrorIs(t, err, ErrNilExceptionRepository)
 	assert.Nil(t, uc)
@@ -230,7 +232,7 @@ func TestNewDispatchUseCase_ValidationOrder(t *testing.T) {
 				infra = nil
 			}
 
-			uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, infra, WithExternalConnector(mockConnector))
+			uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, infra, WithExternalConnector(mockConnector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 			require.ErrorIs(t, err, tc.expectedErr)
 			assert.Nil(t, uc)
@@ -259,7 +261,7 @@ func TestDispatch_Success(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ctx := ctxWithActor("analyst@example.com")
@@ -322,7 +324,7 @@ func TestDispatch_AllTargetSystems(t *testing.T) {
 			audit := &stubAuditPublisher{}
 			actor := actorExtractor("user@test.com")
 
-			uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+			uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 			require.NoError(t, err)
 
 			ctx := ctxWithActor("user@test.com")
@@ -346,7 +348,7 @@ func TestDispatch_NilExceptionID(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ctx := ctxWithActor("analyst@example.com")
@@ -368,7 +370,7 @@ func TestDispatch_EmptyTargetSystem(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ctx := ctxWithActor("analyst@example.com")
@@ -390,7 +392,7 @@ func TestDispatch_WhitespaceTargetSystem(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ctx := ctxWithActor("analyst@example.com")
@@ -412,7 +414,7 @@ func TestDispatch_UnsupportedTargetSystem(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ctx := ctxWithActor("analyst@example.com")
@@ -435,7 +437,7 @@ func TestDispatch_EmptyActor(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ctx := ctxWithActor("")
@@ -457,7 +459,7 @@ func TestDispatch_WhitespaceActor(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("   ")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ctx := ctxWithActor("   ")
@@ -481,7 +483,7 @@ func TestDispatch_ExceptionFinderError(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ctx := ctxWithActor("analyst@example.com")
@@ -510,7 +512,7 @@ func TestDispatch_ConnectorError(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ctx := ctxWithActor("analyst@example.com")
@@ -542,7 +544,7 @@ func TestDispatch_AuditPublisherError(t *testing.T) {
 	audit := &stubAuditPublisher{err: errTestDispatchAudit}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ctx := ctxWithActor("analyst@example.com")
@@ -574,7 +576,7 @@ func TestDispatch_WithQueue(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ctx := ctxWithActor("analyst@example.com")
@@ -609,7 +611,7 @@ func TestDispatch_WithExternalReference(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ctx := ctxWithActor("analyst@example.com")
@@ -642,7 +644,7 @@ func TestDispatch_NotAcknowledged(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ctx := ctxWithActor("analyst@example.com")
@@ -682,7 +684,7 @@ func TestDispatch_ExceptionWithReason(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ctx := ctxWithActor("analyst@example.com")
@@ -721,7 +723,7 @@ func TestDispatch_ExceptionWithoutReason(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ctx := ctxWithActor("analyst@example.com")
@@ -752,7 +754,7 @@ func TestDispatch_AuditEventMetadata(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("team-lead@example.com")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ctx := ctxWithActor("team-lead@example.com")
@@ -905,7 +907,7 @@ func TestDispatch_WithAssignedExceptionIncludesContext(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("dispatcher@example.com")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ctx := ctxWithActor("dispatcher@example.com")
@@ -1017,7 +1019,7 @@ func TestBulkDispatch_RespectsConcurrencyLimit(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("dispatcher@example.com")
 
-	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector))
+	uc, err := NewExceptionUseCase(wrapFinder(finder), actor, audit, &stubInfraProvider{}, WithExternalConnector(connector), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ids := make([]uuid.UUID, 0, batchSize)

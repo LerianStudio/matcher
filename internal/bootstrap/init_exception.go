@@ -16,6 +16,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	streaming "github.com/LerianStudio/lib-streaming/v2"
+
 	exceptionAdapters "github.com/LerianStudio/matcher/internal/exception/adapters"
 	exceptionAudit "github.com/LerianStudio/matcher/internal/exception/adapters/audit"
 	exceptionHTTP "github.com/LerianStudio/matcher/internal/exception/adapters/http"
@@ -42,7 +44,13 @@ func initExceptionModule(
 	dispatchLimiter fiber.Handler,
 	repos *sharedRepositories,
 	production bool,
+	streamEmitters ...streaming.Emitter,
 ) error {
+	var streamEmitter streaming.Emitter
+	if len(streamEmitters) > 0 {
+		streamEmitter = streamEmitters[0]
+	}
+
 	// Exception-specific repositories (not shared across modules)
 	exceptionRepository := exceptionExceptionRepo.NewRepository(provider)
 	disputeRepository := exceptionDisputeRepo.NewRepository(provider)
@@ -64,6 +72,7 @@ func initExceptionModule(
 		commentRepository,
 		deps,
 		repos,
+		streamEmitter,
 	)
 	if err != nil {
 		return err
@@ -163,6 +172,7 @@ func initExceptionUseCases(
 	commentRepository *exceptionCommentRepo.Repository,
 	deps *exceptionModuleDeps,
 	repos *sharedRepositories,
+	streamEmitter streaming.Emitter,
 ) (*exceptionUseCases, error) {
 	queryUseCase, err := exceptionQuery.NewUseCase(
 		exceptionRepository,
@@ -195,6 +205,7 @@ func initExceptionUseCases(
 		exceptionCommand.WithExternalConnector(httpConnector),
 		exceptionCommand.WithIdempotencyRepository(callbackIdempotencyRepo),
 		exceptionCommand.WithCallbackRateLimiter(callbackRateLimiter),
+		exceptionCommand.WithStreamingEmitter(streamEmitter),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create exception use case: %w", err)

@@ -7,8 +7,9 @@
 package command
 
 import (
-	"context"
 	"testing"
+
+	streaming "github.com/LerianStudio/lib-streaming/v2"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -96,10 +97,10 @@ func TestValidateBulkIDs_AllSameID(t *testing.T) {
 func TestBulkAssign_EmptyIDs(t *testing.T) {
 	t.Parallel()
 
-	uc, err := NewExceptionUseCase(&stubExceptionRepo{}, actorExtractor("analyst"), &stubAuditPublisher{}, &stubInfraProvider{}, WithResolutionExecutor(&stubResolutionExecutor{}))
+	uc, err := NewExceptionUseCase(&stubExceptionRepo{}, actorExtractor("analyst"), &stubAuditPublisher{}, &stubInfraProvider{}, WithResolutionExecutor(&stubResolutionExecutor{}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	result, assignErr := uc.BulkAssign(context.Background(), BulkAssignInput{
+	result, assignErr := uc.BulkAssign(testStreamingContext(), BulkAssignInput{
 		ExceptionIDs: nil,
 		Assignee:     "someone",
 	})
@@ -111,10 +112,10 @@ func TestBulkAssign_EmptyIDs(t *testing.T) {
 func TestBulkAssign_EmptyAssignee(t *testing.T) {
 	t.Parallel()
 
-	uc, err := NewExceptionUseCase(&stubExceptionRepo{}, actorExtractor("analyst"), &stubAuditPublisher{}, &stubInfraProvider{}, WithResolutionExecutor(&stubResolutionExecutor{}))
+	uc, err := NewExceptionUseCase(&stubExceptionRepo{}, actorExtractor("analyst"), &stubAuditPublisher{}, &stubInfraProvider{}, WithResolutionExecutor(&stubResolutionExecutor{}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	result, assignErr := uc.BulkAssign(context.Background(), BulkAssignInput{
+	result, assignErr := uc.BulkAssign(testStreamingContext(), BulkAssignInput{
 		ExceptionIDs: []uuid.UUID{uuid.New()},
 		Assignee:     "",
 	})
@@ -126,10 +127,10 @@ func TestBulkAssign_EmptyAssignee(t *testing.T) {
 func TestBulkAssign_WhitespaceAssignee(t *testing.T) {
 	t.Parallel()
 
-	uc, err := NewExceptionUseCase(&stubExceptionRepo{}, actorExtractor("analyst"), &stubAuditPublisher{}, &stubInfraProvider{}, WithResolutionExecutor(&stubResolutionExecutor{}))
+	uc, err := NewExceptionUseCase(&stubExceptionRepo{}, actorExtractor("analyst"), &stubAuditPublisher{}, &stubInfraProvider{}, WithResolutionExecutor(&stubResolutionExecutor{}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	result, assignErr := uc.BulkAssign(context.Background(), BulkAssignInput{
+	result, assignErr := uc.BulkAssign(testStreamingContext(), BulkAssignInput{
 		ExceptionIDs: []uuid.UUID{uuid.New()},
 		Assignee:     "   ",
 	})
@@ -143,10 +144,10 @@ func TestBulkAssign_WhitespaceAssignee(t *testing.T) {
 func TestBulkResolve_EmptyIDs(t *testing.T) {
 	t.Parallel()
 
-	uc, err := NewExceptionUseCase(&stubExceptionRepo{}, actorExtractor("analyst"), &stubAuditPublisher{}, &stubInfraProvider{}, WithResolutionExecutor(&stubResolutionExecutor{}))
+	uc, err := NewExceptionUseCase(&stubExceptionRepo{}, actorExtractor("analyst"), &stubAuditPublisher{}, &stubInfraProvider{}, WithResolutionExecutor(&stubResolutionExecutor{}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	result, resolveErr := uc.BulkResolve(context.Background(), BulkResolveInput{
+	result, resolveErr := uc.BulkResolve(testStreamingContext(), BulkResolveInput{
 		ExceptionIDs: nil,
 		Resolution:   "ACCEPTED",
 	})
@@ -158,10 +159,10 @@ func TestBulkResolve_EmptyIDs(t *testing.T) {
 func TestBulkResolve_EmptyResolution(t *testing.T) {
 	t.Parallel()
 
-	uc, err := NewExceptionUseCase(&stubExceptionRepo{}, actorExtractor("analyst"), &stubAuditPublisher{}, &stubInfraProvider{}, WithResolutionExecutor(&stubResolutionExecutor{}))
+	uc, err := NewExceptionUseCase(&stubExceptionRepo{}, actorExtractor("analyst"), &stubAuditPublisher{}, &stubInfraProvider{}, WithResolutionExecutor(&stubResolutionExecutor{}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	result, resolveErr := uc.BulkResolve(context.Background(), BulkResolveInput{
+	result, resolveErr := uc.BulkResolve(testStreamingContext(), BulkResolveInput{
 		ExceptionIDs: []uuid.UUID{uuid.New()},
 		Resolution:   "",
 	})
@@ -173,10 +174,10 @@ func TestBulkResolve_EmptyResolution(t *testing.T) {
 func TestBulkResolve_WhitespaceResolution(t *testing.T) {
 	t.Parallel()
 
-	uc, err := NewExceptionUseCase(&stubExceptionRepo{}, actorExtractor("analyst"), &stubAuditPublisher{}, &stubInfraProvider{}, WithResolutionExecutor(&stubResolutionExecutor{}))
+	uc, err := NewExceptionUseCase(&stubExceptionRepo{}, actorExtractor("analyst"), &stubAuditPublisher{}, &stubInfraProvider{}, WithResolutionExecutor(&stubResolutionExecutor{}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	result, resolveErr := uc.BulkResolve(context.Background(), BulkResolveInput{
+	result, resolveErr := uc.BulkResolve(testStreamingContext(), BulkResolveInput{
 		ExceptionIDs: []uuid.UUID{uuid.New()},
 		Resolution:   "   \t  ",
 	})
@@ -190,7 +191,7 @@ func TestBulkResolve_WhitespaceResolution(t *testing.T) {
 func TestBulkResolve_SkipsPendingResolutionException(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 
 	// Create an exception in PENDING_RESOLUTION status.
 	exception, err := entities.NewException(
@@ -209,7 +210,7 @@ func TestBulkResolve_SkipsPendingResolutionException(t *testing.T) {
 	exec := &stubResolutionExecutor{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst"), audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst"), audit, &stubInfraProvider{}, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	result, resolveErr := uc.BulkResolve(ctx, BulkResolveInput{
@@ -257,7 +258,7 @@ func newOpenException(t *testing.T) *entities.Exception {
 	t.Helper()
 
 	ex, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityMedium,
 		nil,
@@ -278,7 +279,7 @@ func TestBulkResolve_NPlusOne_Regression(t *testing.T) {
 
 	const batchSize = 10
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 
 	exceptions := make([]*entities.Exception, 0, batchSize)
 	ids := make([]uuid.UUID, 0, batchSize)
@@ -294,7 +295,7 @@ func TestBulkResolve_NPlusOne_Regression(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	provider := &stubInfraProvider{}
 
-	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst"), audit, provider, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst"), audit, provider, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	result, resolveErr := uc.BulkResolve(ctx, BulkResolveInput{
@@ -322,7 +323,7 @@ func TestBulkAssign_NPlusOne_Regression(t *testing.T) {
 
 	const batchSize = 10
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 
 	exceptions := make([]*entities.Exception, 0, batchSize)
 	ids := make([]uuid.UUID, 0, batchSize)
@@ -338,7 +339,7 @@ func TestBulkAssign_NPlusOne_Regression(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	provider := &stubInfraProvider{}
 
-	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst"), audit, provider, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst"), audit, provider, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	result, assignErr := uc.BulkAssign(ctx, BulkAssignInput{
@@ -367,7 +368,7 @@ func TestBulkAssign_NPlusOne_Regression(t *testing.T) {
 func TestBulkResolve_MissingIDReportedAsNotFound(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 
 	found := newOpenException(t)
 	missingID := uuid.New()
@@ -377,7 +378,7 @@ func TestBulkResolve_MissingIDReportedAsNotFound(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	provider := &stubInfraProvider{}
 
-	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst"), audit, provider, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst"), audit, provider, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	result, resolveErr := uc.BulkResolve(ctx, BulkResolveInput{

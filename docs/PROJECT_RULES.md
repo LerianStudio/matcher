@@ -42,7 +42,7 @@ Architectural constraints and design decisions for the Matcher codebase. This pr
 ## 2. Required Libraries
 
 - **AuthN/AuthZ**: `github.com/LerianStudio/lib-auth/v3` only (`v3.0.0-20260415175119-1568b252d48a`, pre-release pseudo-version pending upstream tag).
-- **Commons/Telemetry**: `github.com/LerianStudio/lib-commons/v5` (v5.0.0).
+- **Commons/Telemetry**: `github.com/LerianStudio/lib-commons/v5` (latest v5.x; currently v5.1.0).
 - **Assertions**: `github.com/LerianStudio/lib-commons/v5/commons/assert` (no panics; referred to as `pkg/assert` in shorthand).
 - **lib-commons submodules**:
   - Tracking/logging: `commons/log` (`libLog`), `commons/commons` (`libCommons.NewTrackingFromContext`).

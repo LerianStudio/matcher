@@ -141,8 +141,12 @@ func TestIntegration_Governance_ActorMapping_Pseudonymize(t *testing.T) {
 		_, err = repo.Upsert(ctx, mapping)
 		require.NoError(t, err)
 
-		// Pseudonymize replaces PII with [REDACTED].
-		err = repo.Pseudonymize(ctx, "actor-003")
+		// PseudonymizeWithTx replaces PII with [REDACTED]. Passing nil tx
+		// makes the repository open its own tenant-scoped transaction, which
+		// is fine for the integration test since we are not coupling with a
+		// streaming emit here — that coupling is exercised at the service
+		// layer in unit tests.
+		err = repo.PseudonymizeWithTx(ctx, nil, "actor-003")
 		require.NoError(t, err)
 
 		fetched, err := repo.GetByActorID(ctx, "actor-003")

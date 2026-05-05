@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
 	"github.com/bxcodec/dbresolver/v2"
 	"github.com/golang-migrate/migrate/v4"
 	migratePostgres "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -22,12 +21,18 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/modules/redis"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"go.opentelemetry.io/otel/trace/noop"
+
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
+	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	configContextRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/context"
 	configSourceRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/source"
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	governanceCommand "github.com/LerianStudio/matcher/internal/governance/services/command"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
@@ -324,7 +329,21 @@ func RunWithDatabase(t *testing.T, testFn func(t *testing.T, h *TestHarness)) {
 
 // Ctx returns a context with the tenant ID set for repository operations.
 func (h *TestHarness) Ctx() context.Context {
-	return context.WithValue(context.Background(), auth.TenantIDKey, h.Seed.TenantID.String())
+	return tenantContext(h.Seed.TenantID.String(), auth.DefaultTenantSlug)
+}
+
+func tenantContext(tenantID, tenantSlug string) context.Context {
+	if tenantID == "" {
+		tenantID = auth.DefaultTenantID
+	}
+	if tenantSlug == "" {
+		tenantSlug = auth.DefaultTenantSlug
+	}
+
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID)
+	ctx = context.WithValue(ctx, auth.TenantSlugKey, tenantSlug)
+
+	return tmcore.ContextWithTenantID(ctx, tenantID)
 }
 
 // Provider returns an InfrastructureProvider wrapping the test harness connections.
@@ -410,6 +429,13 @@ func initializeTestConnection(
 		return nil, nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
+	if err := ensureCurrentAuditPartitions(t, primaryDB); err != nil {
+		_ = primaryDB.Close()
+		_ = replicaDB.Close()
+
+		return nil, nil, err
+	}
+
 	connection := infraTestutil.NewClientWithResolver(connectionDB)
 
 	cleanup := func() error {
@@ -444,7 +470,7 @@ func setupSeedData(t *testing.T, connection *libPostgres.Client) (SeedData, erro
 		return SeedData{}, fmt.Errorf("failed to parse default tenant ID: %w", err)
 	}
 
-	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+	ctx := tenantContext(tenantID.String(), auth.DefaultTenantSlug)
 
 	contextEntity, err := configEntities.NewReconciliationContext(
 		ctx,
@@ -498,7 +524,7 @@ func setupSeedData(t *testing.T, connection *libPostgres.Client) (SeedData, erro
 func ensureTenantTxWorks(t *testing.T, connection *libPostgres.Client) error {
 	t.Helper()
 
-	ctx := context.WithValue(context.Background(), auth.TenantIDKey, auth.DefaultTenantID)
+	ctx := tenantContext(auth.DefaultTenantID, auth.DefaultTenantSlug)
 
 	_, err := pgcommon.WithTenantTx(ctx, connection, func(tx *sql.Tx) (struct{}, error) {
 		_, execErr := tx.ExecContext(ctx, "SELECT 1")
@@ -506,6 +532,25 @@ func ensureTenantTxWorks(t *testing.T, connection *libPostgres.Client) error {
 	})
 
 	return err
+}
+
+func ensureCurrentAuditPartitions(t *testing.T, db *sql.DB) error {
+	t.Helper()
+
+	partitionManager, err := governanceCommand.NewPartitionManager(
+		db,
+		&libLog.NopLogger{},
+		noop.NewTracerProvider().Tracer("integration.audit_partitions"),
+	)
+	if err != nil {
+		return fmt.Errorf("create audit partition manager: %w", err)
+	}
+
+	if err := partitionManager.EnsurePartitionsExist(tenantContext(auth.DefaultTenantID, auth.DefaultTenantSlug), 3); err != nil {
+		return fmt.Errorf("ensure current audit partitions: %w", err)
+	}
+
+	return nil
 }
 
 func waitForPostgres(t *testing.T, db *sql.DB) {

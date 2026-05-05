@@ -179,6 +179,13 @@ func (uc *UseCase) syncConnection(ctx context.Context, logger libLog.Logger, fc 
 		return fmt.Errorf("sync connection: %w", err)
 	}
 
+	if fc != nil {
+		conn, err := uc.connRepo.FindByFetcherID(ctx, fc.ID)
+		if err == nil {
+			uc.emitFetcherConnectionSynced(ctx, nil, conn)
+		}
+	}
+
 	return nil
 }
 
@@ -193,6 +200,7 @@ func (uc *UseCase) reconcileStaleConnections(ctx context.Context, logger libLog.
 			continue
 		}
 
+		previousStatus := conn.Status.String()
 		if err := uc.syncer.MarkConnectionUnreachable(ctx, conn); err != nil {
 			if logger != nil {
 				logger.With(
@@ -200,7 +208,11 @@ func (uc *UseCase) reconcileStaleConnections(ctx context.Context, logger libLog.
 					libLog.Err(err),
 				).Log(ctx, libLog.LevelWarn, "failed to mark stale connection unreachable during manual refresh")
 			}
+
+			continue
 		}
+
+		uc.emitFetcherConnectionUnreachable(ctx, nil, conn, previousStatus)
 	}
 
 	return nil

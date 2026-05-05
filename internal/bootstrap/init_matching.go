@@ -12,6 +12,8 @@ package bootstrap
 import (
 	"fmt"
 
+	streaming "github.com/LerianStudio/lib-streaming/v2"
+
 	matchingHTTP "github.com/LerianStudio/matcher/internal/matching/adapters/http"
 	matchExceptionRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/exception_creator"
 	matchFeeVarianceRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/fee_variance"
@@ -31,7 +33,13 @@ func initMatchingModule(
 	outboxRepo sharedPorts.OutboxRepository,
 	repos *sharedRepositories,
 	production bool,
+	streamEmitters ...streaming.Emitter,
 ) (*matchingCommand.UseCase, error) {
+	var streamEmitter streaming.Emitter
+	if len(streamEmitters) > 0 {
+		streamEmitter = streamEmitters[0]
+	}
+
 	configProvider, err := crossAdapters.NewMatchingConfigurationProvider(
 		repos.configContext,
 		repos.configSource,
@@ -74,7 +82,7 @@ func initMatchingModule(
 		AuditLogRepo:     repos.governanceAuditLog,
 		FeeScheduleRepo:  repos.feeSchedule,
 		FeeRuleProvider:  configProvider.FeeRuleProvider(),
-	})
+	}, matchingCommand.WithStreamingEmitter(streamEmitter))
 	if err != nil {
 		return nil, fmt.Errorf("create matching command use case: %w", err)
 	}

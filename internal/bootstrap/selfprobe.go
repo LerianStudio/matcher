@@ -15,8 +15,9 @@ package bootstrap
 //     lets K8s livenessProbe restart the pod on sustained /health 503.
 //
 // The probe reuses the same resolvePostgresCheck / resolveRedisCheck helpers
-// as /readyz so both endpoints reflect the same truth across all 6 deps
-// (postgres, postgres_replica, redis, rabbitmq, fetcher, object_storage).
+// as /readyz so both endpoints reflect the same truth across all deps
+// (postgres, postgres_replica, redis, rabbitmq, fetcher, object_storage,
+// streaming).
 
 import (
 	"context"
@@ -113,6 +114,13 @@ var selfprobeSpecs = []selfprobeSpec{ //nolint:gochecknoglobals // immutable pac
 		name:     "object_storage",
 		resolve:  func(_ *Config, d *HealthDependencies) (HealthCheckFunc, bool) { return resolveObjectStorageCheck(d) },
 		optional: func(_ *Config, d *HealthDependencies) bool { return d != nil && d.ObjectStorageOptional },
+	},
+	{
+		name:    "streaming",
+		resolve: func(_ *Config, d *HealthDependencies) (HealthCheckFunc, bool) { return resolveStreamingCheck(d) },
+		optional: func(_ *Config, d *HealthDependencies) bool {
+			return d == nil || d.StreamingOptional || !d.StreamingEnabled
+		},
 	},
 }
 

@@ -18,6 +18,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	workermetrics "github.com/LerianStudio/matcher/internal/shared/observability/workermetrics"
@@ -87,7 +88,7 @@ func (aw *ArchivalWorker) archiveCycle(ctx context.Context) {
 			continue
 		}
 
-		tenantCtx := context.WithValue(ctx, auth.TenantIDKey, tenantID)
+		tenantCtx := tmcore.ContextWithTenantID(context.WithValue(ctx, auth.TenantIDKey, tenantID), tenantID)
 
 		tenantCtx, tenantSpan := tracer.Start(tenantCtx, "governance.archival.tenant")
 		tenantSpan.SetAttributes(attribute.String("tenant.id", tenantID))
@@ -163,7 +164,7 @@ func (aw *ArchivalWorker) resumeIncomplete(ctx context.Context) {
 		}
 
 		// Set tenant context for each incomplete archive.
-		tenantCtx := context.WithValue(ctx, auth.TenantIDKey, metadata.TenantID.String())
+		tenantCtx := tmcore.ContextWithTenantID(context.WithValue(ctx, auth.TenantIDKey, metadata.TenantID.String()), metadata.TenantID.String())
 
 		if err := aw.archivePartition(tenantCtx, metadata); err != nil {
 			logger.With(

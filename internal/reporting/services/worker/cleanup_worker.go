@@ -19,14 +19,19 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
+	streaming "github.com/LerianStudio/lib-streaming/v2"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 	workermetrics "github.com/LerianStudio/matcher/internal/shared/observability/workermetrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/internal/streaming/emission"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
+
+// See export_worker.go for the streaming.Emitter functional-option naming
+// convention used by this package.
 
 // cleanupWorkerName is the stable label value emitted on matcher.worker.*
 // metrics from this worker.
@@ -47,18 +52,37 @@ type CleanupWorkerConfig struct {
 
 // CleanupWorker removes expired export files and updates job status.
 type CleanupWorker struct {
-	mu      sync.Mutex
-	jobRepo repositories.ExportJobRepository
-	storage objectstorage.Backend
-	cfg     CleanupWorkerConfig
-	logger  libLog.Logger
-	tracer  trace.Tracer
-	metrics *workermetrics.Recorder
+	mu            sync.Mutex
+	jobRepo       repositories.ExportJobRepository
+	storage       objectstorage.Backend
+	cfg           CleanupWorkerConfig
+	logger        libLog.Logger
+	tracer        trace.Tracer
+	metrics       *workermetrics.Recorder
+	streamEmitter streaming.Emitter
 
 	running  atomic.Bool
 	stopOnce sync.Once
 	stopCh   chan struct{}
 	doneCh   chan struct{}
+}
+
+// CleanupWorkerOption configures optional cleanup worker dependencies.
+type CleanupWorkerOption func(*CleanupWorker)
+
+// WithCleanupStreamingEmitter sets the emitter used for cleanup worker streaming events.
+// The receiver-prefixed name is used because this package also defines
+// WithStreamingEmitter on ExportWorker (see export_worker.go); both
+// emitter consumers coexist in the same package.
+//
+// Use emission.IsNilEmitter() to defend against typed-nil interface values
+// (e.g., a (*MockEmitter)(nil) hiding behind a streaming.Emitter interface).
+func WithCleanupStreamingEmitter(emitter streaming.Emitter) CleanupWorkerOption {
+	return func(worker *CleanupWorker) {
+		if !emission.IsNilEmitter(emitter) {
+			worker.streamEmitter = emitter
+		}
+	}
 }
 
 func normalizeCleanupWorkerConfig(cfg CleanupWorkerConfig) CleanupWorkerConfig {
@@ -83,6 +107,7 @@ func NewCleanupWorker(
 	storage objectstorage.Backend,
 	cfg CleanupWorkerConfig,
 	logger libLog.Logger,
+	options ...CleanupWorkerOption,
 ) (*CleanupWorker, error) {
 	if jobRepo == nil {
 		return nil, ErrNilJobRepository
@@ -94,7 +119,7 @@ func NewCleanupWorker(
 
 	cfg = normalizeCleanupWorkerConfig(cfg)
 
-	return &CleanupWorker{
+	worker := &CleanupWorker{
 		jobRepo: jobRepo,
 		storage: storage,
 		cfg:     cfg,
@@ -103,7 +128,15 @@ func NewCleanupWorker(
 		metrics: workermetrics.NewRecorder(cleanupWorkerName),
 		stopCh:  make(chan struct{}),
 		doneCh:  make(chan struct{}),
-	}, nil
+	}
+
+	for _, option := range options {
+		if option != nil {
+			option(worker)
+		}
+	}
+
+	return worker, nil
 }
 
 // prepareRunState reinitialises the worker's stop/done channels and sync.Once for
@@ -337,6 +370,11 @@ func (worker *CleanupWorker) cleanupJob(ctx context.Context, job *entities.Expor
 // already expired (no-op success); returns false when the domain
 // transition or persistence errored.
 func (worker *CleanupWorker) markJobExpiredIfNeeded(ctx context.Context, job *entities.ExportJob) bool {
+	ctx = withTenantContext(ctx, job.TenantID.String())
+
+	ctx, span := worker.tracer.Start(ctx, "cleanup_worker.mark_job_expired")
+	defer span.End()
+
 	if job.Status == entities.ExportJobStatusExpired {
 		return true
 	}
@@ -354,6 +392,7 @@ func (worker *CleanupWorker) markJobExpiredIfNeeded(ctx context.Context, job *en
 	}
 
 	worker.logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("marked job %s as expired", job.ID))
+	worker.emitExportJobExpired(ctx, span, job)
 
 	return true
 }

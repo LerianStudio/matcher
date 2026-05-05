@@ -84,6 +84,7 @@ func (uc *UseCase) CreateMatchRule(
 		"priority":   created.Priority,
 		"context_id": created.ContextID.String(),
 	})
+	uc.emitMatchRuleCreated(ctx, span, created)
 
 	return created, nil
 }
@@ -334,6 +335,7 @@ func (uc *UseCase) ReorderMatchRulePriorities(ctx context.Context, contextID uui
 	// NOTE: Audit event omitted for reorder operation as it represents a bulk priority change
 	// that doesn't modify individual rule content. Priority changes are tracked via the
 	// updated_at timestamp on affected rules.
+	uc.emitMatchRuleReordered(ctx, span, contextID, ruleIDs)
 
 	return nil
 }

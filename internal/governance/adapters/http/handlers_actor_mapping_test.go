@@ -8,6 +8,8 @@ package http
 
 import (
 	"bytes"
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -15,6 +17,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
+	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
+	"github.com/LerianStudio/lib-streaming/v2/streamingtest"
 	"github.com/gofiber/fiber/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,6 +30,7 @@ import (
 	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 var errTestActorMappingRepoFailed = errors.New("actor mapping repo failed")
@@ -42,6 +48,54 @@ func newTestActorMappingHandler(
 	require.NoError(t, err)
 
 	return handler
+}
+
+func newTestActorMappingStreamingHandler(
+	t *testing.T,
+	repo *mocks.MockActorMappingRepository,
+) (*ActorMappingHandler, sqlmock.Sqlmock) {
+	t.Helper()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	cmdUC, err := command.NewActorMappingUseCase(
+		repo,
+		command.WithActorMappingInfrastructure(&actorMappingHTTPTestProvider{db: db}),
+		command.WithActorMappingStreamingEmitter(streamingtest.NewMockEmitter()),
+	)
+	require.NoError(t, err)
+
+	handler, err := NewActorMappingHandler(cmdUC, repo, false)
+	require.NoError(t, err)
+
+	return handler, mock
+}
+
+type actorMappingHTTPTestProvider struct {
+	db *sql.DB
+}
+
+func (provider *actorMappingHTTPTestProvider) BeginTx(ctx context.Context) (*sharedPorts.TxLease, error) {
+	tx, err := provider.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return sharedPorts.NewTxLease(tx, func() {}), nil
+}
+
+func (*actorMappingHTTPTestProvider) GetRedisConnection(context.Context) (*sharedPorts.RedisConnectionLease, error) {
+	return nil, nil
+}
+
+func (*actorMappingHTTPTestProvider) GetReplicaDB(context.Context) (*sharedPorts.DBLease, error) {
+	return nil, nil
+}
+
+func (*actorMappingHTTPTestProvider) GetPrimaryDB(context.Context) (*sharedPorts.DBLease, error) {
+	return nil, nil
 }
 
 func TestNewActorMappingHandler(t *testing.T) {
@@ -337,14 +391,17 @@ func TestPseudonymizeActorHandler(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		repo := mocks.NewMockActorMappingRepository(ctrl)
-		repo.EXPECT().Pseudonymize(gomock.Any(), "actor-123").Return(nil)
+		repo.EXPECT().PseudonymizeWithTx(gomock.Any(), gomock.AssignableToTypeOf(&sql.Tx{}), "actor-123").Return(nil)
 
-		handler := newTestActorMappingHandler(t, repo)
+		handler, mock := newTestActorMappingStreamingHandler(t, repo)
+		mock.ExpectBegin()
+		mock.ExpectCommit()
 
 		resp := testPseudonymizeActorRequest(t, handler, "actor-123")
 		defer resp.Body.Close()
 
 		require.Equal(t, fiber.StatusNoContent, resp.StatusCode)
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 
 	t.Run("not found", func(t *testing.T) {
@@ -352,14 +409,17 @@ func TestPseudonymizeActorHandler(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		repo := mocks.NewMockActorMappingRepository(ctrl)
-		repo.EXPECT().Pseudonymize(gomock.Any(), "nonexistent").Return(governanceErrors.ErrActorMappingNotFound)
+		repo.EXPECT().PseudonymizeWithTx(gomock.Any(), gomock.AssignableToTypeOf(&sql.Tx{}), "nonexistent").Return(governanceErrors.ErrActorMappingNotFound)
 
-		handler := newTestActorMappingHandler(t, repo)
+		handler, mock := newTestActorMappingStreamingHandler(t, repo)
+		mock.ExpectBegin()
+		mock.ExpectRollback()
 
 		resp := testPseudonymizeActorRequest(t, handler, "nonexistent")
 		defer resp.Body.Close()
 
 		verifyErrorResponse(t, resp, fiber.StatusNotFound, "actor mapping not found")
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 
 	t.Run("internal error", func(t *testing.T) {
@@ -367,14 +427,17 @@ func TestPseudonymizeActorHandler(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		repo := mocks.NewMockActorMappingRepository(ctrl)
-		repo.EXPECT().Pseudonymize(gomock.Any(), "actor-err").Return(errTestActorMappingRepoFailed)
+		repo.EXPECT().PseudonymizeWithTx(gomock.Any(), gomock.AssignableToTypeOf(&sql.Tx{}), "actor-err").Return(errTestActorMappingRepoFailed)
 
-		handler := newTestActorMappingHandler(t, repo)
+		handler, mock := newTestActorMappingStreamingHandler(t, repo)
+		mock.ExpectBegin()
+		mock.ExpectRollback()
 
 		resp := testPseudonymizeActorRequest(t, handler, "actor-err")
 		defer resp.Body.Close()
 
 		require.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 }
 
@@ -504,7 +567,7 @@ func testUpsertActorMappingRequest(
 ) *http.Response {
 	t.Helper()
 
-	ctx := createTestContext()
+	ctx := tmcore.ContextWithTenantID(createTestContext(), "018f4f95-0000-7000-8000-000000000001")
 	app := newFiberTestApp(ctx)
 	app.Put("/v1/governance/actor-mappings/:actorId", handler.UpsertActorMapping)
 
@@ -532,7 +595,7 @@ func testGetActorMappingRequest(
 ) *http.Response {
 	t.Helper()
 
-	ctx := createTestContext()
+	ctx := tmcore.ContextWithTenantID(createTestContext(), "018f4f95-0000-7000-8000-000000000001")
 	app := newFiberTestApp(ctx)
 	app.Get("/v1/governance/actor-mappings/:actorId", handler.GetActorMapping)
 
@@ -552,7 +615,7 @@ func testPseudonymizeActorRequest(
 ) *http.Response {
 	t.Helper()
 
-	ctx := createTestContext()
+	ctx := tmcore.ContextWithTenantID(createTestContext(), "018f4f95-0000-7000-8000-000000000001")
 	app := newFiberTestApp(ctx)
 	app.Post("/v1/governance/actor-mappings/:actorId/pseudonymize", handler.PseudonymizeActor)
 

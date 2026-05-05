@@ -19,6 +19,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
+	"github.com/LerianStudio/matcher/internal/streaming/emission"
 )
 
 // archiveTenant identifies and processes partitions eligible for cold archival.
@@ -80,6 +81,8 @@ func (aw *ArchivalWorker) archiveTenant(ctx context.Context, tenantID uuid.UUID)
 }
 
 // getOrCreateMetadata retrieves existing archive metadata or creates a new record.
+//
+//nolint:nestif // Transactional streaming path intentionally stays colocated with metadata creation.
 func (aw *ArchivalWorker) getOrCreateMetadata(
 	ctx context.Context,
 	tenantID uuid.UUID,
@@ -95,11 +98,33 @@ func (aw *ArchivalWorker) getOrCreateMetadata(
 		return nil, fmt.Errorf("create archive metadata: %w", err)
 	}
 
-	if err := aw.archiveRepo.Create(ctx, metadata); err != nil {
-		return nil, fmt.Errorf("persist archive metadata: %w", err)
+	if !emission.IsNilEmitter(aw.streamEmitter) {
+		txLease, txErr := aw.infraProvider.BeginTx(ctx)
+		if txErr != nil {
+			return nil, fmt.Errorf("begin archive metadata transaction: %w", txErr)
+		}
+
+		if txLease == nil || txLease.SQLTx() == nil {
+			return nil, fmt.Errorf("begin archive metadata transaction: %w", emission.ErrCriticalOutboxTxRequired)
+		}
+		defer func() { _ = txLease.Rollback() }()
+
+		if err := aw.archiveRepo.CreateWithTx(ctx, txLease.SQLTx(), metadata); err != nil {
+			return nil, fmt.Errorf("persist archive metadata with tx: %w", err)
+		}
+
+		if err := aw.emitArchiveEvent(ctx, txLease.SQLTx(), "archive_metadata.created", metadata.ID.String(), metadata); err != nil {
+			return nil, fmt.Errorf("emit archive metadata created: %w", err)
+		}
+
+		if err := txLease.Commit(); err != nil {
+			return nil, fmt.Errorf("commit archive metadata transaction: %w", err)
+		}
+
+		return metadata, nil
 	}
 
-	return metadata, nil
+	return nil, fmt.Errorf("archive metadata streaming emitter: %w", emission.ErrCriticalOutboxTxRequired)
 }
 
 // archivePartition processes a partition through the archival state machine,
@@ -239,12 +264,8 @@ func (aw *ArchivalWorker) handleDetachingState(
 	ctx context.Context,
 	metadata *entities.ArchiveMetadata,
 ) error {
-	if err := aw.detachAndDrop(ctx, metadata); err != nil {
-		return aw.handlePartitionError(ctx, metadata, "detach and drop partition", err)
-	}
-
-	if err := aw.transitionTo(ctx, metadata, metadata.MarkComplete); err != nil {
-		return aw.handlePartitionError(ctx, metadata, "mark complete", err)
+	if err := aw.completeArchiveWithPartitionDropTx(ctx, metadata); err != nil {
+		return aw.handlePartitionError(ctx, metadata, "complete archive partition", err)
 	}
 
 	logger, _ := aw.tracking(ctx)
@@ -257,17 +278,72 @@ func (aw *ArchivalWorker) handleDetachingState(
 	return nil
 }
 
+func (aw *ArchivalWorker) completeArchiveWithPartitionDropTx(ctx context.Context, metadata *entities.ArchiveMetadata) error {
+	before := *metadata
+
+	if emission.IsNilEmitter(aw.streamEmitter) {
+		return fmt.Errorf("archive completed streaming emitter: %w", emission.ErrCriticalOutboxTxRequired)
+	}
+
+	txLease, err := aw.infraProvider.BeginTx(ctx)
+	if err != nil {
+		return fmt.Errorf("begin archive completion transaction: %w", err)
+	}
+
+	if txLease == nil || txLease.SQLTx() == nil {
+		return fmt.Errorf("begin archive completion transaction: %w", emission.ErrCriticalOutboxTxRequired)
+	}
+	defer func() { _ = txLease.Rollback() }()
+
+	if err := aw.partitionMgr.DetachPartitionWithTx(ctx, txLease.SQLTx(), metadata.PartitionName); err != nil {
+		if !isPartitionAlreadyDetachedOrAbsent(err) {
+			return fmt.Errorf("detach partition: %w", err)
+		}
+	}
+
+	if err := aw.partitionMgr.DropPartitionWithTx(ctx, txLease.SQLTx(), metadata.PartitionName); err != nil {
+		if !isPartitionAlreadyDetachedOrAbsent(err) {
+			return fmt.Errorf("drop partition: %w", err)
+		}
+	}
+
+	if err := metadata.MarkComplete(); err != nil {
+		*metadata = before
+		return fmt.Errorf("mark complete: %w", err)
+	}
+
+	if err := aw.archiveRepo.UpdateWithTx(ctx, txLease.SQLTx(), metadata); err != nil {
+		*metadata = before
+		return fmt.Errorf("persist complete state with tx: %w", err)
+	}
+
+	if err := aw.emitArchiveEvent(ctx, txLease.SQLTx(), "archive.completed", metadata.ID.String(), metadata); err != nil {
+		*metadata = before
+		return fmt.Errorf("emit archive completed: %w", err)
+	}
+
+	if err := txLease.Commit(); err != nil {
+		*metadata = before
+		return fmt.Errorf("commit archive completion transaction: %w", err)
+	}
+
+	return nil
+}
+
 // transitionTo applies a state transition function and persists the result.
 func (aw *ArchivalWorker) transitionTo(
 	ctx context.Context,
 	metadata *entities.ArchiveMetadata,
 	transition func() error,
 ) error {
+	before := *metadata
+
 	if err := transition(); err != nil {
 		return fmt.Errorf("state transition: %w", err)
 	}
 
 	if err := aw.archiveRepo.Update(ctx, metadata); err != nil {
+		*metadata = before
 		return fmt.Errorf("persist state transition: %w", err)
 	}
 
@@ -292,21 +368,54 @@ func (aw *ArchivalWorker) transitionToExported(
 }
 
 // transitionToUploaded applies the MarkUploaded transition with archive details.
+//
+//nolint:nestif // Uploaded-state streaming must remain in the same transaction as persistence.
 func (aw *ArchivalWorker) transitionToUploaded(
 	ctx context.Context,
 	metadata *entities.ArchiveMetadata,
 	archiveKey, checksum string,
 	compressedSize int64,
 ) error {
+	before := *metadata
+
 	if err := metadata.MarkUploaded(archiveKey, checksum, compressedSize, aw.cfg.StorageClass); err != nil {
 		return fmt.Errorf("mark uploaded: %w", err)
 	}
 
-	if err := aw.archiveRepo.Update(ctx, metadata); err != nil {
-		return fmt.Errorf("persist uploaded state: %w", err)
+	if !emission.IsNilEmitter(aw.streamEmitter) {
+		txLease, err := aw.infraProvider.BeginTx(ctx)
+		if err != nil {
+			*metadata = before
+			return fmt.Errorf("begin archive uploaded transaction: %w", err)
+		}
+
+		if txLease == nil || txLease.SQLTx() == nil {
+			*metadata = before
+			return fmt.Errorf("begin archive uploaded transaction: %w", emission.ErrCriticalOutboxTxRequired)
+		}
+		defer func() { _ = txLease.Rollback() }()
+
+		if err := aw.archiveRepo.UpdateWithTx(ctx, txLease.SQLTx(), metadata); err != nil {
+			*metadata = before
+			return fmt.Errorf("persist uploaded state with tx: %w", err)
+		}
+
+		if err := aw.emitArchiveEvent(ctx, txLease.SQLTx(), "archive.uploaded", metadata.ID.String(), metadata); err != nil {
+			*metadata = before
+			return fmt.Errorf("emit archive uploaded: %w", err)
+		}
+
+		if err := txLease.Commit(); err != nil {
+			*metadata = before
+			return fmt.Errorf("commit archive uploaded transaction: %w", err)
+		}
+
+		return nil
 	}
 
-	return nil
+	*metadata = before
+
+	return fmt.Errorf("archive uploaded streaming emitter: %w", emission.ErrCriticalOutboxTxRequired)
 }
 
 func buildPartitionExportQuery(partitionName string) (string, error) {

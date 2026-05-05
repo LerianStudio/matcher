@@ -111,6 +111,41 @@ DB_METRICS_INTERVAL_SEC=15
 # Filesystem path to SQL migrations used during startup.
 MIGRATIONS_PATH=migrations
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Connection Pool Sizing Guide (Postgres max_connections capacity planning)
+# ─────────────────────────────────────────────────────────────────────────────
+# Each matcher pod opens connections across multiple dedicated pools — they do
+# NOT share the primary pool's max. Per-pod ceiling at default settings:
+#
+#   primary             = POSTGRES_MAX_OPEN_CONNS             (default 25)
+#   replica             = POSTGRES_REPLICA_MAX_OPEN_CONNS     (default 25)
+#   archival (dedicated)= 3   (constant — see archivalMaxOpenConns in init.go)
+#   systemplane         = 1   (single connection by design)
+#   health probe        = 1   (used during startup self-probe)
+#
+# Per-pod ceiling at default config: 25 + 25 + 3 + 1 + 1 = 55 connections.
+#
+# In multi-tenant mode, the per-tenant Postgres manager opens additional
+# pools — at MULTI_TENANT_MAX_TENANT_POOLS=100 (default) and per-pool
+# MaxOpenConns=25 the worst case grows to 100 × 25 = 2500 PER POD. Idle
+# pools are reclaimed after MULTI_TENANT_IDLE_TIMEOUT_SEC. See
+# docs/multi-tenant-guide.md §7 "Connection pool sizing".
+#
+# Cluster-wide capacity at default settings (single-tenant mode):
+#
+#   55 conns × N pods ≤ Postgres max_connections × 0.8 (headroom for admin)
+#
+# So with the Postgres default max_connections=100 you have headroom for
+# at most ⌊100 × 0.8 / 55⌋ = 1 pod before exhausting connections. Operators
+# MUST tune Postgres max_connections to be ≥ (expected_pods × 55) / 0.8
+# BEFORE enabling HPA scale-out — otherwise pod restarts during scale-up
+# will fail with FATAL: too many connections.
+#
+# Recommended starting point for production (single-tenant, 5-pod baseline):
+#   max_connections = 400   (5 pods × 55 × 1.45 headroom)
+# For multi-tenant deployments, size against the per-tenant ceiling.
+# ─────────────────────────────────────────────────────────────────────────────
+
 # ── Infrastructure ───────────────────────────────────────────────────────────
 # Startup timeout for connecting to Postgres, Redis, RabbitMQ, and S3.
 INFRA_CONNECT_TIMEOUT_SEC=30
@@ -193,6 +228,31 @@ M2M_TARGET_SERVICE=fetcher
 # webhook destinations disabled until signing is wired in. There is no env-var
 # override of this default; the intent is that misconfiguration is visible
 # from the first dispatch attempt rather than hidden behind a log line.
+
+
+# ── Streaming (external domain events) ───────────────────────────────────────
+# Producer-only CloudEvents stream via lib-streaming/v2. Disabled by default;
+# when disabled, bootstrap constructs a no-op emitter and no broker connection
+# is opened. Enable only after Redpanda/Kafka topics and subscriber contracts
+# are ready. Outbox relay support is wired for CRITICAL policies.
+STREAMING_ENABLED=false
+STREAMING_BROKERS=localhost:9092
+STREAMING_CLIENT_ID=matcher
+STREAMING_BATCH_LINGER_MS=5
+STREAMING_BATCH_MAX_BYTES=1048576
+STREAMING_MAX_BUFFERED_RECORDS=10000
+STREAMING_COMPRESSION=lz4
+STREAMING_RECORD_RETRIES=10
+STREAMING_RECORD_DELIVERY_TIMEOUT_S=30
+STREAMING_REQUIRED_ACKS=all
+STREAMING_CB_FAILURE_RATIO=0.5
+STREAMING_CB_MIN_REQUESTS=10
+STREAMING_CB_TIMEOUT_S=30
+STREAMING_CLOSE_TIMEOUT_S=30
+STREAMING_CLOUDEVENTS_SOURCE=matcher
+# Optional comma-separated runtime policy overrides, for example:
+# STREAMING_EVENT_POLICIES=exception.resolved.enabled=true,exception.resolved.outbox=always
+# STREAMING_EVENT_POLICIES=
 
 # ── Systemplane ──────────────────────────────────────────────────────────────
 # Backend store for runtime configuration. Default: postgres (reuses the

@@ -8,10 +8,17 @@ package command
 import (
 	"errors"
 
+	streaming "github.com/LerianStudio/lib-streaming/v2"
+
 	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories"
 	configPorts "github.com/LerianStudio/matcher/internal/configuration/ports"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/internal/streaming/emission"
 )
+
+// Functional options for streaming.Emitter injection follow the convention:
+// - Bare WithStreamingEmitter when this package owns one emitter consumer
+// - With<ReceiverName>StreamingEmitter when multiple consumers coexist in the same package.
 
 // Sentinel errors for use case validation.
 var (
@@ -45,6 +52,7 @@ type UseCase struct {
 	feeRuleRepo     repositories.FeeRuleRepository
 	scheduleRepo    configPorts.ScheduleRepository
 	infraProvider   sharedPorts.InfrastructureProvider
+	streamEmitter   streaming.Emitter
 }
 
 // NewUseCase creates a new command use case with the required repositories.
@@ -93,6 +101,17 @@ func WithAuditPublisher(publisher configPorts.AuditPublisher) UseCaseOption {
 	return func(uc *UseCase) {
 		if publisher != nil {
 			uc.auditPublisher = publisher
+		}
+	}
+}
+
+// WithStreamingEmitter sets the lib-streaming emitter used for external domain events.
+// Use emission.IsNilEmitter() to defend against typed-nil interface values
+// (e.g., a (*MockEmitter)(nil) hiding behind a streaming.Emitter interface).
+func WithStreamingEmitter(emitter streaming.Emitter) UseCaseOption {
+	return func(uc *UseCase) {
+		if !emission.IsNilEmitter(emitter) {
+			uc.streamEmitter = emitter
 		}
 	}
 }

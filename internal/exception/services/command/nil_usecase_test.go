@@ -7,8 +7,9 @@
 package command
 
 import (
-	"context"
 	"testing"
+
+	streaming "github.com/LerianStudio/lib-streaming/v2"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -22,7 +23,7 @@ func TestAdjustEntry_NilUseCase(t *testing.T) {
 
 	var uc *ExceptionUseCase
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	_, err := uc.AdjustEntry(ctx, AdjustEntryCommand{
 		ExceptionID: uuid.New(),
 		ReasonCode:  "AMOUNT_CORRECTION",
@@ -39,7 +40,7 @@ func TestForceMatch_NilUseCase(t *testing.T) {
 
 	var uc *ExceptionUseCase
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	_, err := uc.ForceMatch(ctx, ForceMatchCommand{
 		ExceptionID:    uuid.New(),
 		OverrideReason: "POLICY_EXCEPTION",
@@ -54,7 +55,7 @@ func TestOpenDispute_NilUseCase(t *testing.T) {
 
 	var uc *ExceptionUseCase
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	_, err := uc.OpenDispute(ctx, OpenDisputeCommand{
 		ExceptionID: uuid.New(),
 		Category:    "BANK_FEE_ERROR",
@@ -69,7 +70,7 @@ func TestCloseDispute_NilUseCase(t *testing.T) {
 
 	var uc *ExceptionUseCase
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	_, err := uc.CloseDispute(ctx, CloseDisputeCommand{
 		DisputeID:  uuid.New(),
 		Resolution: "test",
@@ -84,7 +85,7 @@ func TestSubmitEvidence_NilUseCase(t *testing.T) {
 
 	var uc *ExceptionUseCase
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	_, err := uc.SubmitEvidence(ctx, SubmitEvidenceCommand{
 		DisputeID: uuid.New(),
 		Comment:   "test",
@@ -98,7 +99,7 @@ func TestProcessCallback_NilUseCase(t *testing.T) {
 
 	var uc *ExceptionUseCase
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	err := uc.ProcessCallback(ctx, ProcessCallbackCommand{
 		IdempotencyKey:  "valid-key",
 		ExceptionID:     uuid.New(),
@@ -154,7 +155,7 @@ func TestAdjustEntry_PartialNilDependencies(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := context.Background()
+			ctx := testStreamingContext()
 			_, err := tc.uc.AdjustEntry(ctx, AdjustEntryCommand{
 				ExceptionID: uuid.New(),
 				ReasonCode:  "AMOUNT_CORRECTION",
@@ -211,7 +212,7 @@ func TestForceMatch_PartialNilDependencies(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := context.Background()
+			ctx := testStreamingContext()
 			_, err := tc.uc.ForceMatch(ctx, ForceMatchCommand{
 				ExceptionID:    uuid.New(),
 				OverrideReason: "POLICY_EXCEPTION",
@@ -266,7 +267,7 @@ func TestOpenDispute_PartialNilDependencies(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := context.Background()
+			ctx := testStreamingContext()
 			_, err := tc.uc.OpenDispute(ctx, OpenDisputeCommand{
 				ExceptionID: uuid.New(),
 				Category:    "BANK_FEE_ERROR",
@@ -321,7 +322,7 @@ func TestCloseDispute_PartialNilDependencies(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := context.Background()
+			ctx := testStreamingContext()
 			_, err := tc.uc.CloseDispute(ctx, CloseDisputeCommand{
 				DisputeID:  uuid.New(),
 				Resolution: "test",
@@ -376,7 +377,7 @@ func TestSubmitEvidence_PartialNilDependencies(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := context.Background()
+			ctx := testStreamingContext()
 			_, err := tc.uc.SubmitEvidence(ctx, SubmitEvidenceCommand{
 				DisputeID: uuid.New(),
 				Comment:   "test",
@@ -440,7 +441,7 @@ func TestProcessCallback_PartialNilDependencies(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := context.Background()
+			ctx := testStreamingContext()
 			err := tc.uc.ProcessCallback(ctx, ProcessCallbackCommand{
 				IdempotencyKey:  "valid-key",
 				ExceptionID:     uuid.New(),
@@ -463,7 +464,7 @@ func TestNewUseCase_NilInfraProviderDependency(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst-1")
 
-	uc, err := NewExceptionUseCase(repo, actor, audit, nil, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actor, audit, nil, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 	require.ErrorIs(t, err, ErrNilInfraProvider)
 	require.Nil(t, uc)
@@ -477,7 +478,7 @@ func TestNewUseCase_NilInfraProviderDependency(t *testing.T) {
 func TestNewCallbackUseCase_AllDependenciesNil(t *testing.T) {
 	t.Parallel()
 
-	uc, err := NewExceptionUseCase(nil, actorExtractor("system"), nil, nil, WithIdempotencyRepository(nil), WithCallbackRateLimiter(nil))
+	uc, err := NewExceptionUseCase(nil, actorExtractor("system"), nil, nil, WithIdempotencyRepository(nil), WithCallbackRateLimiter(nil), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 	require.ErrorIs(t, err, ErrNilExceptionRepository)
 	assert.Nil(t, uc)
@@ -491,7 +492,7 @@ func TestNewCallbackUseCase_AllDependenciesNil(t *testing.T) {
 func TestNewDisputeUseCase_AllDependenciesNil(t *testing.T) {
 	t.Parallel()
 
-	uc, err := NewExceptionUseCase(nil, nil, nil, nil, WithDisputeRepository(nil))
+	uc, err := NewExceptionUseCase(nil, nil, nil, nil, WithDisputeRepository(nil), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 	require.ErrorIs(t, err, ErrNilExceptionRepository)
 	assert.Nil(t, uc)

@@ -7,9 +7,10 @@
 package command
 
 import (
-	"context"
 	"testing"
 	"time"
+
+	streaming "github.com/LerianStudio/lib-streaming/v2"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -22,12 +23,12 @@ import (
 func TestCloseDispute_Win(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	exceptionID := uuid.New()
 	existingDispute := createTestDispute(ctx, t, exceptionID)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -43,7 +44,7 @@ func TestCloseDispute_Win(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	result, err := uc.CloseDispute(ctx, CloseDisputeCommand{
@@ -74,12 +75,12 @@ func TestCloseDispute_Win(t *testing.T) {
 func TestCloseDispute_Lose(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	exceptionID := uuid.New()
 	existingDispute := createTestDispute(ctx, t, exceptionID)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -95,7 +96,7 @@ func TestCloseDispute_Lose(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	result, err := uc.CloseDispute(ctx, CloseDisputeCommand{
@@ -125,12 +126,12 @@ func TestCloseDispute_Lose(t *testing.T) {
 func TestCloseDispute_ValidationErrors(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	exceptionID := uuid.New()
 	existingDispute := createTestDispute(ctx, t, exceptionID)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -141,7 +142,7 @@ func TestCloseDispute_ValidationErrors(t *testing.T) {
 	disputeRepo := &stubDisputeRepo{dispute: existingDispute}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	testCases := []struct {
@@ -191,12 +192,12 @@ func TestCloseDispute_ValidationErrors(t *testing.T) {
 func TestCloseDispute_ActorRequired(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	exceptionID := uuid.New()
 	existingDispute := createTestDispute(ctx, t, exceptionID)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -208,10 +209,10 @@ func TestCloseDispute_ActorRequired(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	emptyActor := actorExtractor("")
 
-	uc, err := NewExceptionUseCase(exceptionRepo, emptyActor, audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, emptyActor, audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	_, err = uc.CloseDispute(context.Background(), CloseDisputeCommand{
+	_, err = uc.CloseDispute(testStreamingContext(), CloseDisputeCommand{
 		DisputeID:  existingDispute.ID,
 		Resolution: "resolution",
 		Won:        true,
@@ -223,7 +224,7 @@ func TestCloseDispute_DisputeNotFound(t *testing.T) {
 	t.Parallel()
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -234,10 +235,10 @@ func TestCloseDispute_DisputeNotFound(t *testing.T) {
 	disputeRepo := &stubDisputeRepo{findErr: errTestDisputeFind}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	_, err = uc.CloseDispute(ctx, CloseDisputeCommand{
 		DisputeID:  uuid.New(),
 		Resolution: "resolution",
@@ -249,14 +250,14 @@ func TestCloseDispute_DisputeNotFound(t *testing.T) {
 func TestCloseDispute_InvalidStateTransition(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	exceptionID := uuid.New()
 	existingDispute := createTestDispute(ctx, t, exceptionID)
 
 	require.NoError(t, existingDispute.Win(ctx, "already won"))
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -267,7 +268,7 @@ func TestCloseDispute_InvalidStateTransition(t *testing.T) {
 	disputeRepo := &stubDisputeRepo{dispute: existingDispute}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	_, err = uc.CloseDispute(ctx, CloseDisputeCommand{
@@ -281,12 +282,12 @@ func TestCloseDispute_InvalidStateTransition(t *testing.T) {
 func TestCloseDispute_UpdateError(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	exceptionID := uuid.New()
 	existingDispute := createTestDispute(ctx, t, exceptionID)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -297,7 +298,7 @@ func TestCloseDispute_UpdateError(t *testing.T) {
 	disputeRepo := &stubDisputeRepo{dispute: existingDispute, updateErr: errTestDisputeUpdate}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	_, err = uc.CloseDispute(ctx, CloseDisputeCommand{
@@ -311,12 +312,12 @@ func TestCloseDispute_UpdateError(t *testing.T) {
 func TestCloseDispute_AuditPublishError(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	exceptionID := uuid.New()
 	existingDispute := createTestDispute(ctx, t, exceptionID)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -327,7 +328,7 @@ func TestCloseDispute_AuditPublishError(t *testing.T) {
 	disputeRepo := &stubDisputeRepo{dispute: existingDispute}
 	audit := &stubAuditPublisher{err: errTestAudit}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	_, err = uc.CloseDispute(ctx, CloseDisputeCommand{

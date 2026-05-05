@@ -9,13 +9,25 @@ import (
 	"errors"
 	"time"
 
+	streaming "github.com/LerianStudio/lib-streaming/v2"
+
 	governanceRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	matchingRepositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	matching "github.com/LerianStudio/matcher/internal/matching/domain/services"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/internal/streaming/emission"
 )
+
+// Functional options for streaming.Emitter injection follow the convention:
+// - Bare WithStreamingEmitter when this package owns one emitter consumer
+// - With<ReceiverName>StreamingEmitter when multiple consumers coexist in the same package
+//
+// This package owns a single emitter-consuming type (UseCase) so the bare
+// WithStreamingEmitter form is used below. The option pattern (rather than
+// a struct field on UseCaseDeps) matches the dominant 6-of-9 sites in the
+// codebase and keeps the deps struct focused on required wiring.
 
 // Sentinel errors for UseCase construction.
 var (
@@ -71,9 +83,11 @@ type UseCase struct {
 	executeRulesDetailed func(context.Context, ExecuteRulesInput) (*ExecuteRulesResult, error)
 	lockRefreshInterval  time.Duration
 	maxLockBatchSize     int
+	streamEmitter        streaming.Emitter
 }
 
 // UseCaseDeps groups all dependencies required by the matching UseCase.
+// Optional dependencies (e.g. streaming.Emitter) are wired via UseCaseOption.
 type UseCaseDeps struct {
 	ContextProvider  ports.ContextProvider
 	SourceProvider   ports.SourceProvider
@@ -91,6 +105,22 @@ type UseCaseDeps struct {
 	AuditLogRepo     governanceRepositories.AuditLogRepository
 	FeeScheduleRepo  sharedPorts.FeeScheduleRepository
 	FeeRuleProvider  ports.FeeRuleProvider
+}
+
+// UseCaseOption configures optional dependencies on the matching UseCase.
+// Nil values are ignored so callers can pass results of conditional setup
+// without guarding at the call site.
+type UseCaseOption func(*UseCase)
+
+// WithStreamingEmitter sets the emitter used for matching streaming events.
+// Use emission.IsNilEmitter() to defend against typed-nil interface values
+// (e.g., a (*MockEmitter)(nil) hiding behind a streaming.Emitter interface).
+func WithStreamingEmitter(emitter streaming.Emitter) UseCaseOption {
+	return func(uc *UseCase) {
+		if !emission.IsNilEmitter(emitter) {
+			uc.streamEmitter = emitter
+		}
+	}
 }
 
 func (deps *UseCaseDeps) validate() error {
@@ -125,8 +155,9 @@ func (deps *UseCaseDeps) validate() error {
 	return nil
 }
 
-// New creates a new UseCase with all required dependencies.
-func New(deps UseCaseDeps) (*UseCase, error) {
+// New creates a new UseCase with all required dependencies. Optional
+// dependencies (e.g., streaming emitter) are wired via UseCaseOption.
+func New(deps UseCaseDeps, options ...UseCaseOption) (*UseCase, error) {
 	if err := deps.validate(); err != nil {
 		return nil, err
 	}
@@ -158,6 +189,12 @@ func New(deps UseCaseDeps) (*UseCase, error) {
 		maxLockBatchSize:    maxCandidateSet,
 	}
 	uc.executeRules = uc.ExecuteRules
+
+	for _, option := range options {
+		if option != nil {
+			option(uc)
+		}
+	}
 
 	return uc, nil
 }

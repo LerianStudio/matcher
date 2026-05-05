@@ -7,9 +7,10 @@
 package command
 
 import (
-	"context"
 	"testing"
 	"time"
+
+	streaming "github.com/LerianStudio/lib-streaming/v2"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -29,11 +30,11 @@ import (
 func TestNewCommentUseCase_NilCommentRepo(t *testing.T) {
 	t.Parallel()
 
-	uc, err := NewExceptionUseCase(&stubExceptionRepo{}, actorExtractor("a"), &stubAuditPublisher{}, &stubInfraProvider{})
+	uc, err := NewExceptionUseCase(&stubExceptionRepo{}, actorExtractor("a"), &stubAuditPublisher{}, &stubInfraProvider{}, WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 	require.NotNil(t, uc)
 
-	_, err = uc.AddComment(context.Background(), AddCommentInput{
+	_, err = uc.AddComment(testStreamingContext(), AddCommentInput{
 		ExceptionID: uuid.New(),
 		Content:     "test",
 	})
@@ -45,7 +46,7 @@ func TestNewCommentUseCase_NilExceptionRepo(t *testing.T) {
 
 	mockCommentRepo := &mockCommentRepository{}
 
-	_, err := NewExceptionUseCase(nil, nil, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(mockCommentRepo))
+	_, err := NewExceptionUseCase(nil, nil, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(mockCommentRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.ErrorIs(t, err, ErrNilExceptionRepository)
 }
 
@@ -55,7 +56,7 @@ func TestNewCommentUseCase_NilActorExtractor(t *testing.T) {
 	mockCommentRepo := &mockCommentRepository{}
 	mockExceptionRepo := &mockExceptionRepository{}
 
-	_, err := NewExceptionUseCase(mockExceptionRepo, nil, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(mockCommentRepo))
+	_, err := NewExceptionUseCase(mockExceptionRepo, nil, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(mockCommentRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.ErrorIs(t, err, ErrNilActorExtractor)
 }
 
@@ -66,7 +67,7 @@ func TestNewCommentUseCase_Success(t *testing.T) {
 	mockExceptionRepo := &mockExceptionRepository{}
 	mockActor := &mockActorExtractor{}
 
-	uc, err := NewExceptionUseCase(mockExceptionRepo, mockActor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(mockCommentRepo))
+	uc, err := NewExceptionUseCase(mockExceptionRepo, mockActor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(mockCommentRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 	assert.NotNil(t, uc)
 }
@@ -102,10 +103,10 @@ func TestAddComment_ResolvedExceptionReturnsError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: resolvedException}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	result, err := uc.AddComment(context.Background(), AddCommentInput{
+	result, err := uc.AddComment(testStreamingContext(), AddCommentInput{
 		ExceptionID: exceptionID,
 		Content:     "This should fail",
 	})
@@ -133,10 +134,10 @@ func TestAddComment_OpenExceptionSucceeds(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: openException}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	result, err := uc.AddComment(context.Background(), AddCommentInput{
+	result, err := uc.AddComment(testStreamingContext(), AddCommentInput{
 		ExceptionID: exceptionID,
 		Content:     "This should succeed",
 	})
@@ -168,10 +169,10 @@ func TestAddComment_AssignedExceptionSucceeds(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: assignedException}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	result, err := uc.AddComment(context.Background(), AddCommentInput{
+	result, err := uc.AddComment(testStreamingContext(), AddCommentInput{
 		ExceptionID: exceptionID,
 		Content:     "Comment on assigned exception",
 	})
@@ -187,10 +188,10 @@ func TestAddComment_ExceptionNotFoundReturnsError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{findErr: errTestFind}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	result, err := uc.AddComment(context.Background(), AddCommentInput{
+	result, err := uc.AddComment(testStreamingContext(), AddCommentInput{
 		ExceptionID: uuid.New(),
 		Content:     "This should fail",
 	})
@@ -207,10 +208,10 @@ func TestAddComment_NilExceptionIDReturnsError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	result, err := uc.AddComment(context.Background(), AddCommentInput{
+	result, err := uc.AddComment(testStreamingContext(), AddCommentInput{
 		ExceptionID: uuid.Nil,
 		Content:     "Test",
 	})
@@ -226,10 +227,10 @@ func TestAddComment_EmptyActorReturnsError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	actor := actorExtractor("")
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	result, err := uc.AddComment(context.Background(), AddCommentInput{
+	result, err := uc.AddComment(testStreamingContext(), AddCommentInput{
 		ExceptionID: uuid.New(),
 		Content:     "Test",
 	})
@@ -245,10 +246,10 @@ func TestAddComment_EmptyContentReturnsError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	result, err := uc.AddComment(context.Background(), AddCommentInput{
+	result, err := uc.AddComment(testStreamingContext(), AddCommentInput{
 		ExceptionID: uuid.New(),
 		Content:     "   ",
 	})
@@ -279,10 +280,10 @@ func TestDeleteComment_OwnCommentSucceeds(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	err = uc.DeleteComment(context.Background(), exceptionID, commentID)
+	err = uc.DeleteComment(testStreamingContext(), exceptionID, commentID)
 
 	require.NoError(t, err)
 }
@@ -307,10 +308,10 @@ func TestDeleteComment_OtherUsersCommentReturnsError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	actor := actorExtractor("different-user@example.com")
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	err = uc.DeleteComment(context.Background(), exceptionID, commentID)
+	err = uc.DeleteComment(testStreamingContext(), exceptionID, commentID)
 
 	require.ErrorIs(t, err, ErrNotCommentAuthor)
 }
@@ -322,10 +323,10 @@ func TestDeleteComment_CommentNotFoundReturnsError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	err = uc.DeleteComment(context.Background(), uuid.New(), uuid.New())
+	err = uc.DeleteComment(testStreamingContext(), uuid.New(), uuid.New())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "find comment")
@@ -338,10 +339,10 @@ func TestDeleteComment_NilCommentIDReturnsError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	err = uc.DeleteComment(context.Background(), uuid.New(), uuid.Nil)
+	err = uc.DeleteComment(testStreamingContext(), uuid.New(), uuid.Nil)
 
 	require.ErrorIs(t, err, ErrCommentIDRequired)
 }
@@ -353,10 +354,10 @@ func TestDeleteComment_EmptyActorReturnsError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	actor := actorExtractor("")
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	err = uc.DeleteComment(context.Background(), uuid.New(), uuid.New())
+	err = uc.DeleteComment(testStreamingContext(), uuid.New(), uuid.New())
 
 	require.ErrorIs(t, err, ErrActorRequired)
 }
@@ -384,10 +385,10 @@ func TestDeleteComment_DeleteRepoErrorReturnsError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	err = uc.DeleteComment(context.Background(), exceptionID, commentID)
+	err = uc.DeleteComment(testStreamingContext(), exceptionID, commentID)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "delete comment")
@@ -419,10 +420,10 @@ func TestDeleteComment_CrossExceptionDeletionRejected(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	actor := actorExtractor("analyst@example.com")
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, &stubAuditPublisher{}, &stubInfraProvider{}, WithCommentRepository(commentRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	err = uc.DeleteComment(context.Background(), victimURLExceptionID, commentID)
+	err = uc.DeleteComment(testStreamingContext(), victimURLExceptionID, commentID)
 
 	require.ErrorIs(t, err, entities.ErrCommentNotFound)
 }

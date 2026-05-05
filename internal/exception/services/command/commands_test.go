@@ -7,8 +7,9 @@
 package command
 
 import (
-	"context"
 	"testing"
+
+	streaming "github.com/LerianStudio/lib-streaming/v2"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -28,7 +29,7 @@ func TestNewUseCase_Success(t *testing.T) {
 	actor := actorExtractor("analyst-1")
 	infra := &stubInfraProvider{}
 
-	uc, err := NewExceptionUseCase(repo, actor, audit, infra, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actor, audit, infra, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 	require.NoError(t, err)
 	require.NotNil(t, uc)
@@ -47,7 +48,7 @@ func TestNewUseCase_NilExceptionRepository(t *testing.T) {
 	actor := actorExtractor("analyst-1")
 	infra := &stubInfraProvider{}
 
-	uc, err := NewExceptionUseCase(nil, actor, audit, infra, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(nil, actor, audit, infra, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 	require.ErrorIs(t, err, ErrNilExceptionRepository)
 	assert.Nil(t, uc)
@@ -66,11 +67,11 @@ func TestNewUseCase_NilResolutionExecutor(t *testing.T) {
 	actor := actorExtractor("analyst-1")
 	infra := &stubInfraProvider{}
 
-	uc, err := NewExceptionUseCase(repo, actor, audit, infra)
+	uc, err := NewExceptionUseCase(repo, actor, audit, infra, WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 	require.NotNil(t, uc)
 
-	_, err = uc.ForceMatch(context.Background(), ForceMatchCommand{
+	_, err = uc.ForceMatch(testStreamingContext(), ForceMatchCommand{
 		ExceptionID:    uuid.New(),
 		OverrideReason: "POLICY_EXCEPTION",
 		Notes:          "test",
@@ -87,7 +88,7 @@ func TestNewUseCase_NilAuditPublisher(t *testing.T) {
 	actor := actorExtractor("analyst-1")
 	infra := &stubInfraProvider{}
 
-	uc, err := NewExceptionUseCase(repo, actor, nil, infra, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actor, nil, infra, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 	require.ErrorIs(t, err, ErrNilAuditPublisher)
 	assert.Nil(t, uc)
@@ -101,7 +102,7 @@ func TestNewUseCase_NilActorExtractor(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	infra := &stubInfraProvider{}
 
-	uc, err := NewExceptionUseCase(repo, nil, audit, infra, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, nil, audit, infra, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 	require.ErrorIs(t, err, ErrNilActorExtractor)
 	assert.Nil(t, uc)
@@ -115,7 +116,7 @@ func TestNewUseCase_NilInfraProvider(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	actor := actorExtractor("analyst-1")
 
-	uc, err := NewExceptionUseCase(repo, actor, audit, nil, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actor, audit, nil, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 	require.ErrorIs(t, err, ErrNilInfraProvider)
 	assert.Nil(t, uc)
@@ -124,7 +125,7 @@ func TestNewUseCase_NilInfraProvider(t *testing.T) {
 func TestNewUseCase_AllDependenciesNil(t *testing.T) {
 	t.Parallel()
 
-	uc, err := NewExceptionUseCase(nil, nil, nil, nil, WithResolutionExecutor(nil))
+	uc, err := NewExceptionUseCase(nil, nil, nil, nil, WithResolutionExecutor(nil), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 	require.ErrorIs(t, err, ErrNilExceptionRepository)
 	assert.Nil(t, uc)
@@ -184,7 +185,7 @@ func TestNewUseCase_ValidationOrder(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			uc, err := NewExceptionUseCase(tc.repo, tc.actor, tc.audit, tc.infra, WithResolutionExecutor(&stubResolutionExecutor{}))
+			uc, err := NewExceptionUseCase(tc.repo, tc.actor, tc.audit, tc.infra, WithResolutionExecutor(&stubResolutionExecutor{}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 
 			require.ErrorIs(t, err, tc.expectedErr)
 			assert.Nil(t, uc)

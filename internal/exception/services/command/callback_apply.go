@@ -146,6 +146,13 @@ func (uc *ExceptionUseCase) processCallback(
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 
+	if err := validateCriticalTxLease(txLease, "begin callback transaction"); err != nil {
+		libOpentelemetry.HandleSpanError(span, "invalid critical streaming transaction", err)
+		uc.markIdempotencyFailed(ctx, params.dedupeKey)
+
+		return err
+	}
+
 	defer func() {
 		_ = txLease.Rollback() // No-op if already committed
 	}()
@@ -166,6 +173,16 @@ func (uc *ExceptionUseCase) processCallback(
 
 	if err := uc.publishCallbackAudit(ctx, txLease.SQLTx(), cmd, params, updated, span); err != nil {
 		return err
+	}
+
+	if err := uc.emitExceptionCritical(ctx, span, txLease.SQLTx(), "exception.callback_processed", updated, map[string]any{
+		"external_system":   params.externalSystem,
+		"external_issue_id": params.externalIssueID,
+		"callback_type":     cmd.CallbackType,
+		"processed_at":      formatExceptionTime(updated.UpdatedAt),
+	}); err != nil {
+		uc.markIdempotencyFailed(ctx, params.dedupeKey)
+		return fmt.Errorf("emit callback processed: %w", err)
 	}
 
 	if err := txLease.Commit(); err != nil {

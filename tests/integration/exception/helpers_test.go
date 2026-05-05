@@ -12,12 +12,14 @@ import (
 	"testing"
 	"time"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
+
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
+	streaming "github.com/LerianStudio/lib-streaming/v2"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	configContextRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/context"
@@ -27,28 +29,6 @@ import (
 	configSourceRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/source"
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
-	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
-	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
-	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
-
-	ingestionParsers "github.com/LerianStudio/matcher/internal/ingestion/adapters/parsers"
-	ingestionJobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
-	ingestionTxRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/transaction"
-	ingestionRedis "github.com/LerianStudio/matcher/internal/ingestion/adapters/redis"
-	ingestionEntities "github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
-	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
-
-	governancePostgres "github.com/LerianStudio/matcher/internal/governance/adapters/postgres"
-	adjustmentRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/adjustment"
-	exceptionCreatorRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/exception_creator"
-	feeScheduleRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/fee_schedule"
-	feeVarianceRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/fee_variance"
-	matchGroupRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_group"
-	matchItemRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_item"
-	matchRunRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_run"
-	matchLockManager "github.com/LerianStudio/matcher/internal/matching/adapters/redis"
-	matchingCommand "github.com/LerianStudio/matcher/internal/matching/services/command"
-
 	exceptionAdapters "github.com/LerianStudio/matcher/internal/exception/adapters"
 	exceptionAudit "github.com/LerianStudio/matcher/internal/exception/adapters/audit"
 	disputeRepoAdapter "github.com/LerianStudio/matcher/internal/exception/adapters/postgres/dispute"
@@ -58,12 +38,29 @@ import (
 	exceptionVO "github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	exceptionPorts "github.com/LerianStudio/matcher/internal/exception/ports"
 	exceptionCommand "github.com/LerianStudio/matcher/internal/exception/services/command"
-
+	governancePostgres "github.com/LerianStudio/matcher/internal/governance/adapters/postgres"
+	ingestionParsers "github.com/LerianStudio/matcher/internal/ingestion/adapters/parsers"
+	ingestionJobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
+	ingestionTxRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/transaction"
+	ingestionRedis "github.com/LerianStudio/matcher/internal/ingestion/adapters/redis"
+	ingestionEntities "github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
+	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
+	adjustmentRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/adjustment"
+	exceptionCreatorRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/exception_creator"
+	feeScheduleRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/fee_schedule"
+	feeVarianceRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/fee_variance"
+	matchGroupRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_group"
+	matchItemRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_item"
+	matchRunRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_run"
+	matchLockManager "github.com/LerianStudio/matcher/internal/matching/adapters/redis"
+	matchingCommand "github.com/LerianStudio/matcher/internal/matching/services/command"
 	sharedCross "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
+	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
-
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -606,6 +603,7 @@ func wireExceptionUseCase(
 		auditPub,
 		provider,
 		exceptionCommand.WithResolutionExecutor(executor),
+		exceptionCommand.WithStreamingEmitter(streaming.NewNoopEmitter()),
 	)
 	require.NoError(t, err)
 
@@ -639,6 +637,7 @@ func wireDisputeUseCase(
 		auditPub,
 		provider,
 		exceptionCommand.WithDisputeRepository(disputeRepo),
+		exceptionCommand.WithStreamingEmitter(streaming.NewNoopEmitter()),
 	)
 	require.NoError(t, err)
 

@@ -11,16 +11,20 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
 
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
+	streaming "github.com/LerianStudio/lib-streaming/v2"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 	reportingMetrics "github.com/LerianStudio/matcher/internal/reporting/services/metrics"
+	reportingStreamingPayload "github.com/LerianStudio/matcher/internal/reporting/services/streamingpayload"
 	sharedObservability "github.com/LerianStudio/matcher/internal/shared/observability"
+	"github.com/LerianStudio/matcher/internal/streaming/emission"
 )
 
 const exportJobResourcePathFmt = "/v1/export-jobs/%s"
@@ -36,16 +40,43 @@ var ErrJobInTerminalState = errors.New("cannot cancel job in terminal state")
 
 // ExportJobUseCase orchestrates export job commands.
 type ExportJobUseCase struct {
-	repo repositories.ExportJobRepository
+	repo          repositories.ExportJobRepository
+	streamEmitter streaming.Emitter
 }
 
 // NewExportJobUseCase creates a new export job use case.
-func NewExportJobUseCase(repo repositories.ExportJobRepository) (*ExportJobUseCase, error) {
+func NewExportJobUseCase(repo repositories.ExportJobRepository, options ...ExportJobUseCaseOption) (*ExportJobUseCase, error) {
 	if repo == nil {
 		return nil, ErrNilExportJobRepository
 	}
 
-	return &ExportJobUseCase{repo: repo}, nil
+	uc := &ExportJobUseCase{repo: repo}
+
+	for _, option := range options {
+		if option != nil {
+			option(uc)
+		}
+	}
+
+	return uc, nil
+}
+
+// Functional options for streaming.Emitter injection follow the convention:
+// - Bare WithStreamingEmitter when this package owns one emitter consumer
+// - With<ReceiverName>StreamingEmitter when multiple consumers coexist in the same package.
+
+// ExportJobUseCaseOption configures optional export job command dependencies.
+type ExportJobUseCaseOption func(*ExportJobUseCase)
+
+// WithStreamingEmitter sets the emitter used for export job streaming events.
+// Use emission.IsNilEmitter() to defend against typed-nil interface values
+// (e.g., a (*MockEmitter)(nil) hiding behind a streaming.Emitter interface).
+func WithStreamingEmitter(emitter streaming.Emitter) ExportJobUseCaseOption {
+	return func(uc *ExportJobUseCase) {
+		if !emission.IsNilEmitter(emitter) {
+			uc.streamEmitter = emitter
+		}
+	}
 }
 
 // CreateExportJobInput contains parameters for creating an export job.
@@ -117,12 +148,27 @@ func (uc *ExportJobUseCase) CreateExportJob(
 		string(job.Format),
 		string(entities.ExportJobStatusQueued),
 	)
+	uc.emitExportJobEvent(ctx, span, "export_job.created", job)
 
 	return &CreateExportJobOutput{
 		JobID:     job.ID,
 		Status:    job.Status,
 		StatusURL: fmt.Sprintf(exportJobResourcePathFmt, job.ID),
 	}, nil
+}
+
+func (uc *ExportJobUseCase) emitExportJobEvent(ctx context.Context, span trace.Span, definitionKey string, job *entities.ExportJob) {
+	if job == nil {
+		return
+	}
+
+	if err := emission.Emit(ctx, uc.streamEmitter, definitionKey, job.ID.String(), exportJobPayload(definitionKey, job)); err != nil {
+		libOpentelemetry.HandleSpanError(span, "failed to emit streaming event "+definitionKey, err)
+	}
+}
+
+func exportJobPayload(definitionKey string, job *entities.ExportJob) map[string]any {
+	return reportingStreamingPayload.ExportJob(definitionKey, job)
 }
 
 // CancelExportJob cancels a queued or running export job.

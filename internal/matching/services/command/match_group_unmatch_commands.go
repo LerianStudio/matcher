@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -63,19 +62,23 @@ func (uc *UseCase) Unmatch(ctx context.Context, input UnmatchInput) error {
 	}
 
 	wasConfirmed := group.Status == matchingVO.MatchGroupStatusConfirmed
+	persistedGroup := group
 
 	if err := uc.txRepo.WithTx(ctx, func(tx repositories.Tx) error {
-		if txErr := uc.rejectOrRevokeGroup(ctx, logger, tx, group, input.Reason, wasConfirmed); txErr != nil {
+		updatedGroup, txErr := uc.rejectOrRevokeGroup(ctx, logger, tx, group, input.Reason, wasConfirmed)
+		if txErr != nil {
 			return txErr
 		}
 
-		if txErr := uc.revertTransactionStatuses(ctx, logger, tx, input.ContextID, input.MatchGroupID); txErr != nil {
-			return txErr
+		persistedGroup = updatedGroup
+
+		if revertErr := uc.revertTransactionStatuses(ctx, logger, tx, input.ContextID, input.MatchGroupID); revertErr != nil {
+			return revertErr
 		}
 
 		if wasConfirmed {
-			if txErr := uc.enqueueUnmatchEvent(ctx, tx, group, input.Reason); txErr != nil {
-				return txErr
+			if enqueueErr := uc.enqueueUnmatchEvent(ctx, tx, persistedGroup, input.Reason); enqueueErr != nil {
+				return enqueueErr
 			}
 		}
 
@@ -88,6 +91,10 @@ func (uc *UseCase) Unmatch(ctx context.Context, input UnmatchInput) error {
 		libLog.String("group_id", input.MatchGroupID.String()),
 		libLog.String("reason", input.Reason),
 	).Log(ctx, libLog.LevelInfo, "successfully unmatched group")
+
+	if wasConfirmed {
+		uc.emitMatchGroupUnmatched(ctx, span, persistedGroup, input.Reason)
+	}
 
 	return nil
 }
@@ -195,7 +202,7 @@ func (uc *UseCase) rejectOrRevokeGroup(
 	group *matchingEntities.MatchGroup,
 	reason string,
 	wasConfirmed bool,
-) error {
+) (*matchingEntities.MatchGroup, error) {
 	var err error
 
 	action := "reject"
@@ -208,15 +215,20 @@ func (uc *UseCase) rejectOrRevokeGroup(
 
 	if err != nil {
 		logger.With(libLog.String("action", action), libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to update match group status")
-		return fmt.Errorf("%s match group: %w", action, err)
+		return nil, fmt.Errorf("%s match group: %w", action, err)
 	}
 
-	if _, err := uc.matchGroupRepo.UpdateWithTx(ctx, tx, group); err != nil {
+	updatedGroup, err := uc.matchGroupRepo.UpdateWithTx(ctx, tx, group)
+	if err != nil {
 		logger.With(libLog.String("action", action), libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to update match group after status change")
-		return fmt.Errorf("update match group: %w", err)
+		return nil, fmt.Errorf("update match group: %w", err)
 	}
 
-	return nil
+	if updatedGroup == nil {
+		return nil, fmt.Errorf("update match group: %w", ErrMatchGroupNotFound)
+	}
+
+	return updatedGroup, nil
 }
 
 func (uc *UseCase) enqueueUnmatchEvent(
@@ -260,7 +272,7 @@ func (uc *UseCase) enqueueUnmatchEvent(
 		tenantSlug,
 		group,
 		reason,
-		time.Now().UTC(),
+		group.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("build match unmatched event: %w", err)

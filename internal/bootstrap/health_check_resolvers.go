@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	streaming "github.com/LerianStudio/lib-streaming/v2"
+
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -207,14 +209,18 @@ func resolveFetcherCheck(cfg *Config, deps *HealthDependencies) (HealthCheckFunc
 }
 
 func isNilFetcherClient(client sharedPorts.FetcherClient) bool {
-	if client == nil {
+	return isNilInterfaceValue(client)
+}
+
+func isNilInterfaceValue(value any) bool {
+	if value == nil {
 		return true
 	}
 
-	value := reflect.ValueOf(client)
-	switch value.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
-		return value.IsNil()
+	valueOf := reflect.ValueOf(value)
+	switch valueOf.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return valueOf.IsNil()
 	default:
 		return false
 	}
@@ -229,21 +235,54 @@ func resolveObjectStorageCheck(deps *HealthDependencies) (HealthCheckFunc, bool)
 		return deps.ObjectStorageCheck, true
 	}
 
-	if deps.ObjectStorage == nil {
+	if isNilInterfaceValue(deps.ObjectStorage) {
 		return nil, false
 	}
+
+	storage := deps.ObjectStorage
 
 	return func(ctx context.Context) error {
 		// We just check that we can reach the storage by checking for a non-existent key.
 		// The Exists call will return false if the key doesn't exist (expected),
 		// but will error if the storage is unreachable.
-		_, err := deps.ObjectStorage.Exists(ctx, ".health-check")
+		_, err := storage.Exists(ctx, ".health-check")
 		if err != nil {
 			return fmt.Errorf("object storage health check: %w", err)
 		}
 
 		return nil
 	}, true
+}
+
+func resolveStreamingCheck(deps *HealthDependencies) (HealthCheckFunc, bool) {
+	if deps == nil || !deps.StreamingEnabled {
+		return nil, false
+	}
+
+	if deps.StreamingCheck != nil {
+		return normalizeStreamingHealthCheck(deps.StreamingCheck), true
+	}
+
+	if isNilInterfaceValue(deps.Streaming) {
+		return nil, false
+	}
+
+	emitter := deps.Streaming
+
+	return normalizeStreamingHealthCheck(emitter.Healthy), true
+}
+
+func normalizeStreamingHealthCheck(check HealthCheckFunc) HealthCheckFunc {
+	return func(ctx context.Context) error {
+		err := check(ctx)
+
+		var healthErr *streaming.HealthError
+		if errors.As(err, &healthErr) && healthErr.State() == streaming.Degraded {
+			return nil
+		}
+
+		return err
+	}
 }
 
 // rabbitMQHTTPClientTimeout is an outer belt-and-suspenders cap on the

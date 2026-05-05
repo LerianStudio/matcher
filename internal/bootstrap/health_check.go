@@ -51,6 +51,7 @@ import (
 	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
 	libRabbitmq "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
 	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
+	streaming "github.com/LerianStudio/lib-streaming/v2"
 
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -123,6 +124,7 @@ type HealthDependencies struct {
 	RabbitMQ        *libRabbitmq.RabbitMQConnection
 	ObjectStorage   ObjectStorageHealthChecker
 	Fetcher         sharedPorts.FetcherClient
+	Streaming       streaming.Emitter
 
 	PostgresCheck        HealthCheckFunc
 	PostgresReplicaCheck HealthCheckFunc
@@ -130,6 +132,7 @@ type HealthDependencies struct {
 	RabbitMQCheck        HealthCheckFunc
 	ObjectStorageCheck   HealthCheckFunc
 	FetcherCheck         HealthCheckFunc
+	StreamingCheck       HealthCheckFunc
 
 	// Optional dependencies do not impact overall readiness status when unavailable
 	// or failing their readiness checks (the "optional-dep down" carve-out).
@@ -139,6 +142,8 @@ type HealthDependencies struct {
 	RabbitMQOptional        bool
 	ObjectStorageOptional   bool
 	FetcherOptional         bool
+	StreamingOptional       bool
+	StreamingEnabled        bool
 }
 
 // ObjectStorageHealthChecker is an interface for checking object storage health.

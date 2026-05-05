@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
+	"github.com/LerianStudio/lib-streaming/v2/streamingtest"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1372,13 +1374,18 @@ func TestExportWorker_HandleRequeueFailure(t *testing.T) {
 	storage := storageMocks.NewMockBackend(ctrl)
 	cfg := ExportWorkerConfig{}
 	logger := &libLog.NopLogger{}
+	emitter := streamingtest.NewMockEmitter()
 
-	worker, err := NewExportWorker(jobRepo, reportRepo, storage, cfg, logger)
+	worker, err := NewExportWorker(jobRepo, reportRepo, storage, cfg, logger, WithStreamingEmitter(emitter))
 	require.NoError(t, err)
 
+	tenantID := uuid.New()
 	job := &entities.ExportJob{
-		ID:     uuid.New(),
-		Status: entities.ExportJobStatusQueued,
+		ID:        uuid.New(),
+		TenantID:  tenantID,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+		Status:    entities.ExportJobStatusQueued,
 	}
 
 	var failCalled atomic.Bool
@@ -1395,13 +1402,15 @@ func TestExportWorker_HandleRequeueFailure(t *testing.T) {
 		})
 
 	worker.handleRequeueFailure(
-		context.Background(),
+		tmcore.ContextWithTenantID(context.Background(), tenantID.String()),
 		job,
 		errTestOriginalError,
 		errTestRequeueError,
 	)
 
 	assert.True(t, failCalled.Load())
+	streamingtest.AssertEventEmitted(t, emitter, "export_job.failed")
+	streamingtest.AssertTenantID(t, emitter, tenantID.String())
 }
 
 func TestExportWorker_HandleRequeueFailure_UpdateStatusFails(t *testing.T) {
@@ -2317,4 +2326,41 @@ func TestExportWorker_FailJob_UpdateStatusError(t *testing.T) {
 	jobRepo.EXPECT().UpdateStatus(gomock.Any(), gomock.Any()).Return(errTestUpdateFailed)
 
 	worker.failJob(context.Background(), job, errTestGenericFailure)
+}
+
+func TestExportWorker_FailJob_UpdateStatusErrorDoesNotEmitFailedEvent(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
+	reportRepo := &mockReportRepoForWorker{}
+	storage := storageMocks.NewMockBackend(ctrl)
+	emitter := streamingtest.NewMockEmitter()
+	cfg := ExportWorkerConfig{
+		MaxRetries:        3,
+		InitialBackoff:    time.Second,
+		MaxBackoff:        5 * time.Minute,
+		BackoffMultiplier: 2.0,
+	}
+	logger := &libLog.NopLogger{}
+
+	worker, err := NewExportWorker(jobRepo, reportRepo, storage, cfg, logger, WithStreamingEmitter(emitter))
+	require.NoError(t, err)
+
+	tenantID := uuid.New()
+	job := &entities.ExportJob{
+		ID:        uuid.New(),
+		TenantID:  tenantID,
+		ContextID: uuid.New(),
+		Attempts:  4,
+		Status:    entities.ExportJobStatusRunning,
+		Format:    entities.ExportFormatCSV,
+		CreatedAt: time.Now().UTC().Add(-time.Minute),
+		ExpiresAt: time.Now().UTC().Add(time.Hour),
+	}
+
+	jobRepo.EXPECT().UpdateStatus(gomock.Any(), gomock.Any()).Return(errTestUpdateFailed)
+
+	ctx := tmcore.ContextWithTenantID(context.Background(), tenantID.String())
+	worker.failJob(ctx, job, errTestGenericFailure)
+
+	streamingtest.AssertNoEvents(t, emitter)
 }

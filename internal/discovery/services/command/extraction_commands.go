@@ -99,6 +99,8 @@ func (uc *UseCase) StartExtraction(
 		return nil, fmt.Errorf("persist pending extraction request: %w", err)
 	}
 
+	uc.emitExtractionRequestCreated(ctx, span, extractionReq)
+
 	input, inputErr := buildExtractionJobInput(conn, tables, params)
 	if inputErr != nil {
 		return nil, inputErr
@@ -128,6 +130,8 @@ func (uc *UseCase) StartExtraction(
 	if err := uc.persistSubmittedExtraction(ctx, span, extractionReq); err != nil {
 		return nil, fmt.Errorf("persist submitted extraction request: %w", err)
 	}
+
+	uc.emitExtractionRequestSubmitted(ctx, span, extractionReq)
 
 	// Start async polling for extraction completion (if poller configured).
 	if uc.extractionPoller != nil {

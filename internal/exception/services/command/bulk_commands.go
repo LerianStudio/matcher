@@ -206,6 +206,10 @@ func (uc *ExceptionUseCase) assignSingle(
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 
+	if err := validateCriticalTxLease(txLease, "begin bulk assign transaction"); err != nil {
+		return err
+	}
+
 	defer func() {
 		_ = txLease.Rollback()
 	}()
@@ -230,6 +234,10 @@ func (uc *ExceptionUseCase) assignSingle(
 	if err := txLease.Commit(); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)
 	}
+
+	uc.emitExceptionImportant(ctx, nil, "exception.assigned", exception, map[string]any{
+		"assigned_at": formatExceptionTime(exception.UpdatedAt),
+	})
 
 	return nil
 }
@@ -339,6 +347,10 @@ func (uc *ExceptionUseCase) resolveSingle(
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 
+	if err := validateCriticalTxLease(txLease, "begin bulk resolve transaction"); err != nil {
+		return err
+	}
+
 	defer func() {
 		_ = txLease.Rollback()
 	}()
@@ -358,6 +370,12 @@ func (uc *ExceptionUseCase) resolveSingle(
 		},
 	}); err != nil {
 		return fmt.Errorf("publish audit: %w", err)
+	}
+
+	if err := uc.emitExceptionCritical(ctx, nil, txLease.SQLTx(), "exception.resolved", exception, map[string]any{
+		"resolved_at": formatExceptionTime(exception.UpdatedAt),
+	}); err != nil {
+		return fmt.Errorf("emit exception resolved: %w", err)
 	}
 
 	if err := txLease.Commit(); err != nil {

@@ -7,10 +7,11 @@
 package command
 
 import (
-	"context"
 	"errors"
 	"testing"
 	"time"
+
+	streaming "github.com/LerianStudio/lib-streaming/v2"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -27,7 +28,7 @@ var errTestBeginTx = errors.New("test: begin transaction failed")
 func TestAdjustEntry_BeginTxError(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 
 	exception, err := entities.NewException(
 		ctx,
@@ -42,7 +43,7 @@ func TestAdjustEntry_BeginTxError(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	infra := &stubInfraProvider{txErr: errTestBeginTx}
 
-	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, infra, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, infra, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	_, err = uc.AdjustEntry(ctx, AdjustEntryCommand{
@@ -61,7 +62,7 @@ func TestAdjustEntry_BeginTxError(t *testing.T) {
 func TestAdjustEntry_CommitError(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 
 	exception, err := entities.NewException(
 		ctx,
@@ -81,7 +82,7 @@ func TestAdjustEntry_CommitError(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, infra, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, infra, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	_, err = uc.AdjustEntry(ctx, AdjustEntryCommand{
@@ -101,7 +102,7 @@ func TestAdjustEntry_CommitError(t *testing.T) {
 func TestForceMatch_BeginTxError(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 
 	exception, err := entities.NewException(
 		ctx,
@@ -116,7 +117,7 @@ func TestForceMatch_BeginTxError(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	infra := &stubInfraProvider{txErr: errTestBeginTx}
 
-	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, infra, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, infra, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	_, err = uc.ForceMatch(ctx, ForceMatchCommand{
@@ -132,7 +133,7 @@ func TestForceMatch_BeginTxError(t *testing.T) {
 func TestForceMatch_CommitError(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 
 	exception, err := entities.NewException(
 		ctx,
@@ -152,7 +153,7 @@ func TestForceMatch_CommitError(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, infra, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, infra, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	_, err = uc.ForceMatch(ctx, ForceMatchCommand{
@@ -168,7 +169,7 @@ func TestForceMatch_CommitError(t *testing.T) {
 func TestForceMatch_UpdateError(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 
 	exception, err := entities.NewException(
 		ctx,
@@ -182,7 +183,7 @@ func TestForceMatch_UpdateError(t *testing.T) {
 	exec := &stubResolutionExecutor{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	_, err = uc.ForceMatch(ctx, ForceMatchCommand{
@@ -198,7 +199,7 @@ func TestForceMatch_UpdateError(t *testing.T) {
 func TestOpenDispute_BeginTxError(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 
 	exception, err := entities.NewException(
 		ctx,
@@ -213,7 +214,7 @@ func TestOpenDispute_BeginTxError(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	infra := &stubInfraProvider{txErr: errTestBeginTx}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	_, err = uc.OpenDispute(ctx, OpenDisputeCommand{
@@ -229,7 +230,7 @@ func TestOpenDispute_BeginTxError(t *testing.T) {
 func TestOpenDispute_CommitError(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 
 	exception, err := entities.NewException(
 		ctx,
@@ -249,7 +250,7 @@ func TestOpenDispute_CommitError(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	_, err = uc.OpenDispute(ctx, OpenDisputeCommand{
@@ -266,7 +267,7 @@ func TestOpenDispute_CommitError(t *testing.T) {
 func TestCloseDispute_BeginTxError(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	exceptionID := uuid.New()
 	existingDispute := createTestDispute(ctx, t, exceptionID)
 
@@ -283,7 +284,7 @@ func TestCloseDispute_BeginTxError(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	infra := &stubInfraProvider{txErr: errTestBeginTx}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	_, err = uc.CloseDispute(ctx, CloseDisputeCommand{
@@ -299,7 +300,7 @@ func TestCloseDispute_BeginTxError(t *testing.T) {
 func TestCloseDispute_CommitError(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	exceptionID := uuid.New()
 	existingDispute := createTestDispute(ctx, t, exceptionID)
 
@@ -321,7 +322,7 @@ func TestCloseDispute_CommitError(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	_, err = uc.CloseDispute(ctx, CloseDisputeCommand{
@@ -338,7 +339,7 @@ func TestCloseDispute_CommitError(t *testing.T) {
 func TestSubmitEvidence_BeginTxError(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	exceptionID := uuid.New()
 	existingDispute := createTestDispute(ctx, t, exceptionID)
 
@@ -355,7 +356,7 @@ func TestSubmitEvidence_BeginTxError(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	infra := &stubInfraProvider{txErr: errTestBeginTx}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	_, err = uc.SubmitEvidence(ctx, SubmitEvidenceCommand{
@@ -370,7 +371,7 @@ func TestSubmitEvidence_BeginTxError(t *testing.T) {
 func TestSubmitEvidence_CommitError(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	exceptionID := uuid.New()
 	existingDispute := createTestDispute(ctx, t, exceptionID)
 
@@ -392,7 +393,7 @@ func TestSubmitEvidence_CommitError(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	_, err = uc.SubmitEvidence(ctx, SubmitEvidenceCommand{
@@ -450,7 +451,7 @@ func TestSubmitEvidence_FileURLVariations(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := context.Background()
+			ctx := testStreamingContext()
 			exceptionID := uuid.New()
 			existingDispute := createTestDispute(ctx, t, exceptionID)
 
@@ -472,7 +473,7 @@ func TestSubmitEvidence_FileURLVariations(t *testing.T) {
 
 			infra := &stubInfraProvider{tx: tx}
 
-			uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
+			uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 			require.NoError(t, err)
 
 			result, err := uc.SubmitEvidence(ctx, SubmitEvidenceCommand{

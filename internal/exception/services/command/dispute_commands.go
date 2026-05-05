@@ -170,6 +170,12 @@ func (uc *ExceptionUseCase) processOpenDispute(
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 
+	if err := validateCriticalTxLease(txLease, "begin open dispute transaction"); err != nil {
+		libOpentelemetry.HandleSpanError(span, "invalid critical streaming transaction", err)
+
+		return nil, err
+	}
+
 	defer func() {
 		if rbErr := txLease.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
 			libOpentelemetry.HandleSpanError(span, "tx.Rollback failed", rbErr)
@@ -199,6 +205,13 @@ func (uc *ExceptionUseCase) processOpenDispute(
 		libOpentelemetry.HandleSpanError(span, "audit publish failed", err)
 
 		return nil, fmt.Errorf("publish audit: %w", err)
+	}
+
+	if err := uc.emitDisputeCritical(ctx, span, txLease.SQLTx(), "dispute.opened", created, map[string]any{
+		"category":  created.Category.String(),
+		"opened_at": formatExceptionTime(created.UpdatedAt),
+	}); err != nil {
+		return nil, fmt.Errorf("emit dispute opened: %w", err)
 	}
 
 	if err := txLease.Commit(); err != nil {
@@ -266,6 +279,7 @@ func (uc *ExceptionUseCase) CloseDispute(
 	return uc.processCloseDispute(ctx, cmd, params, logger, span)
 }
 
+//nolint:cyclop // Transactional critical streaming guard is intentionally colocated with dispute state-machine write path.
 func (uc *ExceptionUseCase) processCloseDispute(
 	ctx context.Context,
 	cmd CloseDisputeCommand,
@@ -281,6 +295,12 @@ func (uc *ExceptionUseCase) processCloseDispute(
 		libOpentelemetry.HandleSpanError(span, "failed to begin transaction", err)
 
 		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+
+	if err := validateCriticalTxLease(txLease, "begin close dispute transaction"); err != nil {
+		libOpentelemetry.HandleSpanError(span, "invalid critical streaming transaction", err)
+
+		return nil, err
 	}
 
 	defer func() {
@@ -338,6 +358,17 @@ func (uc *ExceptionUseCase) processCloseDispute(
 		libOpentelemetry.HandleSpanError(span, "audit publish failed", err)
 
 		return nil, fmt.Errorf("publish audit: %w", err)
+	}
+
+	definitionKey := "dispute.lost"
+	if cmd.Won {
+		definitionKey = "dispute.won"
+	}
+
+	if err := uc.emitDisputeCritical(ctx, span, txLease.SQLTx(), definitionKey, updated, map[string]any{
+		"closed_at": formatExceptionTime(updated.UpdatedAt),
+	}); err != nil {
+		return nil, fmt.Errorf("emit dispute closed: %w", err)
 	}
 
 	if err := txLease.Commit(); err != nil {
@@ -421,6 +452,7 @@ func (uc *ExceptionUseCase) SubmitEvidence(
 	return uc.processSubmitEvidence(ctx, cmd, params, logger, span)
 }
 
+//nolint:cyclop // Transactional critical streaming guard is intentionally colocated with evidence state-machine write path.
 func (uc *ExceptionUseCase) processSubmitEvidence(
 	ctx context.Context,
 	cmd SubmitEvidenceCommand,
@@ -437,6 +469,12 @@ func (uc *ExceptionUseCase) processSubmitEvidence(
 		libOpentelemetry.HandleSpanError(span, "failed to begin transaction", err)
 
 		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+
+	if err := validateCriticalTxLease(txLease, "begin submit evidence transaction"); err != nil {
+		libOpentelemetry.HandleSpanError(span, "invalid critical streaming transaction", err)
+
+		return nil, err
 	}
 
 	defer func() {
@@ -486,6 +524,23 @@ func (uc *ExceptionUseCase) processSubmitEvidence(
 		libOpentelemetry.HandleSpanError(span, "audit publish failed", err)
 
 		return nil, fmt.Errorf("publish audit: %w", err)
+	}
+
+	var latestEvidence *dispute.Evidence
+	if len(updated.Evidence) > 0 {
+		latestEvidence = &updated.Evidence[len(updated.Evidence)-1]
+	}
+
+	if latestEvidence != nil {
+		if err := uc.emitExceptionPayload(ctx, span, txLease.SQLTx(), true, "evidence.submitted", latestEvidence.ID.String(), map[string]any{
+			"evidence_id":  latestEvidence.ID.String(),
+			"dispute_id":   updated.ID.String(),
+			"exception_id": updated.ExceptionID.String(),
+			"has_file":     latestEvidence.FileURL != nil,
+			"submitted_at": formatExceptionTime(latestEvidence.SubmittedAt),
+		}); err != nil {
+			return nil, fmt.Errorf("emit evidence submitted: %w", err)
+		}
 	}
 
 	if err := txLease.Commit(); err != nil {

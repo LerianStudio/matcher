@@ -15,6 +15,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
 )
 
 // ExtractTenant returns a Fiber middleware that extracts tenant information from the request.
@@ -47,6 +48,14 @@ func (te *TenantExtractor) ExtractTenant() fiber.Handler {
 		if !te.authEnabled {
 			ctx = context.WithValue(ctx, TenantIDKey, currentDefaultTenantID)
 			ctx = context.WithValue(ctx, TenantSlugKey, currentDefaultTenantSlug)
+			// Dual-key tenant context: matcher's repositories read tenant
+			// from auth.TenantIDKey, but lib-streaming/emission and
+			// lib-commons tenant-manager helpers read from the tmcore
+			// context value. Both keys MUST be set together — hand-rolled
+			// contexts that only set one will silently fail downstream
+			// (emission.Emit returns ErrTenantIDMissing). See
+			// docs/multi-tenant-guide.md §10 "Tenant Context Setup".
+			ctx = tmcore.ContextWithTenantID(ctx, currentDefaultTenantID)
 
 			span.SetAttributes(
 				attribute.String("tenant.id", currentDefaultTenantID),
@@ -105,6 +114,11 @@ func (te *TenantExtractor) ExtractTenant() fiber.Handler {
 
 		ctx = context.WithValue(ctx, TenantIDKey, tenantID)
 		ctx = context.WithValue(ctx, TenantSlugKey, tenantSlug)
+		// Dual-key tenant context: see the doc comment on the
+		// auth-disabled branch above. Both auth.TenantIDKey and the
+		// tmcore tenant context must be set together so streaming
+		// emission and lib-commons tenant-manager reads both work.
+		ctx = tmcore.ContextWithTenantID(ctx, tenantID)
 
 		span.SetAttributes(
 			attribute.String("tenant.id", tenantID),

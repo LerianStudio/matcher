@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel"
 
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	streaming "github.com/LerianStudio/lib-streaming/v2"
 
 	governanceHTTP "github.com/LerianStudio/matcher/internal/governance/adapters/http"
 	archiveMetadataRepo "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/archive_metadata"
@@ -235,6 +236,8 @@ func openArchivalDatabase(cfg *Config) (*sql.DB, error) {
 }
 
 // initArchivalComponents initializes the archival worker and archive retrieval routes.
+//
+//nolint:cyclop // Bootstrap wiring coordinates optional archive dependencies and keeps construction centralized.
 func initArchivalComponents(
 	routes *Routes,
 	cfg *Config,
@@ -245,7 +248,13 @@ func initArchivalComponents(
 	cleanups *[]func(),
 	production bool,
 	connector InfraConnector,
+	streamEmitters ...streaming.Emitter,
 ) (*governanceWorker.ArchivalWorker, error) {
+	var streamEmitter streaming.Emitter
+	if len(streamEmitters) > 0 {
+		streamEmitter = streamEmitters[0]
+	}
+
 	if connector == nil {
 		connector = DefaultInfraConnector()
 	}
@@ -269,6 +278,10 @@ func initArchivalComponents(
 	}
 
 	if err := registerArchiveRoutesIfAvailable(routes, cfg, archiveRepo, archivalStorage, configGetter, settingsResolver, production); err != nil {
+		return nil, err
+	}
+
+	if err := ensureAuditLogPartitions(context.Background(), provider, logger, cfg.Archival.PartitionLookahead); err != nil {
 		return nil, err
 	}
 
@@ -312,6 +325,7 @@ func initArchivalComponents(
 		provider,
 		archivalWorkerCfg,
 		logger,
+		governanceWorker.WithStreamingEmitter(streamEmitter),
 	)
 	if workerErr != nil {
 		_ = archivalDB.Close()
@@ -323,6 +337,36 @@ func initArchivalComponents(
 	})
 
 	return worker, nil
+}
+
+func ensureAuditLogPartitions(
+	ctx context.Context,
+	provider sharedPorts.InfrastructureProvider,
+	logger libLog.Logger,
+	lookaheadMonths int,
+) error {
+	if provider == nil {
+		return nil
+	}
+
+	if sharedPorts.IsNilValue(logger) {
+		logger = &libLog.NopLogger{}
+	}
+
+	if lookaheadMonths <= 0 {
+		lookaheadMonths = defaultArchivalPartitionLA
+	}
+
+	partitionManager, err := newDynamicPartitionManager(provider, logger, otel.Tracer(constants.ApplicationName))
+	if err != nil {
+		return fmt.Errorf("create audit partition manager: %w", err)
+	}
+
+	if err := partitionManager.EnsurePartitionsExist(ctx, lookaheadMonths); err != nil {
+		return fmt.Errorf("ensure audit log partitions: %w", err)
+	}
+
+	return nil
 }
 
 func createArchivalStorageAvailable(cfg *Config) bool {

@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	streaming "github.com/LerianStudio/lib-streaming/v2"
+
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
@@ -143,10 +145,10 @@ func TestAdjustEntry_ValidationOrder(t *testing.T) {
 			exec := &stubResolutionExecutor{}
 			audit := &stubAuditPublisher{}
 
-			uc, err := NewExceptionUseCase(repo, actorExtractor(tc.actor), audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
+			uc, err := NewExceptionUseCase(repo, actorExtractor(tc.actor), audit, &stubInfraProvider{}, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 			require.NoError(t, err)
 
-			_, err = uc.AdjustEntry(context.Background(), tc.cmd)
+			_, err = uc.AdjustEntry(testStreamingContext(), tc.cmd)
 			require.ErrorIs(t, err, tc.expectedErr)
 		})
 	}
@@ -159,7 +161,7 @@ func TestAdjustEntry_NotesTrimmedInAuditEvent(t *testing.T) {
 	t.Parallel()
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -170,7 +172,7 @@ func TestAdjustEntry_NotesTrimmedInAuditEvent(t *testing.T) {
 	exec := &stubResolutionExecutor{}
 	audit := &stubAuditPublisher{called: make(chan struct{})}
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 
 	tx, mock, err := newMockTx(ctx)
 	require.NoError(t, err)
@@ -178,7 +180,7 @@ func TestAdjustEntry_NotesTrimmedInAuditEvent(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, infra, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, infra, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	_, err = uc.AdjustEntry(ctx, AdjustEntryCommand{
@@ -204,7 +206,7 @@ func TestAdjustEntry_ActorTrimmedInAuditEvent(t *testing.T) {
 	t.Parallel()
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -215,7 +217,7 @@ func TestAdjustEntry_ActorTrimmedInAuditEvent(t *testing.T) {
 	exec := &stubResolutionExecutor{}
 	audit := &stubAuditPublisher{called: make(chan struct{})}
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 
 	tx, mock, err := newMockTx(ctx)
 	require.NoError(t, err)
@@ -224,7 +226,7 @@ func TestAdjustEntry_ActorTrimmedInAuditEvent(t *testing.T) {
 	infra := &stubInfraProvider{tx: tx}
 
 	// Actor with leading/trailing whitespace.
-	uc, err := NewExceptionUseCase(repo, actorExtractor("  spaced-analyst  "), audit, infra, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actorExtractor("  spaced-analyst  "), audit, infra, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	_, err = uc.AdjustEntry(ctx, AdjustEntryCommand{
@@ -251,7 +253,7 @@ func TestAdjustEntry_AuditEventFieldCompleteness(t *testing.T) {
 	t.Parallel()
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -262,7 +264,7 @@ func TestAdjustEntry_AuditEventFieldCompleteness(t *testing.T) {
 	exec := &stubResolutionExecutor{}
 	audit := &stubAuditPublisher{called: make(chan struct{})}
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 
 	tx, mock, err := newMockTx(ctx)
 	require.NoError(t, err)
@@ -270,7 +272,7 @@ func TestAdjustEntry_AuditEventFieldCompleteness(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, infra, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, infra, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	before := time.Now().UTC()
@@ -317,7 +319,7 @@ func TestAdjustEntry_AdjustmentInputPassthrough(t *testing.T) {
 	t.Parallel()
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -328,9 +330,9 @@ func TestAdjustEntry_AdjustmentInputPassthrough(t *testing.T) {
 	capExec := &capturingResolutionExecutor{}
 	audit := &stubAuditPublisher{}
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 
-	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithResolutionExecutor(capExec))
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithResolutionExecutor(capExec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	effectiveAt := fixedTestTime()
@@ -369,10 +371,10 @@ func TestAdjustEntry_ZeroValueCommand(t *testing.T) {
 	exec := &stubResolutionExecutor{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	_, err = uc.AdjustEntry(context.Background(), AdjustEntryCommand{})
+	_, err = uc.AdjustEntry(testStreamingContext(), AdjustEntryCommand{})
 	require.ErrorIs(t, err, ErrExceptionIDRequired)
 }
 
@@ -383,7 +385,7 @@ func TestAdjustEntry_DecimalPrecisionPreserved(t *testing.T) {
 	t.Parallel()
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -394,9 +396,9 @@ func TestAdjustEntry_DecimalPrecisionPreserved(t *testing.T) {
 	capExec := &capturingResolutionExecutor{}
 	audit := &stubAuditPublisher{}
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 
-	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithResolutionExecutor(capExec))
+	uc, err := NewExceptionUseCase(repo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithResolutionExecutor(capExec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	// 8 decimal places -- more than most currencies need, exercises precision.
@@ -425,7 +427,7 @@ func TestAdjustEntry_PendingResolutionRejected(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -443,10 +445,10 @@ func TestAdjustEntry_PendingResolutionRejected(t *testing.T) {
 	repo.EXPECT().FindByID(gomock.Any(), exception.ID).Return(exception, nil)
 	// StartResolution should fail, so no executor call, no update, no audit.
 
-	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	_, err = uc.AdjustEntry(context.Background(), AdjustEntryCommand{
+	_, err = uc.AdjustEntry(testStreamingContext(), AdjustEntryCommand{
 		ExceptionID: exception.ID,
 		ReasonCode:  "AMOUNT_CORRECTION",
 		Notes:       "should fail",
@@ -466,7 +468,7 @@ func TestAdjustEntry_GatewayFailureRevertsStatus(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -499,10 +501,10 @@ func TestAdjustEntry_GatewayFailureRevertsStatus(t *testing.T) {
 			return exc, nil
 		})
 
-	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	_, err = uc.AdjustEntry(context.Background(), AdjustEntryCommand{
+	_, err = uc.AdjustEntry(testStreamingContext(), AdjustEntryCommand{
 		ExceptionID: exception.ID,
 		ReasonCode:  "AMOUNT_CORRECTION",
 		Notes:       "note",
@@ -523,13 +525,13 @@ func TestAdjustEntry_GatewayFailureRevertsAssignedStatus(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
-	require.NoError(t, exception.Assign(context.Background(), "analyst-1", nil))
+	require.NoError(t, exception.Assign(testStreamingContext(), "analyst-1", nil))
 	require.Equal(t, value_objects.ExceptionStatusAssigned, exception.Status)
 
 	repo := repoMocks.NewMockExceptionRepository(ctrl)
@@ -556,10 +558,10 @@ func TestAdjustEntry_GatewayFailureRevertsAssignedStatus(t *testing.T) {
 			return exc, nil
 		})
 
-	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	_, err = uc.AdjustEntry(context.Background(), AdjustEntryCommand{
+	_, err = uc.AdjustEntry(testStreamingContext(), AdjustEntryCommand{
 		ExceptionID: exception.ID,
 		ReasonCode:  "AMOUNT_CORRECTION",
 		Notes:       "note",

@@ -11,6 +11,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -24,9 +25,23 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
+	streaming "github.com/LerianStudio/lib-streaming/v2"
+
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
+	"github.com/LerianStudio/matcher/internal/governance/services/command"
 )
+
+type failingArchiveEmitter struct {
+	err error
+}
+
+func (emitter failingArchiveEmitter) Emit(context.Context, streaming.EmitRequest) error {
+	return emitter.err
+}
+func (emitter failingArchiveEmitter) Close() error                  { return nil }
+func (emitter failingArchiveEmitter) Healthy(context.Context) error { return nil }
 
 // buildVerificationArchive creates a gzip-compressed JSONL archive with the given
 // number of rows, returning the compressed bytes, the SHA-256 checksum of the
@@ -81,8 +96,6 @@ func buildVerificationArchive(t *testing.T, rowCount int, customRows ...map[stri
 // --- verifyArchive tests ---
 
 func TestVerifyArchive(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		name       string
 		metadata   *entities.ArchiveMetadata
@@ -132,8 +145,6 @@ func TestVerifyArchive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			deps := setupTestDeps(t)
 			defer deps.ctrl.Finish()
 
@@ -144,7 +155,7 @@ func TestVerifyArchive(t *testing.T) {
 			w, err := NewArchivalWorker(
 				deps.archiveRepo, deps.partitionMgr, deps.storage,
 				deps.db, deps.provider, deps.cfg, deps.logger,
-			)
+				WithStreamingEmitter(streaming.NewNoopEmitter()))
 			require.NoError(t, err)
 
 			err = w.verifyArchive(context.Background(), tt.metadata)
@@ -163,15 +174,13 @@ func TestVerifyArchive(t *testing.T) {
 }
 
 func TestVerifyArchive_DownloadAndVerify_Success(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	reader, checksum, rowCount := buildVerificationArchive(t, 5)
@@ -188,16 +197,65 @@ func TestVerifyArchive_DownloadAndVerify_Success(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestVerifyArchive_ChecksumMismatch(t *testing.T) {
-	t.Parallel()
+func TestGetOrCreateMetadata_RollsBackOnCriticalStreamingEmitFailure(t *testing.T) {
+	deps := setupTestDeps(t)
+	defer deps.ctrl.Finish()
 
+	streamErr := errors.New("streaming outbox write failed")
+	w, err := NewArchivalWorker(
+		deps.archiveRepo,
+		deps.partitionMgr,
+		deps.storage,
+		deps.db,
+		deps.provider,
+		deps.cfg,
+		deps.logger,
+		WithStreamingEmitter(failingArchiveEmitter{err: streamErr}),
+	)
+	require.NoError(t, err)
+
+	tenantID := uuid.MustParse("018f4f95-0000-7000-8000-000000000001")
+	ctx := tmcore.ContextWithTenantID(context.Background(), tenantID.String())
+	partition := &command.PartitionInfo{
+		Name:       "audit_logs_2024_01",
+		RangeStart: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		RangeEnd:   time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
+	}
+
+	deps.sqlMock.ExpectBegin()
+	deps.sqlMock.ExpectRollback()
+
+	var createCalls int
+	var createTx *sql.Tx
+	deps.archiveRepo.EXPECT().GetByPartition(gomock.Any(), tenantID, partition.Name).Return(nil, nil)
+	deps.archiveRepo.EXPECT().CreateWithTx(gomock.Any(), gomock.AssignableToTypeOf(&sql.Tx{}), gomock.Any()).DoAndReturn(
+		func(_ context.Context, tx *sql.Tx, metadata *entities.ArchiveMetadata) error {
+			createCalls++
+			createTx = tx
+			require.Equal(t, tenantID, metadata.TenantID)
+			require.Equal(t, partition.Name, metadata.PartitionName)
+
+			return nil
+		},
+	)
+
+	metadata, err := w.getOrCreateMetadata(ctx, tenantID, partition)
+
+	require.Nil(t, metadata)
+	require.ErrorIs(t, err, streamErr)
+	require.Equal(t, 1, createCalls)
+	require.NotNil(t, createTx)
+	require.NoError(t, deps.sqlMock.ExpectationsWereMet())
+}
+
+func TestVerifyArchive_ChecksumMismatch(t *testing.T) {
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	reader, _, rowCount := buildVerificationArchive(t, 3)
@@ -216,15 +274,13 @@ func TestVerifyArchive_ChecksumMismatch(t *testing.T) {
 }
 
 func TestVerifyArchive_RowCountMismatch(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	reader, checksum, _ := buildVerificationArchive(t, 3)
@@ -245,15 +301,13 @@ func TestVerifyArchive_RowCountMismatch(t *testing.T) {
 // --- transitionTo tests ---
 
 func TestTransitionTo_TransitionFunctionError(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	metadata := &entities.ArchiveMetadata{
@@ -269,15 +323,13 @@ func TestTransitionTo_TransitionFunctionError(t *testing.T) {
 }
 
 func TestTransitionTo_PersistError(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	metadata := &entities.ArchiveMetadata{
@@ -295,15 +347,13 @@ func TestTransitionTo_PersistError(t *testing.T) {
 }
 
 func TestTransitionTo_Success(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	metadata := &entities.ArchiveMetadata{
@@ -324,15 +374,13 @@ func TestTransitionTo_Success(t *testing.T) {
 // --- transitionToExported tests ---
 
 func TestTransitionToExported_MarkExportedError(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	// MarkExported with negative row count should fail
@@ -346,15 +394,13 @@ func TestTransitionToExported_MarkExportedError(t *testing.T) {
 }
 
 func TestTransitionToExported_PersistError(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	metadata := &entities.ArchiveMetadata{
@@ -370,15 +416,13 @@ func TestTransitionToExported_PersistError(t *testing.T) {
 }
 
 func TestTransitionToExported_Success(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	metadata := &entities.ArchiveMetadata{
@@ -396,48 +440,56 @@ func TestTransitionToExported_Success(t *testing.T) {
 // --- transitionToUploaded tests ---
 
 func TestTransitionToUploaded_PersistError(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	metadata := &entities.ArchiveMetadata{
-		Status: entities.StatusUploading,
+		ID:       uuid.New(),
+		TenantID: uuid.MustParse("550e8400-e29b-41d4-a716-446655440000"),
+		Status:   entities.StatusUploading,
 	}
+	ctx := context.WithValue(tmcore.ContextWithTenantID(context.Background(), metadata.TenantID.String()), auth.TenantIDKey, metadata.TenantID.String())
 
-	deps.archiveRepo.EXPECT().Update(gomock.Any(), gomock.Any()).
+	deps.sqlMock.ExpectBegin()
+	deps.sqlMock.ExpectExec("SET LOCAL search_path").WillReturnResult(sqlmock.NewResult(0, 0))
+	deps.archiveRepo.EXPECT().UpdateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(errors.New("db error"))
+	deps.sqlMock.ExpectRollback()
 
-	err = w.transitionToUploaded(context.Background(), metadata, "key", "checksum", 1024)
+	err = w.transitionToUploaded(ctx, metadata, "key", "checksum", 1024)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "persist uploaded state")
 }
 
 func TestTransitionToUploaded_Success(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	metadata := &entities.ArchiveMetadata{
-		Status: entities.StatusUploading,
+		ID:       uuid.New(),
+		TenantID: uuid.MustParse("550e8400-e29b-41d4-a716-446655440000"),
+		Status:   entities.StatusUploading,
 	}
+	ctx := context.WithValue(tmcore.ContextWithTenantID(context.Background(), metadata.TenantID.String()), auth.TenantIDKey, metadata.TenantID.String())
 
-	deps.archiveRepo.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil)
+	deps.sqlMock.ExpectBegin()
+	deps.sqlMock.ExpectExec("SET LOCAL search_path").WillReturnResult(sqlmock.NewResult(0, 0))
+	deps.archiveRepo.EXPECT().UpdateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	deps.sqlMock.ExpectCommit()
 
-	err = w.transitionToUploaded(context.Background(), metadata, "key", "checksum", 1024)
+	err = w.transitionToUploaded(ctx, metadata, "key", "checksum", 1024)
 	require.NoError(t, err)
 	assert.Equal(t, "key", metadata.ArchiveKey)
 	assert.Equal(t, "checksum", metadata.Checksum)
@@ -446,18 +498,142 @@ func TestTransitionToUploaded_Success(t *testing.T) {
 	assert.Equal(t, entities.StatusUploaded, metadata.Status)
 }
 
-// --- handlePartitionError tests ---
+func TestTransitionToUploaded_StreamingEmitFailureRestoresPreTransitionState(t *testing.T) {
+	deps := setupTestDeps(t)
+	defer deps.ctrl.Finish()
 
-func TestHandlePartitionError_UpdateSuccess(t *testing.T) {
-	t.Parallel()
+	streamErr := errors.New("streaming outbox write failed")
+	w, err := NewArchivalWorker(
+		deps.archiveRepo, deps.partitionMgr, deps.storage,
+		deps.db, deps.provider, deps.cfg, deps.logger,
+		WithStreamingEmitter(failingArchiveEmitter{err: streamErr}),
+	)
+	require.NoError(t, err)
 
+	tenantID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
+	ctx := context.WithValue(tmcore.ContextWithTenantID(context.Background(), tenantID.String()), auth.TenantIDKey, tenantID.String())
+	ctx = tmcore.ContextWithTenantID(ctx, tenantID.String())
+	metadata := &entities.ArchiveMetadata{
+		ID:            uuid.New(),
+		TenantID:      tenantID,
+		PartitionName: "audit_logs_2015_01",
+		Status:        entities.StatusUploading,
+		RowCount:      42,
+	}
+
+	deps.sqlMock.ExpectBegin()
+	deps.sqlMock.ExpectExec("SET LOCAL search_path").WillReturnResult(sqlmock.NewResult(0, 0))
+	deps.archiveRepo.EXPECT().UpdateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	deps.sqlMock.ExpectRollback()
+
+	err = w.transitionToUploaded(ctx, metadata, "key", "checksum", 1024)
+	require.ErrorIs(t, err, streamErr)
+	assert.Equal(t, entities.StatusUploading, metadata.Status)
+	assert.Empty(t, metadata.ArchiveKey)
+	assert.Empty(t, metadata.Checksum)
+}
+
+func TestCompleteArchiveWithPartitionDropTx_CommitFailureRestoresPreTransitionState(t *testing.T) {
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
+		WithStreamingEmitter(failingArchiveEmitter{err: nil}),
 	)
+	require.NoError(t, err)
+
+	tenantID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
+	ctx := context.WithValue(tmcore.ContextWithTenantID(context.Background(), tenantID.String()), auth.TenantIDKey, tenantID.String())
+	ctx = tmcore.ContextWithTenantID(ctx, tenantID.String())
+	metadata := &entities.ArchiveMetadata{
+		ID:             uuid.New(),
+		TenantID:       tenantID,
+		PartitionName:  "audit_logs_2015_01",
+		DateRangeStart: time.Date(2015, time.January, 1, 0, 0, 0, 0, time.UTC),
+		DateRangeEnd:   time.Date(2015, time.February, 1, 0, 0, 0, 0, time.UTC),
+		Status:         entities.StatusDetaching,
+		ArchiveKey:     "archives/audit-logs/audit_logs_2015_01.jsonl.gz",
+		Checksum:       "checksum",
+		RowCount:       42,
+	}
+
+	deps.sqlMock.ExpectBegin()
+	deps.sqlMock.ExpectExec("SET LOCAL search_path").WillReturnResult(sqlmock.NewResult(0, 0))
+	deps.sqlMock.ExpectExec("ALTER TABLE audit_logs DETACH PARTITION audit_logs_2015_01").WillReturnResult(sqlmock.NewResult(0, 0))
+	deps.sqlMock.ExpectExec("DROP TABLE IF EXISTS audit_logs_2015_01").WillReturnResult(sqlmock.NewResult(0, 0))
+	deps.archiveRepo.EXPECT().UpdateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	deps.sqlMock.ExpectCommit().WillReturnError(errors.New("commit failed"))
+
+	err = w.completeArchiveWithPartitionDropTx(ctx, metadata)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "commit archive completion transaction")
+	assert.Equal(t, entities.StatusDetaching, metadata.Status)
+	assert.Nil(t, metadata.ArchivedAt)
+	assert.NoError(t, deps.sqlMock.ExpectationsWereMet())
+}
+
+func TestCompleteArchiveWithPartitionDropTx_RollsBackDDLMetadataAndOutboxOnEmitFailure(t *testing.T) {
+	deps := setupTestDeps(t)
+	defer deps.ctrl.Finish()
+
+	streamErr := errors.New("streaming outbox write failed")
+	w, err := NewArchivalWorker(
+		deps.archiveRepo, deps.partitionMgr, deps.storage,
+		deps.db, deps.provider, deps.cfg, deps.logger,
+		WithStreamingEmitter(failingArchiveEmitter{err: streamErr}),
+	)
+	require.NoError(t, err)
+
+	tenantID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
+	ctx := context.WithValue(tmcore.ContextWithTenantID(context.Background(), tenantID.String()), auth.TenantIDKey, tenantID.String())
+	ctx = tmcore.ContextWithTenantID(ctx, tenantID.String())
+	metadata := &entities.ArchiveMetadata{
+		ID:             uuid.New(),
+		TenantID:       tenantID,
+		PartitionName:  "audit_logs_2015_01",
+		DateRangeStart: time.Date(2015, time.January, 1, 0, 0, 0, 0, time.UTC),
+		DateRangeEnd:   time.Date(2015, time.February, 1, 0, 0, 0, 0, time.UTC),
+		Status:         entities.StatusDetaching,
+		ArchiveKey:     "archives/audit-logs/audit_logs_2015_01.jsonl.gz",
+		Checksum:       "checksum",
+		RowCount:       42,
+	}
+
+	deps.sqlMock.ExpectBegin()
+	deps.sqlMock.ExpectExec("SET LOCAL search_path").WillReturnResult(sqlmock.NewResult(0, 0))
+	deps.sqlMock.ExpectExec("ALTER TABLE audit_logs DETACH PARTITION audit_logs_2015_01").WillReturnResult(sqlmock.NewResult(0, 0))
+	deps.sqlMock.ExpectExec("DROP TABLE IF EXISTS audit_logs_2015_01").WillReturnResult(sqlmock.NewResult(0, 0))
+	deps.archiveRepo.EXPECT().UpdateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, tx *sql.Tx, updated *entities.ArchiveMetadata) error {
+			require.NotNil(t, tx, "archive metadata must advance through the same SQL transaction as partition DDL")
+			require.Equal(t, entities.StatusComplete, updated.Status)
+			require.NotNil(t, updated.ArchivedAt)
+
+			return nil
+		},
+	)
+	deps.sqlMock.ExpectRollback()
+
+	err = w.completeArchiveWithPartitionDropTx(ctx, metadata)
+
+	require.ErrorIs(t, err, streamErr)
+	assert.Equal(t, entities.StatusDetaching, metadata.Status)
+	assert.Nil(t, metadata.ArchivedAt)
+	assert.NoError(t, deps.sqlMock.ExpectationsWereMet())
+}
+
+// --- handlePartitionError tests ---
+
+func TestHandlePartitionError_UpdateSuccess(t *testing.T) {
+	deps := setupTestDeps(t)
+	defer deps.ctrl.Finish()
+
+	w, err := NewArchivalWorker(
+		deps.archiveRepo, deps.partitionMgr, deps.storage,
+		deps.db, deps.provider, deps.cfg, deps.logger,
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	metadataID := uuid.New()
@@ -485,15 +661,13 @@ func TestHandlePartitionError_UpdateSuccess(t *testing.T) {
 }
 
 func TestHandlePartitionError_UpdateFails(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	metadataID := uuid.New()
@@ -517,15 +691,13 @@ func TestHandlePartitionError_UpdateFails(t *testing.T) {
 // --- processTenant tests ---
 
 func TestProcessTenant_InvalidTenantID(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	// intentionally only verifies no panic; other behavior tested elsewhere
@@ -535,15 +707,13 @@ func TestProcessTenant_InvalidTenantID(t *testing.T) {
 }
 
 func TestProcessTenant_ProvisionPartitionsError(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	tenantID := uuid.New().String()
@@ -572,19 +742,17 @@ func TestProcessTenant_ProvisionPartitionsError(t *testing.T) {
 // --- archiveTenant tests ---
 
 func TestArchiveTenant_ListPartitionsError(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	tenantID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
-	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+	ctx := context.WithValue(tmcore.ContextWithTenantID(context.Background(), tenantID.String()), auth.TenantIDKey, tenantID.String())
 
 	// ListPartitions fails at BeginTx
 	deps.pmMock.ExpectBegin().WillReturnError(errors.New("db connection lost"))
@@ -599,15 +767,13 @@ func TestArchiveTenant_ListPartitionsError(t *testing.T) {
 // --- archivePartition already complete test ---
 
 func TestArchivePartition_SkipsComplete(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	metadata := &entities.ArchiveMetadata{
@@ -624,19 +790,17 @@ func TestArchivePartition_SkipsComplete(t *testing.T) {
 // --- handleUploadingState - streaming upload failure ---
 
 func TestHandleUploadingState_StreamQueryError(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	tenantID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
-	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+	ctx := context.WithValue(tmcore.ContextWithTenantID(context.Background(), tenantID.String()), auth.TenantIDKey, tenantID.String())
 
 	metadataID := uuid.New()
 	metadata := &entities.ArchiveMetadata{
@@ -666,19 +830,17 @@ func TestHandleUploadingState_StreamQueryError(t *testing.T) {
 // --- handleDetachingState ---
 
 func TestHandleDetachingState_DetachError(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	tenantID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
-	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+	ctx := context.WithValue(tmcore.ContextWithTenantID(context.Background(), tenantID.String()), auth.TenantIDKey, tenantID.String())
 
 	metadataID := uuid.New()
 	metadata := &entities.ArchiveMetadata{
@@ -690,11 +852,11 @@ func TestHandleDetachingState_DetachError(t *testing.T) {
 		Status:         entities.StatusDetaching,
 	}
 
-	deps.pmMock.ExpectBegin()
-	deps.pmMock.ExpectExec("SET LOCAL search_path").WillReturnResult(sqlmock.NewResult(0, 0))
-	deps.pmMock.ExpectExec("ALTER TABLE audit_logs DETACH PARTITION").
+	deps.sqlMock.ExpectBegin()
+	deps.sqlMock.ExpectExec("SET LOCAL search_path").WillReturnResult(sqlmock.NewResult(0, 0))
+	deps.sqlMock.ExpectExec("ALTER TABLE audit_logs DETACH PARTITION").
 		WillReturnError(errors.New("detach failed"))
-	deps.pmMock.ExpectRollback()
+	deps.sqlMock.ExpectRollback()
 
 	deps.archiveRepo.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil)
 	deps.archiveRepo.EXPECT().GetByID(gomock.Any(), metadataID).Return(metadata, nil)
@@ -707,8 +869,6 @@ func TestHandleDetachingState_DetachError(t *testing.T) {
 // --- releaseLock tests ---
 
 func TestReleaseLock_NilRedisConnection(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
@@ -718,7 +878,7 @@ func TestReleaseLock_NilRedisConnection(t *testing.T) {
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	// Should not panic
@@ -731,15 +891,13 @@ func TestReleaseLock_NilRedisConnection(t *testing.T) {
 // --- archiveKey format tests ---
 
 func TestArchiveKey_JanuaryPartition(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	tenantID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
@@ -759,15 +917,13 @@ func TestArchiveKey_JanuaryPartition(t *testing.T) {
 }
 
 func TestArchiveKey_DecemberPartition(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	tenantID := uuid.MustParse("660e8400-e29b-41d4-a716-446655440001")
@@ -786,52 +942,16 @@ func TestArchiveKey_DecemberPartition(t *testing.T) {
 	assert.Equal(t, expected, key)
 }
 
-// --- detachAndDrop tests ---
-
-func TestDetachAndDrop_DetachError(t *testing.T) {
-	t.Parallel()
-
-	deps := setupTestDeps(t)
-	defer deps.ctrl.Finish()
-
-	w, err := NewArchivalWorker(
-		deps.archiveRepo, deps.partitionMgr, deps.storage,
-		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
-	require.NoError(t, err)
-
-	tenantID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
-	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
-
-	metadata := &entities.ArchiveMetadata{
-		PartitionName:  "audit_logs_2015_01",
-		DateRangeStart: time.Date(2015, 1, 1, 0, 0, 0, 0, time.UTC),
-		DateRangeEnd:   time.Date(2015, 2, 1, 0, 0, 0, 0, time.UTC),
-	}
-
-	deps.pmMock.ExpectBegin()
-	deps.pmMock.ExpectExec("SET LOCAL search_path").WillReturnResult(sqlmock.NewResult(0, 0))
-	deps.pmMock.ExpectExec("ALTER TABLE audit_logs DETACH PARTITION").
-		WillReturnError(errors.New("detach error"))
-	deps.pmMock.ExpectRollback()
-
-	err = w.detachAndDrop(ctx, metadata)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "detach partition")
-}
-
 // --- provisionPartitions test ---
 
 func TestProvisionPartitions_Error(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ctx := context.WithValue(context.Background(), auth.TenantIDKey, uuid.New().String())
@@ -849,8 +969,6 @@ func TestProvisionPartitions_Error(t *testing.T) {
 // --- acquireLock with nil redis client ---
 
 func TestAcquireLock_NilRedisConnection(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
@@ -859,7 +977,7 @@ func TestAcquireLock_NilRedisConnection(t *testing.T) {
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	acquired, token, err := w.acquireLock(context.Background())
@@ -878,19 +996,17 @@ func TestAcquireLock_NilRedisConnection(t *testing.T) {
 // it guarantees that swapping the buffer for io.Pipe did not change the hash
 // contract (hash is computed over `json.Marshal(row) + "\n"`).
 func TestStreamPartitionUpload_HashMatchesExternalComputation(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	tenantID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
-	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+	ctx := context.WithValue(tmcore.ContextWithTenantID(context.Background(), tenantID.String()), auth.TenantIDKey, tenantID.String())
 
 	metadata := &entities.ArchiveMetadata{
 		ID:            uuid.New(),
@@ -986,19 +1102,17 @@ func TestStreamPartitionUpload_HashMatchesExternalComputation(t *testing.T) {
 // the overall function returns an error without leaking the pipe reader or
 // the goroutine.
 func TestStreamPartitionUpload_UploadErrorPropagates(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	tenantID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
-	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+	ctx := context.WithValue(tmcore.ContextWithTenantID(context.Background(), tenantID.String()), auth.TenantIDKey, tenantID.String())
 
 	metadata := &entities.ArchiveMetadata{
 		ID:            uuid.New(),
@@ -1033,19 +1147,17 @@ func TestStreamPartitionUpload_UploadErrorPropagates(t *testing.T) {
 // --- archivePartition from various states ---
 
 func TestArchivePartition_FromUploadedState(t *testing.T) {
-	t.Parallel()
-
 	deps := setupTestDeps(t)
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	tenantID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
-	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+	ctx := context.WithValue(tmcore.ContextWithTenantID(context.Background(), tenantID.String()), auth.TenantIDKey, tenantID.String())
 
 	metadata := &entities.ArchiveMetadata{
 		ID:             uuid.New(),
@@ -1059,7 +1171,8 @@ func TestArchivePartition_FromUploadedState(t *testing.T) {
 		Checksum:       "abc123",
 	}
 
-	deps.archiveRepo.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil).Times(4)
+	deps.archiveRepo.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	deps.archiveRepo.EXPECT().UpdateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 
 	// Build a valid verification archive matching the metadata.
 	archiveReader, checksum, _ := buildVerificationArchive(t, 100)
@@ -1067,19 +1180,11 @@ func TestArchivePartition_FromUploadedState(t *testing.T) {
 
 	deps.storage.EXPECT().Download(gomock.Any(), gomock.Any()).Return(archiveReader, nil)
 
-	// Detach
-	deps.pmMock.ExpectBegin()
-	deps.pmMock.ExpectExec("SET LOCAL search_path").WillReturnResult(sqlmock.NewResult(0, 0))
-	deps.pmMock.ExpectExec("ALTER TABLE audit_logs DETACH PARTITION").
-		WillReturnResult(sqlmock.NewResult(0, 0))
-	deps.pmMock.ExpectCommit()
-
-	// Drop
-	deps.pmMock.ExpectBegin()
-	deps.pmMock.ExpectExec("SET LOCAL search_path").WillReturnResult(sqlmock.NewResult(0, 0))
-	deps.pmMock.ExpectExec("DROP TABLE IF EXISTS").
-		WillReturnResult(sqlmock.NewResult(0, 0))
-	deps.pmMock.ExpectCommit()
+	deps.sqlMock.ExpectBegin()
+	deps.sqlMock.ExpectExec("SET LOCAL search_path").WillReturnResult(sqlmock.NewResult(0, 0))
+	deps.sqlMock.ExpectExec("ALTER TABLE audit_logs DETACH PARTITION").WillReturnResult(sqlmock.NewResult(0, 0))
+	deps.sqlMock.ExpectExec("DROP TABLE IF EXISTS").WillReturnResult(sqlmock.NewResult(0, 0))
+	deps.sqlMock.ExpectCommit()
 
 	err = w.archivePartition(ctx, metadata)
 	assert.NoError(t, err)
