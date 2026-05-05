@@ -32,6 +32,11 @@ CONFIG_DIR := ./config
 BINARY_NAME ?= matcher
 BIN_DIR ?= bin
 GOLANGCI_LINT_VERSION ?= v2.10.1
+# GOPATH_BIN points at the Go install directory (`go env GOPATH`/bin) so we
+# can invoke pinned tool versions explicitly, bypassing whatever an OS
+# package manager (brew, apt) might have put earlier on PATH. Critical
+# for keeping local lint runs identical to CI.
+GOPATH_BIN := $(shell go env GOPATH)/bin
 GO_CI_PACKAGES := ./cmd/... ./internal/... ./migrations/... ./pkg/... ./tests/...
 
 # Migration configuration
@@ -288,18 +293,34 @@ vet:
 
 lint:
 	$(call print_title,Running linters)
-	@if ! command -v golangci-lint >/dev/null 2>&1; then \
-		echo "golangci-lint not found, installing..."; \
-		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION); \
-	fi
-	@golangci-lint run $(GO_CI_PACKAGES)
+	@$(MAKE) --no-print-directory _ensure_pinned_golangci_lint
+	@$(GOPATH_BIN)/golangci-lint run $(GO_CI_PACKAGES)
 	@echo "[ok] Linting completed successfully"
 
 lint-fix:
 	$(call print_title,Running linters with auto-fix on all packages)
-	$(call check_command,golangci-lint,"go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)")
-	@golangci-lint run --fix $(GO_CI_PACKAGES)
+	@$(MAKE) --no-print-directory _ensure_pinned_golangci_lint
+	@$(GOPATH_BIN)/golangci-lint run --fix $(GO_CI_PACKAGES)
 	@echo "[ok] Lint auto-fix completed"
+
+# _ensure_pinned_golangci_lint guarantees we run the EXACT pinned version
+# from $(GOPATH_BIN), not whatever an OS package manager (brew, apt) put
+# on PATH. This prevents silent local/CI version drift where a newer
+# linter passes locally but a stricter rule in the CI-pinned version
+# fires on the runner.
+.PHONY: _ensure_pinned_golangci_lint
+_ensure_pinned_golangci_lint:
+	@WANT="$(GOLANGCI_LINT_VERSION)"; \
+	BIN="$(GOPATH_BIN)/golangci-lint"; \
+	NEED_INSTALL=1; \
+	if [ -x "$$BIN" ]; then \
+		HAVE=$$("$$BIN" version --short 2>/dev/null | head -n1 | sed 's/^v//'); \
+		if [ "$$HAVE" = "$${WANT#v}" ]; then NEED_INSTALL=0; fi; \
+	fi; \
+	if [ "$$NEED_INSTALL" -eq 1 ]; then \
+		echo "Installing pinned golangci-lint $$WANT to $(GOPATH_BIN)..."; \
+		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$$WANT; \
+	fi
 
 lint-custom:
 	$(call print_title,Running custom Matcher linters)
