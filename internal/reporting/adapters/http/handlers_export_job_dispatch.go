@@ -117,7 +117,7 @@ func (handler *ExportJobHandlers) CancelExportJob(fiberCtx *fiber.Ctx) error {
 // DownloadExportJob handles GET /v1/export-jobs/:jobId/download
 // @ID downloadExportJob
 // @Summary Download export file
-// @Description Returns a presigned URL or redirects to download the export file.
+// @Description Returns a presigned URL to download the export file.
 // @Tags Export Jobs
 // @Produce json
 // @Security BearerAuth

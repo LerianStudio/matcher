@@ -279,7 +279,7 @@ func (svc *Service) stopBackgroundWorkers(ctx context.Context, logger libLog.Log
 			// surfaces partial-drain / lost-event scenarios to callers
 			// and tests instead of returning nil after the dispatcher
 			// refused to stop.
-			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("outbox dispatcher shutdown failed: %v", err))
+			libLog.SafeError(logger, ctx, "outbox dispatcher shutdown failed", err, runtime.IsProductionMode())
 
 			return fmt.Errorf("shutdown outbox dispatcher: %w", err)
 		}
@@ -307,7 +307,7 @@ func (svc *Service) stopWorkerManager(ctx context.Context, logger libLog.Logger)
 	}
 
 	if err := svc.workerManager.Stop(); err != nil {
-		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to stop worker manager: %v", err))
+		libLog.SafeError(logger, ctx, "failed to stop worker manager", err, runtime.IsProductionMode())
 	}
 
 	return true
@@ -386,13 +386,13 @@ func (svc *Service) shutdownServerAndConnections(ctx context.Context, logger lib
 	}
 
 	if err := svc.closeStreamingApp(ctx); err != nil {
-		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("streaming producer close failed: %v", err))
+		libLog.SafeError(logger, ctx, "streaming producer close failed", err, runtime.IsProductionMode())
 		shutdownErr = errors.Join(shutdownErr, err)
 	}
 
 	if svc.connectionManager != nil {
 		if err := svc.connectionManager.Close(); err != nil {
-			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to close connection manager: %v", err))
+			libLog.SafeError(logger, ctx, "failed to close connection manager", err, runtime.IsProductionMode())
 			shutdownErr = errors.Join(shutdownErr, err)
 		}
 	}

@@ -283,6 +283,8 @@ func TestIsNonRetryableOutboxError_PayloadNotJSON(t *testing.T) {
 }
 
 func TestIsNonRetryableOutboxError_LibStreamingCallerError(t *testing.T) {
+	t.Parallel()
+
 	wrapped := fmt.Errorf("streaming replay failed: %w", streaming.ErrInvalidSubject)
 
 	assert.True(t, isNonRetryableOutboxError(wrapped))

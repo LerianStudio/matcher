@@ -660,6 +660,7 @@ definitions:
         - BANK
         - GATEWAY
         - CUSTOM
+        - FETCHER
         example: BANK
         type: string
       updatedAt:
@@ -788,6 +789,7 @@ definitions:
         - BANK
         - GATEWAY
         - CUSTOM
+        - FETCHER
         example: BANK
         type: string
       updatedAt:
@@ -6695,7 +6697,7 @@ paths:
       - Export Jobs
   /v1/export-jobs/{jobId}/download:
     get:
-      description: Returns a presigned URL or redirects to download the export file.
+      description: Returns a presigned URL to download the export file.
       operationId: downloadExportJob
       parameters:
       - description: Request ID for tracing

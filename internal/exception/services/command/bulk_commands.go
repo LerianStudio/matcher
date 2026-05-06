@@ -242,6 +242,14 @@ func (uc *ExceptionUseCase) assignSingle(
 		return fmt.Errorf("commit transaction: %w", err)
 	}
 
+	// Intentional asymmetry vs BulkResolve (which uses emitExceptionCritical
+	// inside the transaction at line 387): assignment is a metadata update
+	// with lower business-criticality than resolution. The "Important" tier
+	// emits post-commit on a best-effort basis — if the streaming bus is
+	// unavailable, we accept the rare event-loss in exchange for not
+	// rolling back a successful assignment. Resolution events, by contrast,
+	// must roll back on emit failure to preserve at-least-once delivery
+	// of the audit-critical resolution signal.
 	uc.emitExceptionImportant(ctx, nil, "exception.assigned", exception, map[string]any{
 		"assigned_at": formatExceptionTime(exception.UpdatedAt),
 	})

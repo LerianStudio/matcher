@@ -5077,7 +5077,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns a presigned URL or redirects to download the export file.",
+                "description": "Returns a presigned URL to download the export file.",
                 "produces": [
                     "application/json"
                 ],
@@ -10849,7 +10849,8 @@ const docTemplate = `{
                         "LEDGER",
                         "BANK",
                         "GATEWAY",
-                        "CUSTOM"
+                        "CUSTOM",
+                        "FETCHER"
                     ],
                     "example": "BANK"
                 },
@@ -11018,7 +11019,8 @@ const docTemplate = `{
                         "LEDGER",
                         "BANK",
                         "GATEWAY",
-                        "CUSTOM"
+                        "CUSTOM",
+                        "FETCHER"
                     ],
                     "example": "BANK"
                 },
