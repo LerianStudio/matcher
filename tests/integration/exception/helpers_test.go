@@ -19,7 +19,7 @@ import (
 
 	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
 	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	configContextRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/context"

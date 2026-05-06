@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"

@@ -15,7 +15,7 @@ import (
 	"github.com/valyala/fasthttp/fasthttpadaptor"
 
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	streamingBootstrap "github.com/LerianStudio/matcher/internal/streaming/bootstrap"
@@ -115,7 +115,7 @@ func streamingManifestLibVersion() string {
 		return "unknown"
 	}
 
-	const libStreamingModulePath = "github.com/LerianStudio/lib-streaming/v2"
+	const libStreamingModulePath = "github.com/LerianStudio/lib-streaming"
 	for _, dep := range info.Deps {
 		if dep.Path == libStreamingModulePath {
 			return dep.Version

@@ -14,7 +14,7 @@ import (
 	"go.opentelemetry.io/otel"
 
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	governanceHTTP "github.com/LerianStudio/matcher/internal/governance/adapters/http"
 	archiveMetadataRepo "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/archive_metadata"

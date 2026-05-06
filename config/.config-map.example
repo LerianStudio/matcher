@@ -231,7 +231,7 @@ M2M_TARGET_SERVICE=fetcher
 
 
 # ── Streaming (external domain events) ───────────────────────────────────────
-# Producer-only CloudEvents stream via lib-streaming/v2. Disabled by default;
+# Producer-only CloudEvents stream via lib-streaming. Disabled by default;
 # when disabled, bootstrap constructs a no-op emitter and no broker connection
 # is opened. Enable only after Redpanda/Kafka topics and subscriber contracts
 # are ready. Outbox relay support is wired for CRITICAL policies.

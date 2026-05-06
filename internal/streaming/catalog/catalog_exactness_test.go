@@ -13,7 +13,7 @@ import (
 	"runtime"
 	"testing"
 
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 	"github.com/stretchr/testify/require"
 
 	streamingcatalog "github.com/LerianStudio/matcher/internal/streaming/catalog"

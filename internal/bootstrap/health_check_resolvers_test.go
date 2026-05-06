@@ -16,7 +16,7 @@ import (
 	"time"
 
 	libRabbitmq "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/gofiber/fiber/v2"
 	"github.com/stretchr/testify/assert"

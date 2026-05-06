@@ -9,7 +9,7 @@ package command
 import (
 	"testing"
 
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"

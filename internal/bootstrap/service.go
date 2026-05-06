@@ -344,7 +344,7 @@ func (svc *Service) closeStreamingApp(ctx context.Context) error {
 		return nil
 	}
 
-	// Prefer the shutdowner contract: lib-streaming/v2 producers expose
+	// Prefer the shutdowner contract: lib-streaming producers expose
 	// Shutdown(ctx) for graceful flush + broker disconnect, which is
 	// strictly richer than CloseContext/Close (those just tear down the
 	// underlying connection without ensuring in-flight envelopes drain).

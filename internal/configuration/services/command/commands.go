@@ -8,7 +8,7 @@ package command
 import (
 	"errors"
 
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories"
 	configPorts "github.com/LerianStudio/matcher/internal/configuration/ports"

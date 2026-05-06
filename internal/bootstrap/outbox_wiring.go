@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/LerianStudio/lib-commons/v5/commons/outbox"
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
@@ -137,7 +137,7 @@ var matcherNonRetryableErrors = []error{
 	errMatchPublisherUnavailable,
 }
 
-// streamingNonRetryableErrors lists lib-streaming/v2 caller-side sentinels
+// streamingNonRetryableErrors lists lib-streaming caller-side sentinels
 // that map cleanly onto "permanent validation failure" semantics. These cover
 // cases that streaming.IsCallerError catches structurally too, but we list
 // them explicitly so the retry classifier does not depend on that helper for

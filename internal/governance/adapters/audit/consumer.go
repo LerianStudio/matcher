@@ -21,7 +21,7 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
@@ -159,7 +159,7 @@ func (consumer *Consumer) PublishAuditLogCreated(
 	}
 
 	// Streaming-disabled fast-path: when the configured emitter is the
-	// canonical NoopEmitter from lib-streaming/v2 (or interface-nil),
+	// canonical NoopEmitter from lib-streaming (or interface-nil),
 	// streaming emission is a documented soft-disable. Skip the
 	// BeginTx → CreateWithTx → Emit → Commit dance and persist via the
 	// repository's autocommit Create — pre-streaming semantics. This
@@ -194,7 +194,7 @@ func (consumer *Consumer) persistAuditLogAutocommit(ctx context.Context, span tr
 }
 
 // isNoopEmitter reports whether emitter is the canonical
-// lib-streaming/v2 NoopEmitter — the value returned by
+// lib-streaming NoopEmitter — the value returned by
 // streaming.NewEmitterWithCatalog when STREAMING_ENABLED=false. The
 // type is exported as streaming.NoopEmitter, so a direct type
 // assertion is safe and cheap (no reflection). Combined with

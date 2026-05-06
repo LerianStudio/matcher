@@ -11,7 +11,7 @@ import (
 	"time"
 
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/discovery/extractionpoller"

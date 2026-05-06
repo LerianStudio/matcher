@@ -12,7 +12,7 @@ package bootstrap
 import (
 	"fmt"
 
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	governanceHTTP "github.com/LerianStudio/matcher/internal/governance/adapters/http"
 	actorMappingRepoAdapter "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/actor_mapping"

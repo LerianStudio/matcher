@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/lib-commons/v5/commons/outbox"
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
@@ -1095,9 +1095,15 @@ func TestRegisterStreamingOutboxRelayPreservesMatcherHandlers(t *testing.T) {
 	require.NoError(t, streamingbootstrap.RegisterOutboxRelay(bundle, registry))
 	require.NoError(t, bundle.Emitter.Close())
 
+	// In lib-streaming v1, replay handlers dispatch directly to the per-target
+	// transport adapter (bypassing Emit and the per-target circuit breaker).
+	// Once the producer is Closed, the underlying transport adapter returns its
+	// own closed-client error (e.g. franz-go's "client closed") wrapped as
+	// "streaming: replay outbox row <id>: ...". The contract this assertion
+	// exercises is "post-Close replay yields an error", not a specific sentinel.
 	streamingErr := registry.Handle(context.Background(), validStreamingOutboxRelayRow(t))
 	require.Error(t, streamingErr)
-	assert.ErrorIs(t, streamingErr, streaming.ErrEmitterClosed)
+	assert.Contains(t, streamingErr.Error(), "replay outbox row")
 
 	matchPayload, err := json.Marshal(validMatchConfirmedEvent())
 	require.NoError(t, err)
@@ -1160,11 +1166,20 @@ func validStreamingOutboxRelayRow(t *testing.T) *outbox.OutboxEvent {
 	}
 	event.ApplyDefaults()
 
+	// Envelope reflects the lib-streaming v1 route-aware shape: every persisted
+	// row carries the originating route identity (RouteKey, Target, Transport,
+	// Destination, Requirement) so the replay handler can dispatch to the same
+	// transport adapter without re-running emit-time route resolution. Topic is
+	// not a field — derive it from event.Topic() or destination.Name when needed.
 	envelope := streaming.OutboxEnvelope{
 		Version:       1,
-		Topic:         event.Topic(),
+		RouteKey:      "reconciliation-context.created.kafka.primary",
 		DefinitionKey: "reconciliation_context.created",
+		Target:        "primary",
+		Transport:     streaming.TransportKafkaLike,
+		Destination:   streaming.KafkaTopic(event.Topic()),
 		AggregateID:   uuid.New(),
+		Requirement:   streaming.RouteRequired,
 		Policy:        streaming.DefaultDeliveryPolicy(),
 		Event:         event,
 	}

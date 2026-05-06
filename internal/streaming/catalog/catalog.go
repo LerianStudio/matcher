@@ -8,7 +8,7 @@ package catalog
 import (
 	"fmt"
 
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 )
 
 // EventCount is the canonical number of streaming event definitions in Matcher.

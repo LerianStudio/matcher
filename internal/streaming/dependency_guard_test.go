@@ -9,8 +9,8 @@ package streaming_test
 import (
 	"testing"
 
-	streaming "github.com/LerianStudio/lib-streaming/v2"
-	"github.com/LerianStudio/lib-streaming/v2/streamingtest"
+	streaming "github.com/LerianStudio/lib-streaming"
+	"github.com/LerianStudio/lib-streaming/streamingtest"
 )
 
 func TestLibStreamingV2DependencyGuard(t *testing.T) {

@@ -15,8 +15,8 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
-	streaming "github.com/LerianStudio/lib-streaming/v2"
-	"github.com/LerianStudio/lib-streaming/v2/streamingtest"
+	streaming "github.com/LerianStudio/lib-streaming"
+	"github.com/LerianStudio/lib-streaming/streamingtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace/noop"

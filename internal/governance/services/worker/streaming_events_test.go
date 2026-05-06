@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
-	"github.com/LerianStudio/lib-streaming/v2/streamingtest"
+	"github.com/LerianStudio/lib-streaming/streamingtest"
 
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	"github.com/LerianStudio/matcher/internal/streaming/emission"

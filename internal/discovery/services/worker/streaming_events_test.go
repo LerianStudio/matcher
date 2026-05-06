@@ -18,7 +18,7 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 
 	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
-	"github.com/LerianStudio/lib-streaming/v2/streamingtest"
+	"github.com/LerianStudio/lib-streaming/streamingtest"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"

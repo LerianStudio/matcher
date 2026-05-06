@@ -20,7 +20,7 @@ import (
 	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
 	libRabbitmq "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
 	tmrabbitmq "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/rabbitmq"
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	configContextRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/context"
@@ -180,7 +180,7 @@ func initModulesAndMessaging(
 	}
 
 	// NoopEmitter is the canonical disabled-streaming pattern from
-	// lib-streaming/v2. When STREAMING_ENABLED=false, NewEmitterWithCatalog
+	// lib-streaming. When STREAMING_ENABLED=false, NewEmitterWithCatalog
 	// returns a non-nil *streaming.NoopEmitter — NOT a Go-nil interface.
 	// Downstream emit sites use emission.IsNilEmitter() (typed-nil
 	// reflection check) and isNoopEmitter() (concrete type assertion) to

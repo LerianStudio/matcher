@@ -7,7 +7,7 @@ package bootstrap
 import (
 	"fmt"
 
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	configAudit "github.com/LerianStudio/matcher/internal/configuration/adapters/audit"
 	configHTTP "github.com/LerianStudio/matcher/internal/configuration/adapters/http"

@@ -25,7 +25,7 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	sharedhttp "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"

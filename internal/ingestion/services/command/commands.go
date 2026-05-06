@@ -13,7 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	ingestionRepositories "github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"

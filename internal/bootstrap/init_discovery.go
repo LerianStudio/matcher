@@ -11,7 +11,7 @@ import (
 	"time"
 
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	discoveryFetcher "github.com/LerianStudio/matcher/internal/discovery/adapters/fetcher"
 	discoveryHTTP "github.com/LerianStudio/matcher/internal/discovery/adapters/http"

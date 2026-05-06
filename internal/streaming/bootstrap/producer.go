@@ -18,7 +18,7 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	"github.com/LerianStudio/lib-commons/v5/commons/opentelemetry/metrics"
 	"github.com/LerianStudio/lib-commons/v5/commons/outbox"
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	streamingcatalog "github.com/LerianStudio/matcher/internal/streaming/catalog"
 )
@@ -27,6 +27,13 @@ import (
 var (
 	ErrStreamingCatalogEmpty            = errors.New("streaming catalog must contain at least one event definition")
 	ErrCriticalDeliveryPolicyOverridden = errors.New("critical streaming delivery policy overrides are not allowed")
+	// ErrUnexpectedEmitterType is returned when streaming.Builder.Build yields
+	// an Emitter that is not the expected *streaming.Producer concrete type.
+	// In practice this is unreachable on the broker-backed path (Builder
+	// always returns *Producer when Brokers/Routes/Targets are set), but we
+	// keep the guard so any future facade change surfaces loudly at bootstrap
+	// rather than panicking on the first OutboxRelay registration.
+	ErrUnexpectedEmitterType = errors.New("streaming producer: unexpected emitter type from builder; want *streaming.Producer")
 )
 
 // ProducerOptions contains optional dependencies for constructing the streaming producer.
@@ -115,6 +122,14 @@ func NewEmitter(ctx context.Context, cfg streaming.Config, options ...ProducerOp
 }
 
 // NewEmitterWithCatalog creates an emitter bundle using a caller-supplied catalog.
+//
+// As of lib-streaming v1.0.0, producer construction is programmatic via
+// streaming.NewBuilder() rather than a Config-driven streaming.NewProducer.
+// Routes are auto-derived from the catalog by streamingcatalog.NewRoutes()
+// — one RouteRequired Kafka route per catalog event, all targeting a single
+// transport runtime named streamingcatalog.PrimaryKafkaTarget. Multi-target
+// fan-out (per-region replicas, SQS shadows) would extend the catalog's
+// route generator, not this bootstrap.
 func NewEmitterWithCatalog(
 	ctx context.Context,
 	cfg streaming.Config,
@@ -137,11 +152,20 @@ func NewEmitterWithCatalog(
 		}, nil
 	}
 
-	opts := buildProducerOptions(catalog, firstProducerOptions(options))
+	opts := firstProducerOptions(options)
 
-	producer, err := streaming.NewProducer(ctx, cfg, opts...)
+	emitter, err := buildProducerWithBuilder(ctx, cfg, catalog, opts)
 	if err != nil {
 		return ProducerBundle{}, fmt.Errorf("construct streaming producer: %w", err)
+	}
+
+	// Builder.Build returns the Emitter interface; cast to *streaming.Producer
+	// to expose the lifecycle (App) and outbox-relay surface. The cast is
+	// total when the broker-backed branch is taken — the no-op branch is
+	// short-circuited above and returns NoopEmitter directly.
+	producer, ok := emitter.(*streaming.Producer)
+	if !ok {
+		return ProducerBundle{}, fmt.Errorf("%w: got %T", ErrUnexpectedEmitterType, emitter)
 	}
 
 	return ProducerBundle{
@@ -150,6 +174,77 @@ func NewEmitterWithCatalog(
 		Catalog: catalog,
 		Config:  cfg,
 	}, nil
+}
+
+// buildProducerWithBuilder wires the lib-streaming v1 Builder using the
+// caller-supplied Config, Catalog, and optional dependencies. Routes are
+// generated from the catalog (one per definition) and pinned to a single
+// Kafka target whose name is streamingcatalog.PrimaryKafkaTarget.
+func buildProducerWithBuilder(
+	ctx context.Context,
+	cfg streaming.Config,
+	catalog streaming.Catalog,
+	options ProducerOptions,
+) (streaming.Emitter, error) {
+	routes := streamingcatalog.NewRoutes()
+
+	builder := streaming.NewBuilder().
+		Source(cfg.CloudEventsSource).
+		Catalog(catalog).
+		Routes(routes...).
+		Target(streaming.TargetConfig{
+			Name:     streamingcatalog.PrimaryKafkaTarget,
+			Kind:     streaming.TransportKafkaLike,
+			Brokers:  cfg.Brokers,
+			ClientID: cfg.ClientID,
+		})
+
+	if cfg.CloseTimeout > 0 {
+		builder = builder.CloseTimeout(cfg.CloseTimeout)
+	}
+
+	if cfg.CBFailureRatio > 0 {
+		builder = builder.CBFailureRatio(cfg.CBFailureRatio)
+	}
+
+	if cfg.CBMinRequests > 0 {
+		builder = builder.CBMinRequests(cfg.CBMinRequests)
+	}
+
+	if cfg.CBTimeout > 0 {
+		builder = builder.CBTimeout(cfg.CBTimeout)
+	}
+
+	if options.Logger != nil {
+		builder = builder.Logger(options.Logger)
+	}
+
+	if options.MetricsFactory != nil {
+		builder = builder.MetricsFactory(options.MetricsFactory)
+	}
+
+	if options.Tracer != nil {
+		builder = builder.Tracer(options.Tracer)
+	}
+
+	if options.CircuitBreakerManager != nil {
+		builder = builder.CircuitBreakerManager(options.CircuitBreakerManager)
+	}
+
+	if options.OutboxRepository != nil {
+		builder = builder.OutboxRepository(options.OutboxRepository)
+	}
+
+	if options.OutboxWriter != nil {
+		builder = builder.OutboxWriter(options.OutboxWriter)
+	}
+
+	emitter, err := builder.Build(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("streaming builder build: %w", err)
+	}
+
+	return emitter, nil
 }
 
 // ValidateCriticalPolicyOverrides rejects runtime overrides that would change
@@ -205,34 +300,4 @@ func firstProducerOptions(options []ProducerOptions) ProducerOptions {
 	}
 
 	return options[0]
-}
-
-func buildProducerOptions(catalog streaming.Catalog, options ProducerOptions) []streaming.EmitterOption {
-	producerOptions := []streaming.EmitterOption{streaming.WithCatalog(catalog)}
-
-	if options.Logger != nil {
-		producerOptions = append(producerOptions, streaming.WithLogger(options.Logger))
-	}
-
-	if options.MetricsFactory != nil {
-		producerOptions = append(producerOptions, streaming.WithMetricsFactory(options.MetricsFactory))
-	}
-
-	if options.Tracer != nil {
-		producerOptions = append(producerOptions, streaming.WithTracer(options.Tracer))
-	}
-
-	if options.CircuitBreakerManager != nil {
-		producerOptions = append(producerOptions, streaming.WithCircuitBreakerManager(options.CircuitBreakerManager))
-	}
-
-	if options.OutboxRepository != nil {
-		producerOptions = append(producerOptions, streaming.WithOutboxRepository(options.OutboxRepository))
-	}
-
-	if options.OutboxWriter != nil {
-		producerOptions = append(producerOptions, streaming.WithOutboxWriter(options.OutboxWriter))
-	}
-
-	return producerOptions
 }

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )

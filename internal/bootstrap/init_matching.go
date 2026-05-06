@@ -12,7 +12,7 @@ package bootstrap
 import (
 	"fmt"
 
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	matchingHTTP "github.com/LerianStudio/matcher/internal/matching/adapters/http"
 	matchExceptionRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/exception_creator"

@@ -9,7 +9,7 @@ import (
 	"errors"
 	"time"
 
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	governanceRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	matchingRepositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"

@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"time"
 
-	streaming "github.com/LerianStudio/lib-streaming/v2"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	ingestionHTTP "github.com/LerianStudio/matcher/internal/ingestion/adapters/http"
 	ingestionParser "github.com/LerianStudio/matcher/internal/ingestion/adapters/parsers"
