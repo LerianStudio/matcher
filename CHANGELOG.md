@@ -1,3 +1,25 @@
+## [2.0.0-beta.2](https://github.com/LerianStudio/matcher/compare/v2.0.0-beta.1...v2.0.0-beta.2) (2026-05-06)
+
+
+### Features
+
+* **health:** add fetcher dependency probe to /readyz and /health ([55eb264](https://github.com/LerianStudio/matcher/commit/55eb2647571ccdb3dd762f071611f6a31fde31ca))
+* **examples:** add raw matcher example datasets ([0bf0967](https://github.com/LerianStudio/matcher/commit/0bf09678cc546c9c0298975acc3c27490eed08ae))
+* **streaming:** adopt lib-streaming v1 builder API and route catalog ([7424459](https://github.com/LerianStudio/matcher/commit/74244598e4c01151a6bae9013e43f4c9c45d415a))
+* **streaming:** introduce generated instrumentation map ([ec8d396](https://github.com/LerianStudio/matcher/commit/ec8d396fc19133157805b2c2c344fb5271f7ef63))
+* **streaming:** wire lib-streaming/v2 emission ([03f8d03](https://github.com/LerianStudio/matcher/commit/03f8d03b081a2b7ece2ba51de9d0976b364d5339))
+
+
+### Bug Fixes
+
+* apply CodeRabbit auto-fixes ([11c1031](https://github.com/LerianStudio/matcher/commit/11c1031586d26d780e919e51f751156341e4e854)), closes [#135](https://github.com/LerianStudio/matcher/issues/135)
+* apply CodeRabbit auto-fixes ([6a4f547](https://github.com/LerianStudio/matcher/commit/6a4f547315ff572d5b8297229b89ee4793d21c3c)), closes [#135](https://github.com/LerianStudio/matcher/issues/135)
+* **exception:** read dispute inside transaction to prevent replica lag ([3b3aea2](https://github.com/LerianStudio/matcher/commit/3b3aea292cb847c288802ccbba0caf7b4846bb8a))
+* **api:** remove /config prefix from configuration endpoint routes ([fc22445](https://github.com/LerianStudio/matcher/commit/fc2244518428e3bd31e063a753d80a0a2f5ad038))
+* **test:** remove timing race in TestClient_ConcurrentResolverAndCalls ([7672d12](https://github.com/LerianStudio/matcher/commit/7672d12c274fa407de370c42ff874037a9b1679a))
+* **governance:** satisfy wsl_v5 defer whitespace rule ([cacb9cf](https://github.com/LerianStudio/matcher/commit/cacb9cfa1606163dfa28dfdb4d444518279e21cf))
+* **bootstrap:** use SafeGoWithContextAndComponent for readyz dispatch ([732087a](https://github.com/LerianStudio/matcher/commit/732087ad69b4a3f95d3f219cc44ea89e4de9ee82))
+
 ## [2.0.0-beta.1](https://github.com/LerianStudio/matcher/compare/v1.4.0-beta.5...v2.0.0-beta.1) (2026-04-24)
 
 
