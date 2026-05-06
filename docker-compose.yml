@@ -115,7 +115,7 @@ services:
 #      - "4318:4318"
 
   app:
-    image: golang:1.26.1-alpine
+    image: golang:1.26.2-alpine
     container_name: matcher-app
     restart: unless-stopped
     working_dir: /app
