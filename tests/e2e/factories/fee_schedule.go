@@ -6,8 +6,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/LerianStudio/matcher/tests/e2e"
 	"github.com/LerianStudio/matcher/tests/client"
+	"github.com/LerianStudio/matcher/tests/e2e"
 )
 
 // FeeScheduleFactory creates fee schedules for tests.

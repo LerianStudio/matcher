@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
 	"github.com/bxcodec/dbresolver/v2"
 	"github.com/golang-migrate/migrate/v4"
 	migratePostgres "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -24,6 +23,8 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/modules/redis"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	configContextRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/context"
@@ -428,7 +429,7 @@ func quoteIdentifier(identifier string) string {
 
 // Ctx returns a context with the tenant ID set for repository operations.
 func (h *SharedTestHarness) Ctx() context.Context {
-	return context.WithValue(context.Background(), auth.TenantIDKey, h.Seed.TenantID.String())
+	return tenantContext(h.Seed.TenantID.String(), auth.DefaultTenantSlug)
 }
 
 // ToLegacyHarness converts SharedTestHarness to the legacy TestHarness format
@@ -553,6 +554,12 @@ func initSharedDBConnection(
 		_ = primaryDB.Close()
 		_ = replicaDB.Close()
 		return nil, nil, fmt.Errorf("failed to run migrations: %w", err)
+	}
+
+	if err := ensureCurrentAuditPartitions(t, primaryDB); err != nil {
+		_ = primaryDB.Close()
+		_ = replicaDB.Close()
+		return nil, nil, err
 	}
 
 	connection := infraTestutil.NewClientWithResolver(connectionDB)
@@ -680,7 +687,7 @@ func setupSharedSeedData(
 		return SeedData{}, fmt.Errorf("failed to parse default tenant ID: %w", err)
 	}
 
-	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+	ctx := tenantContext(tenantID.String(), auth.DefaultTenantSlug)
 
 	// Use unique name to avoid conflicts across tests
 	contextName := fmt.Sprintf("Integration Test Context %s", uuid.New().String()[:8])
@@ -736,7 +743,7 @@ func setupSharedSeedData(
 func ensureSharedTenantTxWorks(t *testing.T, connection *libPostgres.Client) error {
 	t.Helper()
 
-	ctx := context.WithValue(context.Background(), auth.TenantIDKey, auth.DefaultTenantID)
+	ctx := tenantContext(auth.DefaultTenantID, auth.DefaultTenantSlug)
 
 	_, err := pgcommon.WithTenantTx(ctx, connection, func(tx *sql.Tx) (struct{}, error) {
 		_, execErr := tx.ExecContext(ctx, "SELECT 1")

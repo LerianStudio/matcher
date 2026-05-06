@@ -11,6 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	streaming "github.com/LerianStudio/lib-streaming"
+
 	"github.com/LerianStudio/matcher/internal/auth"
 	governanceAudit "github.com/LerianStudio/matcher/internal/governance/adapters/audit"
 	governancePostgres "github.com/LerianStudio/matcher/internal/governance/adapters/postgres"
@@ -46,6 +48,24 @@ func newDedupEvent(
 		Action:     action,
 		OccurredAt: time.Now().UTC(),
 	}
+}
+
+func newDedupConsumer(
+	t *testing.T,
+	h *integration.TestHarness,
+	repo *governancePostgres.Repository,
+	dedupWindow time.Duration,
+) *governanceAudit.Consumer {
+	t.Helper()
+
+	consumer, err := governanceAudit.NewConsumer(repo, governanceAudit.ConsumerConfig{
+		DedupWindow:      dedupWindow,
+		Infrastructure:   h.Provider(),
+		StreamingEmitter: streaming.NewNoopEmitter(),
+	})
+	require.NoError(t, err)
+
+	return consumer
 }
 
 // countAuditLogs returns the number of audit_logs rows matching the given entity_type
@@ -105,16 +125,13 @@ func TestIntegration_Governance_AuditConsumerDedup_FirstEventPersisted(t *testin
 
 		const dedupWindow = 100 * time.Millisecond
 
-		consumer, err := governanceAudit.NewConsumer(repo, governanceAudit.ConsumerConfig{
-			DedupWindow: dedupWindow,
-		})
-		require.NoError(t, err)
+		consumer := newDedupConsumer(t, h, repo, dedupWindow)
 
 		entityType := "reconciliation_context"
 		entityID := uuid.New()
 
 		event := newDedupEvent(h.Seed.TenantID, entityType, entityID, "CREATED")
-		err = consumer.PublishAuditLogCreated(ctx, event)
+		err := consumer.PublishAuditLogCreated(ctx, event)
 		require.NoError(t, err)
 
 		got := countAuditLogs(t, ctx, h, entityType, entityID)
@@ -129,10 +146,7 @@ func TestIntegration_Governance_AuditConsumerDedup_DuplicateWithinWindow(t *test
 		ctx := dedupTestCtx(t, h)
 		repo := governancePostgres.NewRepository(h.Provider())
 
-		consumer, err := governanceAudit.NewConsumer(repo, governanceAudit.ConsumerConfig{
-			DedupWindow: 100 * time.Millisecond,
-		})
-		require.NoError(t, err)
+		consumer := newDedupConsumer(t, h, repo, 100*time.Millisecond)
 
 		entityType := "reconciliation_context"
 		entityID := uuid.New()
@@ -140,7 +154,7 @@ func TestIntegration_Governance_AuditConsumerDedup_DuplicateWithinWindow(t *test
 
 		// First delivery — should persist.
 		event1 := newDedupEvent(h.Seed.TenantID, entityType, entityID, action)
-		err = consumer.PublishAuditLogCreated(ctx, event1)
+		err := consumer.PublishAuditLogCreated(ctx, event1)
 		require.NoError(t, err)
 
 		// Second delivery — same entity+action within the 5s dedup window — should be dropped.
@@ -162,17 +176,14 @@ func TestIntegration_Governance_AuditConsumerDedup_DifferentActionNotDeduped(t *
 
 		const dedupWindow = 100 * time.Millisecond
 
-		consumer, err := governanceAudit.NewConsumer(repo, governanceAudit.ConsumerConfig{
-			DedupWindow: dedupWindow,
-		})
-		require.NoError(t, err)
+		consumer := newDedupConsumer(t, h, repo, dedupWindow)
 
 		entityType := "reconciliation_context"
 		entityID := uuid.New()
 
 		// First event: CREATED action.
 		event1 := newDedupEvent(h.Seed.TenantID, entityType, entityID, "CREATED")
-		err = consumer.PublishAuditLogCreated(ctx, event1)
+		err := consumer.PublishAuditLogCreated(ctx, event1)
 		require.NoError(t, err)
 
 		// Second event: UPDATED action on the same entity — different action is not a duplicate.
@@ -194,10 +205,7 @@ func TestIntegration_Governance_AuditConsumerDedup_DifferentEntityNotDeduped(t *
 
 		const dedupWindow = 100 * time.Millisecond
 
-		consumer, err := governanceAudit.NewConsumer(repo, governanceAudit.ConsumerConfig{
-			DedupWindow: dedupWindow,
-		})
-		require.NoError(t, err)
+		consumer := newDedupConsumer(t, h, repo, dedupWindow)
 
 		entityType := "reconciliation_context"
 		entity1ID := uuid.New()
@@ -206,7 +214,7 @@ func TestIntegration_Governance_AuditConsumerDedup_DifferentEntityNotDeduped(t *
 
 		// Publish the same action for two distinct entities.
 		event1 := newDedupEvent(h.Seed.TenantID, entityType, entity1ID, action)
-		err = consumer.PublishAuditLogCreated(ctx, event1)
+		err := consumer.PublishAuditLogCreated(ctx, event1)
 		require.NoError(t, err)
 
 		event2 := newDedupEvent(h.Seed.TenantID, entityType, entity2ID, action)
@@ -230,10 +238,7 @@ func TestIntegration_Governance_AuditConsumerDedup_AfterWindowExpiry(t *testing.
 
 		const dedupWindow = 100 * time.Millisecond
 
-		consumer, err := governanceAudit.NewConsumer(repo, governanceAudit.ConsumerConfig{
-			DedupWindow: dedupWindow,
-		})
-		require.NoError(t, err)
+		consumer := newDedupConsumer(t, h, repo, dedupWindow)
 
 		entityType := "reconciliation_context"
 		entityID := uuid.New()
@@ -241,7 +246,7 @@ func TestIntegration_Governance_AuditConsumerDedup_AfterWindowExpiry(t *testing.
 
 		// First delivery — persisted.
 		event1 := newDedupEvent(h.Seed.TenantID, entityType, entityID, action)
-		err = consumer.PublishAuditLogCreated(ctx, event1)
+		err := consumer.PublishAuditLogCreated(ctx, event1)
 		require.NoError(t, err)
 
 		firstCreatedAt := latestAuditLogCreatedAt(t, ctx, h, entityType, entityID)

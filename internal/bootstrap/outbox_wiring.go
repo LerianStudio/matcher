@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/LerianStudio/lib-commons/v5/commons/outbox"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
@@ -96,10 +97,16 @@ var (
 	errDefaultTenantDiscovererUninitialized = errors.New("default tenant discoverer not initialized")
 	errIngestionPublisherUnavailable        = errors.New("ingestion publisher is unavailable")
 	errMatchPublisherUnavailable            = errors.New("match publisher is unavailable")
+	errOutboxRegistryRequired               = errors.New("outbox handler registry is required")
 )
 
-// nonRetryableErrors lists all errors that indicate permanent validation failures.
-var nonRetryableErrors = []error{
+// matcherNonRetryableErrors lists matcher-internal sentinels that indicate
+// permanent validation failures originating in matcher's own outbox handlers
+// (payload shape, missing identifiers, publisher wiring). Kept separate from
+// streamingNonRetryableErrors so it is obvious at a glance which side of the
+// boundary owns each sentinel — and so that lib-streaming sentinel churn does
+// not silently rewrite matcher's retry classifier.
+var matcherNonRetryableErrors = []error{
 	errInvalidPayload,
 	errMissingJobID,
 	errMissingContextID,
@@ -130,14 +137,74 @@ var nonRetryableErrors = []error{
 	errMatchPublisherUnavailable,
 }
 
+// streamingNonRetryableErrors lists lib-streaming caller-side sentinels
+// that map cleanly onto "permanent validation failure" semantics. These cover
+// cases that streaming.IsCallerError catches structurally too, but we list
+// them explicitly so the retry classifier does not depend on that helper for
+// every sentinel — IsCallerError is checked separately as a structural
+// safety net for new caller-side errors that lib-streaming may add upstream.
+//
+// streaming.ErrEventDisabled is intentionally excluded: it is an operational
+// state (delivery policy toggled off), not a malformed envelope. Outbox rows
+// that surface this sentinel must remain retryable so they drain after the
+// event is re-enabled. See isNonRetryableOutboxError for the explicit
+// short-circuit that overrides the structural IsCallerError(true) verdict
+// lib-streaming returns for this sentinel.
+var streamingNonRetryableErrors = []error{
+	streaming.ErrInvalidOutboxEnvelope,
+	streaming.ErrInvalidDeliveryPolicy,
+	streaming.ErrUnknownEventDefinition,
+	streaming.ErrInvalidEventDefinition,
+	streaming.ErrMissingTenantID,
+	streaming.ErrInvalidTenantID,
+	streaming.ErrNotJSON,
+	streaming.ErrPayloadTooLarge,
+}
+
+// nonRetryableErrors is the legacy union of matcher and streaming
+// non-retryable sentinels, kept for backward compatibility with existing
+// tests that iterate the full classifier surface. New code should use the
+// split slices above and isNonRetryableOutboxError directly.
+//
+// Deprecated: prefer matcherNonRetryableErrors or streamingNonRetryableErrors
+// when iterating, or isNonRetryableOutboxError when classifying.
+//
+//nolint:unused // backward-compat alias referenced by outbox_wiring_test.go (lines 238, 299) and tests/integration/matching/outbox_dispatcher_test.go; production code uses the split slices above.
+var nonRetryableErrors = func() []error {
+	combined := make([]error, 0, len(matcherNonRetryableErrors)+len(streamingNonRetryableErrors))
+	combined = append(combined, matcherNonRetryableErrors...)
+	combined = append(combined, streamingNonRetryableErrors...)
+
+	return combined
+}()
+
 // isNonRetryableOutboxError checks if an error is a permanent validation failure.
 func isNonRetryableOutboxError(err error) bool {
 	if err == nil {
 		return false
 	}
 
-	for _, target := range nonRetryableErrors {
-		if errors.Is(err, target) {
+	// ErrEventDisabled is an operational toggle (delivery policy off), not a
+	// malformed envelope. lib-streaming's IsCallerError truth table classifies
+	// it as caller-side, but for matcher's outbox semantics this would mean
+	// silent event loss when streaming is re-enabled. Short-circuit BEFORE the
+	// IsCallerError check so the dispatcher keeps the row retryable.
+	if errors.Is(err, streaming.ErrEventDisabled) {
+		return false
+	}
+
+	if streaming.IsCallerError(err) {
+		return true
+	}
+
+	for _, sentinel := range matcherNonRetryableErrors {
+		if errors.Is(err, sentinel) {
+			return true
+		}
+	}
+
+	for _, sentinel := range streamingNonRetryableErrors {
+		if errors.Is(err, sentinel) {
 			return true
 		}
 	}
@@ -163,6 +230,10 @@ func RegisterOutboxHandlers(
 	matchPub sharedDomain.MatchEventPublisher,
 	auditPub sharedDomain.AuditEventPublisher,
 ) error {
+	if registry == nil {
+		return errOutboxRegistryRequired
+	}
+
 	return registerOutboxHandlers(registry, ingestPub, matchPub, auditPub)
 }
 
@@ -179,6 +250,10 @@ func registerOutboxHandlers(
 	matchPub sharedDomain.MatchEventPublisher,
 	auditPub sharedDomain.AuditEventPublisher,
 ) error {
+	if registry == nil {
+		return errOutboxRegistryRequired
+	}
+
 	if err := registry.Register(sharedDomain.EventTypeIngestionCompleted, instrumentHandler(sharedDomain.EventTypeIngestionCompleted, func(ctx context.Context, event *outbox.OutboxEvent) error {
 		return publishIngestionCompleted(ctx, ingestPub, event.Payload)
 	})); err != nil {
@@ -225,6 +300,16 @@ func registerOutboxHandlers(
 // retry classification and state transitions are unaffected.
 func instrumentHandler(eventType string, inner outbox.EventHandler) outbox.EventHandler {
 	return func(ctx context.Context, event *outbox.OutboxEvent) error {
+		// Defense-in-depth nil guard. The dispatcher is contractually
+		// expected to pass a non-nil OutboxEvent, but every wrapped
+		// handler immediately dereferences event.Payload — a nil event
+		// would panic across all 5 publish handlers below. Surface a
+		// non-retryable validation error instead so the dispatcher
+		// marks the event invalid rather than crashing the worker.
+		if event == nil {
+			return errInvalidPayload
+		}
+
 		startedAt := time.Now()
 
 		err := inner(ctx, event)

@@ -405,7 +405,7 @@ func TestCreateFeeRule_Success(t *testing.T) {
 	contextEntity := fixture.seedContext(t, tenantID)
 	schedule := fixture.seedFeeSchedule(t, tenantID)
 
-	app.Post("/v1/config/contexts/:contextId/fee-rules", fixture.handler.CreateFeeRule)
+	app.Post("/v1/contexts/:contextId/fee-rules", fixture.handler.CreateFeeRule)
 
 	payload := mustJSON(t, map[string]any{
 		"side":          "ANY",
@@ -415,7 +415,7 @@ func TestCreateFeeRule_Success(t *testing.T) {
 		"predicates":    []any{},
 	})
 
-	requestPath := replacePathParams("/v1/config/contexts/:contextId/fee-rules", contextEntity.ID.String())
+	requestPath := replacePathParams("/v1/contexts/:contextId/fee-rules", contextEntity.ID.String())
 	resp := performRequest(t, app, http.MethodPost, requestPath, payload)
 	defer resp.Body.Close()
 
@@ -441,9 +441,9 @@ func TestCreateFeeRule_InvalidPayload(t *testing.T) {
 	fixture := newHandlerFixture(t)
 
 	contextEntity := fixture.seedContext(t, tenantID)
-	app.Post("/v1/config/contexts/:contextId/fee-rules", fixture.handler.CreateFeeRule)
+	app.Post("/v1/contexts/:contextId/fee-rules", fixture.handler.CreateFeeRule)
 
-	requestPath := replacePathParams("/v1/config/contexts/:contextId/fee-rules", contextEntity.ID.String())
+	requestPath := replacePathParams("/v1/contexts/:contextId/fee-rules", contextEntity.ID.String())
 	resp := performRequest(t, app, http.MethodPost, requestPath, []byte("{"))
 	defer resp.Body.Close()
 
@@ -461,7 +461,7 @@ func TestCreateFeeRule_InvalidFeeScheduleID(t *testing.T) {
 	fixture := newHandlerFixture(t)
 
 	contextEntity := fixture.seedContext(t, tenantID)
-	app.Post("/v1/config/contexts/:contextId/fee-rules", fixture.handler.CreateFeeRule)
+	app.Post("/v1/contexts/:contextId/fee-rules", fixture.handler.CreateFeeRule)
 
 	payload := mustJSON(t, map[string]any{
 		"side":          "ANY",
@@ -471,7 +471,7 @@ func TestCreateFeeRule_InvalidFeeScheduleID(t *testing.T) {
 		"predicates":    []any{},
 	})
 
-	requestPath := replacePathParams("/v1/config/contexts/:contextId/fee-rules", contextEntity.ID.String())
+	requestPath := replacePathParams("/v1/contexts/:contextId/fee-rules", contextEntity.ID.String())
 	resp := performRequest(t, app, http.MethodPost, requestPath, payload)
 	defer resp.Body.Close()
 
@@ -493,9 +493,9 @@ func TestListFeeRules_Success(t *testing.T) {
 	fixture.seedFeeRule(t, contextEntity.ID, schedule.ID, "left-rule", fee.MatchingSideLeft, 1)
 	fixture.seedFeeRule(t, contextEntity.ID, schedule.ID, "right-rule", fee.MatchingSideRight, 2)
 
-	app.Get("/v1/config/contexts/:contextId/fee-rules", fixture.handler.ListFeeRules)
+	app.Get("/v1/contexts/:contextId/fee-rules", fixture.handler.ListFeeRules)
 
-	requestPath := replacePathParams("/v1/config/contexts/:contextId/fee-rules", contextEntity.ID.String())
+	requestPath := replacePathParams("/v1/contexts/:contextId/fee-rules", contextEntity.ID.String())
 	resp := performRequest(t, app, http.MethodGet, requestPath, nil)
 	defer resp.Body.Close()
 

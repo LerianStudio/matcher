@@ -15,6 +15,7 @@ import (
 
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
@@ -146,7 +147,7 @@ func (worker *BridgeWorker) pollCycle(ctx context.Context) {
 // (whether transient or terminal — the retry machinery is separate from
 // "did this attempt produce work").
 func (worker *BridgeWorker) processTenant(parentCtx context.Context, tenantID string) (int, int) {
-	ctx := context.WithValue(parentCtx, auth.TenantIDKey, tenantID)
+	ctx := tmcore.ContextWithTenantID(context.WithValue(parentCtx, auth.TenantIDKey, tenantID), tenantID)
 	logger, tracer := worker.tracking(ctx)
 
 	ctx, span := tracer.Start(ctx, "discovery.bridge.process_tenant")

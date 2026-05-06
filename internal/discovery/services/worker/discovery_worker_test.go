@@ -18,6 +18,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
+	"github.com/LerianStudio/lib-streaming/streamingtest"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
@@ -753,6 +755,71 @@ func TestDiscoveryWorker_SyncConnectionsAndSchemas_UpsertNewConnection(t *testin
 	w.syncConnectionsAndSchemas(context.Background())
 
 	assert.True(t, upsertCalled, "connection should have been upserted")
+}
+
+func TestDiscoveryWorker_SyncConnectionsAndSchemas_EmitsSyncedWithTenantManagerTenant(t *testing.T) {
+	tenantID := "018f4f95-0000-7000-8000-000000000123"
+	emitter := streamingtest.NewMockEmitter()
+
+	var persisted *entities.FetcherConnection
+	fetcher := &stubFetcherClient{
+		listConnectionsFn: func(ctx context.Context, productName string) ([]*sharedPorts.FetcherConnection, error) {
+			require.Equal(t, tenantID, tmcore.GetTenantIDContext(ctx))
+			require.Equal(t, "matcher", productName)
+
+			return []*sharedPorts.FetcherConnection{{
+				ID:           "fetcher-conn-streaming",
+				ConfigName:   "streaming-db",
+				DatabaseType: "postgresql",
+				Host:         "localhost",
+				Port:         5432,
+				DatabaseName: "matcher",
+			}}, nil
+		},
+		getSchemaFn: func(ctx context.Context, _ string) (*sharedPorts.FetcherSchema, error) {
+			require.Equal(t, tenantID, tmcore.GetTenantIDContext(ctx))
+
+			return &sharedPorts.FetcherSchema{
+				Tables: []sharedPorts.FetcherTableSchema{{Name: "transactions", Fields: []string{"id"}}},
+			}, nil
+		},
+	}
+
+	connRepo := &stubConnectionRepo{
+		findByFetcherIDFn: func(_ context.Context, _ string) (*entities.FetcherConnection, error) {
+			if persisted == nil {
+				return nil, repositories.ErrConnectionNotFound
+			}
+
+			return persisted, nil
+		},
+		upsertFn: func(_ context.Context, conn *entities.FetcherConnection) error {
+			copy := *conn
+			persisted = &copy
+
+			return nil
+		},
+		findAllFn: func(_ context.Context) ([]*entities.FetcherConnection, error) { return nil, nil },
+	}
+
+	worker, err := NewDiscoveryWorker(
+		fetcher,
+		connRepo,
+		&stubSchemaRepo{},
+		&stubTenantLister{listTenantsFn: func(context.Context) ([]string, error) { return []string{tenantID}, nil }},
+		&stubInfraProvider{},
+		DiscoveryWorkerConfig{Interval: time.Hour},
+		&stubLogger{},
+		WithDiscoveryStreamingEmitter(emitter),
+	)
+	require.NoError(t, err)
+
+	processed, failed := worker.syncConnectionsAndSchemas(context.Background())
+
+	require.Equal(t, 1, processed)
+	require.Zero(t, failed)
+	streamingtest.AssertEventEmitted(t, emitter, "fetcher_connection.synced")
+	streamingtest.AssertTenantID(t, emitter, tenantID)
 }
 
 func TestDiscoveryWorker_MarkStaleConnections(t *testing.T) {

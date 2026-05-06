@@ -104,6 +104,7 @@ func TestReadinessHandler_UsesRuntimeTimeoutFromConfigGetter(t *testing.T) {
 
 			return ctx.Err()
 		},
+		FetcherOptional: true,
 	}
 
 	app := fiber.New()
@@ -145,7 +146,10 @@ func TestReadinessHandler_WhenDraining_ReturnsServiceUnavailable(t *testing.T) {
 	}
 
 	app := fiber.New()
-	cfg := &Config{App: AppConfig{EnvName: "development"}}
+	cfg := &Config{
+		App:     AppConfig{EnvName: "development"},
+		Fetcher: FetcherConfig{Enabled: true, URL: "https://fetcher.example.com"},
+	}
 	app.Get("/readyz", readinessHandler(cfg, nil, state.isDraining, deps, nil))
 
 	started := time.Now()
@@ -200,7 +204,10 @@ func TestReadinessHandler_CacheServesRepeatRequests(t *testing.T) {
 
 	var probeCount int64
 
-	cfg := &Config{App: AppConfig{EnvName: "development"}}
+	cfg := &Config{
+		App:     AppConfig{EnvName: "development"},
+		Fetcher: FetcherConfig{Enabled: true, URL: "https://fetcher.example.com"},
+	}
 	deps := &HealthDependencies{
 		PostgresCheck: func(context.Context) error {
 			atomic.AddInt64(&probeCount, 1)
@@ -210,6 +217,7 @@ func TestReadinessHandler_CacheServesRepeatRequests(t *testing.T) {
 		// Mark postgres required (default); others optional so they don't trip.
 		PostgresReplicaOptional: true,
 		RedisOptional:           true,
+		FetcherOptional:         true,
 		ObjectStorageOptional:   true,
 	}
 
@@ -240,7 +248,10 @@ func TestReadinessHandler_CacheRefreshesAfterTTL(t *testing.T) {
 
 	var probeCount int64
 
-	cfg := &Config{App: AppConfig{EnvName: "development"}}
+	cfg := &Config{
+		App:     AppConfig{EnvName: "development"},
+		Fetcher: FetcherConfig{Enabled: true, URL: "https://fetcher.example.com"},
+	}
 	deps := &HealthDependencies{
 		PostgresCheck: func(context.Context) error {
 			atomic.AddInt64(&probeCount, 1)
@@ -249,6 +260,7 @@ func TestReadinessHandler_CacheRefreshesAfterTTL(t *testing.T) {
 		RabbitMQCheck:           func(context.Context) error { return nil },
 		PostgresReplicaOptional: true,
 		RedisOptional:           true,
+		FetcherOptional:         true,
 		ObjectStorageOptional:   true,
 	}
 
@@ -277,12 +289,16 @@ func TestReadinessHandler_CacheRefreshesAfterTTL(t *testing.T) {
 func TestReadinessHandler_DrainBypassesCache(t *testing.T) {
 	t.Parallel()
 
-	cfg := &Config{App: AppConfig{EnvName: "development"}}
+	cfg := &Config{
+		App:     AppConfig{EnvName: "development"},
+		Fetcher: FetcherConfig{Enabled: true, URL: "https://fetcher.example.com"},
+	}
 	deps := &HealthDependencies{
 		PostgresCheck:           func(context.Context) error { return nil },
 		RabbitMQCheck:           func(context.Context) error { return nil },
 		PostgresReplicaOptional: true,
 		RedisOptional:           true,
+		FetcherOptional:         true,
 		ObjectStorageOptional:   true,
 	}
 
@@ -333,6 +349,7 @@ func TestReadinessHandler_SurfacesTLSPosture(t *testing.T) {
 		},
 		Redis:    RedisConfig{Host: "redis.example.com:6380", TLS: true},
 		RabbitMQ: RabbitMQConfig{URI: "amqps", Host: "rabbit.example.com", Port: "5671", User: "u"},
+		Fetcher:  FetcherConfig{Enabled: true, URL: "http://fetcher.example.com"},
 		// Non-empty endpoint exercises objectStorageTLSPosture.
 		ObjectStorage: ObjectStorageConfig{Endpoint: "https://s3.example.com"},
 	}
@@ -342,6 +359,7 @@ func TestReadinessHandler_SurfacesTLSPosture(t *testing.T) {
 		PostgresReplicaCheck: func(context.Context) error { return nil },
 		RedisCheck:           func(context.Context) error { return nil },
 		RabbitMQCheck:        func(context.Context) error { return nil },
+		FetcherCheck:         func(context.Context) error { return nil },
 		ObjectStorageCheck:   func(context.Context) error { return nil },
 	}
 
@@ -360,11 +378,16 @@ func TestReadinessHandler_SurfacesTLSPosture(t *testing.T) {
 	require.NoError(t, json.Unmarshal(body, &response))
 	assert.Equal(t, "healthy", response.Status)
 
-	for _, name := range []string{"postgres", "postgres_replica", "redis", "rabbitmq", "object_storage"} {
+	for _, name := range []string{"postgres", "postgres_replica", "redis", "rabbitmq", "fetcher", "object_storage"} {
 		entry, ok := response.Checks[name]
 		require.True(t, ok, "expected check for %s", name)
 		assert.Equal(t, "up", entry.Status)
 		require.NotNil(t, entry.TLS, "TLS posture must be reported for %s", name)
+		if name == "fetcher" {
+			assert.False(t, *entry.TLS, "TLS posture for %s must reflect the configured scheme", name)
+			continue
+		}
+
 		assert.True(t, *entry.TLS, "TLS posture for %s must be true", name)
 	}
 }
@@ -372,8 +395,8 @@ func TestReadinessHandler_SurfacesTLSPosture(t *testing.T) {
 // TestEvaluateReadinessChecks_ParallelBoundedByMaxCheckLatency asserts that
 // evaluateReadinessChecks fans every per-dep probe out in parallel, so the
 // handler's worst-case latency is max(per-check timeout) — NOT
-// n_deps × per_check_timeout. With 5 deps each sleeping 100ms, sequential
-// execution would take ~500ms; parallel execution stays well under 200ms.
+// n_deps × per_check_timeout. With 6 deps each sleeping 100ms, sequential
+// execution would take ~600ms; parallel execution stays well under 200ms.
 // This regression test guards K8s readinessProbe.periodSeconds=5 from probe
 // backup under degraded deps.
 func TestEvaluateReadinessChecks_ParallelBoundedByMaxCheckLatency(t *testing.T) {
@@ -383,7 +406,7 @@ func TestEvaluateReadinessChecks_ParallelBoundedByMaxCheckLatency(t *testing.T) 
 		perCheckSleep = 100 * time.Millisecond
 		// Generous upper bound — parallel fan-out should finish in ~100ms
 		// plus goroutine scheduling overhead. Sequential execution would
-		// take 5×100ms = 500ms, far above this ceiling.
+		// take 6×100ms = 600ms, far above this ceiling.
 		parallelCeiling = 400 * time.Millisecond
 	)
 
@@ -401,6 +424,7 @@ func TestEvaluateReadinessChecks_ParallelBoundedByMaxCheckLatency(t *testing.T) 
 		PostgresReplicaCheck: sleepyCheck,
 		RedisCheck:           sleepyCheck,
 		RabbitMQCheck:        sleepyCheck,
+		FetcherCheck:         sleepyCheck,
 		ObjectStorageCheck:   sleepyCheck,
 
 		PostgresReplicaOptional: true,
@@ -408,7 +432,10 @@ func TestEvaluateReadinessChecks_ParallelBoundedByMaxCheckLatency(t *testing.T) 
 		ObjectStorageOptional:   true,
 	}
 
-	cfg := &Config{App: AppConfig{EnvName: "development"}}
+	cfg := &Config{
+		App:     AppConfig{EnvName: "development"},
+		Fetcher: FetcherConfig{Enabled: true, URL: "https://fetcher.example.com"},
+	}
 
 	started := time.Now()
 	httpStatus, checks, healthy := evaluateReadinessChecks(
@@ -420,7 +447,7 @@ func TestEvaluateReadinessChecks_ParallelBoundedByMaxCheckLatency(t *testing.T) 
 	require.True(t, healthy, "all checks pass must yield healthy=true")
 	require.Len(t, checks, readyzDepCount, "every dep must produce a CheckResult")
 
-	for _, name := range []string{"postgres", "postgres_replica", "redis", "rabbitmq", "object_storage"} {
+	for _, name := range []string{"postgres", "postgres_replica", "redis", "rabbitmq", "fetcher", "object_storage"} {
 		entry, ok := checks[name]
 		require.True(t, ok, "missing check for %s", name)
 		assert.Equal(t, "up", entry.Status, "expected up for %s", name)
@@ -428,12 +455,12 @@ func TestEvaluateReadinessChecks_ParallelBoundedByMaxCheckLatency(t *testing.T) 
 
 	assert.Less(t, elapsed, parallelCeiling,
 		"evaluateReadinessChecks must fan out: expected <%s, got %s (sequential would be ~%s)",
-		parallelCeiling, elapsed, 5*perCheckSleep)
+		parallelCeiling, elapsed, 6*perCheckSleep)
 }
 
 // TestEvaluateReadinessChecks_AllDepsProbedUnderDegradation is a second-order
 // regression guard: even when every dep is slow, the handler latency stays
-// bounded by per-check timeout, not sum-of-timeouts. Wires 5 checks that
+// bounded by per-check timeout, not sum-of-timeouts. Wires 6 checks that
 // each hang to the per-check timeout; asserts total handler latency does
 // not exceed timeout + goroutine scheduling budget.
 func TestEvaluateReadinessChecks_AllDepsProbedUnderDegradation(t *testing.T) {
@@ -454,6 +481,7 @@ func TestEvaluateReadinessChecks_AllDepsProbedUnderDegradation(t *testing.T) {
 		PostgresReplicaCheck: hungCheck,
 		RedisCheck:           hungCheck,
 		RabbitMQCheck:        hungCheck,
+		FetcherCheck:         hungCheck,
 		ObjectStorageCheck:   hungCheck,
 
 		PostgresReplicaOptional: true,
@@ -461,7 +489,10 @@ func TestEvaluateReadinessChecks_AllDepsProbedUnderDegradation(t *testing.T) {
 		ObjectStorageOptional:   true,
 	}
 
-	cfg := &Config{App: AppConfig{EnvName: "development"}}
+	cfg := &Config{
+		App:     AppConfig{EnvName: "development"},
+		Fetcher: FetcherConfig{Enabled: true, URL: "https://fetcher.example.com"},
+	}
 
 	started := time.Now()
 	httpStatus, checks, healthy := evaluateReadinessChecks(
@@ -473,7 +504,7 @@ func TestEvaluateReadinessChecks_AllDepsProbedUnderDegradation(t *testing.T) {
 	require.False(t, healthy)
 	require.Len(t, checks, readyzDepCount)
 
-	for _, name := range []string{"postgres", "postgres_replica", "redis", "rabbitmq", "object_storage"} {
+	for _, name := range []string{"postgres", "postgres_replica", "redis", "rabbitmq", "fetcher", "object_storage"} {
 		entry, ok := checks[name]
 		require.True(t, ok, "missing check for %s", name)
 		assert.Equal(t, "down", entry.Status, "expected down for %s under timeout", name)
@@ -624,7 +655,7 @@ func TestCategoriseProbeError_CredentialLeakRegression(t *testing.T) {
 }
 
 // TestTLSPostureHelpers_NilCfgReturnsUnknown pins the nil-cfg short-circuit
-// on every TLS posture helper. All five return (nil, "") for nil cfg so the
+// on every TLS posture helper. All six return (nil, "") for nil cfg so the
 // response drops the tls field without emitting a misleading Reason.
 func TestTLSPostureHelpers_NilCfgReturnsUnknown(t *testing.T) {
 	t.Parallel()
@@ -637,6 +668,7 @@ func TestTLSPostureHelpers_NilCfgReturnsUnknown(t *testing.T) {
 		{"postgres_replica", postgresReplicaTLSPosture},
 		{"redis", redisTLSPosture},
 		{"rabbitmq", rabbitMQTLSPosture},
+		{"fetcher", fetcherTLSPosture},
 		{"object_storage", objectStorageTLSPosture},
 	}
 
@@ -667,8 +699,9 @@ func TestReadinessHandler_TLSPostureUnknown_SurfacesReason(t *testing.T) {
 	}
 
 	deps := &HealthDependencies{
-		RedisCheck:    func(context.Context) error { return nil },
-		RedisOptional: true,
+		RedisCheck:      func(context.Context) error { return nil },
+		RedisOptional:   true,
+		FetcherOptional: true,
 	}
 
 	app := fiber.New()
@@ -696,6 +729,103 @@ func TestReadinessHandler_TLSPostureUnknown_SurfacesReason(t *testing.T) {
 		"response reason must not leak raw parser input")
 }
 
+func TestReadinessHandler_FetcherDisabledIsSkipped(t *testing.T) {
+	t.Parallel()
+
+	var probeCount int64
+
+	cfg := &Config{App: AppConfig{EnvName: "development"}}
+	deps := &HealthDependencies{
+		PostgresCheck: func(context.Context) error { return nil },
+		RabbitMQCheck: func(context.Context) error { return nil },
+		FetcherCheck: func(context.Context) error {
+			atomic.AddInt64(&probeCount, 1)
+			return nil
+		},
+		RedisOptional:           true,
+		PostgresReplicaOptional: true,
+		ObjectStorageOptional:   true,
+	}
+
+	app := fiber.New()
+	app.Get("/readyz", readinessHandler(cfg, nil, nil, deps, nil))
+
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Zero(t, atomic.LoadInt64(&probeCount), "disabled fetcher must not be probed")
+
+	var response ReadinessResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	assert.Equal(t, statusHealthy, response.Status)
+	assert.Equal(t, checkStatusSkipped, response.Checks["fetcher"].Status)
+	assert.Contains(t, response.Checks["fetcher"].Reason, "not configured")
+}
+
+func TestReadinessHandler_FetcherEnabledDownYieldsUnhealthy(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		App:     AppConfig{EnvName: "development"},
+		Fetcher: FetcherConfig{Enabled: true, URL: "https://fetcher.example.com"},
+	}
+	deps := &HealthDependencies{
+		PostgresCheck: func(context.Context) error { return nil },
+		RabbitMQCheck: func(context.Context) error { return nil },
+		FetcherCheck: func(context.Context) error {
+			return errors.New("fetcher unavailable")
+		},
+		RedisOptional:           true,
+		PostgresReplicaOptional: true,
+		ObjectStorageOptional:   true,
+	}
+
+	app := fiber.New()
+	app.Get("/readyz", readinessHandler(cfg, nil, nil, deps, nil))
+
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+
+	var response ReadinessResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	assert.Equal(t, statusUnhealthy, response.Status)
+	assert.Equal(t, checkStatusDown, response.Checks["fetcher"].Status)
+	assert.Equal(t, "check failed", response.Checks["fetcher"].Error)
+}
+
+func TestReadinessHandler_FetcherEnabledWithoutURLYieldsUnhealthy(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		App:     AppConfig{EnvName: "development"},
+		Fetcher: FetcherConfig{Enabled: true},
+	}
+	deps := &HealthDependencies{
+		PostgresCheck:           func(context.Context) error { return nil },
+		RabbitMQCheck:           func(context.Context) error { return nil },
+		RedisOptional:           true,
+		PostgresReplicaOptional: true,
+		ObjectStorageOptional:   true,
+	}
+
+	app := fiber.New()
+	app.Get("/readyz", readinessHandler(cfg, nil, nil, deps, nil))
+
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+
+	var response ReadinessResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	assert.Equal(t, statusUnhealthy, response.Status)
+	assert.Equal(t, checkStatusDown, response.Checks["fetcher"].Status)
+	assert.Equal(t, "check failed", response.Checks["fetcher"].Error)
+}
+
 // TestReadinessHandler_SkippedDepCarriesReason verifies that a not-configured
 // dep (no check func, no backing client) surfaces with status=skipped and
 // a non-empty reason field, per the five-value contract.
@@ -709,6 +839,7 @@ func TestReadinessHandler_SkippedDepCarriesReason(t *testing.T) {
 		RabbitMQOptional:        true,
 		PostgresReplicaOptional: true,
 		ObjectStorageOptional:   true,
+		FetcherOptional:         true,
 	}
 
 	cfg := &Config{App: AppConfig{EnvName: "development"}}

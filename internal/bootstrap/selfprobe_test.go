@@ -53,7 +53,7 @@ func TestSelfProbeOK_StartsFalse(t *testing.T) {
 func TestRunSelfProbe_NilDeps_Errors(t *testing.T) {
 	withFreshSelfProbeState(t)
 
-	err := RunSelfProbe(context.Background(), nil, &libLog.NopLogger{})
+	err := RunSelfProbe(context.Background(), nil, nil, &libLog.NopLogger{})
 	require.Error(t, err)
 	assert.False(t, SelfProbeOK(), "nil deps must not flip the ok flag")
 }
@@ -72,9 +72,10 @@ func TestRunSelfProbe_AllUp_FlipsOKTrue(t *testing.T) {
 		PostgresReplicaOptional: true,
 		RedisOptional:           true,
 		ObjectStorageOptional:   true,
+		FetcherOptional:         true,
 	}
 
-	err := RunSelfProbe(context.Background(), deps, &libLog.NopLogger{})
+	err := RunSelfProbe(context.Background(), nil, deps, &libLog.NopLogger{})
 	require.NoError(t, err)
 	assert.True(t, SelfProbeOK(), "all required deps up must flip flag true")
 }
@@ -92,11 +93,13 @@ func TestRunSelfProbe_RequiredDown_FlagStaysFalse(t *testing.T) {
 		RabbitMQCheck:      func(context.Context) error { return nil },
 		ObjectStorageCheck: func(context.Context) error { return nil },
 
-		RedisOptional:         true,
-		ObjectStorageOptional: true,
+		RedisOptional:           true,
+		ObjectStorageOptional:   true,
+		PostgresReplicaOptional: true,
+		FetcherOptional:         true,
 	}
 
-	err := RunSelfProbe(context.Background(), deps, &libLog.NopLogger{})
+	err := RunSelfProbe(context.Background(), nil, deps, &libLog.NopLogger{})
 	require.Error(t, err)
 	assert.False(t, SelfProbeOK(), "a required-dep failure must keep flag false")
 }
@@ -117,9 +120,10 @@ func TestRunSelfProbe_OptionalDown_FlagStillTrue(t *testing.T) {
 		PostgresReplicaOptional: true,
 		RedisOptional:           true,
 		ObjectStorageOptional:   true,
+		FetcherOptional:         true,
 	}
 
-	err := RunSelfProbe(context.Background(), deps, &libLog.NopLogger{})
+	err := RunSelfProbe(context.Background(), nil, deps, &libLog.NopLogger{})
 	require.NoError(t, err, "optional dep down must not produce an error")
 	assert.True(t, SelfProbeOK(), "optional dep failures must not flip flag false")
 }
@@ -157,10 +161,11 @@ func TestRunSelfProbe_ProbesRunInParallel(t *testing.T) {
 		PostgresReplicaOptional: true,
 		RedisOptional:           true,
 		ObjectStorageOptional:   true,
+		FetcherOptional:         true,
 	}
 
 	started := time.Now()
-	err := RunSelfProbe(context.Background(), deps, &libLog.NopLogger{})
+	err := RunSelfProbe(context.Background(), nil, deps, &libLog.NopLogger{})
 	elapsed := time.Since(started)
 
 	require.NoError(t, err)
@@ -176,14 +181,15 @@ func TestRunSelfProbe_DepWithoutCheckFunc_Skipped(t *testing.T) {
 
 	deps := &HealthDependencies{
 		PostgresCheck: func(context.Context) error { return nil },
-		// Redis/RabbitMQ/ObjectStorage/Replica left nil. resolver returns not-available.
+		// Redis/RabbitMQ/ObjectStorage/Replica/Fetcher left nil. resolver returns not-available.
 		RedisOptional:           true,
 		RabbitMQOptional:        true,
 		PostgresReplicaOptional: true,
 		ObjectStorageOptional:   true,
+		FetcherOptional:         true,
 	}
 
-	err := RunSelfProbe(context.Background(), deps, &libLog.NopLogger{})
+	err := RunSelfProbe(context.Background(), nil, deps, &libLog.NopLogger{})
 	require.NoError(t, err)
 	assert.True(t, SelfProbeOK())
 }
@@ -198,9 +204,10 @@ func TestRunSelfProbe_RequiredDepWithoutCheckFunc_Fails(t *testing.T) {
 		RabbitMQOptional:        true,
 		PostgresReplicaOptional: true,
 		ObjectStorageOptional:   true,
+		FetcherOptional:         true,
 	}
 
-	err := RunSelfProbe(context.Background(), deps, &libLog.NopLogger{})
+	err := RunSelfProbe(context.Background(), nil, deps, &libLog.NopLogger{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrSelfProbeRequiredDepDown)
 	assert.False(t, SelfProbeOK())
@@ -208,7 +215,7 @@ func TestRunSelfProbe_RequiredDepWithoutCheckFunc_Fails(t *testing.T) {
 
 // TestRunSelfProbe_EmitsMetricForEachDep verifies that RunSelfProbe emits a
 // selfprobe_result data point for every resolvable dep. Wires a ManualReader
-// against the global OTel provider, runs a successful self-probe with all 5
+// against the global OTel provider, runs a successful self-probe with all 6
 // deps registered, collects, and asserts that the gauge carries a dep-labelled
 // point for each.
 //
@@ -223,6 +230,7 @@ func TestRunSelfProbe_EmitsMetricForEachDep(t *testing.T) {
 		PostgresReplicaCheck: func(context.Context) error { return nil },
 		RedisCheck:           func(context.Context) error { return nil },
 		RabbitMQCheck:        func(context.Context) error { return nil },
+		FetcherCheck:         func(context.Context) error { return nil },
 		ObjectStorageCheck:   func(context.Context) error { return nil },
 
 		PostgresReplicaOptional: true,
@@ -230,7 +238,8 @@ func TestRunSelfProbe_EmitsMetricForEachDep(t *testing.T) {
 		ObjectStorageOptional:   true,
 	}
 
-	require.NoError(t, RunSelfProbe(context.Background(), deps, &libLog.NopLogger{}))
+	cfg := &Config{Fetcher: FetcherConfig{Enabled: true, URL: "https://fetcher.internal"}}
+	require.NoError(t, RunSelfProbe(context.Background(), cfg, deps, &libLog.NopLogger{}))
 
 	var rm metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(context.Background(), &rm))
@@ -261,7 +270,7 @@ func TestRunSelfProbe_EmitsMetricForEachDep(t *testing.T) {
 		t.Fatalf("selfprobe_result must be gauge-shaped; got %T", found.Data)
 	}
 
-	for _, dep := range []string{"postgres", "postgres_replica", "redis", "rabbitmq", "object_storage"} {
+	for _, dep := range []string{"postgres", "postgres_replica", "redis", "rabbitmq", "fetcher", "object_storage"} {
 		assert.True(t, seen[dep], "selfprobe_result must carry a datapoint for dep=%s", dep)
 	}
 }
@@ -277,8 +286,9 @@ func TestRunSelfProbe_ResetsSelfProbeFlagBeforeEachRun(t *testing.T) {
 		RedisOptional:           true,
 		PostgresReplicaOptional: true,
 		ObjectStorageOptional:   true,
+		FetcherOptional:         true,
 	}
-	require.NoError(t, RunSelfProbe(context.Background(), depsHealthy, &libLog.NopLogger{}))
+	require.NoError(t, RunSelfProbe(context.Background(), nil, depsHealthy, &libLog.NopLogger{}))
 	assert.True(t, SelfProbeOK())
 
 	depsUnhealthy := &HealthDependencies{
@@ -288,7 +298,40 @@ func TestRunSelfProbe_ResetsSelfProbeFlagBeforeEachRun(t *testing.T) {
 		RedisOptional:           true,
 		PostgresReplicaOptional: true,
 		ObjectStorageOptional:   true,
+		FetcherOptional:         true,
 	}
-	require.Error(t, RunSelfProbe(context.Background(), depsUnhealthy, &libLog.NopLogger{}))
+	require.Error(t, RunSelfProbe(context.Background(), nil, depsUnhealthy, &libLog.NopLogger{}))
 	assert.False(t, SelfProbeOK(), "failed probe must reset stale success flag")
+}
+
+// TestRunSelfProbe_FetcherEnabledMissingURL_FlagStaysFalse verifies that a
+// misconfigured fetcher (Enabled=true with empty URL) surfaces at startup
+// rather than waiting for the first /readyz hit. Before fetcher was added to
+// selfprobeSpecs, this misconfiguration only failed once readyz was probed —
+// effectively a pod that booted "healthy" but could never serve traffic that
+// touched the fetcher.
+//
+//nolint:paralleltest // mutates package-level selfProbeOK flag; MUST run serially
+func TestRunSelfProbe_FetcherEnabledMissingURL_FlagStaysFalse(t *testing.T) {
+	withFreshSelfProbeState(t)
+
+	cfg := &Config{Fetcher: FetcherConfig{Enabled: true}} // URL deliberately empty
+
+	deps := &HealthDependencies{
+		PostgresCheck:           func(context.Context) error { return nil },
+		RedisCheck:              func(context.Context) error { return nil },
+		RabbitMQCheck:           func(context.Context) error { return nil },
+		ObjectStorageCheck:      func(context.Context) error { return nil },
+		PostgresReplicaOptional: true,
+		RedisOptional:           true,
+		ObjectStorageOptional:   true,
+		// Fetcher is required (Enabled=true) but URL is empty → resolver
+		// returns errFetcherURLRequired → required-down → flag stays false.
+	}
+
+	err := RunSelfProbe(context.Background(), cfg, deps, &libLog.NopLogger{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrSelfProbeRequiredDepDown)
+	assert.False(t, SelfProbeOK(),
+		"fetcher misconfiguration must keep selfProbeOK false at startup")
 }

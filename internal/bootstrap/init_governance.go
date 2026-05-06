@@ -12,6 +12,8 @@ package bootstrap
 import (
 	"fmt"
 
+	streaming "github.com/LerianStudio/lib-streaming"
+
 	governanceHTTP "github.com/LerianStudio/matcher/internal/governance/adapters/http"
 	actorMappingRepoAdapter "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/actor_mapping"
 	governanceCommand "github.com/LerianStudio/matcher/internal/governance/services/command"
@@ -19,7 +21,18 @@ import (
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
-func initGovernanceModule(routes *Routes, repos *sharedRepositories, provider sharedPorts.InfrastructureProvider, production bool) error {
+func initGovernanceModule(
+	routes *Routes,
+	repos *sharedRepositories,
+	provider sharedPorts.InfrastructureProvider,
+	production bool,
+	streamEmitters ...streaming.Emitter,
+) error {
+	var streamEmitter streaming.Emitter
+	if len(streamEmitters) > 0 {
+		streamEmitter = streamEmitters[0]
+	}
+
 	governanceQueryUC, err := governanceQuery.NewUseCase(repos.governanceAuditLog)
 	if err != nil {
 		return fmt.Errorf("create governance query use case: %w", err)
@@ -37,7 +50,11 @@ func initGovernanceModule(routes *Routes, repos *sharedRepositories, provider sh
 	// Actor mapping CRUD
 	actorMappingRepo := actorMappingRepoAdapter.NewRepository(provider)
 
-	actorMappingCommandUC, err := governanceCommand.NewActorMappingUseCase(actorMappingRepo)
+	actorMappingCommandUC, err := governanceCommand.NewActorMappingUseCase(
+		actorMappingRepo,
+		governanceCommand.WithActorMappingInfrastructure(provider),
+		governanceCommand.WithActorMappingStreamingEmitter(streamEmitter),
+	)
 	if err != nil {
 		return fmt.Errorf("create actor mapping command use case: %w", err)
 	}

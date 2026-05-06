@@ -6,11 +6,20 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
+	"strings"
 	"time"
+
+	streaming "github.com/LerianStudio/lib-streaming"
+
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
+
+var errFetcherURLRequired = errors.New("fetcher url required when fetcher is enabled")
 
 func resolvePostgresCheck(deps *HealthDependencies) (HealthCheckFunc, bool) {
 	if deps == nil {
@@ -149,6 +158,74 @@ func resolveRabbitMQCheck(deps *HealthDependencies) (HealthCheckFunc, bool) {
 	}, true
 }
 
+// resolveFetcherCheck returns the readiness check for the fetcher dependency.
+//
+// Precedence (highest to lowest):
+//  1. deps == nil → unresolved (caller treats as required-missing).
+//  2. cfg.Fetcher.Enabled == false → unresolved (caller's optional() reports
+//     skipped, so /readyz stays healthy when fetcher is disabled).
+//  3. cfg.Fetcher.Enabled && URL == "" → fail-closed with errFetcherURLRequired
+//     (misconfiguration must surface as required-failure).
+//  4. deps.FetcherCheck (custom override, used by tests) wins over the live
+//     client.
+//  5. deps.Fetcher == nil → unresolved (fetcher enabled but no probe wired —
+//     bootstrap-time misconfiguration).
+//  6. Otherwise: probe deps.Fetcher.IsHealthy.
+func resolveFetcherCheck(cfg *Config, deps *HealthDependencies) (HealthCheckFunc, bool) {
+	if deps == nil {
+		return nil, false
+	}
+
+	if cfg != nil && !cfg.Fetcher.Enabled {
+		return nil, false
+	}
+
+	if cfg != nil && strings.TrimSpace(cfg.Fetcher.URL) == "" {
+		return func(context.Context) error { return errFetcherURLRequired }, true
+	}
+
+	if deps.FetcherCheck != nil {
+		return deps.FetcherCheck, true
+	}
+
+	if isNilFetcherClient(deps.Fetcher) {
+		return nil, false
+	}
+
+	// Capture the client outside the closure so a swap of deps.Fetcher (e.g.,
+	// in a test that mutates deps after resolve) cannot race with an
+	// in-flight probe. Defense-in-depth — the resolver/probe pair is single-
+	// threaded today, but capturing keeps the contract independent of caller
+	// ordering.
+	client := deps.Fetcher
+
+	return func(ctx context.Context) error {
+		if client.IsHealthy(ctx) {
+			return nil
+		}
+
+		return sharedPorts.ErrFetcherUnavailable
+	}, true
+}
+
+func isNilFetcherClient(client sharedPorts.FetcherClient) bool {
+	return isNilInterfaceValue(client)
+}
+
+func isNilInterfaceValue(value any) bool {
+	if value == nil {
+		return true
+	}
+
+	valueOf := reflect.ValueOf(value)
+	switch valueOf.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return valueOf.IsNil()
+	default:
+		return false
+	}
+}
+
 func resolveObjectStorageCheck(deps *HealthDependencies) (HealthCheckFunc, bool) {
 	if deps == nil {
 		return nil, false
@@ -158,21 +235,54 @@ func resolveObjectStorageCheck(deps *HealthDependencies) (HealthCheckFunc, bool)
 		return deps.ObjectStorageCheck, true
 	}
 
-	if deps.ObjectStorage == nil {
+	if isNilInterfaceValue(deps.ObjectStorage) {
 		return nil, false
 	}
+
+	storage := deps.ObjectStorage
 
 	return func(ctx context.Context) error {
 		// We just check that we can reach the storage by checking for a non-existent key.
 		// The Exists call will return false if the key doesn't exist (expected),
 		// but will error if the storage is unreachable.
-		_, err := deps.ObjectStorage.Exists(ctx, ".health-check")
+		_, err := storage.Exists(ctx, ".health-check")
 		if err != nil {
 			return fmt.Errorf("object storage health check: %w", err)
 		}
 
 		return nil
 	}, true
+}
+
+func resolveStreamingCheck(deps *HealthDependencies) (HealthCheckFunc, bool) {
+	if deps == nil || !deps.StreamingEnabled {
+		return nil, false
+	}
+
+	if deps.StreamingCheck != nil {
+		return normalizeStreamingHealthCheck(deps.StreamingCheck), true
+	}
+
+	if isNilInterfaceValue(deps.Streaming) {
+		return nil, false
+	}
+
+	emitter := deps.Streaming
+
+	return normalizeStreamingHealthCheck(emitter.Healthy), true
+}
+
+func normalizeStreamingHealthCheck(check HealthCheckFunc) HealthCheckFunc {
+	return func(ctx context.Context) error {
+		err := check(ctx)
+
+		var healthErr *streaming.HealthError
+		if errors.As(err, &healthErr) && healthErr.State() == streaming.Degraded {
+			return nil
+		}
+
+		return err
+	}
 }
 
 // rabbitMQHTTPClientTimeout is an outer belt-and-suspenders cap on the

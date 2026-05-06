@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/bxcodec/dbresolver/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,8 +24,12 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	sharedhttp "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
+	streaming "github.com/LerianStudio/lib-streaming"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
+	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	"github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/internal/shared/testutil"
 )
 
@@ -35,6 +41,64 @@ type stubAuditLogRepo struct {
 	err                error
 	listByEntityResult []*entities.AuditLog
 	listByEntityErr    error
+}
+
+func newStreamingConsumer(t *testing.T, repo *stubAuditLogRepo) (*Consumer, sqlmock.Sqlmock) {
+	return newStreamingConsumerWithEmitter(t, repo, streaming.NewNoopEmitter())
+}
+
+func newStreamingConsumerWithEmitter(
+	t *testing.T,
+	repo *stubAuditLogRepo,
+	emitter streaming.Emitter,
+) (*Consumer, sqlmock.Sqlmock) {
+	t.Helper()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	provider := &infraTestutil.MockInfrastructureProvider{
+		PostgresConn: infraTestutil.NewClientWithResolver(dbresolver.New(dbresolver.WithPrimaryDBs(db))),
+	}
+	consumer, err := NewConsumer(repo, ConsumerConfig{
+		Infrastructure:   provider,
+		StreamingEmitter: emitter,
+	})
+	require.NoError(t, err)
+
+	return consumer, mock
+}
+
+type failingAuditEmitter struct {
+	err error
+}
+
+func (emitter failingAuditEmitter) Emit(context.Context, streaming.EmitRequest) error {
+	return emitter.err
+}
+
+func (emitter failingAuditEmitter) Close() error { return nil }
+
+func (emitter failingAuditEmitter) Healthy(context.Context) error { return nil }
+
+type typedNilAuditEmitter struct{}
+
+func (*typedNilAuditEmitter) Emit(context.Context, streaming.EmitRequest) error { return nil }
+
+func (*typedNilAuditEmitter) Close() error { return nil }
+
+func (*typedNilAuditEmitter) Healthy(context.Context) error { return nil }
+
+func expectAuditStreamingTx(mock sqlmock.Sqlmock, commit bool) {
+	mock.ExpectBegin()
+	mock.ExpectExec("SET LOCAL search_path").WillReturnResult(sqlmock.NewResult(0, 0))
+	if commit {
+		mock.ExpectCommit()
+		return
+	}
+
+	mock.ExpectRollback()
 }
 
 func (s *stubAuditLogRepo) Create(
@@ -85,8 +149,9 @@ func TestNewConsumer_Success(t *testing.T) {
 	t.Parallel()
 
 	repo := &stubAuditLogRepo{}
-	consumer, err := NewConsumer(repo)
-	require.NoError(t, err)
+	consumer, _ := newStreamingConsumer(t, repo)
+	// Construction does not exercise the persistence path; the streaming
+	// fast-path (M3) is asserted by the persistence tests below.
 	require.NotNil(t, consumer)
 }
 
@@ -136,8 +201,10 @@ func TestConsumer_PublishAuditLogCreated_Success(t *testing.T) {
 	t.Parallel()
 
 	repo := &stubAuditLogRepo{}
-	consumer, err := NewConsumer(repo)
-	require.NoError(t, err)
+	// Default emitter is the lib-streaming NoopEmitter — exercises the
+	// streaming-disabled fast-path (M3): repo.Create autocommit, no
+	// BeginTx → CreateWithTx → Commit envelope.
+	consumer, mock := newStreamingConsumer(t, repo)
 
 	actor := "user-123"
 	fixedTime := testutil.FixedTime()
@@ -154,13 +221,16 @@ func TestConsumer_PublishAuditLogCreated_Success(t *testing.T) {
 		Timestamp:  fixedTime,
 	}
 
-	err = consumer.PublishAuditLogCreated(context.Background(), event)
+	err := consumer.PublishAuditLogCreated(auditDispatchContext(event), event)
 	require.NoError(t, err)
 	require.NotNil(t, repo.created)
 	assert.Equal(t, event.EntityType, repo.created.EntityType)
 	assert.Equal(t, event.EntityID, repo.created.EntityID)
 	assert.Equal(t, event.Action, repo.created.Action)
 	assert.Equal(t, event.TenantID, repo.created.TenantID)
+	// Fast-path bypasses tx — no Begin / Commit / Rollback should have been
+	// observed on sqlmock.
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestConsumer_PublishAuditLogCreated_NilConsumer(t *testing.T) {
@@ -187,8 +257,9 @@ func TestConsumer_PublishAuditLogCreated_RepoError(t *testing.T) {
 	t.Parallel()
 
 	repo := &stubAuditLogRepo{err: errConsumerRepoFailure}
-	consumer, err := NewConsumer(repo)
-	require.NoError(t, err)
+	// Streaming-disabled fast-path: repo.Create returns the configured
+	// failure; no transaction is opened so no Begin / Rollback expectations.
+	consumer, mock := newStreamingConsumer(t, repo)
 
 	actor := "admin"
 	fixedTime := testutil.FixedTime()
@@ -205,17 +276,19 @@ func TestConsumer_PublishAuditLogCreated_RepoError(t *testing.T) {
 		Timestamp:  fixedTime,
 	}
 
-	err = consumer.PublishAuditLogCreated(context.Background(), event)
+	err := consumer.PublishAuditLogCreated(auditDispatchContext(event), event)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "persist audit log")
+	// Fast-path: error surfaces from repo.Create — no tx state to assert.
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestConsumer_PublishAuditLogCreated_WithoutActor(t *testing.T) {
 	t.Parallel()
 
 	repo := &stubAuditLogRepo{}
-	consumer, err := NewConsumer(repo)
-	require.NoError(t, err)
+	// Streaming-disabled fast-path: repo.Create autocommit, no tx envelope.
+	consumer, mock := newStreamingConsumer(t, repo)
 
 	fixedTime := testutil.FixedTime()
 	event := &sharedDomain.AuditLogCreatedEvent{
@@ -231,18 +304,64 @@ func TestConsumer_PublishAuditLogCreated_WithoutActor(t *testing.T) {
 		Timestamp:  fixedTime,
 	}
 
-	err = consumer.PublishAuditLogCreated(context.Background(), event)
+	err := consumer.PublishAuditLogCreated(auditDispatchContext(event), event)
 	require.NoError(t, err)
 	require.NotNil(t, repo.created)
 	assert.Nil(t, repo.created.ActorID)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestConsumer_PublishAuditLogCreated_WithNilChanges(t *testing.T) {
-	t.Parallel()
-
+func TestConsumer_PublishAuditLogCreated_RejectsPayloadTenantMismatchWithDispatchContext(t *testing.T) {
 	repo := &stubAuditLogRepo{}
 	consumer, err := NewConsumer(repo)
 	require.NoError(t, err)
+
+	dispatchTenantID := testutil.MustDeterministicUUID("consumer-test-dispatch-tenant")
+	payloadTenantID := testutil.MustDeterministicUUID("consumer-test-payload-tenant")
+	event := &sharedDomain.AuditLogCreatedEvent{
+		UniqueID:   testutil.MustDeterministicUUID("consumer-test-mismatch-unique"),
+		EventType:  sharedDomain.EventTypeAuditLogCreated,
+		TenantID:   payloadTenantID,
+		EntityType: "context",
+		EntityID:   testutil.MustDeterministicUUID("consumer-test-mismatch-entity"),
+		Action:     "create",
+		OccurredAt: testutil.FixedTime(),
+		Timestamp:  testutil.FixedTime(),
+	}
+	ctx := tmcore.ContextWithTenantID(context.Background(), dispatchTenantID.String())
+
+	err = consumer.PublishAuditLogCreated(ctx, event)
+
+	require.ErrorIs(t, err, ErrAuditTenantMismatch)
+	require.Nil(t, repo.created)
+}
+
+func TestConsumer_PublishAuditLogCreated_RejectsMissingDispatchTenantContext(t *testing.T) {
+	repo := &stubAuditLogRepo{}
+	consumer, err := NewConsumer(repo)
+	require.NoError(t, err)
+
+	event := &sharedDomain.AuditLogCreatedEvent{
+		UniqueID:   testutil.MustDeterministicUUID("consumer-test-missing-context-unique"),
+		EventType:  sharedDomain.EventTypeAuditLogCreated,
+		TenantID:   testutil.MustDeterministicUUID("consumer-test-missing-context-tenant"),
+		EntityType: "context",
+		EntityID:   testutil.MustDeterministicUUID("consumer-test-missing-context-entity"),
+		Action:     "create",
+		OccurredAt: testutil.FixedTime(),
+		Timestamp:  testutil.FixedTime(),
+	}
+
+	err = consumer.PublishAuditLogCreated(context.Background(), event)
+
+	require.ErrorIs(t, err, ErrAuditTenantContextMissing)
+	require.Nil(t, repo.created)
+}
+
+func TestConsumer_PublishAuditLogCreated_WithNilChanges(t *testing.T) {
+	repo := &stubAuditLogRepo{}
+	// Streaming-disabled fast-path: repo.Create autocommit, no tx envelope.
+	consumer, mock := newStreamingConsumer(t, repo)
 
 	actor := "system"
 	fixedTime := testutil.FixedTime()
@@ -259,9 +378,10 @@ func TestConsumer_PublishAuditLogCreated_WithNilChanges(t *testing.T) {
 		Timestamp:  fixedTime,
 	}
 
-	err = consumer.PublishAuditLogCreated(context.Background(), event)
+	err := consumer.PublishAuditLogCreated(auditDispatchContext(event), event)
 	require.NoError(t, err)
 	require.NotNil(t, repo.created)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestConsumer_PublishAuditLogCreated_DuplicateDeliverySkipped(t *testing.T) {
@@ -300,12 +420,111 @@ func TestConsumer_PublishAuditLogCreated_DuplicateDeliverySkipped(t *testing.T) 
 	}
 
 	require.NotPanics(t, func() {
-		err = consumer.PublishAuditLogCreated(context.Background(), event)
+		err = consumer.PublishAuditLogCreated(auditDispatchContext(event), event)
 	})
 
 	require.NoError(t, err)
 	assert.Nil(t, repo.created, "duplicate delivery should be skipped — no new audit log created")
 }
+
+// TestConsumer_PublishAuditLogCreated_NilEmitterFallsBackToAutocommit verifies
+// the M3 streaming-disabled fast-path: when the emitter is nil (interface-nil),
+// emission is treated as soft-disabled and the consumer persists via
+// repo.Create (autocommit) without opening a transaction. This is the
+// pre-streaming compliance posture — every audit row still lands; only the
+// broker emission (which would no-op anyway) is skipped along with its
+// transactional envelope. The test deliberately wires a nil
+// InfrastructureProvider to prove the fast-path never reaches BeginTx.
+func TestConsumer_PublishAuditLogCreated_NilEmitterFallsBackToAutocommit(t *testing.T) {
+	repo := &stubAuditLogRepo{}
+	consumer, err := NewConsumer(repo, ConsumerConfig{Infrastructure: &nilAuditInfraProvider{}})
+	require.NoError(t, err)
+	event := &sharedDomain.AuditLogCreatedEvent{
+		UniqueID:   testutil.MustDeterministicUUID("consumer-test-nil-emitter-unique"),
+		EventType:  sharedDomain.EventTypeAuditLogCreated,
+		TenantID:   testutil.MustDeterministicUUID("consumer-test-nil-emitter-tenant"),
+		EntityType: "context",
+		EntityID:   testutil.MustDeterministicUUID("consumer-test-nil-emitter-entity"),
+		Action:     "create",
+		OccurredAt: testutil.FixedTime(),
+		Timestamp:  testutil.FixedTime(),
+	}
+
+	err = consumer.PublishAuditLogCreated(auditDispatchContext(event), event)
+
+	require.NoError(t, err)
+	require.NotNil(t, repo.created, "fast-path persists via autocommit Create")
+	assert.Equal(t, event.EntityType, repo.created.EntityType)
+	assert.Equal(t, event.Action, repo.created.Action)
+}
+
+// TestConsumer_PublishAuditLogCreated_TypedNilEmitterFallsBackToAutocommit
+// verifies emission.IsNilEmitter detects a typed-nil pointer (nil
+// *typedNilAuditEmitter wrapped in a non-nil interface header) and routes it
+// through the same fast-path as bare-nil. Without this, a typed-nil escape
+// would dereference inside Emit() and the consumer would drag the audit log
+// down with it.
+func TestConsumer_PublishAuditLogCreated_TypedNilEmitterFallsBackToAutocommit(t *testing.T) {
+	repo := &stubAuditLogRepo{}
+	var emitter *typedNilAuditEmitter
+	consumer, err := NewConsumer(repo, ConsumerConfig{
+		Infrastructure:   &nilAuditInfraProvider{},
+		StreamingEmitter: emitter,
+	})
+	require.NoError(t, err)
+	event := &sharedDomain.AuditLogCreatedEvent{
+		UniqueID:   testutil.MustDeterministicUUID("consumer-test-typed-nil-emitter-unique"),
+		EventType:  sharedDomain.EventTypeAuditLogCreated,
+		TenantID:   testutil.MustDeterministicUUID("consumer-test-typed-nil-emitter-tenant"),
+		EntityType: "context",
+		EntityID:   testutil.MustDeterministicUUID("consumer-test-typed-nil-emitter-entity"),
+		Action:     "create",
+		OccurredAt: testutil.FixedTime(),
+		Timestamp:  testutil.FixedTime(),
+	}
+
+	err = consumer.PublishAuditLogCreated(auditDispatchContext(event), event)
+
+	require.NoError(t, err)
+	require.NotNil(t, repo.created, "fast-path persists via autocommit Create")
+	assert.Equal(t, event.EntityType, repo.created.EntityType)
+}
+
+func TestConsumer_PublishAuditLogCreated_StreamingEmitFailureRollsBackTransaction(t *testing.T) {
+	repo := &stubAuditLogRepo{}
+	streamErr := errors.New("streaming emit failed")
+	consumer, mock := newStreamingConsumerWithEmitter(t, repo, failingAuditEmitter{err: streamErr})
+	expectAuditStreamingTx(mock, false)
+
+	event := &sharedDomain.AuditLogCreatedEvent{
+		UniqueID:   testutil.MustDeterministicUUID("consumer-test-stream-fail-unique"),
+		EventType:  sharedDomain.EventTypeAuditLogCreated,
+		TenantID:   testutil.MustDeterministicUUID("consumer-test-stream-fail-tenant"),
+		EntityType: "context",
+		EntityID:   testutil.MustDeterministicUUID("consumer-test-stream-fail-entity"),
+		Action:     "create",
+		OccurredAt: testutil.FixedTime(),
+		Timestamp:  testutil.FixedTime(),
+	}
+
+	err := consumer.PublishAuditLogCreated(auditDispatchContext(event), event)
+
+	require.ErrorIs(t, err, streamErr)
+	require.NotNil(t, repo.created, "repository CreateWithTx succeeds before streaming failure")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+type nilAuditInfraProvider struct{}
+
+func (nilAuditInfraProvider) GetRedisConnection(context.Context) (*ports.RedisConnectionLease, error) {
+	return nil, nil
+}
+
+func (nilAuditInfraProvider) GetReplicaDB(context.Context) (*ports.DBLease, error) { return nil, nil }
+
+func (nilAuditInfraProvider) GetPrimaryDB(context.Context) (*ports.DBLease, error) { return nil, nil }
+
+func (nilAuditInfraProvider) BeginTx(context.Context) (*ports.TxLease, error) { return nil, nil }
 
 func TestConsumer_PublishAuditLogCreated_DifferentAction_NotSkipped(t *testing.T) {
 	t.Parallel()
@@ -323,8 +542,8 @@ func TestConsumer_PublishAuditLogCreated_DifferentAction_NotSkipped(t *testing.T
 			},
 		},
 	}
-	consumer, err := NewConsumer(repo)
-	require.NoError(t, err)
+	// Streaming-disabled fast-path: repo.Create autocommit, no tx envelope.
+	consumer, mock := newStreamingConsumer(t, repo)
 
 	actor := "user-456"
 	fixedTime := testutil.FixedTime()
@@ -341,9 +560,10 @@ func TestConsumer_PublishAuditLogCreated_DifferentAction_NotSkipped(t *testing.T
 		Timestamp:  fixedTime,
 	}
 
-	err = consumer.PublishAuditLogCreated(context.Background(), event)
+	err := consumer.PublishAuditLogCreated(auditDispatchContext(event), event)
 	require.NoError(t, err)
 	require.NotNil(t, repo.created, "different action should not be skipped")
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestConsumer_PublishAuditLogCreated_InterleavedActions_DuplicateSkipped(t *testing.T) {
@@ -387,7 +607,7 @@ func TestConsumer_PublishAuditLogCreated_InterleavedActions_DuplicateSkipped(t *
 		Timestamp:  fixedTime,
 	}
 
-	err = consumer.PublishAuditLogCreated(context.Background(), event)
+	err = consumer.PublishAuditLogCreated(auditDispatchContext(event), event)
 	require.NoError(t, err)
 	assert.Nil(t, repo.created, "matching action inside dedup window should be skipped even when latest action differs")
 }
@@ -409,8 +629,8 @@ func TestConsumer_PublishAuditLogCreated_OldEntry_NotSkipped(t *testing.T) {
 			},
 		},
 	}
-	consumer, err := NewConsumer(repo)
-	require.NoError(t, err)
+	// Streaming-disabled fast-path: repo.Create autocommit, no tx envelope.
+	consumer, mock := newStreamingConsumer(t, repo)
 
 	actor := "admin"
 	fixedTime := testutil.FixedTime()
@@ -427,9 +647,10 @@ func TestConsumer_PublishAuditLogCreated_OldEntry_NotSkipped(t *testing.T) {
 		Timestamp:  fixedTime,
 	}
 
-	err = consumer.PublishAuditLogCreated(context.Background(), event)
+	err := consumer.PublishAuditLogCreated(auditDispatchContext(event), event)
 	require.NoError(t, err)
 	require.NotNil(t, repo.created, "old entry outside dedup window should not be skipped")
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestConsumer_PublishAuditLogCreated_ListByEntityError_ContinuesNormally(t *testing.T) {
@@ -438,8 +659,8 @@ func TestConsumer_PublishAuditLogCreated_ListByEntityError_ContinuesNormally(t *
 	repo := &stubAuditLogRepo{
 		listByEntityErr: errors.New("database connection lost"),
 	}
-	consumer, err := NewConsumer(repo)
-	require.NoError(t, err)
+	// Streaming-disabled fast-path: repo.Create autocommit, no tx envelope.
+	consumer, mock := newStreamingConsumer(t, repo)
 
 	actor := "system"
 	fixedTime := testutil.FixedTime()
@@ -457,12 +678,13 @@ func TestConsumer_PublishAuditLogCreated_ListByEntityError_ContinuesNormally(t *
 	}
 
 	logger := &capturingAuditLogger{}
-	ctx := libCommons.ContextWithLogger(context.Background(), logger)
+	ctx := libCommons.ContextWithLogger(auditDispatchContext(event), logger)
 
-	err = consumer.PublishAuditLogCreated(ctx, event)
+	err := consumer.PublishAuditLogCreated(ctx, event)
 	require.NoError(t, err)
 	require.NotNil(t, repo.created, "dedup check failure should not prevent audit log creation")
 	assert.Contains(t, logger.joined(), "dedup check failed")
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 type capturingAuditLogger struct {
@@ -492,4 +714,12 @@ func (logger *capturingAuditLogger) joined() string {
 	defer logger.mu.Unlock()
 
 	return strings.Join(logger.messages, "\n")
+}
+
+func auditDispatchContext(event *sharedDomain.AuditLogCreatedEvent) context.Context {
+	if event == nil {
+		return context.Background()
+	}
+
+	return tmcore.ContextWithTenantID(context.Background(), event.TenantID.String())
 }

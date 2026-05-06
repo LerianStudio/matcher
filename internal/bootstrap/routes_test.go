@@ -481,13 +481,14 @@ func TestRegisterRoutes_HealthEndpoints(t *testing.T) {
 			"/health is 503 before self-probe flips the flag")
 
 		// Simulate a successful self-probe and re-check.
-		require.NoError(t, RunSelfProbe(context.Background(), &HealthDependencies{
+		require.NoError(t, RunSelfProbe(context.Background(), nil, &HealthDependencies{
 			PostgresCheck:           func(context.Context) error { return nil },
 			RedisCheck:              func(context.Context) error { return nil },
 			RabbitMQCheck:           func(context.Context) error { return nil },
 			RedisOptional:           true,
 			PostgresReplicaOptional: true,
 			ObjectStorageOptional:   true,
+			FetcherOptional:         true,
 		}, &libLog.NopLogger{}))
 
 		req2 := httptest.NewRequest(http.MethodGet, "/health", http.NoBody)

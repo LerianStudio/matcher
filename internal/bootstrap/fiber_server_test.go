@@ -127,7 +127,7 @@ func TestCustomErrorHandler_ReturnsBadRequestMessage(t *testing.T) {
 // Readiness handler tests under the canonical /readyz contract:
 //   - top-level status is "healthy" / "unhealthy" (not "ok" / "degraded")
 //   - checks is map[string]CheckResult with snake_case keys
-//     (postgres, postgres_replica, redis, rabbitmq, object_storage)
+//     (postgres, postgres_replica, redis, rabbitmq, fetcher, object_storage)
 //   - version and deployment_mode are always present
 //   - a required dep with no check func fails closed (status="down")
 //   - optional-dep down stays "down" in the response but agg is "healthy"
@@ -159,6 +159,10 @@ func TestReadinessHandler_NoDepsFailsClosed(t *testing.T) {
 		assert.Equal(t, "check not configured", entry["error"], "dep %s should expose bounded unresolved-check error", name)
 	}
 
+	fetcher, ok := checks["fetcher"].(map[string]any)
+	require.True(t, ok, "expected checks[fetcher] to be a map")
+	assert.Equal(t, "skipped", fetcher["status"], "disabled fetcher must be skipped, not probed")
+
 	assert.NotEmpty(t, body["version"])
 	assert.NotEmpty(t, body["deployment_mode"])
 }
@@ -174,6 +178,7 @@ func TestReadinessHandler_RequiredDepDownYieldsUnhealthy(t *testing.T) {
 		RabbitMQCheck:           func(context.Context) error { return nil },
 		RedisOptional:           true,
 		PostgresReplicaOptional: true,
+		FetcherOptional:         true,
 		ObjectStorageOptional:   true,
 	}
 	app.Get("/readyz", readinessHandler(cfg, nil, nil, deps, &libLog.NopLogger{}))
@@ -208,7 +213,9 @@ func TestReadinessHandler_AllChecksPass(t *testing.T) {
 		PostgresCheck:           func(context.Context) error { return nil },
 		RedisCheck:              func(context.Context) error { return nil },
 		RabbitMQCheck:           func(context.Context) error { return nil },
+		RedisOptional:           true,
 		PostgresReplicaOptional: true,
+		FetcherOptional:         true,
 		ObjectStorageOptional:   true,
 	}
 	app.Get("/readyz", readinessHandler(cfg, nil, nil, deps, &libLog.NopLogger{}))
@@ -234,6 +241,7 @@ func TestReadinessHandler_OptionalDependencyDownStaysHealthy(t *testing.T) {
 		RabbitMQCheck:           func(context.Context) error { return nil },
 		RedisOptional:           true,
 		PostgresReplicaOptional: true,
+		FetcherOptional:         true,
 		ObjectStorageOptional:   true,
 	}
 	app.Get("/readyz", readinessHandler(cfg, nil, nil, deps, &libLog.NopLogger{}))
@@ -729,13 +737,14 @@ func TestLivenessHandler(t *testing.T) {
 	require.Equal(t, http.StatusServiceUnavailable, resp0.StatusCode)
 
 	// After a successful self-probe, /health returns 200 with "healthy".
-	require.NoError(t, RunSelfProbe(context.Background(), &HealthDependencies{
+	require.NoError(t, RunSelfProbe(context.Background(), nil, &HealthDependencies{
 		PostgresCheck:           func(context.Context) error { return nil },
 		RedisCheck:              func(context.Context) error { return nil },
 		RabbitMQCheck:           func(context.Context) error { return nil },
 		RedisOptional:           true,
 		PostgresReplicaOptional: true,
 		ObjectStorageOptional:   true,
+		FetcherOptional:         true,
 	}, &libLog.NopLogger{}))
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/health", http.NoBody))
@@ -1402,6 +1411,7 @@ func TestEvaluateReadinessChecks_AllRequiredUp(t *testing.T) {
 		RabbitMQCheck:           func(context.Context) error { return nil },
 		RedisOptional:           true,
 		PostgresReplicaOptional: true,
+		FetcherOptional:         true,
 		ObjectStorageOptional:   true,
 	}
 
@@ -1893,6 +1903,7 @@ func TestEvaluateReadinessChecks_AllRequiredDown(t *testing.T) {
 		RedisOptional:    false,
 		PostgresOptional: false,
 		RabbitMQOptional: false,
+		FetcherOptional:  true,
 	}
 
 	status, checks, healthy := evaluateReadinessChecks(
@@ -2196,6 +2207,7 @@ func TestReadinessHandler_NilContext(t *testing.T) {
 		RabbitMQCheck:           func(context.Context) error { return nil },
 		RedisOptional:           true,
 		PostgresReplicaOptional: true,
+		FetcherOptional:         true,
 		ObjectStorageOptional:   true,
 	}
 	app.Get("/readyz", readinessHandler(cfg, nil, nil, deps, &libLog.NopLogger{}))

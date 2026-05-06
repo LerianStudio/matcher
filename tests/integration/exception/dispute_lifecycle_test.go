@@ -3,15 +3,17 @@
 package exception
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
-	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
+	disputeRepoAdapter "github.com/LerianStudio/matcher/internal/exception/adapters/postgres/dispute"
 	exceptionCommand "github.com/LerianStudio/matcher/internal/exception/services/command"
 	ingestionJobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -185,6 +187,75 @@ func TestIntegration_Exception_Dispute_MultipleEvidenceSubmissions(t *testing.T)
 		require.Len(t, updated.Evidence, 2, "should accumulate evidence entries")
 		require.Equal(t, "Initial bank statement screenshot", updated.Evidence[0].Comment)
 		require.Equal(t, "Processor response confirming duplicate", updated.Evidence[1].Comment)
+	})
+}
+
+func TestIntegration_Exception_Dispute_ConcurrentEvidenceSubmissionsPreserveBothEntries(t *testing.T) {
+	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
+		ctx := testCtxWithActor(t, h, "evidence-submitter")
+		seed := seedTestConfig(t, h)
+		wired := wireServices(t, h)
+
+		jRepo := ingestionJobRepo.NewRepository(wired.Provider)
+		job := createIngestionJob(t, ctx, jRepo, seed.ContextID, seed.LedgerSourceID, 1)
+		tx := createTransaction(t, ctx, wired.TxRepo, job.ID, seed.LedgerSourceID,
+			"CONCURRENT-EV-"+uuid.New().String()[:8], decimal.NewFromFloat(250.00), "USD")
+
+		exc := createExceptionForTransaction(t, ctx, h.Connection, tx.ID,
+			sharedexception.ExceptionSeverityMedium, "UNMATCHED")
+
+		disputeUC, provider := wireDisputeUseCase(t, h)
+		opened, err := disputeUC.OpenDispute(ctx, exceptionCommand.OpenDisputeCommand{
+			ExceptionID: exc.ID,
+			Category:    "OTHER",
+			Description: "Concurrent evidence test",
+		})
+		require.NoError(t, err)
+
+		start := make(chan struct{})
+		results := make(chan error, 2)
+		comments := []string{
+			"Concurrent bank statement screenshot",
+			"Concurrent processor response",
+		}
+
+		var wg sync.WaitGroup
+		for _, comment := range comments {
+			wg.Add(1)
+
+			go func(comment string) {
+				defer wg.Done()
+				<-start
+
+				_, submitErr := disputeUC.SubmitEvidence(ctx, exceptionCommand.SubmitEvidenceCommand{
+					DisputeID: opened.ID,
+					Comment:   comment,
+				})
+				results <- submitErr
+			}(comment)
+		}
+
+		close(start)
+		wg.Wait()
+		close(results)
+
+		for submitErr := range results {
+			require.NoError(t, submitErr)
+		}
+
+		disputeRepo := disputeRepoAdapter.NewRepository(provider)
+		loaded, err := disputeRepo.FindByID(ctx, opened.ID)
+		require.NoError(t, err)
+		require.Len(t, loaded.Evidence, 2, "both concurrent evidence entries must persist")
+
+		persistedComments := make(map[string]bool, len(loaded.Evidence))
+		for _, evidence := range loaded.Evidence {
+			persistedComments[evidence.Comment] = true
+		}
+
+		for _, comment := range comments {
+			require.True(t, persistedComments[comment], "missing persisted evidence comment %q", comment)
+		}
 	})
 }
 

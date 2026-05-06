@@ -326,5 +326,7 @@ func finalizeRunFailure(
 		return fmt.Errorf("updating match run failed: %w; original cause: %w", updateErr, cause)
 	}
 
+	uc.emitMatchRunFailed(updateCtx, run)
+
 	return cause
 }

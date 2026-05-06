@@ -6,7 +6,7 @@ Universal entry point for any AI coding agent working on the Matcher codebase.
 
 **Matcher** is a transaction reconciliation engine built by Lerian Studio. It automates matching between a ledger (Midaz) and external systems (banks, payment processors, ERPs), applying configurable rules, managing exceptions, and maintaining an immutable audit trail.
 
-- **Language**: Go 1.26 (module `go 1.26.0`, toolchain `1.26.1`)
+- **Language**: Go 1.26 (module `go 1.26.2`, toolchain `1.26.2`)
 - **Architecture**: Modular monolith — DDD + Hexagonal Architecture + CQRS-light
 - **Database**: PostgreSQL 17, schema-per-tenant isolation
 - **Cache/Locking**: Valkey 8 (Redis-compatible)

@@ -5,8 +5,8 @@ package factories
 import (
 	"context"
 
-	"github.com/LerianStudio/matcher/tests/e2e"
 	"github.com/LerianStudio/matcher/tests/client"
+	"github.com/LerianStudio/matcher/tests/e2e"
 )
 
 // RuleFactory creates match rules for tests.

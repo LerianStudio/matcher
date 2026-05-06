@@ -13,12 +13,24 @@ import (
 
 	"github.com/google/uuid"
 
+	streaming "github.com/LerianStudio/lib-streaming"
+
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	ingestionRepositories "github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/internal/streaming/emission"
 )
+
+// Functional options for streaming.Emitter injection follow the convention:
+// - Bare WithStreamingEmitter when this package owns one emitter consumer
+// - With<ReceiverName>StreamingEmitter when multiple consumers coexist in the same package
+//
+// This package owns a single emitter-consuming type (UseCase) so the bare
+// WithStreamingEmitter form is used below. The option pattern (rather than
+// a struct field on UseCaseDeps) matches the dominant 6-of-9 sites in the
+// codebase and keeps the deps struct focused on required wiring.
 
 const (
 	defaultDedupeRetries = 3
@@ -125,9 +137,11 @@ type UseCase struct {
 	sourceRepo        ports.SourceRepository
 	matchTrigger      sharedPorts.MatchTrigger
 	contextProvider   sharedPorts.ContextProvider
+	streamEmitter     streaming.Emitter
 }
 
 // UseCaseDeps groups all dependencies required by the ingestion UseCase.
+// Optional dependencies (e.g. streaming.Emitter) are wired via UseCaseOption.
 type UseCaseDeps struct {
 	JobRepo           ingestionRepositories.JobRepository
 	TransactionRepo   ingestionRepositories.TransactionRepository
@@ -142,6 +156,22 @@ type UseCaseDeps struct {
 	DedupeTTLGetter   func() time.Duration
 	MatchTrigger      sharedPorts.MatchTrigger
 	ContextProvider   sharedPorts.ContextProvider
+}
+
+// UseCaseOption configures optional dependencies on the ingestion UseCase.
+// Nil values are ignored so callers can pass results of conditional setup
+// without guarding at the call site.
+type UseCaseOption func(*UseCase)
+
+// WithStreamingEmitter sets the emitter used for ingestion streaming events.
+// Use emission.IsNilEmitter() to defend against typed-nil interface values
+// (e.g., a (*MockEmitter)(nil) hiding behind a streaming.Emitter interface).
+func WithStreamingEmitter(emitter streaming.Emitter) UseCaseOption {
+	return func(uc *UseCase) {
+		if !emission.IsNilEmitter(emitter) {
+			uc.streamEmitter = emitter
+		}
+	}
 }
 
 func (deps *UseCaseDeps) validate() error {
@@ -170,7 +200,8 @@ func (deps *UseCaseDeps) validate() error {
 
 // NewUseCase creates a new command use case with required dependencies.
 // defaultDedupeTTL is a safety net; callers should clear dedupe keys on completion.
-func NewUseCase(deps UseCaseDeps) (*UseCase, error) {
+// Optional dependencies (e.g., streaming emitter) are wired via UseCaseOption.
+func NewUseCase(deps UseCaseDeps, options ...UseCaseOption) (*UseCase, error) {
 	if err := deps.validate(); err != nil {
 		return nil, err
 	}
@@ -211,7 +242,7 @@ func NewUseCase(deps UseCaseDeps) (*UseCase, error) {
 		return nil, ErrOutboxRepoNotTxCreator
 	}
 
-	return &UseCase{
+	uc := &UseCase{
 		jobRepo:           deps.JobRepo,
 		transactionRepo:   deps.TransactionRepo,
 		dedupe:            deps.Dedupe,
@@ -229,5 +260,13 @@ func NewUseCase(deps UseCaseDeps) (*UseCase, error) {
 		sourceRepo:        deps.SourceRepo,
 		matchTrigger:      deps.MatchTrigger,
 		contextProvider:   deps.ContextProvider,
-	}, nil
+	}
+
+	for _, option := range options {
+		if option != nil {
+			option(uc)
+		}
+	}
+
+	return uc, nil
 }

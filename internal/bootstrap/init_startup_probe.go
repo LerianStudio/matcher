@@ -16,14 +16,17 @@ import (
 )
 
 // startupSelfProbeRunner matches RunSelfProbe's signature. Abstracted so tests
-// can inject a deterministic runner without depending on real infra.
-type startupSelfProbeRunner func(context.Context, *HealthDependencies, libLog.Logger) error
+// can inject a deterministic runner without depending on real infra. The cfg
+// parameter feeds the fetcher resolver's Enabled+URL precedence; nil cfg is
+// tolerated and surfaces the fetcher as required-missing.
+type startupSelfProbeRunner func(context.Context, *Config, *HealthDependencies, libLog.Logger) error
 
 // runStartupSelfProbe drives the startup self-probe. A probe failure is logged
 // but does NOT abort startup — K8s livenessProbe restarts the pod via /health
 // 503 if the condition persists.
 func runStartupSelfProbe(
 	ctx context.Context,
+	cfg *Config,
 	healthDeps *HealthDependencies,
 	logger libLog.Logger,
 	runner startupSelfProbeRunner,
@@ -36,7 +39,7 @@ func runStartupSelfProbe(
 		logger = &libLog.NopLogger{}
 	}
 
-	if probeErr := runner(ctx, healthDeps, logger); probeErr != nil {
+	if probeErr := runner(ctx, cfg, healthDeps, logger); probeErr != nil {
 		logger.Log(ctx, libLog.LevelError,
 			fmt.Sprintf("startup self-probe failed (service will return /health 503 until deps recover): %v", probeErr))
 	}

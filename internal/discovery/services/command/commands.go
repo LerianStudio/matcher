@@ -11,13 +11,24 @@ import (
 	"time"
 
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/discovery/extractionpoller"
 	"github.com/LerianStudio/matcher/internal/discovery/schemacache"
 	"github.com/LerianStudio/matcher/internal/discovery/services/syncer"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/internal/streaming/emission"
 )
+
+// Functional options for streaming.Emitter injection follow the convention:
+// - Bare WithStreamingEmitter when this package owns one emitter consumer
+// - With<ReceiverName>StreamingEmitter when multiple consumers coexist in the same package
+//
+// This package owns two consumers (UseCase, BridgeExtractionOrchestrator),
+// so the orchestrator-bound option uses the prefixed form
+// (WithBridgeStreamingEmitter, see bridge_extraction_commands.go) while the
+// UseCase-bound option uses the bare WithStreamingEmitter name below.
 
 // Sentinel errors for discovery commands.
 var (
@@ -49,7 +60,13 @@ type UseCase struct {
 	refreshLockProvider  sharedPorts.InfrastructureProvider
 	refreshLockTTL       time.Duration
 	refreshLockTTLGetter func() time.Duration
+	streamEmitter        streaming.Emitter
 }
+
+// UseCaseOption configures optional dependencies on the discovery UseCase.
+// Nil values are ignored so callers can pass results of conditional setup
+// without guarding at the call site.
+type UseCaseOption func(*UseCase)
 
 // NewUseCase creates a new discovery command use case.
 func NewUseCase(
@@ -58,6 +75,7 @@ func NewUseCase(
 	schemaRepo repositories.SchemaRepository,
 	extractionRepo repositories.ExtractionRepository,
 	logger libLog.Logger,
+	options ...UseCaseOption,
 ) (*UseCase, error) {
 	if fetcherClient == nil {
 		return nil, ErrNilFetcherClient
@@ -84,14 +102,33 @@ func NewUseCase(
 		return nil, fmt.Errorf("create connection syncer: %w", err)
 	}
 
-	return &UseCase{
+	uc := &UseCase{
 		fetcherClient:  fetcherClient,
 		connRepo:       connRepo,
 		schemaRepo:     schemaRepo,
 		extractionRepo: extractionRepo,
 		logger:         logger,
 		syncer:         cs,
-	}, nil
+	}
+
+	for _, option := range options {
+		if option != nil {
+			option(uc)
+		}
+	}
+
+	return uc, nil
+}
+
+// WithStreamingEmitter sets the emitter used for discovery streaming events.
+// Use emission.IsNilEmitter() to defend against typed-nil interface values
+// (e.g., a (*MockEmitter)(nil) hiding behind a streaming.Emitter interface).
+func WithStreamingEmitter(emitter streaming.Emitter) UseCaseOption {
+	return func(uc *UseCase) {
+		if !emission.IsNilEmitter(emitter) {
+			uc.streamEmitter = emitter
+		}
+	}
 }
 
 // WithExtractionPoller adds an optional extraction poller for async job monitoring.

@@ -243,6 +243,7 @@ func TestConfig_ReplicaDSNMasked(t *testing.T) {
 		assert.NotContains(t, dsn, "replica_secret")
 	})
 }
+
 func TestConfig_ReplicaDSNMasked_PartialFallbacks(t *testing.T) {
 	t.Parallel()
 
@@ -353,4 +354,3 @@ func TestConfig_ReplicaDSNMasked_PartialFallbacks(t *testing.T) {
 		assert.NotContains(t, dsn, "replica_secret")
 	})
 }
-

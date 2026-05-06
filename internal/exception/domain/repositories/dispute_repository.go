@@ -39,6 +39,10 @@ type DisputeRepository interface {
 	// This enables atomic operations across multiple repositories.
 	CreateWithTx(ctx context.Context, tx Tx, d *dispute.Dispute) (*dispute.Dispute, error)
 	FindByID(ctx context.Context, id uuid.UUID) (*dispute.Dispute, error)
+	// FindByIDWithTx retrieves a dispute by ID within the provided transaction.
+	// Use this instead of FindByID inside write transactions to guarantee
+	// reading from the primary and avoid replica lag on subsequent mutations.
+	FindByIDWithTx(ctx context.Context, tx Tx, id uuid.UUID) (*dispute.Dispute, error)
 	FindByExceptionID(ctx context.Context, exceptionID uuid.UUID) (*dispute.Dispute, error)
 	// List retrieves disputes with optional filters and cursor pagination.
 	List(

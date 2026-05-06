@@ -17,14 +17,23 @@ import (
 
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
 	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 	workermetrics "github.com/LerianStudio/matcher/internal/shared/observability/workermetrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/internal/streaming/emission"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
+
+// Functional options for streaming.Emitter injection follow the convention:
+// - Bare WithStreamingEmitter when this package owns one emitter consumer
+// - With<ReceiverName>StreamingEmitter when multiple consumers coexist in the same package
+//
+// This worker package owns a single emitter consumer (ArchivalWorker) so
+// the bare WithStreamingEmitter name is used below.
 
 // archivalWorkerName is the stable label value emitted on matcher.worker.*
 // metrics from this worker. Kept as a package constant so dashboards and
@@ -60,11 +69,14 @@ const (
 var archivalPartitionNameRegex = regexp.MustCompile(`^audit_logs_\d{4}_\d{2}$`)
 
 // PartitionManager manages audit log partition lifecycle operations for archival.
+// Detach and Drop are exposed only as transactional variants so the archival
+// worker can atomically couple partition state changes with audit/streaming
+// emits in a single tx (see archival_batch.go).
 type PartitionManager interface {
 	EnsurePartitionsExist(ctx context.Context, lookaheadMonths int) error
 	ListPartitions(ctx context.Context) ([]command.PartitionInfo, error)
-	DetachPartition(ctx context.Context, name string) error
-	DropPartition(ctx context.Context, name string) error
+	DetachPartitionWithTx(ctx context.Context, tx *sql.Tx, name string) error
+	DropPartitionWithTx(ctx context.Context, tx *sql.Tx, name string) error
 }
 
 // ArchivalWorker orchestrates the full partition lifecycle for audit log archival.
@@ -81,11 +93,26 @@ type ArchivalWorker struct {
 	logger        libLog.Logger
 	tracer        trace.Tracer
 	metrics       *workermetrics.Recorder
+	streamEmitter streaming.Emitter
 
 	running  atomic.Bool
 	stopOnce sync.Once
 	stopCh   chan struct{}
 	doneCh   chan struct{}
+}
+
+// ArchivalWorkerOption configures optional archival worker dependencies.
+type ArchivalWorkerOption func(*ArchivalWorker)
+
+// WithStreamingEmitter sets the emitter used for archive streaming events.
+// Use emission.IsNilEmitter() to defend against typed-nil interface values
+// (e.g., a (*MockEmitter)(nil) hiding behind a streaming.Emitter interface).
+func WithStreamingEmitter(emitter streaming.Emitter) ArchivalWorkerOption {
+	return func(aw *ArchivalWorker) {
+		if !emission.IsNilEmitter(emitter) {
+			aw.streamEmitter = emitter
+		}
+	}
 }
 
 // UpdateRuntimeConfig updates the worker runtime configuration used on the next start/restart.
@@ -170,6 +197,7 @@ func NewArchivalWorker(
 	infraProvider sharedPorts.InfrastructureProvider,
 	cfg ArchivalWorkerConfig,
 	logger libLog.Logger,
+	options ...ArchivalWorkerOption,
 ) (*ArchivalWorker, error) {
 	if archiveRepo == nil {
 		return nil, ErrNilArchiveRepo
@@ -197,7 +225,7 @@ func NewArchivalWorker(
 
 	cfg = normalizeArchivalWorkerConfig(cfg)
 
-	return &ArchivalWorker{
+	aw := &ArchivalWorker{
 		archiveRepo:   archiveRepo,
 		partitionMgr:  partitionMgr,
 		storage:       storage,
@@ -209,7 +237,15 @@ func NewArchivalWorker(
 		metrics:       workermetrics.NewRecorder(archivalWorkerName),
 		stopCh:        make(chan struct{}),
 		doneCh:        make(chan struct{}),
-	}, nil
+	}
+
+	for _, option := range options {
+		if option != nil {
+			option(aw)
+		}
+	}
+
+	return aw, nil
 }
 
 // Start begins the archival worker.

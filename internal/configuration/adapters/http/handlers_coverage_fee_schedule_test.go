@@ -305,4 +305,3 @@ func TestFeeSchedule_GetNotFound(t *testing.T) {
 	requireSpanName(t, recorder, "handler.fee_schedule.get")
 	requireNotFoundResponse(t, resp, "fee schedule not found")
 }
-

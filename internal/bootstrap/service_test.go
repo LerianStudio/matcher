@@ -31,6 +31,37 @@ type mockApp struct{}
 
 func (m *mockApp) Run(_ *libCommons.Launcher) error { return nil }
 
+type shutdownRecordingApp struct {
+	shutdownCalled bool
+	stopCalled     bool
+}
+
+func (app *shutdownRecordingApp) Run(_ *libCommons.Launcher) error { return nil }
+
+func (app *shutdownRecordingApp) Shutdown(context.Context) error {
+	app.shutdownCalled = true
+	return nil
+}
+
+func (app *shutdownRecordingApp) Stop() { app.stopCalled = true }
+
+type closeContextRecordingApp struct {
+	closeContextCalled bool
+	closeCalled        bool
+}
+
+func (app *closeContextRecordingApp) Run(_ *libCommons.Launcher) error { return nil }
+
+func (app *closeContextRecordingApp) CloseContext(context.Context) error {
+	app.closeContextCalled = true
+	return nil
+}
+
+func (app *closeContextRecordingApp) Close() error {
+	app.closeCalled = true
+	return nil
+}
+
 type orderingCloser struct {
 	order *[]string
 	name  string
@@ -42,12 +73,20 @@ func (closer *orderingCloser) Close() error {
 	return closer.err
 }
 
+type orderingCloseContextApp struct {
+	order *[]string
+	name  string
+}
+
+func (app *orderingCloseContextApp) Run(_ *libCommons.Launcher) error { return nil }
+
+func (app *orderingCloseContextApp) CloseContext(context.Context) error {
+	*app.order = append(*app.order, app.name)
+	return nil
+}
+
 func TestServiceRun(t *testing.T) {
-	t.Parallel()
-
 	t.Run("with nil service does not panic", func(t *testing.T) {
-		t.Parallel()
-
 		var svc *Service
 
 		assert.NotPanics(t, func() {
@@ -56,8 +95,6 @@ func TestServiceRun(t *testing.T) {
 	})
 
 	t.Run("with nil service returns nil error", func(t *testing.T) {
-		t.Parallel()
-
 		var svc *Service
 
 		err := svc.Run()
@@ -67,11 +104,7 @@ func TestServiceRun(t *testing.T) {
 }
 
 func TestServiceStruct(t *testing.T) {
-	t.Parallel()
-
 	t.Run("can be instantiated with all fields", func(t *testing.T) {
-		t.Parallel()
-
 		cfg := &Config{
 			App: AppConfig{EnvName: "test"},
 			Server: ServerConfig{
@@ -93,11 +126,7 @@ func TestServiceStruct(t *testing.T) {
 }
 
 func TestServiceShutdown(t *testing.T) {
-	t.Parallel()
-
 	t.Run("with nil service returns nil", func(t *testing.T) {
-		t.Parallel()
-
 		var svc *Service
 
 		err := svc.Shutdown(context.Background())
@@ -106,8 +135,6 @@ func TestServiceShutdown(t *testing.T) {
 	})
 
 	t.Run("with valid server shuts down successfully", func(t *testing.T) {
-		t.Parallel()
-
 		fiberApp := fiber.New()
 		svc := &Service{
 			Server: &Server{
@@ -124,8 +151,6 @@ func TestServiceShutdown(t *testing.T) {
 	})
 
 	t.Run("with nil server but valid service returns nil", func(t *testing.T) {
-		t.Parallel()
-
 		svc := &Service{
 			Server: nil,
 			Logger: &libLog.NopLogger{},
@@ -138,11 +163,7 @@ func TestServiceShutdown(t *testing.T) {
 }
 
 func TestServiceShutdownWithWorkers(t *testing.T) {
-	t.Parallel()
-
 	t.Run("with dbMetricsCollector stops collector", func(t *testing.T) {
-		t.Parallel()
-
 		fiberApp := fiber.New()
 		collector := &DBMetricsCollector{
 			stopCh: make(chan struct{}),
@@ -165,11 +186,7 @@ func TestServiceShutdownWithWorkers(t *testing.T) {
 }
 
 func TestServiceRun_NilService(t *testing.T) {
-	t.Parallel()
-
 	t.Run("returns nil error for nil service", func(t *testing.T) {
-		t.Parallel()
-
 		var svc *Service
 
 		err := svc.Run()
@@ -179,8 +196,6 @@ func TestServiceRun_NilService(t *testing.T) {
 }
 
 func TestServiceShutdown_ClosesConnectionsAndStopsDispatcher(t *testing.T) {
-	t.Parallel()
-
 	fiberApp := fiber.New()
 	sqlDB, _, err := sqlmock.New()
 	require.NoError(t, err)
@@ -272,8 +287,6 @@ func (m *mockCloser) Close() error {
 }
 
 func TestServiceResolveActiveConfig_UsesConfigManagerSnapshot(t *testing.T) {
-	t.Parallel()
-
 	initialCfg := defaultConfig()
 	initialCfg.App.LogLevel = "info"
 	managedCfg := defaultConfig()
@@ -295,8 +308,6 @@ func TestServiceResolveActiveConfig_UsesConfigManagerSnapshot(t *testing.T) {
 }
 
 func TestServiceRun_PropagatesWorkerManagerStartFailure(t *testing.T) {
-	t.Parallel()
-
 	worker := &recordingLifecycleWorker{startErr: errors.New("worker start failed")}
 	wm := NewWorkerManager(&libLog.NopLogger{}, nil)
 	wm.Register("critical", func(_ *Config) (WorkerLifecycle, error) {
@@ -314,9 +325,32 @@ func TestServiceRun_PropagatesWorkerManagerStartFailure(t *testing.T) {
 	assert.Contains(t, err.Error(), "critical worker \"critical\" failed to start")
 }
 
-func TestServiceStopBackgroundWorkers_StopsConfigManagerAndWorkers(t *testing.T) {
-	t.Parallel()
+func TestServiceLauncherOptions_StreamingLifecycleApp(t *testing.T) {
+	svc := &Service{
+		Logger: &libLog.NopLogger{},
+		Server: &Server{},
+	}
 
+	assert.Len(t, svc.launcherOptions(), 2, "base launcher options should include logger and Fiber server only")
+
+	svc.outboxRunner = &mockApp{}
+	assert.Len(t, svc.launcherOptions(), 3, "outbox app should be added when configured")
+
+	svc.streamingApp = &mockApp{}
+	assert.Len(t, svc.launcherOptions(), 4, "streaming app should be added when configured")
+}
+
+func TestServiceLauncherOptions_DisabledStreamingDoesNotAddLifecycleApp(t *testing.T) {
+	svc := &Service{
+		Logger:       &libLog.NopLogger{},
+		Server:       &Server{},
+		outboxRunner: &mockApp{},
+	}
+
+	assert.Len(t, svc.launcherOptions(), 3, "disabled/noop streaming must not add a nil lifecycle app")
+}
+
+func TestServiceStopBackgroundWorkers_StopsConfigManagerAndWorkers(t *testing.T) {
 	cm, err := NewConfigManager(defaultConfig(), &libLog.NopLogger{})
 	require.NoError(t, err)
 	t.Cleanup(cm.Stop)
@@ -341,9 +375,33 @@ func TestServiceStopBackgroundWorkers_StopsConfigManagerAndWorkers(t *testing.T)
 	assert.True(t, worker.stopObserved, "worker should have been stopped during shutdown")
 }
 
-func TestServerRun_StartsAndShutdowns(t *testing.T) {
-	t.Parallel()
+func TestServiceStopBackgroundWorkers_PrefersOutboxShutdown(t *testing.T) {
+	outbox := &shutdownRecordingApp{}
+	svc := &Service{
+		Logger:       &libLog.NopLogger{},
+		outboxRunner: outbox,
+	}
 
+	svc.stopBackgroundWorkers(context.Background(), &libLog.NopLogger{})
+
+	assert.True(t, outbox.shutdownCalled)
+	assert.False(t, outbox.stopCalled)
+}
+
+func TestServiceStopBackgroundWorkers_DoesNotCloseStreamingBeforeHTTPDrain(t *testing.T) {
+	streamingApp := &closeContextRecordingApp{}
+	svc := &Service{
+		Logger:       &libLog.NopLogger{},
+		streamingApp: streamingApp,
+	}
+
+	svc.stopBackgroundWorkers(context.Background(), &libLog.NopLogger{})
+
+	assert.False(t, streamingApp.closeContextCalled)
+	assert.False(t, streamingApp.closeCalled)
+}
+
+func TestServerRun_StartsAndShutdowns(t *testing.T) {
 	address, err := reserveLoopbackAddress()
 	require.NoError(t, err)
 
@@ -425,8 +483,6 @@ func waitForServerToListen(t *testing.T, address string, timeout time.Duration) 
 }
 
 func TestServerRun_WithTLSMissingFiles(t *testing.T) {
-	t.Parallel()
-
 	app := fiber.New()
 	cfg := &Config{
 		Server: ServerConfig{
@@ -448,8 +504,6 @@ func TestServerRun_WithTLSMissingFiles(t *testing.T) {
 }
 
 func TestStopBackgroundWorkers_AllNilWorkers(t *testing.T) {
-	t.Parallel()
-
 	svc := &Service{
 		Logger:             &libLog.NopLogger{},
 		dbMetricsCollector: nil,
@@ -462,8 +516,6 @@ func TestStopBackgroundWorkers_AllNilWorkers(t *testing.T) {
 }
 
 func TestStopBackgroundWorkers_WithOutboxRunnerNonStoppable(t *testing.T) {
-	t.Parallel()
-
 	// An outbox runner that does NOT implement the Stop() method
 	nonStoppable := &mockNonStoppable{}
 
@@ -484,8 +536,6 @@ func (m *mockNonStoppable) Run(_ *libCommons.Launcher) error {
 }
 
 func TestStopBackgroundWorkers_WithStoppableOutboxRunner(t *testing.T) {
-	t.Parallel()
-
 	stoppable := &mockStopper{}
 
 	svc := &Service{
@@ -499,8 +549,6 @@ func TestStopBackgroundWorkers_WithStoppableOutboxRunner(t *testing.T) {
 }
 
 func TestStopBackgroundWorkers_WithDBMetricsCollector(t *testing.T) {
-	t.Parallel()
-
 	collector := &DBMetricsCollector{
 		stopCh: make(chan struct{}),
 	}
@@ -516,8 +564,6 @@ func TestStopBackgroundWorkers_WithDBMetricsCollector(t *testing.T) {
 }
 
 func TestShutdownServerAndConnections_NilServer(t *testing.T) {
-	t.Parallel()
-
 	svc := &Service{
 		Server: nil,
 		Logger: &libLog.NopLogger{},
@@ -528,8 +574,6 @@ func TestShutdownServerAndConnections_NilServer(t *testing.T) {
 }
 
 func TestShutdownServerAndConnections_WithConnectionManager(t *testing.T) {
-	t.Parallel()
-
 	fiberApp := fiber.New()
 	closer := &mockCloser{}
 
@@ -550,8 +594,6 @@ func TestShutdownServerAndConnections_WithConnectionManager(t *testing.T) {
 }
 
 func TestShutdownServerAndConnections_RunsRegisteredCleanupFuncs(t *testing.T) {
-	t.Parallel()
-
 	fiberApp := fiber.New()
 	cleanupCalls := 0
 
@@ -581,8 +623,6 @@ func TestShutdownServerAndConnections_RunsRegisteredCleanupFuncs(t *testing.T) {
 }
 
 func TestServiceShutdown_WithNilLogger(t *testing.T) {
-	t.Parallel()
-
 	fiberApp := fiber.New()
 	svc := &Service{
 		Server: &Server{
@@ -599,8 +639,6 @@ func TestServiceShutdown_WithNilLogger(t *testing.T) {
 }
 
 func TestServiceShutdown_MarksReadinessDraining(t *testing.T) {
-	t.Parallel()
-
 	state := &readinessState{}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -616,8 +654,6 @@ func TestServiceShutdown_MarksReadinessDraining(t *testing.T) {
 }
 
 func TestShutdownServerAndConnections_ConnectionManagerError(t *testing.T) {
-	t.Parallel()
-
 	fiberApp := fiber.New()
 	failCloser := &mockFailCloser{}
 
@@ -648,8 +684,6 @@ func (m *mockFailCloser) Close() error {
 }
 
 func TestShutdownServerAndConnections_ServerShutdownError(t *testing.T) {
-	t.Parallel()
-
 	// Create a server with nil app to trigger shutdown error
 	svc := &Service{
 		Server: &Server{
@@ -666,12 +700,28 @@ func TestShutdownServerAndConnections_ServerShutdownError(t *testing.T) {
 	assert.Contains(t, err.Error(), "server not initialized")
 }
 
+func TestShutdownServerAndConnections_ClosesStreamingBeforeConnections(t *testing.T) {
+	order := make([]string, 0, 2)
+	fiberApp := fiber.New()
+	svc := &Service{
+		Server: &Server{
+			app:    fiberApp,
+			cfg:    &Config{},
+			logger: &libLog.NopLogger{},
+		},
+		Logger:            &libLog.NopLogger{},
+		streamingApp:      &orderingCloseContextApp{order: &order, name: "streaming"},
+		connectionManager: &orderingCloser{order: &order, name: "connections"},
+	}
+
+	err := svc.shutdownServerAndConnections(context.Background(), &libLog.NopLogger{}, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"streaming", "connections"}, order)
+}
+
 func TestService_GetOutboxRunner(t *testing.T) {
-	t.Parallel()
-
 	t.Run("returns nil when service is nil", func(t *testing.T) {
-		t.Parallel()
-
 		var svc *Service
 
 		got := svc.GetOutboxRunner()
@@ -680,8 +730,6 @@ func TestService_GetOutboxRunner(t *testing.T) {
 	})
 
 	t.Run("returns nil when outbox runner not set", func(t *testing.T) {
-		t.Parallel()
-
 		svc := &Service{
 			Logger: &libLog.NopLogger{},
 		}
@@ -692,8 +740,6 @@ func TestService_GetOutboxRunner(t *testing.T) {
 	})
 
 	t.Run("returns outbox runner when set", func(t *testing.T) {
-		t.Parallel()
-
 		runner := &mockApp{}
 		svc := &Service{
 			Logger:       &libLog.NopLogger{},

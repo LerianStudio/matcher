@@ -29,7 +29,7 @@ import (
 
 func (uc *UseCase) commitMatchResults(
 	ctx context.Context,
-	_ trace.Span,
+	span trace.Span,
 	createdRun *matchingEntities.MatchRun,
 	groups []*matchingEntities.MatchGroup,
 	items []*matchingEntities.MatchItem,
@@ -39,7 +39,10 @@ func (uc *UseCase) commitMatchResults(
 	stats map[string]int,
 	feeInput *feeVerificationInput,
 ) (*matchingEntities.MatchRun, error) {
-	var updatedRun *matchingEntities.MatchRun
+	var (
+		updatedRun   *matchingEntities.MatchRun
+		feeVariances []*matchingEntities.FeeVariance
+	)
 
 	if refreshFailed != nil && refreshFailed.Load() {
 		return nil, finalizeRunFailure(ctx, uc, createdRun, ErrLockRefreshFailed)
@@ -50,9 +53,12 @@ func (uc *UseCase) commitMatchResults(
 			return ErrLockRefreshFailed
 		}
 
-		if err := uc.persistMatchArtifacts(ctx, tx, createdRun, groups, items, autoMatchedIDs, pendingReviewIDs, unmatchedIDs, unmatchedReasons, feeInput); err != nil {
+		persistedFeeVariances, err := uc.persistMatchArtifacts(ctx, tx, createdRun, groups, items, autoMatchedIDs, pendingReviewIDs, unmatchedIDs, unmatchedReasons, feeInput)
+		if err != nil {
 			return err
 		}
+
+		feeVariances = persistedFeeVariances
 
 		if err := createdRun.Complete(ctx, stats); err != nil {
 			return fmt.Errorf("failed to complete match run: %w", err)
@@ -74,6 +80,10 @@ func (uc *UseCase) commitMatchResults(
 	if updatedRun == nil {
 		return nil, ErrMatchRunPersistedNil
 	}
+
+	uc.emitMatchRunCompleted(ctx, span, updatedRun)
+	uc.emitMatchArtifacts(ctx, span, updatedRun, groups, autoMatchedIDs, pendingReviewIDs, feeInput)
+	uc.emitFeeVariancesCreated(ctx, span, feeVariances)
 
 	return updatedRun, nil
 }
@@ -104,6 +114,8 @@ func (uc *UseCase) completeDryRun(
 		return nil, nil, ErrMatchRunPersistedNil
 	}
 
+	uc.emitMatchRunCompleted(ctx, span, updatedRun)
+
 	return updatedRun, groups, nil
 }
 
@@ -118,26 +130,26 @@ func (uc *UseCase) persistMatchArtifacts(
 	unmatchedIDs []uuid.UUID,
 	unmatchedReasons map[uuid.UUID]string,
 	feeInput *feeVerificationInput,
-) error {
+) ([]*matchingEntities.FeeVariance, error) {
 	if len(groups) > 0 {
 		if _, err := uc.matchGroupRepo.CreateBatchWithTx(ctx, tx, groups); err != nil {
-			return err
+			return nil, err
 		}
 
 		if _, err := uc.matchItemRepo.CreateBatchWithTx(ctx, tx, items); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	if len(autoMatchedIDs) > 0 {
 		if err := uc.txRepo.MarkMatchedWithTx(ctx, tx, createdRun.ContextID, autoMatchedIDs); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	if len(pendingReviewIDs) > 0 {
 		if err := uc.txRepo.MarkPendingReviewWithTx(ctx, tx, createdRun.ContextID, pendingReviewIDs); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -162,14 +174,19 @@ func (uc *UseCase) persistMatchArtifacts(
 		unmatchedReasons,
 	)
 	if err := uc.exceptionCreator.CreateExceptionsWithTx(ctx, tx, createdRun.ContextID, createdRun.ID, exceptionInputs, nil); err != nil {
-		return err
+		return nil, err
 	}
 
-	if err := uc.performFeeVerification(ctx, tx, createdRun, groups, feeInput); err != nil {
-		return err
+	feeVariances, err := uc.performFeeVerification(ctx, tx, createdRun, groups, feeInput)
+	if err != nil {
+		return nil, err
 	}
 
-	return uc.enqueueMatchConfirmedEvents(ctx, tx, groups)
+	if err := uc.enqueueMatchConfirmedEvents(ctx, tx, groups); err != nil {
+		return nil, err
+	}
+
+	return feeVariances, nil
 }
 
 func (uc *UseCase) performFeeVerification(
@@ -178,13 +195,13 @@ func (uc *UseCase) performFeeVerification(
 	createdRun *matchingEntities.MatchRun,
 	groups []*matchingEntities.MatchGroup,
 	feeInput *feeVerificationInput,
-) error {
+) ([]*matchingEntities.FeeVariance, error) {
 	if feeInput == nil || feeInput.ctxInfo == nil {
-		return nil
+		return nil, nil
 	}
 
 	if len(feeInput.leftRules) == 0 && len(feeInput.rightRules) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled
@@ -200,7 +217,7 @@ func (uc *UseCase) performFeeVerification(
 	findings, feeErr := collectFeeFindings(ctx, span, groups, createdRun, feeInput, tolerance)
 	if feeErr != nil {
 		libOpentelemetry.HandleSpanError(span, "fee finding collection failed", feeErr)
-		return fmt.Errorf("collect fee findings: %w", feeErr)
+		return nil, fmt.Errorf("collect fee findings: %w", feeErr)
 	}
 
 	span.SetAttributes(
@@ -213,7 +230,11 @@ func (uc *UseCase) performFeeVerification(
 		attribute.Int("fee.exceptions_created", len(findings.exceptionInputs)),
 	)
 
-	return uc.persistFeeFindings(ctx, tx, span, createdRun, findings)
+	if err := uc.persistFeeFindings(ctx, tx, span, createdRun, findings); err != nil {
+		return nil, err
+	}
+
+	return findings.variances, nil
 }
 
 func collectFeeFindings(

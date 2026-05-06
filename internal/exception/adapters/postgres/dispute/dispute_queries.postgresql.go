@@ -55,6 +55,66 @@ func (repo *Repository) FindByID(ctx context.Context, id uuid.UUID) (*dispute.Di
 	return result, nil
 }
 
+// FindByIDWithTx retrieves a dispute by its ID within an existing transaction.
+// Use this inside write transactions to avoid reading stale data from a replica.
+func (repo *Repository) FindByIDWithTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	id uuid.UUID,
+) (*dispute.Dispute, error) {
+	if repo == nil || repo.provider == nil {
+		return nil, ErrRepoNotInitialized
+	}
+
+	if tx == nil {
+		return nil, ErrTransactionRequired
+	}
+
+	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+	ctx, span := tracer.Start(ctx, "postgres.dispute.find_by_id_with_tx")
+
+	defer span.End()
+
+	result, err := pgcommon.WithTenantTxOrExistingProvider(
+		ctx,
+		repo.provider,
+		tx,
+		func(innerTx *sql.Tx) (*dispute.Dispute, error) {
+			return repo.findByIDForUpdateExec(ctx, innerTx, id)
+		},
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrDisputeNotFound
+		}
+
+		wrappedErr := fmt.Errorf("find dispute by id with tx: %w", err)
+		libOpentelemetry.HandleSpanError(span, "failed to find dispute", wrappedErr)
+
+		libLog.SafeError(logger, ctx, "failed to find dispute", wrappedErr, runtime.IsProductionMode())
+
+		return nil, wrappedErr
+	}
+
+	return result, nil
+}
+
+func (repo *Repository) findByIDForUpdateExec(
+	ctx context.Context,
+	qe pgcommon.QueryExecutor,
+	id uuid.UUID,
+) (*dispute.Dispute, error) {
+	row := qe.QueryRowContext(ctx, `
+		SELECT id, exception_id, category, state, description,
+		       opened_by, resolution, reopen_reason, evidence, created_at, updated_at
+		FROM disputes
+		WHERE id = $1
+		FOR UPDATE
+	`, id.String())
+
+	return scanDispute(row)
+}
+
 // FindByExceptionID retrieves a dispute by its exception ID.
 func (repo *Repository) FindByExceptionID(
 	ctx context.Context,

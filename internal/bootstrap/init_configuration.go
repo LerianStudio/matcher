@@ -7,6 +7,8 @@ package bootstrap
 import (
 	"fmt"
 
+	streaming "github.com/LerianStudio/lib-streaming"
+
 	configAudit "github.com/LerianStudio/matcher/internal/configuration/adapters/audit"
 	configHTTP "github.com/LerianStudio/matcher/internal/configuration/adapters/http"
 	configScheduleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/schedule"
@@ -21,7 +23,13 @@ func initConfigurationModule(
 	outboxRepository sharedPorts.OutboxRepository,
 	repos *sharedRepositories,
 	production bool,
+	streamEmitters ...streaming.Emitter,
 ) error {
+	var streamEmitter streaming.Emitter
+	if len(streamEmitters) > 0 {
+		streamEmitter = streamEmitters[0]
+	}
+
 	// Create outbox-based audit publisher for configuration module
 	// This decouples configuration from governance via the outbox pattern
 	auditPublisher, err := configAudit.NewOutboxPublisher(outboxRepository)
@@ -41,6 +49,7 @@ func initConfigurationModule(
 		configCommand.WithFeeRuleRepository(repos.configFeeRule),
 		configCommand.WithScheduleRepository(scheduleRepository),
 		configCommand.WithInfrastructureProvider(provider),
+		configCommand.WithStreamingEmitter(streamEmitter),
 	)
 	if err != nil {
 		return fmt.Errorf("create config command use case: %w", err)

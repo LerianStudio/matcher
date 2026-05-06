@@ -14,11 +14,13 @@ import (
 
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	"github.com/LerianStudio/lib-commons/v5/commons/net/http/ratelimit"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 	"github.com/LerianStudio/lib-commons/v5/commons/outbox"
 	outboxpg "github.com/LerianStudio/lib-commons/v5/commons/outbox/postgres"
 	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
 	libRabbitmq "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
 	tmrabbitmq "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/rabbitmq"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	configContextRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/context"
@@ -40,10 +42,12 @@ import (
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	streamingBootstrap "github.com/LerianStudio/matcher/internal/streaming/bootstrap"
 )
 
 type modulesResult struct {
 	outboxDispatcher       *outbox.Dispatcher
+	streamingBundle        streamingBootstrap.ProducerBundle
 	exportWorker           *reportingWorker.ExportWorker
 	cleanupWorker          *reportingWorker.CleanupWorker
 	archivalWorker         *governanceWorker.ArchivalWorker
@@ -132,6 +136,7 @@ func initModulesAndMessaging(
 	cfg *Config,
 	configGetter func() *Config,
 	settingsResolver *runtimeSettingsResolver,
+	healthDeps *HealthDependencies,
 	provider sharedPorts.InfrastructureProvider,
 	postgresConnection *libPostgres.Client,
 	rabbitMQConnection *libRabbitmq.RabbitMQConnection,
@@ -139,6 +144,7 @@ func initModulesAndMessaging(
 	logger libLog.Logger,
 	connector InfraConnector,
 	publishers EventPublisherFactory,
+	telemetry *libOpentelemetry.Telemetry,
 ) (*modulesResult, error) {
 	// Build canonical outbox repository using the lib-commons outbox/postgres package.
 	// SchemaResolver provides both TenantResolver and TenantDiscoverer for schema-per-tenant.
@@ -168,9 +174,32 @@ func initModulesAndMessaging(
 		return nil, fmt.Errorf("init shared repositories: %w", err)
 	}
 
+	streamingBundle, err := initStreamingEmitter(ctx, logger, sharedOutboxRepository, telemetry)
+	if err != nil {
+		return nil, err
+	}
+
+	// NoopEmitter is the canonical disabled-streaming pattern from
+	// lib-streaming. When STREAMING_ENABLED=false, NewEmitterWithCatalog
+	// returns a non-nil *streaming.NoopEmitter — NOT a Go-nil interface.
+	// Downstream emit sites use emission.IsNilEmitter() (typed-nil
+	// reflection check) and isNoopEmitter() (concrete type assertion) to
+	// detect both flavours of "streaming is off": direct nil from
+	// uninitialised wiring, and the typed-noop from production with
+	// streaming disabled. Tests that pass (*FakeEmitter)(nil) are covered
+	// by IsNilEmitter; production disabled-streaming is covered by the
+	// concrete type assertion.
+	streamEmitter := streamingBundle.Emitter
+
+	if healthDeps != nil {
+		healthDeps.Streaming = streamEmitter
+		healthDeps.StreamingEnabled = streamingBundle.Config.Enabled && len(streamingBundle.Config.Brokers) > 0
+		healthDeps.StreamingOptional = !healthDeps.StreamingEnabled
+	}
+
 	isProduction := IsProductionEnvironment(cfg.App.EnvName)
 
-	if err := initConfigurationModule(routes, provider, sharedOutboxRepository, sharedRepos, isProduction); err != nil {
+	if err := initConfigurationModule(routes, provider, sharedOutboxRepository, sharedRepos, isProduction, streamEmitter); err != nil {
 		return nil, err
 	}
 
@@ -183,12 +212,12 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
-	matchingUseCase, err := initMatchingModule(routes, provider, sharedOutboxRepository, sharedRepos, isProduction)
+	matchingUseCase, err := initMatchingModule(routes, provider, sharedOutboxRepository, sharedRepos, isProduction, streamEmitter)
 	if err != nil {
 		return nil, err
 	}
 
-	ingestionUseCase, err := initIngestionModule(cfg, configGetter, settingsResolver, routes, provider, sharedOutboxRepository, ingestionPublisher, matchingUseCase, sharedRepos, isProduction)
+	ingestionUseCase, err := initIngestionModule(cfg, configGetter, settingsResolver, routes, provider, sharedOutboxRepository, ingestionPublisher, matchingUseCase, sharedRepos, isProduction, streamEmitter)
 	if err != nil {
 		return nil, err
 	}
@@ -223,18 +252,19 @@ func initModulesAndMessaging(
 		logger,
 		sharedRepos,
 		isProduction,
+		streamEmitter,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := initGovernanceModule(routes, sharedRepos, provider, isProduction); err != nil {
+	if err := initGovernanceModule(routes, sharedRepos, provider, isProduction, streamEmitter); err != nil {
 		return nil, err
 	}
 
 	dispatchLimiter := NewDispatchRateLimit(rateLimiterGetter, cfg, configGetter, settingsResolver)
 
-	if err := initExceptionModule(ctx, cfg, configGetter, settingsResolver, routes, provider, sharedOutboxRepository, dispatchLimiter, sharedRepos, isProduction); err != nil {
+	if err := initExceptionModule(ctx, cfg, configGetter, settingsResolver, routes, provider, sharedOutboxRepository, dispatchLimiter, sharedRepos, isProduction, streamEmitter); err != nil {
 		return nil, err
 	}
 
@@ -245,7 +275,33 @@ func initModulesAndMessaging(
 	extractionRepo := discoveryExtractionRepo.NewRepository(provider)
 
 	// Discovery module (optional — non-critical, gated by FETCHER_ENABLED).
-	discWorker, err := initOptionalDiscoveryWorker(routes, cfg, configGetter, provider, sharedOutboxRepository, extractionRepo, logger, initDiscoveryModule)
+	discoveryInit := func(
+		routes *Routes,
+		cfg *Config,
+		configGetter func() *Config,
+		healthDeps *HealthDependencies,
+		provider sharedPorts.InfrastructureProvider,
+		tenantLister sharedPorts.TenantLister,
+		extractionRepo *discoveryExtractionRepo.Repository,
+		logger libLog.Logger,
+		m2mProvider ...sharedPorts.M2MProvider,
+	) (*discoveryWorker.DiscoveryWorker, error) {
+		return initDiscoveryModuleWithEmitter(
+			ctx,
+			routes,
+			cfg,
+			configGetter,
+			healthDeps,
+			provider,
+			tenantLister,
+			extractionRepo,
+			logger,
+			streamEmitter,
+			m2mProvider...,
+		)
+	}
+
+	discWorker, err := initOptionalDiscoveryWorker(routes, cfg, configGetter, healthDeps, provider, sharedOutboxRepository, extractionRepo, logger, discoveryInit)
 	if err != nil {
 		return nil, fmt.Errorf("init optional discovery worker: %w", err)
 	}
@@ -296,6 +352,7 @@ func initModulesAndMessaging(
 		sharedOutboxRepository,
 		bridgeBundle,
 		logger,
+		streamEmitter,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("init fetcher bridge worker: %w", err)
@@ -325,7 +382,10 @@ func initModulesAndMessaging(
 	// audit events from being silently dropped or retried indefinitely.
 	auditLogRepository := sharedRepos.governanceAuditLog
 
-	auditConsumer, err := governanceAudit.NewConsumer(auditLogRepository)
+	auditConsumer, err := governanceAudit.NewConsumer(auditLogRepository, governanceAudit.ConsumerConfig{
+		Infrastructure:   provider,
+		StreamingEmitter: streamEmitter,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("create governance audit consumer: %w", err)
 	}
@@ -343,6 +403,10 @@ func initModulesAndMessaging(
 
 	if err := registerOutboxHandlers(handlers, ingestionPublisher, matchingPublisher, auditConsumer); err != nil {
 		return nil, fmt.Errorf("register outbox handlers: %w", err)
+	}
+
+	if err := streamingBootstrap.RegisterOutboxRelay(streamingBundle, handlers); err != nil {
+		return nil, fmt.Errorf("register streaming outbox relay: %w", err)
 	}
 
 	// Build retry classifier: marks validation / payload errors as non-retryable.
@@ -377,6 +441,7 @@ func initModulesAndMessaging(
 
 	return &modulesResult{
 		outboxDispatcher:       dispatcher,
+		streamingBundle:        streamingBundle,
 		exportWorker:           exportWorker,
 		cleanupWorker:          cleanupWorker,
 		schedulerWorker:        schedulerWorker,
@@ -384,4 +449,36 @@ func initModulesAndMessaging(
 		bridgeWorker:           bridgeWorker,
 		custodyRetentionWorker: custodyRetentionWorker,
 	}, nil
+}
+
+func initStreamingEmitter(
+	ctx context.Context,
+	logger libLog.Logger,
+	outboxRepository outbox.OutboxRepository,
+	telemetry *libOpentelemetry.Telemetry,
+) (streamingBootstrap.ProducerBundle, error) {
+	cfg, warnings, err := streaming.LoadConfig()
+	if err != nil {
+		return streamingBootstrap.ProducerBundle{}, fmt.Errorf("load streaming config: %w", err)
+	}
+
+	for _, warning := range warnings {
+		logger.Log(ctx, libLog.LevelWarn, warning)
+	}
+
+	producerOptions := streamingBootstrap.ProducerOptions{
+		Logger:           logger,
+		Tracer:           otel.Tracer(constants.ApplicationName),
+		OutboxRepository: outboxRepository,
+	}
+	if telemetry != nil {
+		producerOptions.MetricsFactory = telemetry.MetricsFactory
+	}
+
+	bundle, err := streamingBootstrap.NewEmitter(ctx, cfg, producerOptions)
+	if err != nil {
+		return streamingBootstrap.ProducerBundle{}, fmt.Errorf("create streaming emitter: %w", err)
+	}
+
+	return bundle, nil
 }

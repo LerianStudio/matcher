@@ -746,9 +746,9 @@ type CursorPagination struct {
 
 // MatchedItemResponse represents a matched transaction in a report.
 type MatchedItemResponse struct {
-	TransactionID string `json:"transaction_id"`
-	MatchGroupID  string `json:"match_group_id"`
-	SourceID      string `json:"source_id"`
+	TransactionID string `json:"transactionId"`
+	MatchGroupID  string `json:"matchGroupId"`
+	SourceID      string `json:"sourceId"`
 	Amount        string `json:"amount"`
 	Currency      string `json:"currency"`
 	Date          string `json:"date"`
@@ -756,35 +756,35 @@ type MatchedItemResponse struct {
 
 // UnmatchedItemResponse represents an unmatched transaction in a report.
 type UnmatchedItemResponse struct {
-	TransactionID string  `json:"transaction_id"`
-	SourceID      string  `json:"source_id"`
+	TransactionID string  `json:"transactionId"`
+	SourceID      string  `json:"sourceId"`
 	Amount        string  `json:"amount"`
 	Currency      string  `json:"currency"`
 	Status        string  `json:"status"`
-	ExceptionID   *string `json:"exception_id,omitempty"`
-	DueAt         *string `json:"due_at,omitempty"`
+	ExceptionID   *string `json:"exceptionId,omitempty"`
+	DueAt         *string `json:"dueAt,omitempty"`
 	Date          string  `json:"date"`
 }
 
 // SummaryReportResponse represents an aggregated summary report.
 type SummaryReportResponse struct {
-	MatchedCount    int    `json:"matched_count"`
-	UnmatchedCount  int    `json:"unmatched_count"`
-	TotalAmount     string `json:"total_amount"`
-	MatchedAmount   string `json:"matched_amount"`
-	UnmatchedAmount string `json:"unmatched_amount"`
+	MatchedCount    int    `json:"matchedCount"`
+	UnmatchedCount  int    `json:"unmatchedCount"`
+	TotalAmount     string `json:"totalAmount"`
+	MatchedAmount   string `json:"matchedAmount"`
+	UnmatchedAmount string `json:"unmatchedAmount"`
 }
 
 // VarianceReportRowResponse represents a row in the variance report.
 type VarianceReportRowResponse struct {
-	SourceID        string  `json:"source_id"`
+	SourceID        string  `json:"sourceId"`
 	Currency        string  `json:"currency"`
-	FeeScheduleID   string  `json:"fee_schedule_id"`
-	FeeScheduleName string  `json:"fee_schedule_name"`
-	TotalExpected   string  `json:"total_expected"`
-	TotalActual     string  `json:"total_actual"`
-	NetVariance     string  `json:"net_variance"`
-	VariancePct     *string `json:"variance_pct,omitempty"`
+	FeeScheduleID   string  `json:"feeScheduleId"`
+	FeeScheduleName string  `json:"feeScheduleName"`
+	TotalExpected   string  `json:"totalExpected"`
+	TotalActual     string  `json:"totalActual"`
+	NetVariance     string  `json:"netVariance"`
+	VariancePct     *string `json:"variancePct,omitempty"`
 }
 
 // PaginatedMatchedReport wraps a paginated list of matched items.

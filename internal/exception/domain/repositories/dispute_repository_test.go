@@ -42,7 +42,7 @@ func TestDisputeRepository_MethodCount(t *testing.T) {
 
 	repoType := reflect.TypeOf((*repositories.DisputeRepository)(nil)).Elem()
 
-	const expectedMethodCount = 7
+	const expectedMethodCount = 8
 
 	actualCount := repoType.NumMethod()
 
@@ -50,7 +50,7 @@ func TestDisputeRepository_MethodCount(t *testing.T) {
 		t,
 		expectedMethodCount,
 		actualCount,
-		"DisputeRepository should have exactly %d methods (Create, CreateWithTx, FindByID, FindByExceptionID, List, Update, UpdateWithTx) - found %d",
+		"DisputeRepository should have exactly %d methods (Create, CreateWithTx, FindByID, FindByIDWithTx, FindByExceptionID, List, Update, UpdateWithTx) - found %d",
 		expectedMethodCount,
 		actualCount,
 	)
@@ -156,6 +156,7 @@ func TestDisputeRepository_AllowedMethods(t *testing.T) {
 		"Create":            true,
 		"CreateWithTx":      true,
 		"FindByID":          true,
+		"FindByIDWithTx":    true,
 		"FindByExceptionID": true,
 		"List":              true,
 		"Update":            true,

@@ -418,6 +418,7 @@ func initServerModules(state *bootstrapState) error {
 		state.cfg,
 		moduleConfigGetter,
 		state.settingsResolver,
+		state.healthDeps,
 		state.infraProvider,
 		state.postgresConnection,
 		state.rabbitMQConnection,
@@ -425,6 +426,7 @@ func initServerModules(state *bootstrapState) error {
 		state.logger,
 		state.opts.InfraConnector,
 		state.opts.EventPublishers,
+		state.telemetry,
 	)
 	if err != nil {
 		return err
@@ -440,6 +442,7 @@ func initServerModules(state *bootstrapState) error {
 		&state.cleanups,
 		IsProductionEnvironment(state.cfg.App.EnvName),
 		state.opts.InfraConnector,
+		modules.streamingBundle.Emitter,
 	)
 	if archivalErr != nil {
 		if state.cfg.Archival.Enabled {
@@ -533,6 +536,16 @@ func initServerAssembly(state *bootstrapState) error {
 		return fmt.Errorf("mount systemplane api: %w", mountErr)
 	}
 
+	if state.spClient != nil && state.modules != nil {
+		if mountErr := MountStreamingManifestAPI(
+			state.app,
+			state.modules.streamingBundle,
+			state.logger,
+		); mountErr != nil {
+			return fmt.Errorf("mount streaming manifest api: %w", mountErr)
+		}
+	}
+
 	done()
 
 	return nil
@@ -561,7 +574,7 @@ func assembleService(state *bootstrapState) *Service {
 	// Keeping startup non-abortive preserves log collection for post-mortem.
 	selfProbeDone := state.timer.track("self_probe")
 
-	runStartupSelfProbe(state.ctx, state.healthDeps, state.logger, RunSelfProbe)
+	runStartupSelfProbe(state.ctx, state.cfg, state.healthDeps, state.logger, RunSelfProbe)
 
 	selfProbeDone()
 
@@ -577,6 +590,7 @@ func assembleService(state *bootstrapState) *Service {
 		Routes:                state.routes,
 		ConfigManager:         state.configManager,
 		outboxRunner:          state.modules.outboxDispatcher,
+		streamingApp:          state.modules.streamingBundle.App,
 		dbMetricsCollector:    state.dbMetricsCollector,
 		redisMetricsCollector: state.redisMetricsCollector,
 		workerManager:         state.workerManager,

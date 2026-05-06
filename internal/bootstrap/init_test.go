@@ -10,6 +10,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1559,24 +1561,29 @@ func TestInitOptionalDiscoveryWorker(t *testing.T) {
 		cfg.Fetcher.Enabled = true
 
 		expectedWorker := &discoveryWorker.DiscoveryWorker{}
+		healthDeps := &HealthDependencies{}
 		called := false
+		var receivedHealthDeps *HealthDependencies
 
 		worker, err := initOptionalDiscoveryWorker(
 			nil,
 			cfg,
 			nil,
+			healthDeps,
 			nil,
 			nil,
 			nil,
 			logger,
-			func(_ *Routes, _ *Config, _ func() *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ *discoveryExtractionRepo.Repository, _ libLog.Logger, _ ...sharedPorts.M2MProvider) (*discoveryWorker.DiscoveryWorker, error) {
+			func(_ *Routes, _ *Config, _ func() *Config, received *HealthDependencies, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ *discoveryExtractionRepo.Repository, _ libLog.Logger, _ ...sharedPorts.M2MProvider) (*discoveryWorker.DiscoveryWorker, error) {
 				called = true
+				receivedHealthDeps = received
 				return expectedWorker, nil
 			},
 		)
 
 		require.NoError(t, err)
 		assert.True(t, called)
+		assert.Same(t, healthDeps, receivedHealthDeps)
 		assert.Same(t, expectedWorker, worker)
 		assert.False(t, logger.hasEntry(libLog.LevelWarn, "discovery module failed to initialize"))
 	})
@@ -1597,8 +1604,9 @@ func TestInitOptionalDiscoveryWorker(t *testing.T) {
 			nil,
 			nil,
 			nil,
+			nil,
 			logger,
-			func(_ *Routes, _ *Config, _ func() *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ *discoveryExtractionRepo.Repository, _ libLog.Logger, _ ...sharedPorts.M2MProvider) (*discoveryWorker.DiscoveryWorker, error) {
+			func(_ *Routes, _ *Config, _ func() *Config, _ *HealthDependencies, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ *discoveryExtractionRepo.Repository, _ libLog.Logger, _ ...sharedPorts.M2MProvider) (*discoveryWorker.DiscoveryWorker, error) {
 				called = true
 				return expectedWorker, nil
 			},
@@ -1623,8 +1631,9 @@ func TestInitOptionalDiscoveryWorker(t *testing.T) {
 			nil,
 			nil,
 			nil,
+			nil,
 			logger,
-			func(_ *Routes, _ *Config, _ func() *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ *discoveryExtractionRepo.Repository, _ libLog.Logger, _ ...sharedPorts.M2MProvider) (*discoveryWorker.DiscoveryWorker, error) {
+			func(_ *Routes, _ *Config, _ func() *Config, _ *HealthDependencies, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ *discoveryExtractionRepo.Repository, _ libLog.Logger, _ ...sharedPorts.M2MProvider) (*discoveryWorker.DiscoveryWorker, error) {
 				return nil, errors.New("fetcher bootstrap failed")
 			},
 		)
@@ -1633,6 +1642,58 @@ func TestInitOptionalDiscoveryWorker(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "initialize discovery module")
 	})
+}
+
+func TestInitDiscoveryModule_WiresFetcherHealthDependency(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"healthy"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	cfg := defaultConfig()
+	cfg.Fetcher.Enabled = true
+	cfg.Fetcher.URL = server.URL
+	cfg.Fetcher.AllowPrivateIPs = true
+
+	app := fiber.New()
+	routes := &Routes{
+		API: app.Group("/v1"),
+		Protected: func(_ string, _ ...string) fiber.Router {
+			return app.Group("/v1")
+		},
+	}
+
+	provider := &testutil.MockInfrastructureProvider{}
+	healthDeps := &HealthDependencies{}
+	extractionRepo := discoveryExtractionRepo.NewRepository(provider)
+
+	worker, err := initDiscoveryModule(
+		routes,
+		cfg,
+		func() *Config { return cfg },
+		healthDeps,
+		provider,
+		staticTenantLister{},
+		extractionRepo,
+		&libLog.NopLogger{},
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, worker)
+	require.NotNil(t, healthDeps.Fetcher)
+
+	check, ok := resolveFetcherCheck(cfg, healthDeps)
+	require.True(t, ok)
+	require.NotNil(t, check)
+	require.NoError(t, check(context.Background()))
+}
+
+type staticTenantLister struct{}
+
+func (staticTenantLister) ListTenants(context.Context) ([]string, error) {
+	return []string{auth.DefaultTenantSlug}, nil
 }
 
 func TestCreateObjectStorage_NotEnabled(t *testing.T) {

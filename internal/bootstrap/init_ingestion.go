@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"time"
 
+	streaming "github.com/LerianStudio/lib-streaming"
+
 	ingestionHTTP "github.com/LerianStudio/matcher/internal/ingestion/adapters/http"
 	ingestionParser "github.com/LerianStudio/matcher/internal/ingestion/adapters/parsers"
 	ingestionRedis "github.com/LerianStudio/matcher/internal/ingestion/adapters/redis"
@@ -35,7 +37,13 @@ func initIngestionModule(
 	matchingUseCase *matchingCommand.UseCase,
 	repos *sharedRepositories,
 	production bool,
+	streamEmitters ...streaming.Emitter,
 ) (*ingestionCommand.UseCase, error) {
+	var streamEmitter streaming.Emitter
+	if len(streamEmitters) > 0 {
+		streamEmitter = streamEmitters[0]
+	}
+
 	ingestionRegistry := ingestionParser.NewParserRegistry()
 	ingestionRegistry.Register(ingestionParser.NewCSVParser())
 	ingestionRegistry.Register(ingestionParser.NewJSONParser())
@@ -93,7 +101,7 @@ func initIngestionModule(
 		SourceRepo:      sourceAdapter,
 		MatchTrigger:    matchTrigger,
 		ContextProvider: autoMatchContextProvider,
-	})
+	}, ingestionCommand.WithStreamingEmitter(streamEmitter))
 	if err != nil {
 		return nil, fmt.Errorf("create ingestion command use case: %w", err)
 	}

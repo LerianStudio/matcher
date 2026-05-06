@@ -25,6 +25,7 @@ import (
 	authMiddleware "github.com/LerianStudio/lib-auth/v3/auth/middleware"
 
 	"github.com/LerianStudio/lib-commons/v5/commons/jwt"
+	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
 )
 
 const testTokenSecret = "secret"
@@ -91,8 +92,6 @@ func newTestFiberApp(extractor *TenantExtractor) *fiber.App {
 }
 
 func TestGetTenantID(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		name     string
 		ctx      context.Context
@@ -116,8 +115,6 @@ func TestGetTenantID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			result := GetTenantID(tt.ctx)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -125,8 +122,6 @@ func TestGetTenantID(t *testing.T) {
 }
 
 func TestGetTenantSlug(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		name     string
 		ctx      context.Context
@@ -146,8 +141,6 @@ func TestGetTenantSlug(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			result := GetTenantSlug(tt.ctx)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -237,8 +230,6 @@ func TestSetDefaultTenantSlug_Validation(t *testing.T) {
 }
 
 func TestGetUserID(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		name     string
 		ctx      context.Context
@@ -258,8 +249,6 @@ func TestGetUserID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			result := GetUserID(tt.ctx)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -267,11 +256,7 @@ func TestGetUserID(t *testing.T) {
 }
 
 func TestLookupTenantID(t *testing.T) {
-	t.Parallel()
-
 	t.Run("returns explicit tenant from context", func(t *testing.T) {
-		t.Parallel()
-
 		ctx := context.WithValue(context.Background(), TenantIDKey, "tenant-a")
 		tenantID, ok := LookupTenantID(ctx)
 		require.True(t, ok)
@@ -279,24 +264,18 @@ func TestLookupTenantID(t *testing.T) {
 	})
 
 	t.Run("does not fall back to default tenant", func(t *testing.T) {
-		t.Parallel()
-
 		tenantID, ok := LookupTenantID(context.Background())
 		require.False(t, ok)
 		assert.Empty(t, tenantID)
 	})
 
 	t.Run("nil context returns no tenant", func(t *testing.T) {
-		t.Parallel()
-
 		tenantID, ok := LookupTenantID(nil)
 		require.False(t, ok)
 		assert.Empty(t, tenantID)
 	})
 
 	t.Run("whitespace tenant is rejected", func(t *testing.T) {
-		t.Parallel()
-
 		ctx := context.WithValue(context.Background(), TenantIDKey, "   ")
 		tenantID, ok := LookupTenantID(ctx)
 		require.False(t, ok)
@@ -305,22 +284,17 @@ func TestLookupTenantID(t *testing.T) {
 }
 
 func TestExtractClaimsFromToken(t *testing.T) {
-	t.Parallel()
-
 	validTenantID := "550e8400-e29b-41d4-a716-446655440000"
 
 	t.Run("valid tokens", func(t *testing.T) {
-		t.Parallel()
 		testExtractClaimsValidTokens(t, validTenantID)
 	})
 
 	t.Run("invalid tokens", func(t *testing.T) {
-		t.Parallel()
 		testExtractClaimsInvalidTokens(t, validTenantID)
 	})
 
 	t.Run("missing or optional claims", func(t *testing.T) {
-		t.Parallel()
 		testExtractClaimsMissingClaims(t, validTenantID)
 	})
 }
@@ -334,8 +308,6 @@ func testExtractClaimsValidTokens(t *testing.T, validTenantID string) {
 	})
 
 	t.Run("extracts tenantId, tenantSlug, and sub from valid token", func(t *testing.T) {
-		t.Parallel()
-
 		tenantID, tenantSlug, userID, err := extractClaimsFromToken(
 			validToken,
 			DefaultTenantID,
@@ -356,8 +328,6 @@ func testExtractClaimsValidTokens(t *testing.T, validTenantID string) {
 	})
 
 	t.Run("extracts snake_case tenant claims", func(t *testing.T) {
-		t.Parallel()
-
 		tenantID, tenantSlug, userID, err := extractClaimsFromToken(
 			snakeCaseToken,
 			DefaultTenantID,
@@ -376,8 +346,6 @@ func testExtractClaimsInvalidTokens(t *testing.T, validTenantID string) {
 	t.Helper()
 
 	t.Run("returns error for invalid token", func(t *testing.T) {
-		t.Parallel()
-
 		_, _, _, err := extractClaimsFromToken(
 			"invalid-token",
 			DefaultTenantID,
@@ -389,7 +357,6 @@ func testExtractClaimsInvalidTokens(t *testing.T, validTenantID string) {
 	})
 
 	t.Run("returns error for invalid signature", func(t *testing.T) {
-		t.Parallel()
 		badToken := buildTestTokenInvalidSignature(t, jwt.MapClaims{"tenantId": validTenantID})
 		_, _, _, err := extractClaimsFromToken(
 			badToken,
@@ -402,7 +369,6 @@ func testExtractClaimsInvalidTokens(t *testing.T, validTenantID string) {
 	})
 
 	t.Run("returns error when exp missing", func(t *testing.T) {
-		t.Parallel()
 		missingExpToken := buildTestTokenWithoutExp(t, jwt.MapClaims{
 			"tenantId": validTenantID,
 			"sub":      "user-exp-missing",
@@ -418,7 +384,6 @@ func testExtractClaimsInvalidTokens(t *testing.T, validTenantID string) {
 	})
 
 	t.Run("returns error for non-string tenantId", func(t *testing.T) {
-		t.Parallel()
 		invalidTypeToken := buildTestToken(t, jwt.MapClaims{"tenantId": 123})
 		_, _, _, err := extractClaimsFromToken(
 			invalidTypeToken,
@@ -431,7 +396,6 @@ func testExtractClaimsInvalidTokens(t *testing.T, validTenantID string) {
 	})
 
 	t.Run("returns error for invalid tenant uuid", func(t *testing.T) {
-		t.Parallel()
 		invalidUUIDToken := buildTestToken(t, jwt.MapClaims{"tenant_id": "not-a-uuid"})
 		_, _, _, err := extractClaimsFromToken(
 			invalidUUIDToken,
@@ -448,7 +412,6 @@ func testExtractClaimsMissingClaims(t *testing.T, validTenantID string) {
 	t.Helper()
 
 	t.Run("defaults tenantSlug when missing", func(t *testing.T) {
-		t.Parallel()
 		tenantOnlyToken := buildTestToken(t, jwt.MapClaims{
 			"tenantId": validTenantID,
 			"sub":      "test-user",
@@ -467,7 +430,6 @@ func testExtractClaimsMissingClaims(t *testing.T, validTenantID string) {
 	})
 
 	t.Run("ignores tenantSlug without tenantId", func(t *testing.T) {
-		t.Parallel()
 		slugOnlyToken := buildTestToken(t, jwt.MapClaims{
 			"tenantSlug": "slug-only",
 			"sub":        "user-2",
@@ -488,7 +450,6 @@ func testExtractClaimsMissingClaims(t *testing.T, validTenantID string) {
 	t.Run(
 		"defaults tenant when no tenant claim and requireTenantClaims is false",
 		func(t *testing.T) {
-			t.Parallel()
 			noTenantToken := buildTestToken(t, jwt.MapClaims{
 				"sub": "user-1",
 			})
@@ -507,7 +468,6 @@ func testExtractClaimsMissingClaims(t *testing.T, validTenantID string) {
 	)
 
 	t.Run("returns error when no tenant claim and requireTenantClaims is true", func(t *testing.T) {
-		t.Parallel()
 		noTenantToken := buildTestToken(t, jwt.MapClaims{
 			"sub": "user-1",
 		})
@@ -524,11 +484,7 @@ func testExtractClaimsMissingClaims(t *testing.T, validTenantID string) {
 }
 
 func TestTenantExtractor(t *testing.T) {
-	t.Parallel()
-
 	t.Run("creates extractor with auth disabled", func(t *testing.T) {
-		t.Parallel()
-
 		extractor, err := NewTenantExtractor(
 			false,
 			false,
@@ -543,8 +499,6 @@ func TestTenantExtractor(t *testing.T) {
 	})
 
 	t.Run("creates extractor with auth enabled", func(t *testing.T) {
-		t.Parallel()
-
 		extractor, err := NewTenantExtractor(
 			true,
 			true,
@@ -560,17 +514,35 @@ func TestTenantExtractor(t *testing.T) {
 }
 
 func TestTenantExtractor_ExtractTenant(t *testing.T) {
-	t.Parallel()
-
 	t.Run("auth disabled uses default tenant", func(t *testing.T) {
-		t.Parallel()
 		testExtractTenantAuthDisabled(t)
 	})
 
 	t.Run("auth enabled scenarios", func(t *testing.T) {
-		t.Parallel()
 		testExtractTenantAuthEnabled(t)
 	})
+}
+
+func TestExtractTenant_AuthDisabledPopulatesTenantManagerContext(t *testing.T) {
+	extractor, err := NewTenantExtractor(false, false, DefaultTenantID, DefaultTenantSlug, testTokenSecret, "test")
+	require.NoError(t, err)
+	app := fiber.New()
+	app.Get("/tenant", extractor.ExtractTenant(), func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"authTenantID": GetTenantID(c.UserContext()),
+			"tmTenantID":   tmcore.GetTenantIDContext(c.UserContext()),
+		})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/tenant", http.NoBody)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	var body map[string]string
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, DefaultTenantID, body["authTenantID"])
+	assert.Equal(t, DefaultTenantID, body["tmTenantID"])
 }
 
 func testExtractTenantAuthDisabled(t *testing.T) {
@@ -606,8 +578,6 @@ func testExtractTenantAuthEnabled(t *testing.T) {
 	t.Helper()
 
 	t.Run("missing token returns unauthorized", func(t *testing.T) {
-		t.Parallel()
-
 		extractor, err := NewTenantExtractor(
 			true,
 			true,
@@ -634,8 +604,6 @@ func testExtractTenantAuthEnabled(t *testing.T) {
 	})
 
 	t.Run("invalid token returns unauthorized", func(t *testing.T) {
-		t.Parallel()
-
 		extractor, err := NewTenantExtractor(
 			true,
 			true,
@@ -663,8 +631,6 @@ func testExtractTenantAuthEnabled(t *testing.T) {
 	})
 
 	t.Run("valid token sets tenant", func(t *testing.T) {
-		t.Parallel()
-
 		extractor, err := NewTenantExtractor(
 			true,
 			true,
@@ -700,35 +666,23 @@ func testExtractTenantAuthEnabled(t *testing.T) {
 }
 
 func TestQuoteIdentifier(t *testing.T) {
-	t.Parallel()
-
 	t.Run("escapes embedded quotes and wraps in quotes", func(t *testing.T) {
-		t.Parallel()
-
 		assert.Equal(t, "\"tenant\"\"schema\"", QuoteIdentifier("tenant\"schema"))
 	})
 
 	t.Run("empty string", func(t *testing.T) {
-		t.Parallel()
-
 		assert.Equal(t, "\"\"", QuoteIdentifier(""))
 	})
 
 	t.Run("no special characters", func(t *testing.T) {
-		t.Parallel()
-
 		assert.Equal(t, "\"abc123DEF\"", QuoteIdentifier("abc123DEF"))
 	})
 
 	t.Run("multiple consecutive double quotes", func(t *testing.T) {
-		t.Parallel()
-
 		assert.Equal(t, `"a""""b""""""c"`, QuoteIdentifier(`a""b"""c`))
 	})
 
 	t.Run("very long identifier", func(t *testing.T) {
-		t.Parallel()
-
 		in := strings.Repeat("a", 10_000)
 		out := QuoteIdentifier(in)
 		assert.Equal(t, `"`+in+`"`, out)
@@ -736,8 +690,6 @@ func TestQuoteIdentifier(t *testing.T) {
 }
 
 func TestApplyTenantSchema(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.WithValue(
 		context.Background(),
 		TenantIDKey,
@@ -766,8 +718,6 @@ func TestApplyTenantSchema(t *testing.T) {
 	})
 
 	t.Run("rejects connection executor", func(t *testing.T) {
-		t.Parallel()
-
 		db, mock, err := sqlmock.New()
 		require.NoError(t, err)
 
@@ -783,8 +733,6 @@ func TestApplyTenantSchema(t *testing.T) {
 	})
 
 	t.Run("rejects unsupported executor", func(t *testing.T) {
-		t.Parallel()
-
 		db, mock, err := sqlmock.New()
 		require.NoError(t, err)
 
@@ -796,8 +744,6 @@ func TestApplyTenantSchema(t *testing.T) {
 	})
 
 	t.Run("rejects typed nil transaction", func(t *testing.T) {
-		t.Parallel()
-
 		var tx *sql.Tx
 
 		err := ApplyTenantSchema(ctx, tx)
@@ -805,8 +751,6 @@ func TestApplyTenantSchema(t *testing.T) {
 	})
 
 	t.Run("rejects typed nil connection", func(t *testing.T) {
-		t.Parallel()
-
 		var conn *sql.Conn
 
 		err := ApplyTenantSchema(ctx, conn)
@@ -815,8 +759,6 @@ func TestApplyTenantSchema(t *testing.T) {
 }
 
 func TestProtectedGroup_NilExtractor(t *testing.T) {
-	t.Parallel()
-
 	app := fiber.New()
 	client := authMiddleware.NewAuthClient("", false, nil)
 
@@ -826,8 +768,6 @@ func TestProtectedGroup_NilExtractor(t *testing.T) {
 }
 
 func TestAuthorize_NilClient(t *testing.T) {
-	t.Parallel()
-
 	app := fiber.New()
 	app.Get("/secure", Authorize(nil, "resource", "read"), func(c *fiber.Ctx) error {
 		return c.SendStatus(http.StatusOK)
@@ -842,8 +782,6 @@ func TestAuthorize_NilClient(t *testing.T) {
 }
 
 func TestExtractClaimsFromToken_RejectsNoneAlgorithm(t *testing.T) {
-	t.Parallel()
-
 	header := "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0"
 	payload := "eyJ0ZW5hbnRJZCI6IjU1MGU4NDAwLWUyOWItNDFkNC1hNzE2LTQ0NjY1NTQ0MDAwMCIsInN1YiI6ImF0dGFja2VyIiwiZXhwIjo5OTk5OTk5OTk5fQ"
 	noneToken := header + "." + payload + "."
@@ -858,8 +796,6 @@ func TestExtractClaimsFromToken_RejectsNoneAlgorithm(t *testing.T) {
 }
 
 func TestExtractClaimsFromToken_FutureNBF_RejectsToken(t *testing.T) {
-	t.Parallel()
-
 	validTenantID := "550e8400-e29b-41d4-a716-446655440000"
 	futureNBFToken := buildTestToken(t, jwt.MapClaims{
 		"tenantId": validTenantID,
@@ -879,8 +815,6 @@ func TestExtractClaimsFromToken_FutureNBF_RejectsToken(t *testing.T) {
 }
 
 func TestExtractClaimsFromToken_PastNBF_AcceptsToken(t *testing.T) {
-	t.Parallel()
-
 	validTenantID := "550e8400-e29b-41d4-a716-446655440000"
 	pastNBFToken := buildTestToken(t, jwt.MapClaims{
 		"tenantId": validTenantID,
@@ -901,8 +835,6 @@ func TestExtractClaimsFromToken_PastNBF_AcceptsToken(t *testing.T) {
 }
 
 func TestExtractTenant_ExpiredToken_ReturnsUnauthorized(t *testing.T) {
-	t.Parallel()
-
 	extractor, err := NewTenantExtractor(
 		true, true, DefaultTenantID, DefaultTenantSlug, testTokenSecret, "development",
 	)
@@ -926,8 +858,6 @@ func TestExtractTenant_ExpiredToken_ReturnsUnauthorized(t *testing.T) {
 }
 
 func TestExtractTenant_XUserIDHeader_RejectedInProduction(t *testing.T) {
-	t.Parallel()
-
 	extractor, err := NewTenantExtractor(
 		false, false, DefaultTenantID, DefaultTenantSlug, testTokenSecret, "production",
 	)
@@ -953,8 +883,6 @@ func TestExtractTenant_XUserIDHeader_RejectedInProduction(t *testing.T) {
 }
 
 func TestExtractTenant_XUserIDHeader_AcceptedInDevelopment(t *testing.T) {
-	t.Parallel()
-
 	extractor, err := NewTenantExtractor(
 		false, false, DefaultTenantID, DefaultTenantSlug, testTokenSecret, "development",
 	)
@@ -985,12 +913,8 @@ func TestExtractTenant_XUserIDHeader_AcceptedInDevelopment(t *testing.T) {
 // anything else all reject — those environments may hold real data, so a
 // plain-header impersonation vector is not acceptable.
 func TestExtractTenant_XUserIDHeader_RejectedOutsideDevAndTest(t *testing.T) {
-	t.Parallel()
-
 	for _, envName := range []string{"staging", "uat", "qa", "preview", "sandbox", "Production", ""} {
 		t.Run(envName, func(t *testing.T) {
-			t.Parallel()
-
 			extractor, err := NewTenantExtractor(
 				false, false, DefaultTenantID, DefaultTenantSlug, testTokenSecret, envName,
 			)
@@ -1023,12 +947,8 @@ func TestExtractTenant_XUserIDHeader_RejectedOutsideDevAndTest(t *testing.T) {
 // in-memory test harnesses and local e2e runs working while still rejecting
 // every other deployed environment.
 func TestExtractTenant_XUserIDHeader_AcceptedInTest(t *testing.T) {
-	t.Parallel()
-
 	for _, envName := range []string{"test", "TEST", "Test", "Development", "DEVELOPMENT"} {
 		t.Run(envName, func(t *testing.T) {
-			t.Parallel()
-
 			extractor, err := NewTenantExtractor(
 				false, false, DefaultTenantID, DefaultTenantSlug, testTokenSecret, envName,
 			)

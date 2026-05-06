@@ -1,0 +1,1019 @@
+{
+  "service_name": "matcher",
+  "skill": "ring:streaming-event-mapping",
+  "schema_version": "1.0.0",
+  "events": [
+    {
+      "definition_key": "actor.pseudonymized",
+      "resource_type": "actor",
+      "event_type": "pseudonymized",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A tenant actor mapping had its personally identifying fields durably replaced with redacted values for compliance.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "in-transaction-before-commit"
+        }
+      ],
+      "posture": "CRITICAL",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "skip",
+        "outbox": "always",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "archive.completed",
+      "resource_type": "archive",
+      "event_type": "completed",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A tenant audit-log partition archive was verified, detached, dropped, and durably marked complete in governance metadata.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "in-transaction-before-commit"
+        }
+      ],
+      "posture": "CRITICAL",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "skip",
+        "outbox": "always",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "archive.uploaded",
+      "resource_type": "archive",
+      "event_type": "uploaded",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A tenant audit-log archive object was uploaded and its archive metadata was durably advanced to the uploaded state.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "in-transaction-before-commit"
+        }
+      ],
+      "posture": "CRITICAL",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "skip",
+        "outbox": "always",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "archive_metadata.created",
+      "resource_type": "archive_metadata",
+      "event_type": "created",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A tenant audit-log partition archive metadata record was durably created to start the compliance archival lifecycle.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "in-transaction-before-commit"
+        }
+      ],
+      "posture": "CRITICAL",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "skip",
+        "outbox": "always",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "audit_log.created",
+      "resource_type": "audit_log",
+      "event_type": "created",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "An immutable tenant-scoped audit log entry was appended to the compliance hash chain after durable persistence.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "in-transaction-before-commit"
+        }
+      ],
+      "posture": "CRITICAL",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "skip",
+        "outbox": "always",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "dispute.lost",
+      "resource_type": "dispute",
+      "event_type": "lost",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A dispute was durably closed as lost with resolution details persisted for the exception.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "in-transaction-before-commit"
+        }
+      ],
+      "posture": "CRITICAL",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "skip",
+        "outbox": "always",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "dispute.opened",
+      "resource_type": "dispute",
+      "event_type": "opened",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A dispute was durably opened for an exception and entered the active dispute lifecycle.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "in-transaction-before-commit"
+        }
+      ],
+      "posture": "CRITICAL",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "skip",
+        "outbox": "always",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "dispute.won",
+      "resource_type": "dispute",
+      "event_type": "won",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A dispute was durably closed as won with resolution details persisted for the exception.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "in-transaction-before-commit"
+        }
+      ],
+      "posture": "CRITICAL",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "skip",
+        "outbox": "always",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "evidence.submitted",
+      "resource_type": "evidence",
+      "event_type": "submitted",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "Evidence was durably submitted to a dispute and appended to the persisted dispute record.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "in-transaction-before-commit"
+        }
+      ],
+      "posture": "CRITICAL",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "skip",
+        "outbox": "always",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "exception.adjust_entry_resolved",
+      "resource_type": "exception",
+      "event_type": "adjust_entry_resolved",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "An exception was durably resolved by applying an adjustment entry to the related financial record.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "in-transaction-before-commit"
+        }
+      ],
+      "posture": "CRITICAL",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "skip",
+        "outbox": "always",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "exception.assigned",
+      "resource_type": "exception",
+      "event_type": "assigned",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "An exception was durably assigned to an owner for follow-up and SLA accountability.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "exception.callback_processed",
+      "resource_type": "exception",
+      "event_type": "callback_processed",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "An external callback was processed and its exception state or metadata changes were durably persisted.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "in-transaction-before-commit"
+        }
+      ],
+      "posture": "CRITICAL",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "skip",
+        "outbox": "always",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "exception.dispatched",
+      "resource_type": "exception",
+      "event_type": "dispatched",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "An exception was sent to an external target and the dispatch audit trail was durably persisted.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "in-transaction-before-commit"
+        }
+      ],
+      "posture": "CRITICAL",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "skip",
+        "outbox": "always",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "exception.force_match_resolved",
+      "resource_type": "exception",
+      "event_type": "force_match_resolved",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "An exception was durably resolved by force matching the related transaction with an override reason.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "in-transaction-before-commit"
+        }
+      ],
+      "posture": "CRITICAL",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "skip",
+        "outbox": "always",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "exception.resolved",
+      "resource_type": "exception",
+      "event_type": "resolved",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "An exception was durably resolved through the bulk resolution path with resolution details persisted.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "in-transaction-before-commit"
+        }
+      ],
+      "posture": "CRITICAL",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "skip",
+        "outbox": "always",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "exception_comment.added",
+      "resource_type": "exception_comment",
+      "event_type": "added",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A comment was durably added to an exception for case collaboration and review history.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "exception_comment.deleted",
+      "resource_type": "exception_comment",
+      "event_type": "deleted",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A previously persisted exception comment was durably deleted by its author within tenant scope.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "export_job.created",
+      "resource_type": "export_job",
+      "event_type": "created",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "An asynchronous reporting export job was durably created and queued for tenant-scoped processing.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "export_job.expired",
+      "resource_type": "export_job",
+      "event_type": "expired",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A reporting export job was marked expired, preventing new downloads of the tenant-scoped export artifact.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "export_job.failed",
+      "resource_type": "export_job",
+      "event_type": "failed",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A reporting export job reached a terminal failed state after retry handling and the failure status was persisted.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "export_job.succeeded",
+      "resource_type": "export_job",
+      "event_type": "succeeded",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A reporting export job completed successfully and its generated file metadata was durably persisted.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "extraction_request.bridge_failed",
+      "resource_type": "extraction_request",
+      "event_type": "bridge_failed",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A tenant-scoped completed extraction was durably marked with a terminal bridge failure after retry classification.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "extraction_request.bridged",
+      "resource_type": "extraction_request",
+      "event_type": "bridged",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A tenant-scoped completed extraction was durably linked to the ingestion job created from its verified artifact.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "extraction_request.cancelled",
+      "resource_type": "extraction_request",
+      "event_type": "cancelled",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A tenant-scoped extraction request reached the durable CANCELLED terminal state after remote cancellation or disappearance.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "extraction_request.completed",
+      "resource_type": "extraction_request",
+      "event_type": "completed",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A tenant-scoped extraction request reached the durable COMPLETE terminal state with a Fetcher result artifact path.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "extraction_request.created",
+      "resource_type": "extraction_request",
+      "event_type": "created",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A tenant-scoped extraction request was created in Matcher before submission to the external Fetcher service.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "extraction_request.failed",
+      "resource_type": "extraction_request",
+      "event_type": "failed",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A tenant-scoped extraction request reached the durable FAILED terminal state after Fetcher reported failure.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "extraction_request.submitted",
+      "resource_type": "extraction_request",
+      "event_type": "submitted",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A tenant-scoped extraction request was durably marked submitted after Fetcher accepted the extraction job.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "fee_variance.created",
+      "resource_type": "fee_variance",
+      "event_type": "created",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A fee variance was durably recorded after matching detected a difference between expected and actual fees.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "fetcher_connection.synced",
+      "resource_type": "fetcher_connection",
+      "event_type": "synced",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A tenant-scoped Fetcher connection and its discovered schema snapshot were synchronized into Matcher persistence.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "fetcher_connection.unreachable",
+      "resource_type": "fetcher_connection",
+      "event_type": "unreachable",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A tenant-scoped Fetcher connection was marked unreachable and its stale discovered schema state was cleared.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "ingestion.completed",
+      "resource_type": "ingestion",
+      "event_type": "completed",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "An ingestion job finished successfully and its imported transaction counts were durably recorded.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "ingestion.failed",
+      "resource_type": "ingestion",
+      "event_type": "failed",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "An ingestion job reached the failed terminal state and its failure metadata was durably recorded.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "match_group.confirmed",
+      "resource_type": "match_group",
+      "event_type": "confirmed",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A match group was durably confirmed, binding its transactions to a reconciliation match within a completed run.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "match_group.unmatched",
+      "resource_type": "match_group",
+      "event_type": "unmatched",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A previously confirmed match group was durably revoked and its transactions were reverted to unmatched status.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "match_rule.created",
+      "resource_type": "match_rule",
+      "event_type": "created",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A match rule was durably created for a reconciliation context, adding tenant-scoped matching behavior.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "match_rule.reordered",
+      "resource_type": "match_rule",
+      "event_type": "reordered",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "Match rule priorities were durably reordered for a reconciliation context, changing evaluation order.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "match_run.completed",
+      "resource_type": "match_run",
+      "event_type": "completed",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A matching run completed successfully and its terminal statistics were durably persisted for a reconciliation context.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "match_run.failed",
+      "resource_type": "match_run",
+      "event_type": "failed",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A matching run reached the failed terminal state and its failure reason was durably persisted for the tenant.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "reconciliation_context.created",
+      "resource_type": "reconciliation_context",
+      "event_type": "created",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A reconciliation context was durably created for a tenant, establishing matching topology and configuration defaults.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "reconciliation_context.deleted",
+      "resource_type": "reconciliation_context",
+      "event_type": "deleted",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A reconciliation context was durably deleted after child-entity safeguards passed for the tenant.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "reconciliation_context.updated",
+      "resource_type": "reconciliation_context",
+      "event_type": "updated",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A reconciliation context was durably updated, changing tenant-scoped matching metadata or lifecycle status.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "reconciliation_source.created",
+      "resource_type": "reconciliation_source",
+      "event_type": "created",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A reconciliation source was durably created within a tenant context, defining an input side for matching.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "transaction.ignored",
+      "resource_type": "transaction",
+      "event_type": "ignored",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A previously unmatched transaction was durably marked as ignored and excluded from automatic matching.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "direct",
+        "outbox": "fallback_on_circuit_open",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "transaction.matched",
+      "resource_type": "transaction",
+      "event_type": "matched",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A transaction was durably marked as matched as part of committing reconciliation match results for a tenant context.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "skip",
+        "outbox": "always",
+        "dlq": "on_routable_failure"
+      }
+    },
+    {
+      "definition_key": "transaction.pending_review",
+      "resource_type": "transaction",
+      "event_type": "pending_review",
+      "schema_version": "1.0.0",
+      "data_content_type": "application/json",
+      "data_schema": "",
+      "is_system_event": false,
+      "description": "A transaction was durably marked as pending review because reconciliation found a non-automatic match candidate.",
+      "instrumentation_sites": [
+        {
+          "emission_timing": "post-commit"
+        }
+      ],
+      "posture": "IMPORTANT",
+      "delivery_policy": {
+        "enabled": true,
+        "direct": "skip",
+        "outbox": "always",
+        "dlq": "on_routable_failure"
+      }
+    }
+  ]
+}

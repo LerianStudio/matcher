@@ -29,7 +29,8 @@ package bootstrap
 //     multi-tenancy; all infra is one cluster with per-tenant schema/vhost/
 //     key-prefix isolation. Global /readyz is sufficient.
 //
-//   - No response caching. K8s must see transient failures immediately.
+//   - Response caching is capped at 250ms to dampen K8s probe amplification.
+//     Draining bypasses the cache so shutdown readiness flips immediately.
 //
 //   - No /ready alias. The previous /ready path was renamed to /readyz to
 //     match the canonical contract. /health/live and /health/ready splits
@@ -50,6 +51,9 @@ import (
 	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
 	libRabbitmq "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
 	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
+	streaming "github.com/LerianStudio/lib-streaming"
+
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // HealthCheckFunc is a function type for performing health checks on dependencies.
@@ -119,12 +123,16 @@ type HealthDependencies struct {
 	Redis           *libRedis.Client
 	RabbitMQ        *libRabbitmq.RabbitMQConnection
 	ObjectStorage   ObjectStorageHealthChecker
+	Fetcher         sharedPorts.FetcherClient
+	Streaming       streaming.Emitter
 
 	PostgresCheck        HealthCheckFunc
 	PostgresReplicaCheck HealthCheckFunc
 	RedisCheck           HealthCheckFunc
 	RabbitMQCheck        HealthCheckFunc
 	ObjectStorageCheck   HealthCheckFunc
+	FetcherCheck         HealthCheckFunc
+	StreamingCheck       HealthCheckFunc
 
 	// Optional dependencies do not impact overall readiness status when unavailable
 	// or failing their readiness checks (the "optional-dep down" carve-out).
@@ -133,6 +141,9 @@ type HealthDependencies struct {
 	RedisOptional           bool
 	RabbitMQOptional        bool
 	ObjectStorageOptional   bool
+	FetcherOptional         bool
+	StreamingOptional       bool
+	StreamingEnabled        bool
 }
 
 // ObjectStorageHealthChecker is an interface for checking object storage health.

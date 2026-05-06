@@ -6,7 +6,6 @@
 
 package bootstrap
 
-
 type flatConfig struct {
 	EnvName                     string
 	LogLevel                    string

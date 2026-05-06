@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	streaming "github.com/LerianStudio/lib-streaming"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -97,7 +99,7 @@ func TestCallbackIdempotency_FirstCall_Processes(t *testing.T) {
 	t.Parallel()
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -108,10 +110,10 @@ func TestCallbackIdempotency_FirstCall_Processes(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: exception}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
+	err = uc.ProcessCallback(testStreamingContext(), ProcessCallbackCommand{
 		IdempotencyKey:  "jira:MATCH-123:callback",
 		ExceptionID:     exception.ID,
 		CallbackType:    "jira",
@@ -140,7 +142,7 @@ func TestProcessCallback_AssignedRequiresAssignee(t *testing.T) {
 	t.Parallel()
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -151,10 +153,10 @@ func TestProcessCallback_AssignedRequiresAssignee(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: exception}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
+	err = uc.ProcessCallback(testStreamingContext(), ProcessCallbackCommand{
 		IdempotencyKey:  "webhook:MATCH-123:callback",
 		ExceptionID:     exception.ID,
 		CallbackType:    "webhook",
@@ -170,7 +172,7 @@ func TestProcessCallback_PayloadFallback_Assigns(t *testing.T) {
 	t.Parallel()
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -181,7 +183,7 @@ func TestProcessCallback_PayloadFallback_Assigns(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: exception}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	dueAt := time.Now().UTC().Add(2 * time.Hour).Format(time.RFC3339)
@@ -193,7 +195,7 @@ func TestProcessCallback_PayloadFallback_Assigns(t *testing.T) {
 		"due_at":            dueAt,
 	}
 
-	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
+	err = uc.ProcessCallback(testStreamingContext(), ProcessCallbackCommand{
 		IdempotencyKey: "jira:MATCH-123:callback",
 		ExceptionID:    exception.ID,
 		CallbackType:   "jira",
@@ -210,7 +212,7 @@ func TestProcessCallback_UpdateErrorMarksFailed(t *testing.T) {
 	t.Parallel()
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -221,10 +223,10 @@ func TestProcessCallback_UpdateErrorMarksFailed(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: exception, updateErr: errTestUpdate}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
+	err = uc.ProcessCallback(testStreamingContext(), ProcessCallbackCommand{
 		IdempotencyKey:  "jira:MATCH-123:callback",
 		ExceptionID:     exception.ID,
 		CallbackType:    "jira",
@@ -240,7 +242,7 @@ func TestCallbackIdempotency_DuplicateCall_Ignored(t *testing.T) {
 	t.Parallel()
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -251,10 +253,10 @@ func TestCallbackIdempotency_DuplicateCall_Ignored(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: exception}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
+	err = uc.ProcessCallback(testStreamingContext(), ProcessCallbackCommand{
 		IdempotencyKey:  "jira:MATCH-123:callback",
 		ExceptionID:     exception.ID,
 		CallbackType:    "jira",
@@ -278,7 +280,7 @@ func TestCallbackIdempotency_InvalidKey_Rejected(t *testing.T) {
 	t.Parallel()
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -289,10 +291,10 @@ func TestCallbackIdempotency_InvalidKey_Rejected(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: exception}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
+	err = uc.ProcessCallback(testStreamingContext(), ProcessCallbackCommand{
 		IdempotencyKey:  "",
 		ExceptionID:     exception.ID,
 		CallbackType:    "jira",
@@ -303,7 +305,7 @@ func TestCallbackIdempotency_InvalidKey_Rejected(t *testing.T) {
 	require.ErrorIs(t, err, shared.ErrEmptyIdempotencyKey)
 	require.Equal(t, shared.ErrEmptyIdempotencyKey.Error(), err.Error())
 
-	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
+	err = uc.ProcessCallback(testStreamingContext(), ProcessCallbackCommand{
 		IdempotencyKey:  "invalid key!",
 		ExceptionID:     exception.ID,
 		CallbackType:    "jira",
@@ -322,10 +324,10 @@ func TestCallbackIdempotency_ExceptionIDRequired(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
+	err = uc.ProcessCallback(testStreamingContext(), ProcessCallbackCommand{
 		IdempotencyKey:  "valid-key",
 		ExceptionID:     uuid.Nil,
 		CallbackType:    "jira",
@@ -340,7 +342,7 @@ func TestCallbackIdempotency_TryAcquireError(t *testing.T) {
 	t.Parallel()
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -351,10 +353,10 @@ func TestCallbackIdempotency_TryAcquireError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: exception}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
+	err = uc.ProcessCallback(testStreamingContext(), ProcessCallbackCommand{
 		IdempotencyKey:  "valid-key",
 		ExceptionID:     exception.ID,
 		CallbackType:    "jira",
@@ -377,10 +379,10 @@ func TestCallbackIdempotency_AlreadyProcessing_ReturnsInProgress(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
+	err = uc.ProcessCallback(testStreamingContext(), ProcessCallbackCommand{
 		IdempotencyKey:  "valid-key",
 		ExceptionID:     uuid.New(),
 		CallbackType:    "jira",
@@ -403,10 +405,10 @@ func TestCallbackIdempotency_PreviousFailure_ReturnsRetryable(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
+	err = uc.ProcessCallback(testStreamingContext(), ProcessCallbackCommand{
 		IdempotencyKey:  "valid-key",
 		ExceptionID:     uuid.New(),
 		CallbackType:    "jira",
@@ -422,7 +424,7 @@ func TestCallbackIdempotency_PreviousFailure_ReacquiresAndProcesses(t *testing.T
 	t.Parallel()
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -439,10 +441,10 @@ func TestCallbackIdempotency_PreviousFailure_ReacquiresAndProcesses(t *testing.T
 	exceptionRepo := &stubExceptionRepo{exception: exception}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
+	err = uc.ProcessCallback(testStreamingContext(), ProcessCallbackCommand{
 		IdempotencyKey:  "jira:MATCH-123:callback",
 		ExceptionID:     exception.ID,
 		CallbackType:    "jira",
@@ -469,10 +471,10 @@ func TestCallbackIdempotency_PreviousFailure_ReacquireError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
+	err = uc.ProcessCallback(testStreamingContext(), ProcessCallbackCommand{
 		IdempotencyKey:  "valid-key",
 		ExceptionID:     uuid.New(),
 		CallbackType:    "jira",
@@ -491,10 +493,10 @@ func TestCallbackIdempotency_GetCachedResultError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
+	err = uc.ProcessCallback(testStreamingContext(), ProcessCallbackCommand{
 		IdempotencyKey:  "valid-key",
 		ExceptionID:     uuid.New(),
 		CallbackType:    "jira",
@@ -512,10 +514,10 @@ func TestCallbackIdempotency_FindExceptionError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{findErr: errTestFind}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
+	err = uc.ProcessCallback(testStreamingContext(), ProcessCallbackCommand{
 		IdempotencyKey:  "valid-key",
 		ExceptionID:     uuid.New(),
 		CallbackType:    "jira",
@@ -531,7 +533,7 @@ func TestCallbackIdempotency_MarkCompleteError(t *testing.T) {
 	t.Parallel()
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -542,12 +544,12 @@ func TestCallbackIdempotency_MarkCompleteError(t *testing.T) {
 	exceptionRepo := &stubExceptionRepo{exception: exception}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	// MarkComplete failure after successful processing should NOT return error
 	// (business operation succeeded, just idempotency completion failed - logged as warning)
-	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
+	err = uc.ProcessCallback(testStreamingContext(), ProcessCallbackCommand{
 		IdempotencyKey:  "valid-key",
 		ExceptionID:     exception.ID,
 		CallbackType:    "jira",
@@ -592,23 +594,23 @@ func TestNewCallbackUseCase_Validations(t *testing.T) {
 	}
 
 	// Missing idempotency repository surfaces on ProcessCallback.
-	uc, err := NewExceptionUseCase(exceptionRepo, actor, audit, infra, WithCallbackRateLimiter(rl))
+	uc, err := NewExceptionUseCase(exceptionRepo, actor, audit, infra, WithCallbackRateLimiter(rl), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
-	require.ErrorIs(t, uc.ProcessCallback(context.Background(), cmd), ErrNilIdempotencyRepository)
+	require.ErrorIs(t, uc.ProcessCallback(testStreamingContext(), cmd), ErrNilIdempotencyRepository)
 
 	// Missing rate limiter surfaces on ProcessCallback.
-	uc, err = NewExceptionUseCase(exceptionRepo, actor, audit, infra, WithIdempotencyRepository(idempotencyRepo))
+	uc, err = NewExceptionUseCase(exceptionRepo, actor, audit, infra, WithIdempotencyRepository(idempotencyRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
-	require.ErrorIs(t, uc.ProcessCallback(context.Background(), cmd), ErrNilCallbackRateLimiter)
+	require.ErrorIs(t, uc.ProcessCallback(testStreamingContext(), cmd), ErrNilCallbackRateLimiter)
 
 	// Required dependencies still fail at construction time.
-	_, err = NewExceptionUseCase(nil, actor, audit, infra, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(rl))
+	_, err = NewExceptionUseCase(nil, actor, audit, infra, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(rl), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.ErrorIs(t, err, ErrNilExceptionRepository)
 
-	_, err = NewExceptionUseCase(exceptionRepo, actor, nil, infra, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(rl))
+	_, err = NewExceptionUseCase(exceptionRepo, actor, nil, infra, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(rl), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.ErrorIs(t, err, ErrNilAuditPublisher)
 
-	_, err = NewExceptionUseCase(exceptionRepo, actor, audit, nil, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(rl))
+	_, err = NewExceptionUseCase(exceptionRepo, actor, audit, nil, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(rl), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.ErrorIs(t, err, ErrNilInfraProvider)
 }
 
@@ -616,7 +618,7 @@ func TestProcessCallback_RateLimitKey_IsTenantScoped(t *testing.T) {
 	t.Parallel()
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -628,10 +630,10 @@ func TestProcessCallback_RateLimitKey_IsTenantScoped(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	rateLimiter := &stubCallbackRateLimiter{allowed: true}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(rateLimiter))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(rateLimiter), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	ctx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-A")
+	ctx := context.WithValue(testStreamingContext(), auth.TenantIDKey, "tenant-A")
 
 	err = uc.ProcessCallback(ctx, ProcessCallbackCommand{
 		IdempotencyKey:  "jira:MATCH-123:callback",
@@ -665,7 +667,7 @@ func TestProcessCallback_AllCallbackTypes(t *testing.T) {
 			t.Parallel()
 
 			exception, err := entities.NewException(
-				context.Background(),
+				testStreamingContext(),
 				uuid.New(),
 				sharedexception.ExceptionSeverityHigh,
 				nil,
@@ -676,10 +678,10 @@ func TestProcessCallback_AllCallbackTypes(t *testing.T) {
 			exceptionRepo := &stubExceptionRepo{exception: exception}
 			audit := &stubAuditPublisher{}
 
-			uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
+			uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 			require.NoError(t, err)
 
-			err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
+			err = uc.ProcessCallback(testStreamingContext(), ProcessCallbackCommand{
 				IdempotencyKey:  tc.callbackType + ":MATCH-123:callback",
 				ExceptionID:     exception.ID,
 				CallbackType:    tc.callbackType,
@@ -744,7 +746,7 @@ func TestProcessCallback_PayloadVariations(t *testing.T) {
 			t.Parallel()
 
 			exception, err := entities.NewException(
-				context.Background(),
+				testStreamingContext(),
 				uuid.New(),
 				sharedexception.ExceptionSeverityHigh,
 				nil,
@@ -755,11 +757,11 @@ func TestProcessCallback_PayloadVariations(t *testing.T) {
 			exceptionRepo := &stubExceptionRepo{exception: exception}
 			audit := &stubAuditPublisher{}
 
-			uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}))
+			uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("system"), audit, &stubInfraProvider{}, WithIdempotencyRepository(idempotencyRepo), WithCallbackRateLimiter(&stubCallbackRateLimiter{allowed: true}), WithStreamingEmitter(streaming.NewNoopEmitter()))
 			require.NoError(t, err)
 
 			idempotencyKey := "webhook:" + uuid.New().String() + ":callback"
-			err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
+			err = uc.ProcessCallback(testStreamingContext(), ProcessCallbackCommand{
 				IdempotencyKey:  idempotencyKey,
 				ExceptionID:     exception.ID,
 				CallbackType:    "webhook",

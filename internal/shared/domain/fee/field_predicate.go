@@ -199,7 +199,7 @@ func stringifyPredicateValue(raw any) string {
 		// (pointer, map, slice, chan, func, interface) to be fully defensive.
 		rv := reflect.ValueOf(value)
 		switch rv.Kind() {
-		case reflect.Ptr, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func, reflect.Interface:
+		case reflect.Pointer, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func, reflect.Interface:
 			if rv.IsNil() {
 				return ""
 			}

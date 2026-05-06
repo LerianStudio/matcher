@@ -32,6 +32,17 @@ CONFIG_DIR := ./config
 BINARY_NAME ?= matcher
 BIN_DIR ?= bin
 GOLANGCI_LINT_VERSION ?= v2.10.1
+# GOPATH_BIN points at the directory `go install` writes to so we can invoke
+# pinned tool versions explicitly, bypassing whatever an OS package manager
+# (brew, apt) might have put earlier on PATH. Critical for keeping local
+# lint runs identical to CI.
+#
+# Resolution order matches `go install`'s own contract:
+#   1. $GOBIN if set (overrides everything)
+#   2. first GOPATH entry + /bin (GOPATH may be a colon-separated list)
+# Hard-coding `$(go env GOPATH)/bin` would silently break `lint`/`lint-fix`
+# for any developer or CI environment that exports GOBIN.
+GOPATH_BIN := $(shell GOBIN="$$(go env GOBIN)"; if [ -n "$$GOBIN" ]; then echo "$$GOBIN"; else echo "$$(go env GOPATH | cut -d: -f1)/bin"; fi)
 GO_CI_PACKAGES := ./cmd/... ./internal/... ./migrations/... ./pkg/... ./tests/...
 
 # Migration configuration
@@ -131,6 +142,7 @@ help:
 	@echo "  make format                      - Format code in all packages"
 	@echo "  make sec                         - Run security checks using gosec"
 	@echo "  make check-tests                 - Verify test coverage for components"
+	@echo "  make check-tests-self            - Run check-tests.sh self-test fixtures"
 	@echo "  make check-migrations            - Verify migration pairs and sequential numbering"
 	@echo "  make check-license               - Verify every Go file has an Elastic License 2.0 header"
 	@echo "  make check-coverage              - Check coverage against thresholds"
@@ -278,7 +290,7 @@ check-tools:
 # Code Quality Commands
 #-------------------------------------------------------
 
-.PHONY: lint lint-fix lint-custom format sec vet vulncheck check-tests check-test-tags check-migrations check-generated-artifacts check-license check-coverage
+.PHONY: lint lint-fix lint-custom format sec vet vulncheck check-tests check-tests-self check-test-tags check-migrations check-generated-artifacts check-license check-coverage
 
 vet:
 	$(call print_title,Running go vet)
@@ -287,18 +299,34 @@ vet:
 
 lint:
 	$(call print_title,Running linters)
-	@if ! command -v golangci-lint >/dev/null 2>&1; then \
-		echo "golangci-lint not found, installing..."; \
-		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION); \
-	fi
-	@golangci-lint run $(GO_CI_PACKAGES)
+	@$(MAKE) --no-print-directory _ensure_pinned_golangci_lint
+	@$(GOPATH_BIN)/golangci-lint run $(GO_CI_PACKAGES)
 	@echo "[ok] Linting completed successfully"
 
 lint-fix:
 	$(call print_title,Running linters with auto-fix on all packages)
-	$(call check_command,golangci-lint,"go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)")
-	@golangci-lint run --fix $(GO_CI_PACKAGES)
+	@$(MAKE) --no-print-directory _ensure_pinned_golangci_lint
+	@$(GOPATH_BIN)/golangci-lint run --fix $(GO_CI_PACKAGES)
 	@echo "[ok] Lint auto-fix completed"
+
+# _ensure_pinned_golangci_lint guarantees we run the EXACT pinned version
+# from $(GOPATH_BIN), not whatever an OS package manager (brew, apt) put
+# on PATH. This prevents silent local/CI version drift where a newer
+# linter passes locally but a stricter rule in the CI-pinned version
+# fires on the runner.
+.PHONY: _ensure_pinned_golangci_lint
+_ensure_pinned_golangci_lint:
+	@WANT="$(GOLANGCI_LINT_VERSION)"; \
+	BIN="$(GOPATH_BIN)/golangci-lint"; \
+	NEED_INSTALL=1; \
+	if [ -x "$$BIN" ]; then \
+		HAVE=$$("$$BIN" version --short 2>/dev/null | head -n1 | sed 's/^v//'); \
+		if [ "$$HAVE" = "$${WANT#v}" ]; then NEED_INSTALL=0; fi; \
+	fi; \
+	if [ "$$NEED_INSTALL" -eq 1 ]; then \
+		echo "Installing pinned golangci-lint $$WANT to $(GOPATH_BIN)..."; \
+		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$$WANT; \
+	fi
 
 lint-custom:
 	$(call print_title,Running custom Matcher linters)
@@ -356,6 +384,10 @@ check-tests:
 	$(call print_title,Checking test coverage for components)
 	@./scripts/check-tests.sh
 	@echo "[ok] Test coverage check completed"
+
+check-tests-self:
+	$(call print_title,Checking check-tests.sh self-test)
+	@bash ./scripts/check-tests_test.sh
 
 check-test-tags:
 	$(call print_title,Checking test build tags)
@@ -499,6 +531,7 @@ ci:
 	@$(MAKE) test-leak
 	@$(MAKE) test-int
 	@$(MAKE) check-tests
+	@$(MAKE) check-tests-self
 	@$(MAKE) check-test-tags
 	@$(MAKE) check-migrations
 	@$(MAKE) check-generated-artifacts

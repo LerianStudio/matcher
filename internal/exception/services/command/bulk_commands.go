@@ -206,9 +206,20 @@ func (uc *ExceptionUseCase) assignSingle(
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 
+	// Arm the rollback BEFORE validating the lease: validateCriticalTxLease
+	// can return early when SQLTx() is nil, and at that point the lease's
+	// release callback (the connection-pool reservation guard) has not run.
+	// A nil-guarded Rollback is safe — TxLease.Rollback handles nil tx by
+	// just invoking release once.
 	defer func() {
-		_ = txLease.Rollback()
+		if txLease != nil {
+			_ = txLease.Rollback()
+		}
 	}()
+
+	if err := validateCriticalTxLease(txLease, "begin bulk assign transaction"); err != nil {
+		return err
+	}
 
 	if _, err := uc.exceptionRepo.UpdateWithTx(ctx, txLease.SQLTx(), exception); err != nil {
 		return fmt.Errorf("update exception: %w", err)
@@ -230,6 +241,18 @@ func (uc *ExceptionUseCase) assignSingle(
 	if err := txLease.Commit(); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)
 	}
+
+	// Intentional asymmetry vs BulkResolve (which uses emitExceptionCritical
+	// inside the transaction at line 387): assignment is a metadata update
+	// with lower business-criticality than resolution. The "Important" tier
+	// emits post-commit on a best-effort basis — if the streaming bus is
+	// unavailable, we accept the rare event-loss in exchange for not
+	// rolling back a successful assignment. Resolution events, by contrast,
+	// must roll back on emit failure to preserve at-least-once delivery
+	// of the audit-critical resolution signal.
+	uc.emitExceptionImportant(ctx, nil, "exception.assigned", exception, map[string]any{
+		"assigned_at": formatExceptionTime(exception.UpdatedAt),
+	})
 
 	return nil
 }
@@ -339,9 +362,18 @@ func (uc *ExceptionUseCase) resolveSingle(
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 
+	// Arm the rollback BEFORE validating the lease (see assignSingle for the
+	// full rationale): validateCriticalTxLease can return before the release
+	// callback runs, leaking the connection-pool reservation otherwise.
 	defer func() {
-		_ = txLease.Rollback()
+		if txLease != nil {
+			_ = txLease.Rollback()
+		}
 	}()
+
+	if err := validateCriticalTxLease(txLease, "begin bulk resolve transaction"); err != nil {
+		return err
+	}
 
 	if _, err := uc.exceptionRepo.UpdateWithTx(ctx, txLease.SQLTx(), exception); err != nil {
 		return fmt.Errorf("update exception: %w", err)
@@ -358,6 +390,12 @@ func (uc *ExceptionUseCase) resolveSingle(
 		},
 	}); err != nil {
 		return fmt.Errorf("publish audit: %w", err)
+	}
+
+	if err := uc.emitExceptionCritical(ctx, nil, txLease.SQLTx(), "exception.resolved", exception, map[string]any{
+		"resolved_at": formatExceptionTime(exception.UpdatedAt),
+	}); err != nil {
+		return fmt.Errorf("emit exception resolved: %w", err)
 	}
 
 	if err := txLease.Commit(); err != nil {

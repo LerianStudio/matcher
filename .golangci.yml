@@ -1260,6 +1260,58 @@ linters:
       - linters:
           - goconst
         path: _test\.go
+      # Streaming catalog and event-payload contract keys are intentionally repeated
+      # near their emit sites so reviewers can compare code with instrumentation-map.json.
+      - linters:
+          - goconst
+        path: internal/streaming/catalog/.*\.go
+      - linters:
+          - goconst
+        path: internal/.*/services/(command|worker)/streaming_events\.go
+      - linters:
+          - goconst
+        path: internal/reporting/services/command/export_job_commands\.go
+      # Legacy goconst debt kept as exact-file exclusions so streaming-remediation
+      # changes do not reintroduce package-wide suppressions.
+      - linters:
+          - goconst
+        path: internal/bootstrap/(config_validation_server|health_check_evaluator|logger_environment|rate_limiter|routes|selfprobe|systemplane_init|systemplane_keys_validators|tls_enforcement)\.go
+      - linters:
+          - goconst
+        path: internal/configuration/adapters/postgres/(match_rule/(match_rule_helpers|match_rule_queries)|source/source_queries)\.go
+      - linters:
+          - goconst
+        path: internal/configuration/domain/entities/match_rule\.go
+      - linters:
+          - goconst
+        path: internal/configuration/services/command/(clone_commands|context_commands|fee_rule_commands|fee_schedule_commands|field_map_commands|match_rule_commands|source_commands)\.go
+      - linters:
+          - goconst
+        path: internal/discovery/services/command/bridge_extraction_commands\.go
+      - linters:
+          - goconst
+        path: internal/exception/adapters/http/(handlers|handlers_resolution)\.go
+      - linters:
+          - goconst
+        path: internal/exception/adapters/postgres/(dispute/dispute_list\.postgresql|exception/(exception|exception_list\.postgresql))\.go
+      - linters:
+          - goconst
+        path: internal/exception/services/command/(adjust_entry_commands|bulk_commands|callback_apply|callback_dedup|dispatch_commands|dispute_commands|force_match_commands)\.go
+      - linters:
+          - goconst
+        path: internal/governance/adapters/postgres/(actor_mapping/actor_mapping\.postgresql|archive_metadata/(archive_metadata|archive_metadata\.postgresql))\.go
+      - linters:
+          - goconst
+        path: internal/ingestion/adapters/(http/(handlers|handlers_preview|handlers_upload)|parsers/normalizer_values|postgres/transaction/(transaction_list|transaction_search))\.go
+      - linters:
+          - goconst
+        path: internal/matching/services/command/adjustment_commands\.go
+      - linters:
+          - goconst
+        path: internal/reporting/adapters/postgres/(export_job/(export_job\.postgresql|export_job_query)|report/(report_counts|report_export|report_list|report_pagination|report_summary|report_variance|streaming))\.go
+      - linters:
+          - goconst
+        path: internal/reporting/services/query/(exports/(csv|pdf|stream)|queries_(csv|pdf|stream))\.go
       # Allow fmt.Print* in tests, main, and pkg/assert (for fallback logging)
       - linters:
           - forbidigo

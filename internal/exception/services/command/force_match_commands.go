@@ -84,6 +84,7 @@ func (uc *ExceptionUseCase) ForceMatch(
 	return uc.processForceMatch(ctx, cmd, params, logger, span)
 }
 
+//nolint:cyclop,funlen,gocyclo // Force-match orchestration validates, persists, audits, and emits within one transactional boundary.
 func (uc *ExceptionUseCase) processForceMatch(
 	ctx context.Context,
 	cmd ForceMatchCommand,
@@ -164,6 +165,12 @@ func (uc *ExceptionUseCase) processForceMatch(
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 
+	if err := validateCriticalTxLease(txLease, "begin force match transaction"); err != nil {
+		libOpentelemetry.HandleSpanError(span, "invalid critical streaming transaction", err)
+
+		return nil, err
+	}
+
 	defer func() {
 		_ = txLease.Rollback() // No-op if already committed
 	}()
@@ -173,6 +180,11 @@ func (uc *ExceptionUseCase) processForceMatch(
 		libOpentelemetry.HandleSpanError(span, "failed to update exception", err)
 
 		return nil, fmt.Errorf("update exception: %w", err)
+	}
+
+	updated, err = ensureUpdatedException(span, updated)
+	if err != nil {
+		return nil, err
 	}
 
 	reasonValue := string(params.overrideReason)
@@ -193,6 +205,14 @@ func (uc *ExceptionUseCase) processForceMatch(
 		libOpentelemetry.HandleSpanError(span, "audit publish failed", err)
 
 		return nil, fmt.Errorf("publish audit: %w", err)
+	}
+
+	if err := uc.emitExceptionCritical(ctx, span, txLease.SQLTx(), "exception.force_match_resolved", updated, map[string]any{
+		"resolution_type":      "FORCE_MATCH",
+		"override_reason_code": string(params.overrideReason),
+		"resolved_at":          formatExceptionTime(updated.UpdatedAt),
+	}); err != nil {
+		return nil, fmt.Errorf("emit force match resolved: %w", err)
 	}
 
 	if err := txLease.Commit(); err != nil {

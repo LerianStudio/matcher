@@ -4,6 +4,7 @@ package journeys
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -22,10 +23,12 @@ func TestPagination_ContextsList(t *testing.T) {
 			ctx := context.Background()
 			f := factories.New(tc, client)
 
-			// Create multiple contexts to test pagination
+			// Create multiple contexts to test pagination.
+			// Use an index in each name so siblings don't collide — all calls in
+			// the same test run share the same UniqueName prefix.
 			numContexts := 5
-			for i := 0; i < numContexts; i++ {
-				f.Context.NewContext().WithName("page-ctx").MustCreate(ctx)
+			for i := range numContexts {
+				f.Context.NewContext().WithName(fmt.Sprintf("page-ctx-%d", i)).MustCreate(ctx)
 			}
 
 			// List all contexts

@@ -27,12 +27,12 @@ import (
 // only stub the methods they care about. This pattern replaces the
 // package-level *Fn vars the refactor removed.
 type fakeInfraConnector struct {
-	runMigrations         func(ctx context.Context, dsn, db, path string, logger libLog.Logger, allowDirty bool) error
-	connectPostgres       func(ctx context.Context, client *libPostgres.Client) error
-	ensureRabbitChannel   func(conn *libRabbitmq.RabbitMQConnection) error
-	initTelemetry         func(cfg *Config, logger libLog.Logger) *libOpentelemetry.Telemetry
-	initAuthBoundary      func() (libLog.Logger, error)
-	newS3Client           func(ctx context.Context, cfg reportingStorage.S3Config) (*reportingStorage.S3Client, error)
+	runMigrations       func(ctx context.Context, dsn, db, path string, logger libLog.Logger, allowDirty bool) error
+	connectPostgres     func(ctx context.Context, client *libPostgres.Client) error
+	ensureRabbitChannel func(conn *libRabbitmq.RabbitMQConnection) error
+	initTelemetry       func(cfg *Config, logger libLog.Logger) *libOpentelemetry.Telemetry
+	initAuthBoundary    func() (libLog.Logger, error)
+	newS3Client         func(ctx context.Context, cfg reportingStorage.S3Config) (*reportingStorage.S3Client, error)
 }
 
 func (f *fakeInfraConnector) RunMigrations(
@@ -100,12 +100,12 @@ func (f *fakeInfraConnector) NewS3Client(
 // Like fakeInfraConnector, each field is a function hook that tests set to
 // shape behaviour. Nil hooks are safe no-ops.
 type fakeEventPublisherFactory struct {
-	openDedicatedChannel        func(conn *libRabbitmq.RabbitMQConnection) (*amqp.Channel, error)
-	newMatchingPublisher        func(ch *amqp.Channel, opts ...sharedRabbitmq.ConfirmablePublisherOption) (*matchingRabbitmq.EventPublisher, error)
-	newIngestionPublisher       func(ch *amqp.Channel, opts ...sharedRabbitmq.ConfirmablePublisherOption) (*ingestionRabbitmq.EventPublisher, error)
-	closeAMQPChannel            func(ch *amqp.Channel) error
-	closeMatchingPublisher      func(publisher *matchingRabbitmq.EventPublisher) error
-	closeIngestionPublisher     func(publisher *ingestionRabbitmq.EventPublisher) error
+	openDedicatedChannel    func(conn *libRabbitmq.RabbitMQConnection) (*amqp.Channel, error)
+	newMatchingPublisher    func(ch *amqp.Channel, opts ...sharedRabbitmq.ConfirmablePublisherOption) (*matchingRabbitmq.EventPublisher, error)
+	newIngestionPublisher   func(ch *amqp.Channel, opts ...sharedRabbitmq.ConfirmablePublisherOption) (*ingestionRabbitmq.EventPublisher, error)
+	closeAMQPChannel        func(ch *amqp.Channel) error
+	closeMatchingPublisher  func(publisher *matchingRabbitmq.EventPublisher) error
+	closeIngestionPublisher func(publisher *ingestionRabbitmq.EventPublisher) error
 }
 
 func (f *fakeEventPublisherFactory) OpenDedicatedChannel(

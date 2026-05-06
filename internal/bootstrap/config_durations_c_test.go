@@ -266,4 +266,3 @@ func TestConfig_ValidateNegativeWebhookTimeout(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "WEBHOOK_TIMEOUT_SEC must be non-negative")
 }
-

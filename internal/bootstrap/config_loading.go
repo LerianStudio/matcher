@@ -160,7 +160,7 @@ func sanitizeEnvVarsForConfig() {
 // sanitizeEnvVarsForStruct recursively walks a struct type and trims whitespace from
 // all environment variables identified by `env:` struct tags.
 func sanitizeEnvVarsForStruct(structType reflect.Type) {
-	for structType.Kind() == reflect.Ptr {
+	for structType.Kind() == reflect.Pointer {
 		structType = structType.Elem()
 	}
 

@@ -6,6 +6,7 @@ package bootstrap
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
@@ -75,31 +76,31 @@ func (manager *dynamicPartitionManager) ListPartitions(ctx context.Context) ([]g
 	return partitions, nil
 }
 
-// DetachPartition delegates partition detachment to a runtime-backed manager.
-func (manager *dynamicPartitionManager) DetachPartition(ctx context.Context, name string) error {
+// DetachPartitionWithTx delegates transactional partition detachment to a runtime-backed manager.
+func (manager *dynamicPartitionManager) DetachPartitionWithTx(ctx context.Context, tx *sql.Tx, name string) error {
 	delegate, release, err := manager.current(ctx)
 	if err != nil {
-		return fmt.Errorf("resolve partition manager for detach partition: %w", err)
+		return fmt.Errorf("resolve partition manager for detach partition with tx: %w", err)
 	}
 	defer release()
 
-	if err := delegate.DetachPartition(ctx, name); err != nil {
-		return fmt.Errorf("detach partition %q: %w", name, err)
+	if err := delegate.DetachPartitionWithTx(ctx, tx, name); err != nil {
+		return fmt.Errorf("detach partition %q with tx: %w", name, err)
 	}
 
 	return nil
 }
 
-// DropPartition delegates partition deletion to a runtime-backed manager.
-func (manager *dynamicPartitionManager) DropPartition(ctx context.Context, name string) error {
+// DropPartitionWithTx delegates transactional partition deletion to a runtime-backed manager.
+func (manager *dynamicPartitionManager) DropPartitionWithTx(ctx context.Context, tx *sql.Tx, name string) error {
 	delegate, release, err := manager.current(ctx)
 	if err != nil {
-		return fmt.Errorf("resolve partition manager for drop partition: %w", err)
+		return fmt.Errorf("resolve partition manager for drop partition with tx: %w", err)
 	}
 	defer release()
 
-	if err := delegate.DropPartition(ctx, name); err != nil {
-		return fmt.Errorf("drop partition %q: %w", name, err)
+	if err := delegate.DropPartitionWithTx(ctx, tx, name); err != nil {
+		return fmt.Errorf("drop partition %q with tx: %w", name, err)
 	}
 
 	return nil

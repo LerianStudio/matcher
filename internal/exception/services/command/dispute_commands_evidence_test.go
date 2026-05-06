@@ -7,9 +7,10 @@
 package command
 
 import (
-	"context"
 	"testing"
 	"time"
+
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -22,12 +23,12 @@ import (
 func TestSubmitEvidence_Success(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	exceptionID := uuid.New()
 	existingDispute := createTestDispute(ctx, t, exceptionID)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -43,7 +44,7 @@ func TestSubmitEvidence_Success(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	result, err := uc.SubmitEvidence(ctx, SubmitEvidenceCommand{
@@ -59,17 +60,26 @@ func TestSubmitEvidence_Success(t *testing.T) {
 	require.NotNil(t, audit.lastEvent)
 	require.Equal(t, "EVIDENCE_SUBMITTED", audit.lastEvent.Action)
 	require.Equal(t, "analyst-1", audit.lastEvent.Actor)
+	// Regression guard: dispute MUST be loaded via FindByIDWithTx on the primary
+	// inside the same tx that mutates it. Loading via FindByID hits the replica,
+	// causing replica-lag races on multi-evidence and rapid-close paths (silent
+	// evidence loss when concurrent submitters land within replication lag).
+	// Do NOT delete these assertions during refactoring without an integration
+	// test that exercises real replica lag.
+	require.Equal(t, 1, disputeRepo.findWithTxCalls)
+	require.Same(t, tx, disputeRepo.findWithTxTx)
+	require.Zero(t, disputeRepo.findCalls)
 }
 
 func TestSubmitEvidence_WithFileURL(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	exceptionID := uuid.New()
 	existingDispute := createTestDispute(ctx, t, exceptionID)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -85,7 +95,7 @@ func TestSubmitEvidence_WithFileURL(t *testing.T) {
 
 	infra := &stubInfraProvider{tx: tx}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, infra, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	fileURL := "https://example.com/evidence.pdf"
@@ -102,17 +112,26 @@ func TestSubmitEvidence_WithFileURL(t *testing.T) {
 	require.Equal(t, fileURL, *result.Evidence[0].FileURL)
 	require.NotNil(t, audit.lastEvent)
 	require.Equal(t, fileURL, audit.lastEvent.Metadata["file_url"])
+	// Regression guard: dispute MUST be loaded via FindByIDWithTx on the primary
+	// inside the same tx that mutates it. Loading via FindByID hits the replica,
+	// causing replica-lag races on multi-evidence and rapid-close paths (silent
+	// evidence loss when concurrent submitters land within replication lag).
+	// Do NOT delete these assertions during refactoring without an integration
+	// test that exercises real replica lag.
+	require.Equal(t, 1, disputeRepo.findWithTxCalls)
+	require.Same(t, tx, disputeRepo.findWithTxTx)
+	require.Zero(t, disputeRepo.findCalls)
 }
 
 func TestSubmitEvidence_ValidationErrors(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	exceptionID := uuid.New()
 	existingDispute := createTestDispute(ctx, t, exceptionID)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -123,7 +142,7 @@ func TestSubmitEvidence_ValidationErrors(t *testing.T) {
 	disputeRepo := &stubDisputeRepo{dispute: existingDispute}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	testCases := []struct {
@@ -161,12 +180,12 @@ func TestSubmitEvidence_ValidationErrors(t *testing.T) {
 func TestSubmitEvidence_ActorRequired(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	exceptionID := uuid.New()
 	existingDispute := createTestDispute(ctx, t, exceptionID)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -178,10 +197,10 @@ func TestSubmitEvidence_ActorRequired(t *testing.T) {
 	audit := &stubAuditPublisher{}
 	emptyActor := actorExtractor("")
 
-	uc, err := NewExceptionUseCase(exceptionRepo, emptyActor, audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, emptyActor, audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	_, err = uc.SubmitEvidence(context.Background(), SubmitEvidenceCommand{
+	_, err = uc.SubmitEvidence(testStreamingContext(), SubmitEvidenceCommand{
 		DisputeID: existingDispute.ID,
 		Comment:   "comment",
 	})
@@ -192,7 +211,7 @@ func TestSubmitEvidence_DisputeNotFound(t *testing.T) {
 	t.Parallel()
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -203,10 +222,10 @@ func TestSubmitEvidence_DisputeNotFound(t *testing.T) {
 	disputeRepo := &stubDisputeRepo{findErr: errTestDisputeFind}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	_, err = uc.SubmitEvidence(ctx, SubmitEvidenceCommand{
 		DisputeID: uuid.New(),
 		Comment:   "comment",
@@ -217,14 +236,14 @@ func TestSubmitEvidence_DisputeNotFound(t *testing.T) {
 func TestSubmitEvidence_WrongState(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	exceptionID := uuid.New()
 	existingDispute := createTestDispute(ctx, t, exceptionID)
 
 	require.NoError(t, existingDispute.Win(ctx, "won the dispute"))
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -235,7 +254,7 @@ func TestSubmitEvidence_WrongState(t *testing.T) {
 	disputeRepo := &stubDisputeRepo{dispute: existingDispute}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	_, err = uc.SubmitEvidence(ctx, SubmitEvidenceCommand{
@@ -248,12 +267,12 @@ func TestSubmitEvidence_WrongState(t *testing.T) {
 func TestSubmitEvidence_UpdateError(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	exceptionID := uuid.New()
 	existingDispute := createTestDispute(ctx, t, exceptionID)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -264,7 +283,7 @@ func TestSubmitEvidence_UpdateError(t *testing.T) {
 	disputeRepo := &stubDisputeRepo{dispute: existingDispute, updateErr: errTestDisputeUpdate}
 	audit := &stubAuditPublisher{}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	_, err = uc.SubmitEvidence(ctx, SubmitEvidenceCommand{
@@ -277,12 +296,12 @@ func TestSubmitEvidence_UpdateError(t *testing.T) {
 func TestSubmitEvidence_AuditPublishError(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	exceptionID := uuid.New()
 	existingDispute := createTestDispute(ctx, t, exceptionID)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -293,7 +312,7 @@ func TestSubmitEvidence_AuditPublishError(t *testing.T) {
 	disputeRepo := &stubDisputeRepo{dispute: existingDispute}
 	audit := &stubAuditPublisher{err: errTestAudit}
 
-	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo))
+	uc, err := NewExceptionUseCase(exceptionRepo, actorExtractor("analyst-1"), audit, &stubInfraProvider{}, WithDisputeRepository(disputeRepo), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	_, err = uc.SubmitEvidence(ctx, SubmitEvidenceCommand{

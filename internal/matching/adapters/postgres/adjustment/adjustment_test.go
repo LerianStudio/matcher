@@ -255,7 +255,6 @@ func TestPostgreSQLModel_ToEntity(t *testing.T) {
 		assert.Nil(t, entity)
 		require.ErrorIs(t, err, ErrAdjustmentModelNeeded)
 	})
-
 }
 
 func TestPostgreSQLModel_RoundTrip(t *testing.T) {

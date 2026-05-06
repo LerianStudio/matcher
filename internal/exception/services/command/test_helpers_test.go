@@ -22,6 +22,7 @@ import (
 	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
 	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
+	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
@@ -78,8 +79,12 @@ func (e *stubActorExtractor) GetActor(_ context.Context) string {
 // actorCtxKey is an unexported context key for embedding actor in test contexts.
 type actorCtxKey struct{}
 
+func testStreamingContext() context.Context {
+	return tmcore.ContextWithTenantID(context.Background(), "018f4f95-0000-7000-8000-000000000001")
+}
+
 func ctxWithActor(actor string) context.Context {
-	return context.WithValue(context.Background(), actorCtxKey{}, actor)
+	return context.WithValue(testStreamingContext(), actorCtxKey{}, actor)
 }
 
 func actorExtractor(actor string) *stubActorExtractor {
@@ -95,12 +100,14 @@ var (
 )
 
 type stubExceptionRepo struct {
-	exception   *entities.Exception
-	findErr     error
-	updateErr   error
-	findByIDs   []*entities.Exception // optional override for FindByIDs
-	findIDsErr  error
-	findIDsCall int // number of FindByIDs invocations (bulk regression)
+	exception         *entities.Exception
+	findErr           error
+	updateErr         error
+	findByIDs         []*entities.Exception // optional override for FindByIDs
+	findIDsErr        error
+	findIDsCall       int // number of FindByIDs invocations (bulk regression)
+	updateWithTxCalls int
+	updateWithTxTx    repositories.Tx
 }
 
 func (repo *stubExceptionRepo) FindByID(
@@ -166,9 +173,12 @@ func (repo *stubExceptionRepo) Update(
 
 func (repo *stubExceptionRepo) UpdateWithTx(
 	ctx context.Context,
-	_ repositories.Tx,
+	tx repositories.Tx,
 	exception *entities.Exception,
 ) (*entities.Exception, error) {
+	repo.updateWithTxCalls++
+	repo.updateWithTxTx = tx
+
 	return repo.Update(ctx, exception)
 }
 

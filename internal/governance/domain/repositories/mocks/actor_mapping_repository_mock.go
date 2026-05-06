@@ -11,6 +11,7 @@ package mocks
 
 import (
 	context "context"
+	sql "database/sql"
 	reflect "reflect"
 
 	entities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
@@ -70,18 +71,18 @@ func (mr *MockActorMappingRepositoryMockRecorder) GetByActorID(ctx, actorID any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByActorID", reflect.TypeOf((*MockActorMappingRepository)(nil).GetByActorID), ctx, actorID)
 }
 
-// Pseudonymize mocks base method.
-func (m *MockActorMappingRepository) Pseudonymize(ctx context.Context, actorID string) error {
+// PseudonymizeWithTx mocks base method.
+func (m *MockActorMappingRepository) PseudonymizeWithTx(ctx context.Context, tx *sql.Tx, actorID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Pseudonymize", ctx, actorID)
+	ret := m.ctrl.Call(m, "PseudonymizeWithTx", ctx, tx, actorID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// Pseudonymize indicates an expected call of Pseudonymize.
-func (mr *MockActorMappingRepositoryMockRecorder) Pseudonymize(ctx, actorID any) *gomock.Call {
+// PseudonymizeWithTx indicates an expected call of PseudonymizeWithTx.
+func (mr *MockActorMappingRepositoryMockRecorder) PseudonymizeWithTx(ctx, tx, actorID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Pseudonymize", reflect.TypeOf((*MockActorMappingRepository)(nil).Pseudonymize), ctx, actorID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PseudonymizeWithTx", reflect.TypeOf((*MockActorMappingRepository)(nil).PseudonymizeWithTx), ctx, tx, actorID)
 }
 
 // Upsert mocks base method.

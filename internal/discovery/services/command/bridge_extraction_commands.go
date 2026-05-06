@@ -16,11 +16,13 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/internal/streaming/emission"
 )
 
 // BridgeContentFlattener transforms the raw Fetcher-shape extraction
@@ -80,6 +82,25 @@ type BridgeExtractionOrchestrator struct {
 	linkWriter       sharedPorts.ExtractionLifecycleLinkWriter
 	sourceResolver   sharedPorts.BridgeSourceResolver
 	cfg              BridgeOrchestratorConfig
+	streamEmitter    streaming.Emitter
+}
+
+// BridgeOrchestratorOption configures bridge extraction orchestration dependencies.
+type BridgeOrchestratorOption func(*BridgeExtractionOrchestrator)
+
+// WithBridgeStreamingEmitter sets the emitter used by the bridge orchestrator.
+// The receiver-prefixed name is used because this package also defines
+// WithStreamingEmitter on the discovery UseCase (see commands.go); both
+// emitter consumers coexist in the same package.
+//
+// Use emission.IsNilEmitter() to defend against typed-nil interface values
+// (e.g., a (*MockEmitter)(nil) hiding behind a streaming.Emitter interface).
+func WithBridgeStreamingEmitter(emitter streaming.Emitter) BridgeOrchestratorOption {
+	return func(orch *BridgeExtractionOrchestrator) {
+		if !emission.IsNilEmitter(emitter) {
+			orch.streamEmitter = emitter
+		}
+	}
 }
 
 // Compile-time interface check.
@@ -96,6 +117,7 @@ func NewBridgeExtractionOrchestrator(
 	linkWriter sharedPorts.ExtractionLifecycleLinkWriter,
 	sourceResolver sharedPorts.BridgeSourceResolver,
 	cfg BridgeOrchestratorConfig,
+	options ...BridgeOrchestratorOption,
 ) (*BridgeExtractionOrchestrator, error) {
 	if extractionRepo == nil {
 		return nil, ErrNilBridgeExtractionRepo
@@ -133,7 +155,7 @@ func NewBridgeExtractionOrchestrator(
 		return nil, ErrNilBridgeContentFlattener
 	}
 
-	return &BridgeExtractionOrchestrator{
+	orch := &BridgeExtractionOrchestrator{
 		extractionRepo:   extractionRepo,
 		verifiedOrchestr: verifiedOrchestr,
 		custody:          custody,
@@ -141,7 +163,15 @@ func NewBridgeExtractionOrchestrator(
 		linkWriter:       linkWriter,
 		sourceResolver:   sourceResolver,
 		cfg:              cfg,
-	}, nil
+	}
+
+	for _, option := range options {
+		if option != nil {
+			option(orch)
+		}
+	}
+
+	return orch, nil
 }
 
 // BridgeExtraction runs one extraction through the full pipeline. Each stage
@@ -428,10 +458,13 @@ func (orch *BridgeExtractionOrchestrator) ingestAndLink(
 		return nil, wrapped
 	}
 
-	return &sharedPorts.BridgeExtractionOutcome{
+	result := &sharedPorts.BridgeExtractionOutcome{
 		IngestionJobID:   outcome.IngestionJobID,
 		TransactionCount: outcome.TransactionCount,
-	}, nil
+	}
+	orch.emitExtractionBridged(ctx, span, extraction, result)
+
+	return result, nil
 }
 
 // cleanupCustody removes the custody copy after successful ingestion and
