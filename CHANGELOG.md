@@ -1,3 +1,24 @@
+# Matcher Changelog
+
+## [2.1.0](https://github.com/LerianStudio/matcher/releases/tag/v2.1.0)
+
+- **Features:**
+  - Introduced raw matcher example datasets to enhance testing and development capabilities.
+  - Added missing unit and integration test coverage to ensure robustness and reliability.
+
+- **Fixes:**
+  - Resolved a timing race issue in `TestClient_ConcurrentResolverAndCalls` to improve test stability.
+  - Addressed an exception handling issue by reading disputes inside transactions to prevent replica lag.
+
+- **Improvements:**
+  - Rewrote `check-tests.sh` script with grouped-pattern support for better maintainability and clarity.
+
+Contributors: @fredcamaral, @lerian-studio
+
+[Compare changes](https://github.com/LerianStudio/matcher/compare/v2.0.0...v2.1.0)
+
+---
+
 ## [2.1.0](https://github.com/LerianStudio/matcher/compare/v2.0.0...v2.1.0) (2026-05-06)
 
 
@@ -1010,3 +1031,4 @@ Contributors: @bedatty, @dependabot[bot], @ferr3ira-gabriel, @ferr3ira.gabriel, 
 * **e2e:** resolve dashboard stresser flakiness with unique names ([7e93cfc](https://github.com/LerianStudio/matcher/commit/7e93cfcc13d9d074eceebe09b39e9f8b7f7f42ed))
 
 ## 1.0.0 (2026-02-19)
+
