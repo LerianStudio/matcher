@@ -10,8 +10,8 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/LerianStudio/matcher/tests/e2e"
 	"github.com/LerianStudio/matcher/tests/client"
+	"github.com/LerianStudio/matcher/tests/e2e"
 )
 
 func runDashboardStresserHighVolumeEnrichment(

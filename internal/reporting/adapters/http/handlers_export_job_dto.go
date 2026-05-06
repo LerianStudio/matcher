@@ -30,10 +30,15 @@ type CreateExportJobRequest struct {
 }
 
 // CreateExportJobResponse represents the response for creating an export job.
+//
+// statusUrl points at the top-level read path (/v1/export-jobs/{jobId}) — the
+// only export-job item route this API actually exposes. Returning a
+// /v1/contexts/{contextId}/... shape here would advertise an endpoint that
+// does not exist; the per-context list endpoint is collection-only.
 type CreateExportJobResponse struct {
 	JobID     string `json:"jobId"     example:"550e8400-e29b-41d4-a716-446655440000"`
 	Status    string `json:"status"    example:"QUEUED"    enums:"QUEUED"`
-	StatusURL string `json:"statusUrl" example:"/v1/contexts/550e8400-e29b-41d4-a716-446655440000/export-jobs/550e8400-e29b-41d4-a716-446655440001"`
+	StatusURL string `json:"statusUrl" example:"/v1/export-jobs/550e8400-e29b-41d4-a716-446655440001"`
 }
 
 // parsedExportJobRequest holds validated and parsed request data.
@@ -131,7 +136,7 @@ func normalizeReportTypeAlias(reportType string) (entities.ExportReportType, boo
 // ExportJobResponse represents an export job in API responses.
 type ExportJobResponse struct {
 	ID             string  `json:"id"                   example:"550e8400-e29b-41d4-a716-446655440000"`
-	ReportType     string  `json:"reportType"           example:"MATCHED"    enums:"MATCHED,UNMATCHED,SUMMARY,VARIANCE"`
+	ReportType     string  `json:"reportType"           example:"MATCHED"    enums:"MATCHED,UNMATCHED,SUMMARY,VARIANCE,EXCEPTIONS,MATCHES,UNMATCHED_TRANSACTIONS"`
 	Format         string  `json:"format"               example:"CSV"        enums:"CSV,JSON,XML,PDF"`
 	Status         string  `json:"status"               example:"SUCCEEDED"  enums:"QUEUED,RUNNING,SUCCEEDED,FAILED,EXPIRED,CANCELED"`
 	RecordsWritten int64   `json:"recordsWritten"       example:"4250"`

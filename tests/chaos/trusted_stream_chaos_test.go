@@ -335,6 +335,31 @@ func (d *trustedStreamFakeChaosDedupe) MarkSeenWithRetry(
 	return nil
 }
 
+// MarkSeenBulk mirrors the integration-test stub semantic at
+// internal/ingestion/services/command/trusted_stream_integration_helpers_test.go:126
+// — for each hash, true=newly recorded (caller should process), false=already
+// present (duplicate). The chaos tests never pre-seed duplicates, so the
+// false-branch stays cold but must satisfy the DedupeService contract.
+func (d *trustedStreamFakeChaosDedupe) MarkSeenBulk(
+	_ context.Context, _ uuid.UUID, hashes []string, _ time.Duration,
+) (map[string]bool, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.seen == nil {
+		d.seen = map[string]bool{}
+	}
+	result := make(map[string]bool, len(hashes))
+	for _, hash := range hashes {
+		if d.seen[hash] {
+			result[hash] = false
+			continue
+		}
+		d.seen[hash] = true
+		result[hash] = true
+	}
+	return result, nil
+}
+
 func (d *trustedStreamFakeChaosDedupe) Clear(
 	_ context.Context, _ uuid.UUID, hash string,
 ) error {

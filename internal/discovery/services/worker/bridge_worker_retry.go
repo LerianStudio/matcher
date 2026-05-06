@@ -68,7 +68,11 @@ func (worker *BridgeWorker) persistTerminalFailure(
 			libLog.String("bridge.class", string(class)),
 			libLog.String("error", persistErr.Error()),
 		).Log(ctx, libLog.LevelError, "bridge: persist terminal failure failed")
+
+		return
 	}
+
+	worker.emitExtractionBridgeFailed(ctx, extraction)
 }
 
 // handleTransientFailure increments bridge_attempts, escalates to terminal
@@ -111,7 +115,11 @@ func (worker *BridgeWorker) handleTransientFailure(
 				libLog.String("bridge.class", string(escalated)),
 				libLog.String("error", persistErr.Error()),
 			).Log(ctx, libLog.LevelError, "bridge: persist escalated failure failed")
+
+			return
 		}
+
+		worker.emitExtractionBridgeFailed(ctx, extraction)
 
 		return
 	}

@@ -26,11 +26,11 @@ on:
 jobs:
   go-analysis:
     name: Go Analysis
-    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/go-pr-analysis.yml@3197048995e33cfe9880a4c2c76c20f4cf9bd3ef # v1.26.3
+    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/go-pr-analysis.yml@2cd74e7ecfbeba0a91ecbb8325cc6341dbe918be # v1.28.0
     with:
       runner_type: "blacksmith-4vcpu-ubuntu-2404"
       app_name_prefix: "matcher"
-      go_version: "1.26.1"
+      go_version: "1.26.2"
       golangci_lint_version: "v2.10.1"
       golangci_lint_args: "--timeout=5m"
       coverage_threshold: 70

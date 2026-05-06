@@ -29,9 +29,11 @@ func TestSwaggerSpec_DoesNotContainLegacyAPIPrefix(t *testing.T) {
 			// /api/v1 is the pre-v1.0 prefix that must never appear.
 			assert.NotContains(t, content, "/api/v1", "legacy prefix leaked in %s", file)
 
-			// /v1/config/ is the current configuration namespace for contexts,
-			// sources, rules, field-maps, and fee-rules. Verify it exists.
-			assert.Contains(t, content, "/v1/config/contexts", "expected /v1/config/contexts in %s", file)
+			// /v1/config/ was the transitional namespace for Configuration routes.
+			// The canonical business paths now live directly under /v1/.
+			assert.NotContains(t, content, "/v1/config/contexts", "legacy /v1/config/contexts leaked in %s", file)
+			assert.NotContains(t, content, "/v1/config/field-maps", "legacy /v1/config/field-maps leaked in %s", file)
+			assert.NotContains(t, content, "/v1/config/fee-rules", "legacy /v1/config/fee-rules leaked in %s", file)
 		})
 	}
 }
@@ -52,10 +54,10 @@ func TestSwaggerSpec_ContainsRenamedBusinessPaths(t *testing.T) {
 
 			content := string(data)
 
-			// Configuration context routes under /v1/config/ namespace.
-			assert.Contains(t, content, "/v1/config/contexts", "expected /v1/config/contexts in %s", file)
-			assert.Contains(t, content, "/v1/config/field-maps", "expected /v1/config/field-maps in %s", file)
-			assert.Contains(t, content, "/v1/config/fee-rules", "expected /v1/config/fee-rules in %s", file)
+			// Configuration routes use direct /v1 business paths.
+			assert.Contains(t, content, "/v1/contexts", "expected /v1/contexts in %s", file)
+			assert.Contains(t, content, "/v1/field-maps", "expected /v1/field-maps in %s", file)
+			assert.Contains(t, content, "/v1/fee-rules", "expected /v1/fee-rules in %s", file)
 
 			// Standalone business routes.
 			assert.Contains(t, content, "/v1/fee-schedules", "expected /v1/fee-schedules in %s", file)

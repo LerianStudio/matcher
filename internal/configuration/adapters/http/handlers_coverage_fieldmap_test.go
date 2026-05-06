@@ -21,8 +21,8 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
-	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 // ─── CloneContext handler tests ───────────────────────────────

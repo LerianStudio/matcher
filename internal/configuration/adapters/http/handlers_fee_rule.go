@@ -42,7 +42,7 @@ var _ = sharedhttp.ErrorResponse{}
 // @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
 // @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate priority or name"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/fee-rules [post]
+// @Router /v1/contexts/{contextId}/fee-rules [post]
 func (handler *Handler) CreateFeeRule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_rule.create")
 	defer span.End()
@@ -113,7 +113,7 @@ func (handler *Handler) CreateFeeRule(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
 // @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/fee-rules [get]
+// @Router /v1/contexts/{contextId}/fee-rules [get]
 func (handler *Handler) ListFeeRules(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_rule.list")
 	defer span.End()
@@ -167,7 +167,7 @@ func (handler *Handler) ListFeeRules(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
 // @Failure 404 {object} sharedhttp.ErrorResponse "Fee rule not found"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/fee-rules/{feeRuleId} [get]
+// @Router /v1/fee-rules/{feeRuleId} [get]
 func (handler *Handler) GetFeeRule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_rule.get")
 	defer span.End()
@@ -232,7 +232,7 @@ func (handler *Handler) GetFeeRule(fiberCtx *fiber.Ctx) error {
 // @Failure 404 {object} sharedhttp.ErrorResponse "Fee rule not found"
 // @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate priority or name"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/fee-rules/{feeRuleId} [patch]
+// @Router /v1/fee-rules/{feeRuleId} [patch]
 func (handler *Handler) UpdateFeeRule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_rule.update")
 	defer span.End()
@@ -320,7 +320,7 @@ func (handler *Handler) UpdateFeeRule(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
 // @Failure 404 {object} sharedhttp.ErrorResponse "Fee rule not found"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/fee-rules/{feeRuleId} [delete]
+// @Router /v1/fee-rules/{feeRuleId} [delete]
 func (handler *Handler) DeleteFeeRule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_rule.delete")
 	defer span.End()

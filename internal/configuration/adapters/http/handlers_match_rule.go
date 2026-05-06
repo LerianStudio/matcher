@@ -41,7 +41,7 @@ import (
 // @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
 // @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/rules [post]
+// @Router /v1/contexts/{contextId}/rules [post]
 func (handler *Handler) CreateMatchRule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matchrule.create")
 	defer span.End()
@@ -109,7 +109,7 @@ func (handler *Handler) CreateMatchRule(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
 // @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/rules [get]
+// @Router /v1/contexts/{contextId}/rules [get]
 func (handler *Handler) ListMatchRules(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matchrule.list")
 	defer span.End()
@@ -195,7 +195,7 @@ func (handler *Handler) ListMatchRules(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
 // @Failure 404 {object} sharedhttp.ErrorResponse "Match rule not found"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/rules/{ruleId} [get]
+// @Router /v1/contexts/{contextId}/rules/{ruleId} [get]
 func (handler *Handler) GetMatchRule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matchrule.get")
 	defer span.End()
@@ -259,7 +259,7 @@ func (handler *Handler) GetMatchRule(fiberCtx *fiber.Ctx) error {
 // @Failure 404 {object} sharedhttp.ErrorResponse "Match rule not found"
 // @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/rules/{ruleId} [patch]
+// @Router /v1/contexts/{contextId}/rules/{ruleId} [patch]
 func (handler *Handler) UpdateMatchRule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matchrule.update")
 	defer span.End()
@@ -328,7 +328,7 @@ func (handler *Handler) UpdateMatchRule(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
 // @Failure 404 {object} sharedhttp.ErrorResponse "Match rule not found"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/rules/{ruleId} [delete]
+// @Router /v1/contexts/{contextId}/rules/{ruleId} [delete]
 func (handler *Handler) DeleteMatchRule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matchrule.delete")
 	defer span.End()
@@ -394,7 +394,7 @@ type ReorderRequest struct {
 // @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
 // @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/rules/reorder [post]
+// @Router /v1/contexts/{contextId}/rules/reorder [post]
 func (handler *Handler) ReorderMatchRules(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matchrule.reorder")
 	defer span.End()

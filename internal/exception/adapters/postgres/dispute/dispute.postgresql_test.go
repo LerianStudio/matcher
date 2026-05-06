@@ -296,6 +296,134 @@ func TestRepository_FindByID_Success(t *testing.T) {
 	require.Equal(t, resolution, *result.Resolution)
 }
 
+func TestRepository_FindByIDWithTx_NilRepository(t *testing.T) {
+	t.Parallel()
+
+	var repo *Repository
+	ctx := context.Background()
+
+	result, err := repo.FindByIDWithTx(ctx, nil, uuid.New())
+	require.ErrorIs(t, err, ErrRepoNotInitialized)
+	require.Nil(t, result)
+}
+
+func TestRepository_FindByIDWithTx_NilProvider(t *testing.T) {
+	t.Parallel()
+
+	repo := &Repository{provider: nil}
+	ctx := context.Background()
+
+	result, err := repo.FindByIDWithTx(ctx, nil, uuid.New())
+	require.ErrorIs(t, err, ErrRepoNotInitialized)
+	require.Nil(t, result)
+}
+
+func TestRepository_FindByIDWithTx_NilTransaction(t *testing.T) {
+	t.Parallel()
+
+	repo := NewRepository(&testutil.MockInfrastructureProvider{})
+	ctx := context.Background()
+
+	result, err := repo.FindByIDWithTx(ctx, nil, uuid.New())
+	require.ErrorIs(t, err, ErrTransactionRequired)
+	require.Nil(t, result)
+}
+
+// Caller owns tx lifecycle. These tests intentionally do NOT register
+// ExpectCommit/ExpectRollback because production code's commit-vs-rollback
+// decision is in the caller (processCloseDispute, processSubmitEvidence)
+// — not in the repository method under test. The mock.ExpectationsWereMet()
+// check at the end verifies only the SELECT FOR UPDATE expectation set here.
+func TestRepository_FindByIDWithTx_NotFound(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	provider := testutil.NewMockProviderFromDB(t, db)
+	repo := NewRepository(provider)
+	ctx := context.Background()
+	missingID := uuid.New()
+
+	query := regexp.QuoteMeta(`
+		SELECT id, exception_id, category, state, description,
+		       opened_by, resolution, reopen_reason, evidence, created_at, updated_at
+		FROM disputes
+		WHERE id = $1
+		FOR UPDATE
+	`)
+
+	mock.ExpectBegin()
+	tx, err := db.Begin()
+	require.NoError(t, err)
+	mock.ExpectQuery(query).WithArgs(missingID.String()).WillReturnError(sql.ErrNoRows)
+
+	result, err := repo.FindByIDWithTx(ctx, tx, missingID)
+	require.ErrorIs(t, err, ErrDisputeNotFound)
+	require.Nil(t, result)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+// Caller owns tx lifecycle. These tests intentionally do NOT register
+// ExpectCommit/ExpectRollback because production code's commit-vs-rollback
+// decision is in the caller (processCloseDispute, processSubmitEvidence)
+// — not in the repository method under test. The mock.ExpectationsWereMet()
+// check at the end verifies only the SELECT FOR UPDATE expectation set here.
+func TestRepository_FindByIDWithTx_SuccessLocksRow(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	provider := testutil.NewMockProviderFromDB(t, db)
+	repo := NewRepository(provider)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	disputeID := uuid.New()
+	exceptionID := uuid.New()
+
+	query := regexp.QuoteMeta(`
+		SELECT id, exception_id, category, state, description,
+		       opened_by, resolution, reopen_reason, evidence, created_at, updated_at
+		FROM disputes
+		WHERE id = $1
+		FOR UPDATE
+	`)
+
+	rows := sqlmock.NewRows([]string{
+		"id", "exception_id", "category", "state", "description",
+		"opened_by", "resolution", "reopen_reason", "evidence", "created_at", "updated_at",
+	}).AddRow(
+		disputeID.String(),
+		exceptionID.String(),
+		"UNRECOGNIZED_CHARGE",
+		"OPEN",
+		"Test description",
+		"analyst@example.com",
+		sql.NullString{},
+		sql.NullString{},
+		[]byte("[]"),
+		now,
+		now,
+	)
+
+	mock.ExpectBegin()
+	tx, err := db.Begin()
+	require.NoError(t, err)
+	mock.ExpectQuery(query).WithArgs(disputeID.String()).WillReturnRows(rows)
+
+	result, err := repo.FindByIDWithTx(ctx, tx, disputeID)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, disputeID, result.ID)
+	require.Equal(t, exceptionID, result.ExceptionID)
+	require.Equal(t, dispute.DisputeCategoryUnrecognizedCharge, result.Category)
+	require.Equal(t, dispute.DisputeStateOpen, result.State)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestRepository_FindByExceptionID_NilRepository(t *testing.T) {
 	t.Parallel()
 

@@ -112,6 +112,8 @@ func (uc *ExceptionUseCase) AddComment(
 		return nil, fmt.Errorf("persist comment: %w", err)
 	}
 
+	uc.emitCommentAdded(ctx, span, result)
+
 	return result, nil
 }
 
@@ -186,6 +188,8 @@ func (uc *ExceptionUseCase) DeleteComment(
 
 		return fmt.Errorf("delete comment: %w", err)
 	}
+
+	uc.emitCommentDeleted(ctx, span, exceptionID, commentID, actor)
 
 	return nil
 }

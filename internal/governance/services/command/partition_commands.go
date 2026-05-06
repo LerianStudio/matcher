@@ -239,109 +239,56 @@ const (
 	hoursPerDay       = 24
 )
 
-// DetachPartition detaches a partition from the audit_logs parent table.
+// DetachPartitionWithTx detaches a partition using the caller-owned transaction.
 // The partition name must match the expected format to prevent SQL injection.
 // Partitions whose data falls within the 7-year retention period cannot be detached.
-func (pm *PartitionManager) DetachPartition(ctx context.Context, partitionName string) error {
-	logger, tracer := pm.tracking(ctx)
-
-	ctx, span := tracer.Start(ctx, "governance.partition_manager.detach_partition")
-	defer span.End()
+//
+// Detach is only exposed as a transactional variant so callers (e.g. the
+// archival worker) can atomically couple the partition state change with audit
+// and streaming emits in the same tx.
+func (pm *PartitionManager) DetachPartitionWithTx(ctx context.Context, tx *sql.Tx, partitionName string) error {
+	if tx == nil {
+		return fmt.Errorf("detach partition %s: %w", partitionName, ErrNilDB)
+	}
 
 	if err := validatePartitionName(partitionName); err != nil {
-		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid partition name", err)
 		return err
 	}
-
-	span.SetAttributes(attribute.String("partition.name", partitionName))
 
 	if err := pm.validateRetentionPeriod(partitionName); err != nil {
-		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "retention period active", err)
-
 		return err
-	}
-
-	tx, err := pm.db.BeginTx(ctx, nil)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to begin transaction", err)
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
-	if err := auth.ApplyTenantSchema(ctx, tx); err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to apply tenant schema", err)
-		return fmt.Errorf("apply tenant schema: %w", err)
 	}
 
 	ddl := "ALTER TABLE audit_logs DETACH PARTITION " + partitionName // #nosec G202 -- partition name validated by partitionNameRegex, not from user input
-
 	if _, err := tx.ExecContext(ctx, ddl); err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to detach partition", err)
 		return fmt.Errorf("detach partition %s: %w", partitionName, err)
 	}
-
-	if err := tx.Commit(); err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to commit transaction", err)
-		return fmt.Errorf("commit transaction: %w", err)
-	}
-
-	logger.Log(ctx, libLog.LevelInfo, "detached partition: "+partitionName)
 
 	return nil
 }
 
-// DropPartition drops a previously detached partition table.
+// DropPartitionWithTx drops a detached partition using the caller-owned transaction.
 // The partition name must match the expected format to prevent SQL injection.
-func (pm *PartitionManager) DropPartition(ctx context.Context, partitionName string) error {
-	logger, tracer := pm.tracking(ctx)
-
-	ctx, span := tracer.Start(ctx, "governance.partition_manager.drop_partition")
-	defer span.End()
+//
+// Drop is only exposed as a transactional variant so callers can atomically
+// couple the partition deletion with audit and streaming emits in the same tx.
+func (pm *PartitionManager) DropPartitionWithTx(ctx context.Context, tx *sql.Tx, partitionName string) error {
+	if tx == nil {
+		return fmt.Errorf("drop partition %s: %w", partitionName, ErrNilDB)
+	}
 
 	if err := validatePartitionName(partitionName); err != nil {
-		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid partition name", err)
 		return err
 	}
 
 	if err := pm.validateRetentionPeriod(partitionName); err != nil {
-		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "retention period active", err)
-
 		return err
 	}
 
-	span.SetAttributes(attribute.String("partition.name", partitionName))
-
-	tx, err := pm.db.BeginTx(ctx, nil)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to begin transaction", err)
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
-	if err := auth.ApplyTenantSchema(ctx, tx); err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to apply tenant schema", err)
-		return fmt.Errorf("apply tenant schema: %w", err)
-	}
-
 	ddl := "DROP TABLE IF EXISTS " + partitionName // #nosec G202 -- partition name validated by partitionNameRegex, not from user input
-
 	if _, err := tx.ExecContext(ctx, ddl); err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to drop partition", err)
 		return fmt.Errorf("drop partition %s: %w", partitionName, err)
 	}
-
-	if err := tx.Commit(); err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to commit transaction", err)
-		return fmt.Errorf("commit transaction: %w", err)
-	}
-
-	logger.Log(ctx, libLog.LevelInfo, "dropped partition: "+partitionName)
 
 	return nil
 }

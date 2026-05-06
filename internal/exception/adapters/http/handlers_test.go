@@ -280,6 +280,10 @@ func (repo *stubDisputeRepo) FindByID(_ context.Context, _ uuid.UUID) (*dispute.
 	return nil, nil
 }
 
+func (repo *stubDisputeRepo) FindByIDWithTx(_ context.Context, _ exceptionRepositories.Tx, _ uuid.UUID) (*dispute.Dispute, error) {
+	return nil, nil
+}
+
 func (repo *stubDisputeRepo) FindByExceptionID(_ context.Context, _ uuid.UUID) (*dispute.Dispute, error) {
 	return nil, nil
 }

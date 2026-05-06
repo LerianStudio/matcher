@@ -39,6 +39,10 @@ var (
 	ErrCreateContextReturnedNil = errors.New("context repository returned nil context")
 	// ErrCreateSourceReturnedNil indicates the source repository returned a nil entity without an error.
 	ErrCreateSourceReturnedNil = errors.New("source repository returned nil source")
+	// ErrCreateRuleReturnedNil indicates the match-rule repository returned a nil entity without an error.
+	// Failing fast here prevents the streaming-emission loop downstream from
+	// dereferencing a nil rule pointer.
+	ErrCreateRuleReturnedNil = errors.New("rule repository returned nil rule")
 )
 
 // publishAudit publishes an audit event if the publisher is configured.
@@ -138,7 +142,7 @@ func (uc *UseCase) CreateContext(
 		return nil, ErrInlineCreateRequiresInfrastructure
 	}
 
-	created, err := uc.createContextWithChildren(ctx, entity, input)
+	result, err := uc.createContextWithChildren(ctx, entity, input)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to create reconciliation context", err)
 
@@ -150,6 +154,8 @@ func (uc *UseCase) CreateContext(
 		return nil, err
 	}
 
+	created := result.context
+
 	uc.publishAudit(ctx, "context", created.ID, "create", map[string]any{
 		"name":          created.Name,
 		"type":          created.Type,
@@ -157,17 +163,37 @@ func (uc *UseCase) CreateContext(
 		"sources_count": len(input.Sources),
 		"rules_count":   len(input.Rules),
 	})
+	uc.emitReconciliationContextCreated(ctx, span, created)
+
+	for _, source := range result.sources {
+		uc.emitReconciliationSourceCreated(ctx, span, source)
+	}
+
+	for _, rule := range result.rules {
+		uc.emitMatchRuleCreated(ctx, span, rule)
+	}
 
 	return created, nil
+}
+
+type createContextResult struct {
+	context *entities.ReconciliationContext
+	sources []*entities.ReconciliationSource
+	rules   []*entities.MatchRule
 }
 
 func (uc *UseCase) createContextWithChildren(
 	ctx context.Context,
 	entity *entities.ReconciliationContext,
 	input entities.CreateReconciliationContextInput,
-) (*entities.ReconciliationContext, error) {
+) (*createContextResult, error) {
 	if len(input.Sources) == 0 && len(input.Rules) == 0 {
-		return uc.createContextOnly(ctx, entity)
+		created, err := uc.createContextOnly(ctx, entity)
+		if err != nil {
+			return nil, err
+		}
+
+		return &createContextResult{context: created}, nil
 	}
 
 	return uc.createContextTransactional(ctx, entity, input)
@@ -232,7 +258,7 @@ func (uc *UseCase) createContextTransactional(
 	ctx context.Context,
 	entity *entities.ReconciliationContext,
 	input entities.CreateReconciliationContextInput,
-) (*entities.ReconciliationContext, error) {
+) (*createContextResult, error) {
 	if err := validateInlineRulePriorities(input.Rules); err != nil {
 		return nil, err
 	}
@@ -259,11 +285,13 @@ func (uc *UseCase) createContextTransactional(
 		return nil, ErrCreateContextReturnedNil
 	}
 
-	if err := createInlineSources(ctx, tx, created.ID, input.Sources, creators.source, creators.fieldMap); err != nil {
+	createdSources, err := createInlineSources(ctx, tx, created.ID, input.Sources, creators.source, creators.fieldMap)
+	if err != nil {
 		return nil, err
 	}
 
-	if err := createInlineRules(ctx, tx, created.ID, input.Rules, creators.rule); err != nil {
+	createdRules, err := createInlineRules(ctx, tx, created.ID, input.Rules, creators.rule)
+	if err != nil {
 		return nil, err
 	}
 
@@ -271,7 +299,11 @@ func (uc *UseCase) createContextTransactional(
 		return nil, fmt.Errorf("commit create transaction: %w", err)
 	}
 
-	return created, nil
+	return &createContextResult{
+		context: created,
+		sources: createdSources,
+		rules:   createdRules,
+	}, nil
 }
 
 func createInlineSources(
@@ -281,7 +313,9 @@ func createInlineSources(
 	sources []entities.CreateContextSourceInput,
 	txSourceCreator sourceTxCreator,
 	txFieldMapCreator fieldMapTxCreator,
-) error {
+) ([]*entities.ReconciliationSource, error) {
+	createdSources := make([]*entities.ReconciliationSource, 0, len(sources))
+
 	for _, srcInput := range sources {
 		srcEntity, srcErr := entities.NewReconciliationSource(ctx, contextID, entities.CreateReconciliationSourceInput{
 			Name:   srcInput.Name,
@@ -290,17 +324,19 @@ func createInlineSources(
 			Config: srcInput.Config,
 		})
 		if srcErr != nil {
-			return fmt.Errorf("invalid source input: %w", srcErr)
+			return nil, fmt.Errorf("invalid source input: %w", srcErr)
 		}
 
 		createdSrc, srcErr := txSourceCreator.CreateWithTx(ctx, tx, srcEntity)
 		if srcErr != nil {
-			return fmt.Errorf("creating source: %w", srcErr)
+			return nil, fmt.Errorf("creating source: %w", srcErr)
 		}
 
 		if createdSrc == nil {
-			return ErrCreateSourceReturnedNil
+			return nil, ErrCreateSourceReturnedNil
 		}
+
+		createdSources = append(createdSources, createdSrc)
 
 		if len(srcInput.Mapping) == 0 {
 			continue
@@ -313,15 +349,15 @@ func createInlineSources(
 			shared.CreateFieldMapInput{Mapping: srcInput.Mapping},
 		)
 		if fmErr != nil {
-			return fmt.Errorf("invalid field map input: %w", fmErr)
+			return nil, fmt.Errorf("invalid field map input: %w", fmErr)
 		}
 
 		if _, fmErr = txFieldMapCreator.CreateWithTx(ctx, tx, fmEntity); fmErr != nil {
-			return fmt.Errorf("creating field map: %w", fmErr)
+			return nil, fmt.Errorf("creating field map: %w", fmErr)
 		}
 	}
 
-	return nil
+	return createdSources, nil
 }
 
 func createInlineRules(
@@ -330,19 +366,28 @@ func createInlineRules(
 	contextID uuid.UUID,
 	rules []entities.CreateMatchRuleInput,
 	txRuleCreator matchRuleTxCreator,
-) error {
+) ([]*entities.MatchRule, error) {
+	createdRules := make([]*entities.MatchRule, 0, len(rules))
+
 	for _, ruleInput := range rules {
 		ruleEntity, ruleErr := entities.NewMatchRule(ctx, contextID, ruleInput)
 		if ruleErr != nil {
-			return fmt.Errorf("invalid rule input: %w", ruleErr)
+			return nil, fmt.Errorf("invalid rule input: %w", ruleErr)
 		}
 
-		if _, ruleErr = txRuleCreator.CreateWithTx(ctx, tx, ruleEntity); ruleErr != nil {
-			return fmt.Errorf("creating rule: %w", ruleErr)
+		createdRule, ruleErr := txRuleCreator.CreateWithTx(ctx, tx, ruleEntity)
+		if ruleErr != nil {
+			return nil, fmt.Errorf("creating rule: %w", ruleErr)
 		}
+
+		if createdRule == nil {
+			return nil, ErrCreateRuleReturnedNil
+		}
+
+		createdRules = append(createdRules, createdRule)
 	}
 
-	return nil
+	return createdRules, nil
 }
 
 func hasInlineMappings(sources []entities.CreateContextSourceInput) bool {
@@ -437,6 +482,7 @@ func (uc *UseCase) UpdateContext(
 		"type":     updated.Type,
 		"interval": updated.Interval,
 	})
+	uc.emitReconciliationContextUpdated(ctx, span, updated)
 
 	return updated, nil
 }
@@ -509,6 +555,7 @@ func (uc *UseCase) DeleteContext(ctx context.Context, contextID uuid.UUID) error
 	}
 
 	uc.publishAudit(ctx, "context", contextID, "delete", nil)
+	uc.emitReconciliationContextDeleted(ctx, span, contextID)
 
 	return nil
 }

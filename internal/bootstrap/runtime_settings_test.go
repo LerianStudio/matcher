@@ -36,6 +36,26 @@ func (*noopSystemplaneStore) Set(_ context.Context, _ systemplane.TestEntry) err
 	return nil
 }
 
+func (*noopSystemplaneStore) GetTenantValue(_ context.Context, _, _, _ string) (systemplane.TestEntry, bool, error) {
+	return systemplane.TestEntry{}, false, nil
+}
+
+func (*noopSystemplaneStore) SetTenantValue(_ context.Context, _ string, _ systemplane.TestEntry) error {
+	return nil
+}
+
+func (*noopSystemplaneStore) DeleteTenantValue(_ context.Context, _, _, _, _ string) error {
+	return nil
+}
+
+func (*noopSystemplaneStore) ListTenantOverrides(_ context.Context, _, _, _ string, _ int) ([]systemplane.TestEntry, error) {
+	return nil, nil
+}
+
+func (*noopSystemplaneStore) ListTenantsForKey(_ context.Context, _, _ string) ([]string, error) {
+	return nil, nil
+}
+
 func (*noopSystemplaneStore) Subscribe(ctx context.Context, _ func(systemplane.TestEvent)) error {
 	<-ctx.Done()
 	return ctx.Err()

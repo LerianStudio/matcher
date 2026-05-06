@@ -200,4 +200,3 @@ func TestConfig_RabbitMQDSN_EdgeCases(t *testing.T) {
 		assert.NotContains(t, dsn, "//myapp")
 	})
 }
-

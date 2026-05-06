@@ -21,6 +21,8 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
+	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
@@ -28,8 +30,18 @@ import (
 	"github.com/LerianStudio/matcher/internal/shared/objectstorage"
 	workermetrics "github.com/LerianStudio/matcher/internal/shared/observability/workermetrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/internal/streaming/emission"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
+
+// Functional options for streaming.Emitter injection follow the convention:
+// - Bare WithStreamingEmitter when this package owns one emitter consumer
+// - With<ReceiverName>StreamingEmitter when multiple consumers coexist in the same package
+//
+// This package owns two emitter-consuming workers (ExportWorker, CleanupWorker).
+// ExportWorker keeps the bare WithStreamingEmitter name (it is the dominant
+// reporting-worker emitter consumer) and CleanupWorker uses the receiver-
+// prefixed form WithCleanupStreamingEmitter to avoid the collision.
 
 // exportWorkerName is the stable label value emitted on matcher.worker.*
 // metrics from this worker.
@@ -78,20 +90,35 @@ type ExportWorkerConfig struct {
 
 // ExportWorker processes queued export jobs in the background.
 type ExportWorker struct {
-	mu         sync.Mutex
-	jobRepo    repositories.ExportJobRepository
-	reportRepo repositories.ReportRepository
-	storage    objectstorage.Backend
-	cfg        ExportWorkerConfig
-	logger     libLog.Logger
-	tracer     trace.Tracer
-	metrics    *workermetrics.Recorder
+	mu            sync.Mutex
+	jobRepo       repositories.ExportJobRepository
+	reportRepo    repositories.ReportRepository
+	storage       objectstorage.Backend
+	cfg           ExportWorkerConfig
+	logger        libLog.Logger
+	tracer        trace.Tracer
+	metrics       *workermetrics.Recorder
+	streamEmitter streaming.Emitter
 
 	running    atomic.Bool
 	stopOnce   sync.Once
 	stopCh     chan struct{}
 	doneCh     chan struct{}
 	cancelFunc context.CancelFunc
+}
+
+// ExportWorkerOption configures optional export worker dependencies.
+type ExportWorkerOption func(*ExportWorker)
+
+// WithStreamingEmitter sets the emitter used for export worker streaming events.
+// Use emission.IsNilEmitter() to defend against typed-nil interface values
+// (e.g., a (*MockEmitter)(nil) hiding behind a streaming.Emitter interface).
+func WithStreamingEmitter(emitter streaming.Emitter) ExportWorkerOption {
+	return func(worker *ExportWorker) {
+		if !emission.IsNilEmitter(emitter) {
+			worker.streamEmitter = emitter
+		}
+	}
 }
 
 func normalizeExportWorkerConfig(cfg ExportWorkerConfig) ExportWorkerConfig {
@@ -133,6 +160,7 @@ func NewExportWorker(
 	storage objectstorage.Backend,
 	cfg ExportWorkerConfig,
 	logger libLog.Logger,
+	options ...ExportWorkerOption,
 ) (*ExportWorker, error) {
 	if jobRepo == nil {
 		return nil, ErrNilJobRepository
@@ -148,7 +176,7 @@ func NewExportWorker(
 
 	cfg = normalizeExportWorkerConfig(cfg)
 
-	return &ExportWorker{
+	worker := &ExportWorker{
 		jobRepo:    jobRepo,
 		reportRepo: reportRepo,
 		storage:    storage,
@@ -158,7 +186,15 @@ func NewExportWorker(
 		metrics:    workermetrics.NewRecorder(exportWorkerName),
 		stopCh:     make(chan struct{}),
 		doneCh:     make(chan struct{}),
-	}, nil
+	}
+
+	for _, option := range options {
+		if option != nil {
+			option(worker)
+		}
+	}
+
+	return worker, nil
 }
 
 // prepareRunState reinitialises the worker's stop/done channels and sync.Once for
@@ -370,5 +406,5 @@ func withTenantContext(ctx context.Context, tenantID string) context.Context {
 		return ctx
 	}
 
-	return context.WithValue(ctx, auth.TenantIDKey, tenantID)
+	return tmcore.ContextWithTenantID(context.WithValue(ctx, auth.TenantIDKey, tenantID), tenantID)
 }

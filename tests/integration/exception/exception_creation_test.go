@@ -12,10 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	exceptionVO "github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
-	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	ingestionJobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	matchingCommand "github.com/LerianStudio/matcher/internal/matching/services/command"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 

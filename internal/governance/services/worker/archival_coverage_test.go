@@ -15,6 +15,9 @@ import (
 	"testing"
 	"time"
 
+	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
+	streaming "github.com/LerianStudio/lib-streaming"
+
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -37,11 +40,11 @@ func TestGetOrCreateMetadata_ExistingMetadata(t *testing.T) {
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	tenantID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
-	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+	ctx := context.WithValue(tmcore.ContextWithTenantID(context.Background(), tenantID.String()), auth.TenantIDKey, tenantID.String())
 
 	existing := &entities.ArchiveMetadata{
 		ID:            uuid.New(),
@@ -74,11 +77,11 @@ func TestGetOrCreateMetadata_CreateNew(t *testing.T) {
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	tenantID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
-	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+	ctx := context.WithValue(tmcore.ContextWithTenantID(context.Background(), tenantID.String()), auth.TenantIDKey, tenantID.String())
 
 	partInfo := &command.PartitionInfo{
 		Name:       "audit_logs_2024_01",
@@ -91,8 +94,11 @@ func TestGetOrCreateMetadata_CreateNew(t *testing.T) {
 		Return(nil, errors.New("not found"))
 
 	deps.archiveRepo.EXPECT().
-		Create(gomock.Any(), gomock.Any()).
+		CreateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
+	deps.sqlMock.ExpectBegin()
+	deps.sqlMock.ExpectExec("SET LOCAL search_path").WillReturnResult(sqlmock.NewResult(0, 0))
+	deps.sqlMock.ExpectCommit()
 
 	result, err := w.getOrCreateMetadata(ctx, tenantID, partInfo)
 	require.NoError(t, err)
@@ -110,11 +116,11 @@ func TestGetOrCreateMetadata_CreateFails(t *testing.T) {
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	tenantID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
-	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+	ctx := context.WithValue(tmcore.ContextWithTenantID(context.Background(), tenantID.String()), auth.TenantIDKey, tenantID.String())
 
 	partInfo := &command.PartitionInfo{
 		Name:       "audit_logs_2024_01",
@@ -127,8 +133,11 @@ func TestGetOrCreateMetadata_CreateFails(t *testing.T) {
 		Return(nil, errors.New("not found"))
 
 	deps.archiveRepo.EXPECT().
-		Create(gomock.Any(), gomock.Any()).
+		CreateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(errors.New("db error"))
+	deps.sqlMock.ExpectBegin()
+	deps.sqlMock.ExpectExec("SET LOCAL search_path").WillReturnResult(sqlmock.NewResult(0, 0))
+	deps.sqlMock.ExpectRollback()
 
 	result, err := w.getOrCreateMetadata(ctx, tenantID, partInfo)
 	require.Error(t, err)
@@ -147,7 +156,7 @@ func TestReleaseLock_Success(t *testing.T) {
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -175,7 +184,7 @@ func TestReleaseLock_WrongToken(t *testing.T) {
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -206,7 +215,7 @@ func TestReleaseLock_NilRedisConn(t *testing.T) {
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	// Should not panic.
@@ -401,11 +410,11 @@ func TestArchiveTenantCov_ListPartitionsError(t *testing.T) {
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	tenantID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
-	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+	ctx := context.WithValue(tmcore.ContextWithTenantID(context.Background(), tenantID.String()), auth.TenantIDKey, tenantID.String())
 
 	// Make partition manager fail by not setting up DB expectations.
 	deps.pmMock.ExpectBegin()
@@ -431,7 +440,7 @@ func TestProcessTenantCov_InvalidTenantID(t *testing.T) {
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	// Should log a warning but not panic.
@@ -451,7 +460,7 @@ func TestProvisionPartitionsCov_Error(t *testing.T) {
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	ctx := context.WithValue(context.Background(), auth.TenantIDKey, uuid.New().String())
@@ -478,7 +487,7 @@ func TestHandlePartitionErrorCov_UpdateFails(t *testing.T) {
 	w, err := NewArchivalWorker(
 		deps.archiveRepo, deps.partitionMgr, deps.storage,
 		deps.db, deps.provider, deps.cfg, deps.logger,
-	)
+		WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	metadataID := uuid.New()

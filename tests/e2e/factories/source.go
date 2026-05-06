@@ -6,8 +6,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/LerianStudio/matcher/tests/e2e"
 	"github.com/LerianStudio/matcher/tests/client"
+	"github.com/LerianStudio/matcher/tests/e2e"
 )
 
 // SourceFactory creates reconciliation sources for tests.

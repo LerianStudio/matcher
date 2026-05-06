@@ -17,6 +17,7 @@ import (
 
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	"github.com/LerianStudio/lib-commons/v5/commons/net/http/ratelimit"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	reportingHTTP "github.com/LerianStudio/matcher/internal/reporting/adapters/http"
 	reportDashboard "github.com/LerianStudio/matcher/internal/reporting/adapters/postgres/dashboard"
@@ -42,7 +43,13 @@ func initReportingModule(
 	logger libLog.Logger,
 	repos *sharedRepositories,
 	production bool,
+	streamEmitters ...streaming.Emitter,
 ) (*reportingWorker.ExportWorker, *reportingWorker.CleanupWorker, error) {
+	var streamEmitter streaming.Emitter
+	if len(streamEmitters) > 0 {
+		streamEmitter = streamEmitters[0]
+	}
+
 	contextAdapter := crossAdapters.NewContextAccessProviderAdapter(repos.configContext)
 
 	dashboardRepository := reportDashboard.NewRepository(provider)
@@ -88,6 +95,7 @@ func initReportingModule(
 		contextAdapter,
 		exportLimiter,
 		logger,
+		streamEmitter,
 	)
 }
 
@@ -102,8 +110,12 @@ func initExportWorkers(
 	contextAdapter sharedPorts.ContextAccessProvider,
 	exportLimiter fiber.Handler,
 	logger libLog.Logger,
+	streamEmitter streaming.Emitter,
 ) (*reportingWorker.ExportWorker, *reportingWorker.CleanupWorker, error) {
-	exportJobUseCase, err := reportingCommand.NewExportJobUseCase(exportJobRepository)
+	exportJobUseCase, err := reportingCommand.NewExportJobUseCase(
+		exportJobRepository,
+		reportingCommand.WithStreamingEmitter(streamEmitter),
+	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create export job use case: %w", err)
 	}
@@ -159,6 +171,7 @@ func initExportWorkers(
 		storage,
 		workerCfg,
 		logger,
+		reportingWorker.WithStreamingEmitter(streamEmitter),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create export worker: %w", err)
@@ -175,6 +188,7 @@ func initExportWorkers(
 		storage,
 		cleanupCfg,
 		logger,
+		reportingWorker.WithCleanupStreamingEmitter(streamEmitter),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create cleanup worker: %w", err)

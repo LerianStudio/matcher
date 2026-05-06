@@ -160,6 +160,7 @@ func TestConfig_WebhookTimeout_NilConfigUsesDefault(t *testing.T) {
 
 	assert.Equal(t, 30*time.Second, cfg.WebhookTimeout())
 }
+
 func TestConfig_QueryTimeout(t *testing.T) {
 	t.Parallel()
 
@@ -250,4 +251,3 @@ func TestConfig_ValidateNegativePostgresConnectTimeout(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "PostgresConnectTimeoutSec must be non-negative")
 }
-

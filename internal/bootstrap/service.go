@@ -46,6 +46,7 @@ type Service struct {
 	connectionManager     connectionCloser
 	cleanupFuncs          []func()
 	readinessState        *readinessState
+	streamingApp          libCommons.App
 
 	// Systemplane client for centralized runtime configuration.
 	// Nil when systemplane initialization fails (graceful degradation).
@@ -80,6 +81,14 @@ type connectionCloser interface {
 // during graceful shutdown (e.g., the outbox dispatcher).
 type stoppable interface {
 	Stop()
+}
+
+type shutdowner interface {
+	Shutdown(context.Context) error
+}
+
+type closeContexter interface {
+	CloseContext(context.Context) error
 }
 
 // GetOutboxRunner returns the outbox dispatcher as a libCommons.App.
@@ -149,6 +158,14 @@ func (svc *Service) Run() error {
 		}
 	}
 
+	opts := svc.launcherOptions()
+
+	libCommons.NewLauncher(opts...).Run()
+
+	return nil
+}
+
+func (svc *Service) launcherOptions() []libCommons.LauncherOption {
 	opts := []libCommons.LauncherOption{
 		libCommons.WithLogger(svc.Logger),
 		libCommons.RunApp("Fiber HTTP Server", svc.Server),
@@ -157,9 +174,11 @@ func (svc *Service) Run() error {
 		opts = append(opts, libCommons.RunApp("Outbox Dispatcher", svc.outboxRunner))
 	}
 
-	libCommons.NewLauncher(opts...).Run()
+	if svc.streamingApp != nil {
+		opts = append(opts, libCommons.RunApp("Streaming Producer", svc.streamingApp))
+	}
 
-	return nil
+	return opts
 }
 
 func (svc *Service) resolveActiveConfig() *Config {
@@ -193,7 +212,11 @@ func (svc *Service) Shutdown(ctx context.Context) error {
 
 	svc.readinessState.beginDraining()
 
-	svc.stopBackgroundWorkers(ctx, logger)
+	var shutdownErr error
+
+	if err := svc.stopBackgroundWorkers(ctx, logger); err != nil {
+		shutdownErr = errors.Join(shutdownErr, err)
+	}
 
 	// Allow background workers time to complete in-flight operations
 	// before closing infrastructure connections they depend on.
@@ -213,8 +236,6 @@ func (svc *Service) Shutdown(ctx context.Context) error {
 	case <-timer.C:
 	}
 
-	var shutdownErr error
-
 	shutdownErr = svc.shutdownServerAndConnections(ctx, logger, shutdownErr)
 
 	return shutdownErr
@@ -232,7 +253,7 @@ func (svc *Service) Shutdown(ctx context.Context) error {
 // config-change subscriber from restarting workers while we're shutting them down.
 // Systemplane change feed stops before the supervisor to prevent reload triggers
 // during shutdown.
-func (svc *Service) stopBackgroundWorkers(ctx context.Context, logger libLog.Logger) {
+func (svc *Service) stopBackgroundWorkers(ctx context.Context, logger libLog.Logger) error {
 	// Step 1: Stop ConfigManager first (see ordering contract above).
 	if svc.ConfigManager != nil {
 		svc.ConfigManager.Stop()
@@ -251,9 +272,22 @@ func (svc *Service) stopBackgroundWorkers(ctx context.Context, logger libLog.Log
 		svc.redisMetricsCollector.Stop()
 	}
 
-	if outbox := svc.outboxStoppable(); outbox != nil {
+	if outbox := svc.outboxShutdowner(); outbox != nil {
+		if err := outbox.Shutdown(ctx); err != nil {
+			// Log here so operators see the failure timestamped at the
+			// shutdown stage; propagate the error so Service.Shutdown()
+			// surfaces partial-drain / lost-event scenarios to callers
+			// and tests instead of returning nil after the dispatcher
+			// refused to stop.
+			libLog.SafeError(logger, ctx, "outbox dispatcher shutdown failed", err, runtime.IsProductionMode())
+
+			return fmt.Errorf("shutdown outbox dispatcher: %w", err)
+		}
+	} else if outbox := svc.outboxStoppable(); outbox != nil {
 		outbox.Stop()
 	}
+
+	return nil
 }
 
 // stopSystemplane gracefully shuts down the systemplane client.
@@ -273,7 +307,7 @@ func (svc *Service) stopWorkerManager(ctx context.Context, logger libLog.Logger)
 	}
 
 	if err := svc.workerManager.Stop(); err != nil {
-		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to stop worker manager: %v", err))
+		libLog.SafeError(logger, ctx, "failed to stop worker manager", err, runtime.IsProductionMode())
 	}
 
 	return true
@@ -292,6 +326,57 @@ func (svc *Service) outboxStoppable() stoppable {
 	return s
 }
 
+func (svc *Service) outboxShutdowner() shutdowner {
+	if svc.outboxRunner == nil {
+		return nil
+	}
+
+	shutdown, ok := svc.outboxRunner.(shutdowner)
+	if !ok {
+		return nil
+	}
+
+	return shutdown
+}
+
+func (svc *Service) closeStreamingApp(ctx context.Context) error {
+	if svc == nil || svc.streamingApp == nil {
+		return nil
+	}
+
+	// Prefer the shutdowner contract: lib-streaming producers expose
+	// Shutdown(ctx) for graceful flush + broker disconnect, which is
+	// strictly richer than CloseContext/Close (those just tear down the
+	// underlying connection without ensuring in-flight envelopes drain).
+	// Falling through to CloseContext/Close after a successful shutdown
+	// would double-stop the producer.
+	if shutdown, ok := svc.streamingApp.(shutdowner); ok {
+		if err := shutdown.Shutdown(ctx); err != nil {
+			return fmt.Errorf("shutdown streaming app: %w", err)
+		}
+
+		return nil
+	}
+
+	if closer, ok := svc.streamingApp.(closeContexter); ok {
+		if err := closer.CloseContext(ctx); err != nil {
+			return fmt.Errorf("close streaming app with context: %w", err)
+		}
+
+		return nil
+	}
+
+	if closer, ok := svc.streamingApp.(connectionCloser); ok {
+		if err := closer.Close(); err != nil {
+			return fmt.Errorf("close streaming app: %w", err)
+		}
+
+		return nil
+	}
+
+	return nil
+}
+
 // shutdownServerAndConnections shuts down the HTTP server and closes all connections.
 func (svc *Service) shutdownServerAndConnections(ctx context.Context, logger libLog.Logger, shutdownErr error) error {
 	if svc.Server != nil {
@@ -300,9 +385,14 @@ func (svc *Service) shutdownServerAndConnections(ctx context.Context, logger lib
 		}
 	}
 
+	if err := svc.closeStreamingApp(ctx); err != nil {
+		libLog.SafeError(logger, ctx, "streaming producer close failed", err, runtime.IsProductionMode())
+		shutdownErr = errors.Join(shutdownErr, err)
+	}
+
 	if svc.connectionManager != nil {
 		if err := svc.connectionManager.Close(); err != nil {
-			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to close connection manager: %v", err))
+			libLog.SafeError(logger, ctx, "failed to close connection manager", err, runtime.IsProductionMode())
 			shutdownErr = errors.Join(shutdownErr, err)
 		}
 	}

@@ -56,6 +56,7 @@ func (uc *UseCase) CreateSource(
 		"side":       created.Side,
 		"context_id": created.ContextID.String(),
 	})
+	uc.emitReconciliationSourceCreated(ctx, span, created)
 
 	return created, nil
 }

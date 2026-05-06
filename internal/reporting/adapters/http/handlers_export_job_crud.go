@@ -29,6 +29,7 @@ var _ = sharedhttp.ErrorResponse{}
 // @Produce json
 // @Security BearerAuth
 // @Param X-Request-Id header string false "Request ID for tracing"
+// @Param X-Idempotency-Key header string false "Idempotency key for safe retries"
 // @Param contextId path string true "Context ID" format(uuid)
 // @Param request body CreateExportJobRequest true "Export job parameters"
 // @Success 202 {object} CreateExportJobResponse

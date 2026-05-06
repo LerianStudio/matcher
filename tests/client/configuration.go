@@ -203,7 +203,7 @@ func (c *ConfigurationClient) CreateFeeRule(
 	req CreateFeeRuleRequest,
 ) (*FeeRuleResponse, error) {
 	var resp FeeRuleResponse
-	path := fmt.Sprintf("/v1/config/contexts/%s/fee-rules", contextID)
+	path := fmt.Sprintf("/v1/contexts/%s/fee-rules", contextID)
 	err := c.client.DoJSON(ctx, http.MethodPost, path, req, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("create fee rule: %w", err)
@@ -215,7 +215,7 @@ func (c *ConfigurationClient) CreateFeeRule(
 // GetFeeRule retrieves a fee rule by ID.
 func (c *ConfigurationClient) GetFeeRule(ctx context.Context, feeRuleID string) (*FeeRuleResponse, error) {
 	var resp FeeRuleResponse
-	path := fmt.Sprintf("/v1/config/fee-rules/%s", feeRuleID)
+	path := fmt.Sprintf("/v1/fee-rules/%s", feeRuleID)
 	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("get fee rule: %w", err)
@@ -227,7 +227,7 @@ func (c *ConfigurationClient) GetFeeRule(ctx context.Context, feeRuleID string) 
 // ListFeeRules retrieves all fee rules for a context.
 func (c *ConfigurationClient) ListFeeRules(ctx context.Context, contextID string) ([]FeeRuleResponse, error) {
 	var resp []FeeRuleResponse
-	path := fmt.Sprintf("/v1/config/contexts/%s/fee-rules", contextID)
+	path := fmt.Sprintf("/v1/contexts/%s/fee-rules", contextID)
 	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("list fee rules: %w", err)
@@ -243,7 +243,7 @@ func (c *ConfigurationClient) UpdateFeeRule(
 	req UpdateFeeRuleRequest,
 ) (*FeeRuleResponse, error) {
 	var resp FeeRuleResponse
-	path := fmt.Sprintf("/v1/config/fee-rules/%s", feeRuleID)
+	path := fmt.Sprintf("/v1/fee-rules/%s", feeRuleID)
 	err := c.client.DoJSON(ctx, http.MethodPatch, path, req, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("update fee rule: %w", err)
@@ -254,7 +254,7 @@ func (c *ConfigurationClient) UpdateFeeRule(
 
 // DeleteFeeRule deletes a fee rule.
 func (c *ConfigurationClient) DeleteFeeRule(ctx context.Context, feeRuleID string) error {
-	path := fmt.Sprintf("/v1/config/fee-rules/%s", feeRuleID)
+	path := fmt.Sprintf("/v1/fee-rules/%s", feeRuleID)
 	err := c.client.DoJSON(ctx, http.MethodDelete, path, nil, nil)
 	if err != nil {
 		return fmt.Errorf("delete fee rule: %w", err)

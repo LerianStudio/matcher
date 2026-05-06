@@ -112,6 +112,14 @@ func (r *configurableDisputeRepo) FindByID(_ context.Context, _ uuid.UUID) (*dis
 	return r.findByIDResult, r.findByIDErr
 }
 
+func (r *configurableDisputeRepo) FindByIDWithTx(
+	ctx context.Context,
+	_ exceptionRepositories.Tx,
+	id uuid.UUID,
+) (*dispute.Dispute, error) {
+	return r.FindByID(ctx, id)
+}
+
 func (r *configurableDisputeRepo) FindByExceptionID(_ context.Context, _ uuid.UUID) (*dispute.Dispute, error) {
 	return nil, nil
 }

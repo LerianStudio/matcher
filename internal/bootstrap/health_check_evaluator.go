@@ -7,10 +7,10 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"golang.org/x/sync/errgroup"
 
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
@@ -18,19 +18,37 @@ import (
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
+// readyzProbeConcurrency caps how many readyz probes run in parallel inside
+// evaluateReadinessChecks. With seven dependencies (postgres, postgres_replica,
+// redis, rabbitmq, fetcher, object_storage, streaming) the previous unbounded
+// fan-out spawned all seven goroutines at once. Under K8s probe amplification
+// (5 probes/sec × N pods) that means 7×N goroutines per probe cycle plus the
+// matching number of context.WithTimeout allocations. SetLimit(4) keeps probe
+// parallelism bounded and predictable while still completing well inside the
+// readyzHandlerWallClockCap budget — even if all seven deps hit the per-check
+// timeout, the worst-case wall-clock is ⌈7/4⌉ × per-check-timeout.
+const readyzProbeConcurrency = 4
+
 // readyzDepCount is the fixed number of dependencies probed by /readyz:
-// postgres, postgres_replica, redis, rabbitmq, object_storage. Used as the
-// initial capacity hint for the checks map.
-const readyzDepCount = 5
+// postgres, postgres_replica, redis, rabbitmq, fetcher, object_storage,
+// streaming. Used
+// as the initial capacity hint for the checks map.
+const readyzDepCount = 7
 
 // depSpec binds a dep name to its resolver, optional-check, and TLS posture
 // helpers. Hoisted to package level so evaluateReadinessChecks does not
 // rebuild the slice per /readyz hit.
 type depSpec struct {
 	name     string
-	resolve  func(*HealthDependencies) (HealthCheckFunc, bool)
-	optional func(*HealthDependencies) bool
+	resolve  func(*Config, *HealthDependencies) (HealthCheckFunc, bool)
+	optional func(*Config, *HealthDependencies) bool
 	tlsPost  func(*Config) (*bool, string)
+}
+
+type readinessProbeOutcome struct {
+	index     int
+	result    CheckResult
+	aggregate bool
 }
 
 // readyzSpecs is the canonical dep-order for /readyz. Package-level so
@@ -39,33 +57,57 @@ type depSpec struct {
 var readyzSpecs = []depSpec{ //nolint:gochecknoglobals // immutable package-local constant
 	{
 		name:     "postgres",
-		resolve:  resolvePostgresCheck,
-		optional: func(d *HealthDependencies) bool { return d != nil && d.PostgresOptional },
+		resolve:  func(_ *Config, d *HealthDependencies) (HealthCheckFunc, bool) { return resolvePostgresCheck(d) },
+		optional: func(_ *Config, d *HealthDependencies) bool { return d != nil && d.PostgresOptional },
 		tlsPost:  postgresTLSPosture,
 	},
 	{
 		name:     "postgres_replica",
-		resolve:  resolvePostgresReplicaCheck,
-		optional: func(d *HealthDependencies) bool { return d != nil && d.PostgresReplicaOptional },
+		resolve:  func(_ *Config, d *HealthDependencies) (HealthCheckFunc, bool) { return resolvePostgresReplicaCheck(d) },
+		optional: func(_ *Config, d *HealthDependencies) bool { return d != nil && d.PostgresReplicaOptional },
 		tlsPost:  postgresReplicaTLSPosture,
 	},
 	{
 		name:     "redis",
-		resolve:  resolveRedisCheck,
-		optional: func(d *HealthDependencies) bool { return d != nil && d.RedisOptional },
+		resolve:  func(_ *Config, d *HealthDependencies) (HealthCheckFunc, bool) { return resolveRedisCheck(d) },
+		optional: func(_ *Config, d *HealthDependencies) bool { return d != nil && d.RedisOptional },
 		tlsPost:  redisTLSPosture,
 	},
 	{
 		name:     "rabbitmq",
-		resolve:  resolveRabbitMQCheck,
-		optional: func(d *HealthDependencies) bool { return d != nil && d.RabbitMQOptional },
+		resolve:  func(_ *Config, d *HealthDependencies) (HealthCheckFunc, bool) { return resolveRabbitMQCheck(d) },
+		optional: func(_ *Config, d *HealthDependencies) bool { return d != nil && d.RabbitMQOptional },
 		tlsPost:  rabbitMQTLSPosture,
 	},
 	{
+		name:    "fetcher",
+		resolve: resolveFetcherCheck,
+		optional: func(cfg *Config, d *HealthDependencies) bool {
+			if d != nil && d.FetcherOptional {
+				return true
+			}
+
+			if cfg == nil {
+				return false
+			}
+
+			return !cfg.Fetcher.Enabled
+		},
+		tlsPost: fetcherTLSPosture,
+	},
+	{
 		name:     "object_storage",
-		resolve:  resolveObjectStorageCheck,
-		optional: func(d *HealthDependencies) bool { return d != nil && d.ObjectStorageOptional },
+		resolve:  func(_ *Config, d *HealthDependencies) (HealthCheckFunc, bool) { return resolveObjectStorageCheck(d) },
+		optional: func(_ *Config, d *HealthDependencies) bool { return d != nil && d.ObjectStorageOptional },
 		tlsPost:  objectStorageTLSPosture,
+	},
+	{
+		name:    "streaming",
+		resolve: func(_ *Config, d *HealthDependencies) (HealthCheckFunc, bool) { return resolveStreamingCheck(d) },
+		optional: func(_ *Config, d *HealthDependencies) bool {
+			return d == nil || d.StreamingOptional || !d.StreamingEnabled
+		},
+		tlsPost: func(*Config) (*bool, string) { return nil, "streaming TLS posture is owned by lib-streaming" },
 	},
 }
 
@@ -73,14 +115,32 @@ var readyzSpecs = []depSpec{ //nolint:gochecknoglobals // immutable package-loca
 // map[string]CheckResult. Returns the HTTP status the handler should send
 // (200 or 503), the populated checks map, and the boolean "healthy" aggregate.
 //
-// Per-dep probes run in parallel via goroutines with a sync.WaitGroup join.
-// Worst-case handler latency is max(per-check timeout) — NOT n_deps × timeout.
-// This matters because K8s readinessProbe.periodSeconds=5 would back up
-// under the sequential 5 × 5s = 25s worst case on degraded deps.
+// Concurrency model — bounded errgroup over channel-based fan-out:
 //
-// Panic recovery is provided by SafeGoWithContextAndComponent (via its
-// internal RecoverWithPolicyAndContext defer). A panic in a probe is caught
-// before wg.Done() releases, so wg.Wait() completes cleanly.
+// Probes run on a golang.org/x/sync/errgroup with SetLimit(readyzProbeConcurrency)
+// so at most N (currently 4) goroutines execute simultaneously. The previous
+// implementation spawned ALL deps in parallel via runtime.SafeGoWithContextAndComponent
+// and consumed results through a buffered channel + select on ctx.Done(). That
+// gave us the canceled-context surface we need (so /readyz can return 503
+// immediately when the wall-clock cap fires, rather than blocking on a hung
+// dep), but unbounded fan-out is wasteful under K8s probe amplification.
+// errgroup with SetLimit caps parallelism while still racing every probe to
+// completion in the common case — wall-clock is bounded by
+// ⌈len(readyzSpecs) / readyzProbeConcurrency⌉ × per-check-timeout.
+//
+// We keep the buffered-channel + select pattern (rather than a plain
+// errgroup.Wait) because Wait would block until every probe finishes, including
+// any that never observe their checkCtx cancellation. The select lets the
+// handler return partial results immediately on ctx.Done() and synthesise
+// "down" entries for any spec we have not yet received an outcome for. This
+// preserves the fail-fast contract: kubelet's 1s probe budget is never blocked
+// on a hung dependency.
+//
+// Panic safety: errgroup propagates a recovered panic as ErrPanicRecovered
+// from Wait. We don't call Wait — we drain via the channel — so each goroutine
+// body is wrapped with runtime.RecoverWithPolicyAndContext (KeepRunning) so a
+// panicking probe still emits the matched outcome instead of leaking the
+// goroutine and starving the receive loop.
 func evaluateReadinessChecks(
 	ctx context.Context,
 	cfg *Config,
@@ -91,37 +151,96 @@ func evaluateReadinessChecks(
 	results := make([]CheckResult, len(readyzSpecs))
 	aggOK := make([]bool, len(readyzSpecs))
 
-	var wg sync.WaitGroup
+	outcomes := make(chan readinessProbeOutcome, len(readyzSpecs))
 
-	for idx, spec := range readyzSpecs {
-		wg.Add(1)
+	group := new(errgroup.Group)
+	group.SetLimit(readyzProbeConcurrency)
 
-		runtime.SafeGoWithContextAndComponent(
-			ctx,
-			logger,
-			constants.ApplicationName,
-			"readyz_probe",
-			runtime.KeepRunning,
-			func(_ context.Context) {
-				defer wg.Done()
+	// Dispatch probes from a dedicated goroutine so the receive loop below can
+	// observe ctx.Done() promptly even when errgroup.SetLimit blocks group.Go.
+	// Without this, a cluster of hung probes that ignore checkCtx would stall
+	// the spawn loop and prevent the fan-in select from synthesising "down"
+	// outcomes within the readyz wall-clock budget. The dispatch goroutine
+	// performs a non-blocking ctx check before every group.Go so it exits
+	// cleanly on cancellation; remaining specs are then materialised as "down"
+	// by the ctx.Done branch in the receive loop.
+	//
+	// SafeGoWithContextAndComponent provides the panic-recovery defer
+	// internally — bare `go` is forbidden by tests/static/goroutine_guard.
+	runtime.SafeGoWithContextAndComponent(
+		ctx,
+		logger,
+		constants.ApplicationName,
+		"readyz_dispatch",
+		runtime.KeepRunning,
+		func(dispatchCtx context.Context) {
+			for idx := range readyzSpecs {
+				select {
+				case <-dispatchCtx.Done():
+					return
+				default:
+				}
 
-				check, available := spec.resolve(deps)
-				results[idx], aggOK[idx] = applyReadinessCheckResult(
-					ctx,
-					spec.name,
-					check,
-					available,
-					spec.optional(deps),
-					cfg,
-					spec.tlsPost,
-					logger,
-					timeout,
-				)
-			},
-		)
+				group.Go(func() error {
+					defer runtime.RecoverWithPolicyAndContext(
+						dispatchCtx,
+						logger,
+						constants.ApplicationName,
+						"readyz_probe",
+						runtime.KeepRunning,
+					)
+
+					check, available := readyzSpecs[idx].resolve(cfg, deps)
+					result, aggregate := applyReadinessCheckResult(
+						dispatchCtx,
+						readyzSpecs[idx].name,
+						check,
+						available,
+						readyzSpecs[idx].optional(cfg, deps),
+						cfg,
+						readyzSpecs[idx].tlsPost,
+						logger,
+						timeout,
+					)
+
+					outcomes <- readinessProbeOutcome{index: idx, result: result, aggregate: aggregate}
+
+					return nil
+				})
+			}
+		},
+	)
+
+	received := make([]bool, len(readyzSpecs))
+	pending := len(readyzSpecs)
+
+	for pending > 0 {
+		select {
+		case outcome := <-outcomes:
+			if received[outcome.index] {
+				continue
+			}
+
+			results[outcome.index] = outcome.result
+			aggOK[outcome.index] = outcome.aggregate
+			received[outcome.index] = true
+			pending--
+		case <-ctx.Done():
+			for idx, spec := range readyzSpecs {
+				if received[idx] {
+					continue
+				}
+
+				optional := spec.optional(cfg, deps)
+				results[idx] = CheckResult{Status: checkStatusDown, Error: categoriseProbeError(ctx.Err())}
+				aggOK[idx] = optional
+
+				emitCheckStatus(ctx, spec.name, checkStatusDown)
+			}
+
+			pending = 0
+		}
 	}
-
-	wg.Wait()
 
 	checks := make(map[string]CheckResult, readyzDepCount)
 	healthy := true

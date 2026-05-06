@@ -70,7 +70,22 @@ func (uc *UseCase) completeIngestionJob(
 		)
 	}
 
-	return uc.persistCompletedJob(ctx, state)
+	updatedJob, err := uc.persistCompletedJob(ctx, state)
+	if err != nil {
+		return nil, err
+	}
+
+	extra := map[string]any{
+		"transaction_count": state.totalInserted,
+	}
+	if state.dateRange != nil {
+		extra["date_range_start"] = formatIngestionTime(state.dateRange.Start)
+		extra["date_range_end"] = formatIngestionTime(state.dateRange.End)
+	}
+
+	uc.emitIngestionEvent(ctx, span, "ingestion.completed", updatedJob, extra)
+
+	return updatedJob, nil
 }
 
 // persistCompletedJob updates the job and creates the outbox event in a transaction.
@@ -203,6 +218,8 @@ func (uc *UseCase) IgnoreTransaction(
 		return nil, fmt.Errorf("failed to update transaction status: %w", err)
 	}
 
+	uc.emitTransactionIgnored(ctx, span, existing, updated, input.ContextID.String())
+
 	return updated, nil
 }
 
@@ -265,6 +282,8 @@ func (uc *UseCase) failJob(
 	if err != nil {
 		return fmt.Errorf("failed to save failed job: %w", err)
 	}
+
+	uc.emitIngestionEvent(persistCtx, nil, "ingestion.failed", job, nil)
 
 	// Cleanup runs in a separate best-effort transaction so a cleanup SQL failure
 	// cannot poison the primary transaction that persists FAILED status + outbox event.

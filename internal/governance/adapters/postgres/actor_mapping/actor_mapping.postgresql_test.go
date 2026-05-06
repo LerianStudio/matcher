@@ -65,7 +65,7 @@ func TestRepository_NilProvider(t *testing.T) {
 	_, err = repo.GetByActorID(ctx, "actor-1")
 	require.ErrorIs(t, err, ErrRepositoryNotInitialized)
 
-	err = repo.Pseudonymize(ctx, "actor-1")
+	err = repo.PseudonymizeWithTx(ctx, nil, "actor-1")
 	require.ErrorIs(t, err, ErrRepositoryNotInitialized)
 
 	err = repo.Delete(ctx, "actor-1")
@@ -386,7 +386,7 @@ func TestPseudonymize_Success(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
-	err := repo.Pseudonymize(ctx, "actor-pseudo")
+	err := repo.PseudonymizeWithTx(ctx, nil, "actor-pseudo")
 	require.NoError(t, err)
 }
 
@@ -406,7 +406,7 @@ func TestPseudonymize_NotFound(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectRollback()
 
-	err := repo.Pseudonymize(ctx, "nonexistent")
+	err := repo.PseudonymizeWithTx(ctx, nil, "nonexistent")
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrActorMappingNotFound)
 }
@@ -417,7 +417,7 @@ func TestPseudonymize_EmptyActorID(t *testing.T) {
 	repo := NewRepository(&testutil.MockInfrastructureProvider{})
 	ctx := contextWithTenant()
 
-	err := repo.Pseudonymize(ctx, "")
+	err := repo.PseudonymizeWithTx(ctx, nil, "")
 	require.ErrorIs(t, err, ErrActorIDRequired)
 }
 
@@ -437,7 +437,7 @@ func TestPseudonymize_DatabaseError(t *testing.T) {
 		WillReturnError(errTestDatabaseError)
 	mock.ExpectRollback()
 
-	err := repo.Pseudonymize(ctx, "actor-err")
+	err := repo.PseudonymizeWithTx(ctx, nil, "actor-err")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "pseudonymize actor mapping")
 }

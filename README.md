@@ -176,7 +176,7 @@ matcher/
 | Valkey (Redis) | `valkey/valkey:8` | 6379 |
 | RabbitMQ | `rabbitmq:4.1.3-management-alpine` | 5672 (AMQP), 15672 (UI) |
 | SeaweedFS (S3) | `chrislusf/seaweedfs:3.80` | 8333 (S3), 9333 (Master) |
-| Matcher App | `golang:1.26.1-alpine` | 4018 |
+| Matcher App | `golang:1.26.2-alpine` | 4018 |
 
 ### Testing
 

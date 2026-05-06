@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/tests/e2e"
 	"github.com/LerianStudio/matcher/tests/client"
+	"github.com/LerianStudio/matcher/tests/e2e"
 	"github.com/LerianStudio/matcher/tests/e2e/factories"
 )
 

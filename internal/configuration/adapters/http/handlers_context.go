@@ -41,7 +41,7 @@ import (
 // @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
 // @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/contexts [post]
+// @Router /v1/contexts [post]
 func (handler *Handler) CreateContext(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.context.create")
 	defer span.End()
@@ -103,7 +103,7 @@ func (handler *Handler) CreateContext(fiberCtx *fiber.Ctx) error {
 // @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
 // @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/contexts [get]
+// @Router /v1/contexts [get]
 func (handler *Handler) ListContexts(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.context.list")
 	defer span.End()
@@ -190,7 +190,7 @@ func (handler *Handler) ListContexts(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
 // @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId} [get]
+// @Router /v1/contexts/{contextId} [get]
 func (handler *Handler) GetContext(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.context.get")
 	defer span.End()
@@ -248,7 +248,7 @@ func (handler *Handler) GetContext(fiberCtx *fiber.Ctx) error {
 // @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
 // @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId} [patch]
+// @Router /v1/contexts/{contextId} [patch]
 func (handler *Handler) UpdateContext(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.context.update")
 	defer span.End()
@@ -308,7 +308,7 @@ func (handler *Handler) UpdateContext(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
 // @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId} [delete]
+// @Router /v1/contexts/{contextId} [delete]
 func (handler *Handler) DeleteContext(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.context.delete")
 	defer span.End()
@@ -369,7 +369,7 @@ func (handler *Handler) DeleteContext(fiberCtx *fiber.Ctx) error {
 // @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
 // @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/clone [post]
+// @Router /v1/contexts/{contextId}/clone [post]
 func (handler *Handler) CloneContext(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.context.clone")
 	defer span.End()

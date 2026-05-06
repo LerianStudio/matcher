@@ -9,6 +9,7 @@ package repositories
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 )
@@ -25,8 +26,11 @@ type ActorMappingRepository interface {
 	// Returns ErrActorMappingNotFound if no mapping exists.
 	GetByActorID(ctx context.Context, actorID string) (*entities.ActorMapping, error)
 
-	// Pseudonymize replaces PII fields (display_name, email) with [REDACTED].
-	Pseudonymize(ctx context.Context, actorID string) error
+	// PseudonymizeWithTx replaces PII fields (display_name, email) with
+	// [REDACTED] using the caller-owned transaction. Production paths atomically
+	// couple this mutation with a streaming emit; there is no non-transactional
+	// variant by design.
+	PseudonymizeWithTx(ctx context.Context, tx *sql.Tx, actorID string) error
 
 	// Delete removes the actor mapping entirely (right-to-erasure).
 	Delete(ctx context.Context, actorID string) error

@@ -5,13 +5,14 @@ package journeys
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/tests/e2e"
 	"github.com/LerianStudio/matcher/tests/client"
+	"github.com/LerianStudio/matcher/tests/e2e"
 	"github.com/LerianStudio/matcher/tests/e2e/factories"
 )
 
@@ -19,14 +20,71 @@ import (
 // Dispute Lifecycle Tests
 // =============================================================================
 
+func requireOpenExceptionForExternalID(
+	ctx context.Context,
+	t *testing.T,
+	apiClient *e2e.Client,
+	contextID string,
+	sourceID string,
+	externalID string,
+) string {
+	t.Helper()
+
+	transactions, err := apiClient.Ingestion.SearchTransactions(ctx, contextID, client.SearchTransactionsParams{
+		Query:    externalID,
+		SourceID: sourceID,
+		Limit:    20,
+	})
+	require.NoError(t, err)
+
+	var transactionID string
+	for _, transaction := range transactions.Items {
+		// Accept exact match or prefixed form (e.g. "e2e-abc123-TXN-001" matches "TXN-001").
+		if transaction.ExternalID == externalID || strings.HasSuffix(transaction.ExternalID, "-"+externalID) {
+			transactionID = transaction.ID
+			break
+		}
+	}
+	require.NotEmpty(t, transactionID, "expected transaction for external id %s", externalID)
+
+	// Walk all pages of OPEN exceptions until we find the one matching this
+	// transaction. Tenants accumulate >100 OPEN exceptions during parallel e2e
+	// runs; first-page-only would silently flake when the target exception
+	// lands on page 2+.
+	const pageLimit = 100
+	cursor := ""
+	for {
+		exceptions, err := apiClient.Exception.ListExceptions(ctx, client.ExceptionListFilter{
+			Status: "OPEN",
+			Cursor: cursor,
+			Limit:  pageLimit,
+		})
+		require.NoError(t, err)
+
+		for _, exception := range exceptions.Items {
+			if exception.TransactionID == transactionID {
+				return exception.ID
+			}
+		}
+
+		if exceptions.NextCursor == "" {
+			break
+		}
+		cursor = exceptions.NextCursor
+	}
+
+	require.FailNowf(t, "open exception not found", "expected open exception for transaction %s (%s)", transactionID, externalID)
+
+	return ""
+}
+
 // TestDispute_FullLifecycle tests opening, adding evidence, and closing a dispute.
 func TestDispute_FullLifecycle(t *testing.T) {
-	t.Fatal("dispute endpoint returns 500 — tracked in issue #27, fix and delete this guard")
 	e2e.RunE2EWithTimeout(
 		t,
 		3*time.Minute,
 		func(t *testing.T, tc *e2e.TestContext, apiClient *e2e.Client) {
-			ctx := context.Background()
+			ctx := tc.Context()
 			f := factories.New(tc, apiClient)
 
 			reconciliationContext := f.Context.NewContext().
@@ -99,11 +157,7 @@ func TestDispute_FullLifecycle(t *testing.T) {
 				),
 			)
 
-			exceptions, err := apiClient.Exception.ListOpenExceptions(ctx)
-			require.NoError(t, err)
-			require.NotEmpty(t, exceptions.Items, "should have at least one exception")
-
-			exceptionID := exceptions.Items[0].ID
+			exceptionID := requireOpenExceptionForExternalID(ctx, t, apiClient, reconciliationContext.ID, ledgerSource.ID, "DISP-LC-001")
 
 			// Step 1: Open dispute
 			dispute, err := apiClient.Exception.OpenDispute(
@@ -156,12 +210,11 @@ func TestDispute_FullLifecycle(t *testing.T) {
 
 // TestDispute_CloseAsLost tests closing a dispute as lost.
 func TestDispute_CloseAsLost(t *testing.T) {
-	t.Fatal("dispute endpoint returns 500 — tracked in issue #27, fix and delete this guard")
 	e2e.RunE2EWithTimeout(
 		t,
 		3*time.Minute,
 		func(t *testing.T, tc *e2e.TestContext, apiClient *e2e.Client) {
-			ctx := context.Background()
+			ctx := tc.Context()
 			f := factories.New(tc, apiClient)
 
 			reconciliationContext := f.Context.NewContext().
@@ -234,11 +287,7 @@ func TestDispute_CloseAsLost(t *testing.T) {
 				),
 			)
 
-			exceptions, err := apiClient.Exception.ListOpenExceptions(ctx)
-			require.NoError(t, err)
-			require.NotEmpty(t, exceptions.Items)
-
-			exceptionID := exceptions.Items[0].ID
+			exceptionID := requireOpenExceptionForExternalID(ctx, t, apiClient, reconciliationContext.ID, ledgerSource.ID, "DISP-LOST-001")
 
 			dispute, err := apiClient.Exception.OpenDispute(
 				ctx,
@@ -270,12 +319,11 @@ func TestDispute_CloseAsLost(t *testing.T) {
 
 // TestDispute_MultipleEvidence tests submitting multiple evidence items.
 func TestDispute_MultipleEvidence(t *testing.T) {
-	t.Fatal("dispute endpoint returns 500 — tracked in issue #27, fix and delete this guard")
 	e2e.RunE2EWithTimeout(
 		t,
 		3*time.Minute,
 		func(t *testing.T, tc *e2e.TestContext, apiClient *e2e.Client) {
-			ctx := context.Background()
+			ctx := tc.Context()
 			f := factories.New(tc, apiClient)
 
 			reconciliationContext := f.Context.NewContext().
@@ -348,11 +396,7 @@ func TestDispute_MultipleEvidence(t *testing.T) {
 				),
 			)
 
-			exceptions, err := apiClient.Exception.ListOpenExceptions(ctx)
-			require.NoError(t, err)
-			require.NotEmpty(t, exceptions.Items)
-
-			exceptionID := exceptions.Items[0].ID
+			exceptionID := requireOpenExceptionForExternalID(ctx, t, apiClient, reconciliationContext.ID, ledgerSource.ID, "DISP-EVID-001")
 
 			dispute, err := apiClient.Exception.OpenDispute(
 				ctx,
@@ -403,12 +447,11 @@ func TestDispute_MultipleEvidence(t *testing.T) {
 
 // TestDispute_InvalidCategory tests rejection of empty category.
 func TestDispute_InvalidCategory(t *testing.T) {
-	t.Fatal("dispute endpoint returns 500 — tracked in issue #27, fix and delete this guard")
 	e2e.RunE2EWithTimeout(
 		t,
 		3*time.Minute,
 		func(t *testing.T, tc *e2e.TestContext, apiClient *e2e.Client) {
-			ctx := context.Background()
+			ctx := tc.Context()
 			f := factories.New(tc, apiClient)
 
 			reconciliationContext := f.Context.NewContext().
@@ -464,11 +507,7 @@ func TestDispute_InvalidCategory(t *testing.T) {
 				),
 			)
 
-			exceptions, err := apiClient.Exception.ListOpenExceptions(ctx)
-			require.NoError(t, err)
-			require.NotEmpty(t, exceptions.Items)
-
-			exceptionID := exceptions.Items[0].ID
+			exceptionID := requireOpenExceptionForExternalID(ctx, t, apiClient, reconciliationContext.ID, ledgerSource.ID, "DISP-INVAL-001")
 
 			_, err = apiClient.Exception.OpenDispute(
 				ctx,
@@ -499,7 +538,7 @@ func TestDispute_CloseNonExistentDispute(t *testing.T) {
 		t,
 		1*time.Minute,
 		func(t *testing.T, tc *e2e.TestContext, apiClient *e2e.Client) {
-			ctx := context.Background()
+			ctx := tc.Context()
 
 			won := true
 			_, err := apiClient.Exception.CloseDispute(
@@ -528,7 +567,7 @@ func TestDispute_SubmitEvidenceToNonExistentDispute(t *testing.T) {
 		t,
 		1*time.Minute,
 		func(t *testing.T, tc *e2e.TestContext, apiClient *e2e.Client) {
-			ctx := context.Background()
+			ctx := tc.Context()
 
 			_, err := apiClient.Exception.SubmitEvidence(
 				ctx,
@@ -555,7 +594,7 @@ func TestDispute_OpenOnNonExistentException(t *testing.T) {
 		t,
 		1*time.Minute,
 		func(t *testing.T, tc *e2e.TestContext, apiClient *e2e.Client) {
-			ctx := context.Background()
+			ctx := tc.Context()
 
 			_, err := apiClient.Exception.OpenDispute(
 				ctx,
@@ -583,12 +622,11 @@ func TestDispute_OpenOnNonExistentException(t *testing.T) {
 
 // TestDispute_Categories tests all valid dispute categories.
 func TestDispute_Categories(t *testing.T) {
-	t.Fatal("dispute endpoint returns 500 — tracked in issue #27, fix and delete this guard")
 	e2e.RunE2EWithTimeout(
 		t,
 		3*time.Minute,
 		func(t *testing.T, tc *e2e.TestContext, apiClient *e2e.Client) {
-			ctx := context.Background()
+			ctx := tc.Context()
 			f := factories.New(tc, apiClient)
 
 			reconciliationContext := f.Context.NewContext().
@@ -667,25 +705,22 @@ func TestDispute_Categories(t *testing.T) {
 				),
 			)
 
-			exceptions, err := apiClient.Exception.ListOpenExceptions(ctx)
-			require.NoError(t, err)
-			require.GreaterOrEqual(
-				t,
-				len(exceptions.Items),
-				4,
-				"should have at least 4 exceptions for category tests",
-			)
-
 			categories := []string{
 				"BANK_FEE_ERROR",
 				"UNRECOGNIZED_CHARGE",
 				"DUPLICATE_TRANSACTION",
 				"OTHER",
 			}
+			exceptionIDs := []string{
+				requireOpenExceptionForExternalID(ctx, t, apiClient, reconciliationContext.ID, ledgerSource.ID, "DISP-CAT-001"),
+				requireOpenExceptionForExternalID(ctx, t, apiClient, reconciliationContext.ID, ledgerSource.ID, "DISP-CAT-002"),
+				requireOpenExceptionForExternalID(ctx, t, apiClient, reconciliationContext.ID, ledgerSource.ID, "DISP-CAT-003"),
+				requireOpenExceptionForExternalID(ctx, t, apiClient, reconciliationContext.ID, ledgerSource.ID, "DISP-CAT-004"),
+			}
 
 			for i, category := range categories {
 				t.Run(category, func(t *testing.T) {
-					exceptionID := exceptions.Items[i].ID
+					exceptionID := exceptionIDs[i]
 
 					dispute, err := apiClient.Exception.OpenDispute(
 						ctx,

@@ -8,9 +8,15 @@ package command
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
+	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
+	streaming "github.com/LerianStudio/lib-streaming"
+	"github.com/LerianStudio/lib-streaming/streamingtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace/noop"
@@ -20,6 +26,8 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories/mocks"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/internal/streaming/emission"
 )
 
 var errTestRepoFailure = errors.New("repository failure")
@@ -163,13 +171,25 @@ func TestPseudonymizeActor(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		repo := mocks.NewMockActorMappingRepository(ctrl)
-		repo.EXPECT().Pseudonymize(gomock.Any(), "actor-123").Return(nil)
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		defer db.Close()
 
-		uc, err := NewActorMappingUseCase(repo)
+		mock.ExpectBegin()
+		mock.ExpectCommit()
+		repo.EXPECT().PseudonymizeWithTx(gomock.Any(), gomock.AssignableToTypeOf(&sql.Tx{}), "actor-123").Return(nil)
+
+		uc, err := NewActorMappingUseCase(
+			repo,
+			WithActorMappingInfrastructure(&actorMappingTestProvider{db: db}),
+			WithActorMappingStreamingEmitter(streamingtest.NewMockEmitter()),
+		)
 		require.NoError(t, err)
 
-		err = uc.PseudonymizeActor(testContext(), "actor-123")
+		ctx := tmcore.ContextWithTenantID(testContext(), "018f4f95-0000-7000-8000-000000000001")
+		err = uc.PseudonymizeActor(ctx, "actor-123")
 		assert.NoError(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 
 	t.Run("repository error", func(t *testing.T) {
@@ -177,15 +197,193 @@ func TestPseudonymizeActor(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		repo := mocks.NewMockActorMappingRepository(ctrl)
-		repo.EXPECT().Pseudonymize(gomock.Any(), "actor-456").Return(errTestRepoFailure)
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		defer db.Close()
 
-		uc, err := NewActorMappingUseCase(repo)
+		mock.ExpectBegin()
+		mock.ExpectRollback()
+		repo.EXPECT().PseudonymizeWithTx(gomock.Any(), gomock.AssignableToTypeOf(&sql.Tx{}), "actor-456").Return(errTestRepoFailure)
+
+		uc, err := NewActorMappingUseCase(
+			repo,
+			WithActorMappingInfrastructure(&actorMappingTestProvider{db: db}),
+			WithActorMappingStreamingEmitter(streamingtest.NewMockEmitter()),
+		)
 		require.NoError(t, err)
 
-		err = uc.PseudonymizeActor(testContext(), "actor-456")
+		ctx := tmcore.ContextWithTenantID(testContext(), "018f4f95-0000-7000-8000-000000000001")
+		err = uc.PseudonymizeActor(ctx, "actor-456")
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errTestRepoFailure)
+		assert.NoError(t, mock.ExpectationsWereMet())
 	})
+}
+
+func TestPseudonymizeActor_StreamingFailureRollsBackTransaction(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	repo := mocks.NewMockActorMappingRepository(ctrl)
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectRollback()
+
+	emitter := streamingtest.NewMockEmitter()
+	emitter.SetError(errors.New("streaming unavailable"))
+
+	uc, err := NewActorMappingUseCase(
+		repo,
+		WithActorMappingInfrastructure(&actorMappingTestProvider{db: db}),
+		WithActorMappingStreamingEmitter(emitter),
+	)
+	require.NoError(t, err)
+
+	ctx := tmcore.ContextWithTenantID(testContext(), "018f4f95-0000-7000-8000-000000000001")
+	repo.EXPECT().PseudonymizeWithTx(gomock.Any(), gomock.AssignableToTypeOf(&sql.Tx{}), "actor-123").Return(nil)
+
+	err = uc.PseudonymizeActor(ctx, "actor-123")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "emit actor pseudonymized")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPseudonymizeActor_StreamingPayloadIncludesTenantIDFromContext(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	repo := mocks.NewMockActorMappingRepository(ctrl)
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectCommit()
+
+	emitter := streamingtest.NewMockEmitter()
+	uc, err := NewActorMappingUseCase(
+		repo,
+		WithActorMappingInfrastructure(&actorMappingTestProvider{db: db}),
+		WithActorMappingStreamingEmitter(emitter),
+	)
+	require.NoError(t, err)
+
+	tenantID := "018f4f95-0000-7000-8000-000000000001"
+	ctx := tmcore.ContextWithTenantID(testContext(), tenantID)
+	repo.EXPECT().PseudonymizeWithTx(gomock.Any(), gomock.AssignableToTypeOf(&sql.Tx{}), "actor-123").Return(nil)
+
+	err = uc.PseudonymizeActor(ctx, "actor-123")
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	requests := emitter.Requests()
+	require.Len(t, requests, 1)
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(requests[0].Payload, &payload))
+	require.Equal(t, tenantID, payload["tenant_id"])
+}
+
+func TestPseudonymizeActor_StreamingNilTxLeaseFailsBeforeMutation(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	repo := mocks.NewMockActorMappingRepository(ctrl)
+	emitter := streamingtest.NewMockEmitter()
+
+	uc, err := NewActorMappingUseCase(
+		repo,
+		WithActorMappingInfrastructure(&nilActorMappingTxProvider{}),
+		WithActorMappingStreamingEmitter(emitter),
+	)
+	require.NoError(t, err)
+
+	ctx := tmcore.ContextWithTenantID(testContext(), "018f4f95-0000-7000-8000-000000000001")
+
+	err = uc.PseudonymizeActor(ctx, "actor-123")
+
+	require.ErrorIs(t, err, emission.ErrCriticalOutboxTxRequired)
+	streamingtest.AssertNoEvents(t, emitter)
+}
+
+func TestPseudonymizeActor_NilEmitterFailsBeforeMutation(t *testing.T) {
+	testCases := []struct {
+		name    string
+		emitter streaming.Emitter
+	}{
+		{name: "nil emitter", emitter: nil},
+		{name: "typed nil emitter", emitter: (*typedNilActorEmitter)(nil)},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			repo := mocks.NewMockActorMappingRepository(ctrl)
+
+			uc, err := NewActorMappingUseCase(
+				repo,
+				WithActorMappingInfrastructure(&nilActorMappingTxProvider{}),
+				WithActorMappingStreamingEmitter(tc.emitter),
+			)
+			require.NoError(t, err)
+
+			ctx := tmcore.ContextWithTenantID(testContext(), "018f4f95-0000-7000-8000-000000000001")
+
+			err = uc.PseudonymizeActor(ctx, "actor-123")
+
+			require.ErrorIs(t, err, emission.ErrCriticalOutboxTxRequired)
+		})
+	}
+}
+
+type typedNilActorEmitter struct{}
+
+func (*typedNilActorEmitter) Emit(context.Context, streaming.EmitRequest) error { return nil }
+
+func (*typedNilActorEmitter) Close() error { return nil }
+
+func (*typedNilActorEmitter) Healthy(context.Context) error { return nil }
+
+type nilActorMappingTxProvider struct{}
+
+func (*nilActorMappingTxProvider) BeginTx(context.Context) (*sharedPorts.TxLease, error) {
+	return nil, nil
+}
+
+func (*nilActorMappingTxProvider) GetRedisConnection(context.Context) (*sharedPorts.RedisConnectionLease, error) {
+	return nil, nil
+}
+
+func (*nilActorMappingTxProvider) GetReplicaDB(context.Context) (*sharedPorts.DBLease, error) {
+	return nil, nil
+}
+
+func (*nilActorMappingTxProvider) GetPrimaryDB(context.Context) (*sharedPorts.DBLease, error) {
+	return nil, nil
+}
+
+type actorMappingTestProvider struct {
+	db *sql.DB
+}
+
+func (provider *actorMappingTestProvider) BeginTx(ctx context.Context) (*sharedPorts.TxLease, error) {
+	tx, err := provider.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return sharedPorts.NewTxLease(tx, func() {}), nil
+}
+
+func (*actorMappingTestProvider) GetRedisConnection(context.Context) (*sharedPorts.RedisConnectionLease, error) {
+	return nil, nil
+}
+
+func (*actorMappingTestProvider) GetReplicaDB(context.Context) (*sharedPorts.DBLease, error) {
+	return nil, nil
+}
+
+func (*actorMappingTestProvider) GetPrimaryDB(context.Context) (*sharedPorts.DBLease, error) {
+	return nil, nil
 }
 
 func TestDeleteActorMapping(t *testing.T) {

@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
+	"github.com/LerianStudio/lib-streaming/streamingtest"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
@@ -132,6 +134,8 @@ func TestUnmatch_TenantMismatch_ReturnsError(t *testing.T) {
 		matchItemRepo:  matchItemRepo,
 		txRepo:         txRepo,
 	}
+	emitter := streamingtest.NewMockEmitter()
+	uc.streamEmitter = emitter
 
 	defaultTenantID := mustDefaultTenantUUID(t)
 	ctx := context.WithValue(context.Background(), auth.TenantIDKey, defaultTenantID.String())
@@ -326,6 +330,8 @@ func TestUnmatch_UpdateGroupFails(t *testing.T) {
 		matchItemRepo:  matchItemRepo,
 		txRepo:         txRepo,
 	}
+	emitter := streamingtest.NewMockEmitter()
+	uc.streamEmitter = emitter
 
 	input := UnmatchInput{
 		TenantID:     mustDefaultTenantUUID(t),
@@ -511,6 +517,8 @@ func TestUnmatch_Success(t *testing.T) {
 		matchItemRepo:  matchItemRepo,
 		txRepo:         txRepo,
 	}
+	emitter := streamingtest.NewMockEmitter()
+	uc.streamEmitter = emitter
 
 	input := UnmatchInput{
 		TenantID:     mustDefaultTenantUUID(t),
@@ -519,7 +527,9 @@ func TestUnmatch_Success(t *testing.T) {
 		Reason:       "User requested unmatch",
 	}
 
-	err := uc.Unmatch(context.Background(), input)
+	ctx := tmcore.ContextWithTenantID(context.Background(), input.TenantID.String())
+	ctx = context.WithValue(ctx, auth.TenantIDKey, input.TenantID.String())
+	err := uc.Unmatch(ctx, input)
 	require.NoError(t, err)
 
 	assert.Equal(t, matchingVO.MatchGroupStatusRejected, group.Status)
@@ -528,6 +538,7 @@ func TestUnmatch_Success(t *testing.T) {
 	assert.Len(t, markedIDs, 2)
 	assert.Contains(t, markedIDs, txID1)
 	assert.Contains(t, markedIDs, txID2)
+	streamingtest.AssertNoEvents(t, emitter)
 }
 
 func TestUnmatch_NoItems(t *testing.T) {
@@ -756,8 +767,9 @@ func TestRejectOrRevokeGroup_RejectSuccess(t *testing.T) {
 		txRepo:         txRepo,
 	}
 
-	err := uc.rejectOrRevokeGroup(context.Background(), nil, nil, group, "Test rejection reason", false)
+	updatedGroup, err := uc.rejectOrRevokeGroup(context.Background(), nil, nil, group, "Test rejection reason", false)
 	require.NoError(t, err)
+	require.Same(t, group, updatedGroup)
 
 	assert.Equal(t, matchingVO.MatchGroupStatusRejected, group.Status)
 	assert.NotNil(t, group.RejectedReason)
@@ -955,7 +967,8 @@ func TestUnmatch_ConfirmedGroup_Revokes(t *testing.T) {
 
 	confidence, confidenceErr := matchingVO.ParseConfidenceScore(95)
 	require.NoError(t, confidenceErr)
-	now := time.Now().UTC()
+	now := time.Now().UTC().Add(-time.Hour)
+	persistedUpdatedAt := now.Add(37 * time.Minute)
 
 	group := &matchingEntities.MatchGroup{
 		ID:          matchGroupID,
@@ -987,7 +1000,15 @@ func TestUnmatch_ConfirmedGroup_Revokes(t *testing.T) {
 
 	matchGroupRepo, matchItemRepo, txRepo := newUnmatchMocks(t)
 	matchGroupRepo.EXPECT().FindByID(gomock.Any(), contextID, matchGroupID).Return(group, nil)
-	matchGroupRepo.EXPECT().UpdateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).Return(group, nil)
+	matchGroupRepo.EXPECT().UpdateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ matchingRepositories.Tx, updated *matchingEntities.MatchGroup) (*matchingEntities.MatchGroup, error) {
+			persistedGroup := *updated
+			persistedGroup.UpdatedAt = persistedUpdatedAt
+			persistedGroup.Items = updated.Items
+
+			return &persistedGroup, nil
+		},
+	)
 	matchItemRepo.EXPECT().ListByMatchGroupID(gomock.Any(), matchGroupID).Return(group.Items, nil)
 
 	var markedIDs []uuid.UUID
@@ -1018,6 +1039,8 @@ func TestUnmatch_ConfirmedGroup_Revokes(t *testing.T) {
 		txRepo:         txRepo,
 		outboxRepoTx:   outboxRepo,
 	}
+	emitter := streamingtest.NewMockEmitter()
+	uc.streamEmitter = emitter
 
 	input := UnmatchInput{
 		TenantID:     mustDefaultTenantUUID(t),
@@ -1026,7 +1049,9 @@ func TestUnmatch_ConfirmedGroup_Revokes(t *testing.T) {
 		Reason:       "Revoke confirmed group",
 	}
 
-	err := uc.Unmatch(context.Background(), input)
+	ctx := tmcore.ContextWithTenantID(context.Background(), input.TenantID.String())
+	ctx = context.WithValue(ctx, auth.TenantIDKey, input.TenantID.String())
+	err := uc.Unmatch(ctx, input)
 	require.NoError(t, err)
 
 	assert.Equal(t, matchingVO.MatchGroupStatusRevoked, group.Status)
@@ -1048,5 +1073,12 @@ func TestUnmatch_ConfirmedGroup_Revokes(t *testing.T) {
 	assert.Equal(t, matchGroupID, unmatchPayload.MatchID)
 	assert.Equal(t, contextID, unmatchPayload.ContextID)
 	assert.Equal(t, "Revoke confirmed group", unmatchPayload.Reason)
+	assert.Equal(t, persistedUpdatedAt, unmatchPayload.Timestamp)
 	assert.Len(t, unmatchPayload.TransactionIDs, 2)
+
+	requests := emitter.Requests()
+	require.Len(t, requests, 1)
+	var streamPayload map[string]any
+	require.NoError(t, json.Unmarshal(requests[0].Payload, &streamPayload))
+	assert.Equal(t, formatMatchingTime(persistedUpdatedAt), streamPayload["unmatched_at"])
 }

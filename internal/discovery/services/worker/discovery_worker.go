@@ -22,6 +22,8 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
+	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
@@ -31,7 +33,17 @@ import (
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	workermetrics "github.com/LerianStudio/matcher/internal/shared/observability/workermetrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/internal/streaming/emission"
 )
+
+// Functional options for streaming.Emitter injection follow the convention:
+// - Bare WithStreamingEmitter when this package owns one emitter consumer
+// - With<ReceiverName>StreamingEmitter when multiple consumers coexist in the same package
+//
+// Two emitter-consuming workers coexist in this package (DiscoveryWorker,
+// BridgeWorker), so the discovery setter uses the receiver-prefixed form
+// WithDiscoveryStreamingEmitter; the bridge worker keeps the bare
+// WithStreamingEmitter name (it is the dominant bridge-package consumer).
 
 // discoveryWorkerName is the stable label value emitted on matcher.worker.*
 // metrics from this worker.
@@ -74,6 +86,7 @@ type DiscoveryWorker struct {
 	logger        libLog.Logger
 	tracer        trace.Tracer
 	metrics       *workermetrics.Recorder
+	streamEmitter streaming.Emitter
 
 	mu       sync.RWMutex
 	cfg      DiscoveryWorkerConfig
@@ -82,6 +95,20 @@ type DiscoveryWorker struct {
 	stopCh   chan struct{}
 	doneCh   chan struct{}
 	updateCh chan time.Duration
+}
+
+// DiscoveryWorkerOption configures optional discovery worker dependencies.
+type DiscoveryWorkerOption func(*DiscoveryWorker)
+
+// WithDiscoveryStreamingEmitter sets the emitter used for discovery worker streaming events.
+// Use emission.IsNilEmitter() to defend against typed-nil interface values
+// (e.g., a (*MockEmitter)(nil) hiding behind a streaming.Emitter interface).
+func WithDiscoveryStreamingEmitter(emitter streaming.Emitter) DiscoveryWorkerOption {
+	return func(worker *DiscoveryWorker) {
+		if !emission.IsNilEmitter(emitter) {
+			worker.streamEmitter = emitter
+		}
+	}
 }
 
 // NewDiscoveryWorker creates a new discovery worker.
@@ -93,6 +120,7 @@ func NewDiscoveryWorker(
 	infraProvider sharedPorts.InfrastructureProvider,
 	cfg DiscoveryWorkerConfig,
 	logger libLog.Logger,
+	options ...DiscoveryWorkerOption,
 ) (*DiscoveryWorker, error) {
 	if fetcherClient == nil {
 		return nil, ErrNilFetcherClient
@@ -127,7 +155,7 @@ func NewDiscoveryWorker(
 		return nil, fmt.Errorf("create connection syncer: %w", err)
 	}
 
-	return &DiscoveryWorker{
+	worker := &DiscoveryWorker{
 		fetcherClient: fetcherClient,
 		connRepo:      connRepo,
 		schemaRepo:    schemaRepo,
@@ -141,7 +169,15 @@ func NewDiscoveryWorker(
 		stopCh:        make(chan struct{}),
 		doneCh:        make(chan struct{}),
 		updateCh:      make(chan time.Duration, 1),
-	}, nil
+	}
+
+	for _, option := range options {
+		if option != nil {
+			option(worker)
+		}
+	}
+
+	return worker, nil
 }
 
 // Start begins the discovery worker.
@@ -382,7 +418,7 @@ func (dw *DiscoveryWorker) syncConnectionsAndSchemas(ctx context.Context) (int, 
 // SyncConnection surfaced an error. A ListConnections error returns
 // (0, 0) — nothing was attempted, so nothing failed at the item level.
 func (dw *DiscoveryWorker) syncTenantConnections(parentCtx context.Context, tenantID string) (int, int) {
-	ctx := context.WithValue(parentCtx, auth.TenantIDKey, tenantID)
+	ctx := tmcore.ContextWithTenantID(context.WithValue(parentCtx, auth.TenantIDKey, tenantID), tenantID)
 	logger, tracer := dw.tracking(ctx)
 
 	ctx, span := tracer.Start(ctx, "discovery.worker.sync_tenant_connections")
@@ -456,6 +492,20 @@ func (dw *DiscoveryWorker) syncConnection(ctx context.Context, fc *sharedPorts.F
 		return false
 	}
 
+	conn, err := dw.connRepo.FindByFetcherID(ctx, fc.ID)
+	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "failed to reload synced connection for streaming", err)
+
+		logger.With(
+			libLog.String("fetcher_conn_id", fc.ID),
+			libLog.Err(err),
+		).Log(ctx, libLog.LevelWarn, "discovery: failed to reload synced connection for streaming")
+
+		return true
+	}
+
+	dw.emitFetcherConnectionSynced(ctx, span, conn)
+
 	return true
 }
 
@@ -493,6 +543,7 @@ func (dw *DiscoveryWorker) markStaleConnections(ctx context.Context, seenFetcher
 			continue
 		}
 
+		previousStatus := conn.Status.String()
 		if err := dw.syncer.MarkConnectionUnreachable(ctx, conn); err != nil {
 			logger.With(
 				libLog.String("connection.id", conn.ID.String()),
@@ -501,6 +552,8 @@ func (dw *DiscoveryWorker) markStaleConnections(ctx context.Context, seenFetcher
 
 			continue
 		}
+
+		dw.emitFetcherConnectionUnreachable(ctx, span, conn, previousStatus)
 
 		staleCount++
 	}

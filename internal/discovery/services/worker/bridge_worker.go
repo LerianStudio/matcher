@@ -17,13 +17,18 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	discoveryPorts "github.com/LerianStudio/matcher/internal/discovery/ports"
 	workermetrics "github.com/LerianStudio/matcher/internal/shared/observability/workermetrics"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/internal/streaming/emission"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
+
+// See discovery_worker.go for the streaming.Emitter functional-option naming
+// convention used by this package.
 
 // bridgeWorkerName is the stable label value emitted on matcher.worker.*
 // metrics from this worker.
@@ -182,6 +187,7 @@ type BridgeWorker struct {
 	logger          libLog.Logger
 	tracer          trace.Tracer
 	metrics         *workermetrics.Recorder
+	streamEmitter   streaming.Emitter
 
 	// cleanups holds release callbacks registered by bootstrap wiring so
 	// resources whose lifetime is bound to the worker (e.g. a Redis
@@ -195,6 +201,20 @@ type BridgeWorker struct {
 	doneCh   chan struct{}
 }
 
+// BridgeWorkerOption configures optional bridge worker dependencies.
+type BridgeWorkerOption func(*BridgeWorker)
+
+// WithStreamingEmitter sets the emitter used for bridge worker streaming events.
+// Use emission.IsNilEmitter() to defend against typed-nil interface values
+// (e.g., a (*MockEmitter)(nil) hiding behind a streaming.Emitter interface).
+func WithStreamingEmitter(emitter streaming.Emitter) BridgeWorkerOption {
+	return func(worker *BridgeWorker) {
+		if !emission.IsNilEmitter(emitter) {
+			worker.streamEmitter = emitter
+		}
+	}
+}
+
 // NewBridgeWorker constructs the worker with validated dependencies.
 func NewBridgeWorker(
 	orchestrator sharedPorts.BridgeOrchestrator,
@@ -203,6 +223,7 @@ func NewBridgeWorker(
 	infraProvider sharedPorts.InfrastructureProvider,
 	cfg BridgeWorkerConfig,
 	logger libLog.Logger,
+	options ...BridgeWorkerOption,
 ) (*BridgeWorker, error) {
 	if orchestrator == nil {
 		return nil, sharedPorts.ErrNilBridgeOrchestrator
@@ -226,7 +247,7 @@ func NewBridgeWorker(
 		logger = &libLog.NopLogger{}
 	}
 
-	return &BridgeWorker{
+	worker := &BridgeWorker{
 		orchestrator:   orchestrator,
 		extractionRepo: extractionRepo,
 		tenantLister:   tenantLister,
@@ -237,7 +258,15 @@ func NewBridgeWorker(
 		metrics:        workermetrics.NewRecorder(bridgeWorkerName),
 		stopCh:         make(chan struct{}),
 		doneCh:         make(chan struct{}),
-	}, nil
+	}
+
+	for _, option := range options {
+		if option != nil {
+			option(worker)
+		}
+	}
+
+	return worker, nil
 }
 
 // Start begins the worker loop. The goroutine is supervised by

@@ -149,8 +149,15 @@ func (repo *Repository) GetByActorID(ctx context.Context, actorID string) (*enti
 	return result, nil
 }
 
-// Pseudonymize replaces PII fields with [REDACTED] for the given actor ID.
-func (repo *Repository) Pseudonymize(ctx context.Context, actorID string) error {
+// PseudonymizeWithTx replaces PII fields with [REDACTED] for the given actor ID
+// using the caller-owned transaction. This is the only entry point — production
+// paths atomically couple the mutation with a streaming emit at the service layer
+// (see governance/services/command/actor_mapping_commands.go).
+func (repo *Repository) PseudonymizeWithTx(ctx context.Context, tx *sql.Tx, actorID string) error {
+	return repo.pseudonymizeInternal(ctx, tx, actorID)
+}
+
+func (repo *Repository) pseudonymizeInternal(ctx context.Context, tx *sql.Tx, actorID string) error {
 	if repo == nil || repo.provider == nil {
 		return ErrRepositoryNotInitialized
 	}
@@ -164,9 +171,10 @@ func (repo *Repository) Pseudonymize(ctx context.Context, actorID string) error 
 
 	defer span.End()
 
-	_, err := pgcommon.WithTenantTxProvider(
+	_, err := pgcommon.WithTenantTxOrExistingProvider(
 		ctx,
 		repo.provider,
+		tx,
 		func(tx *sql.Tx) (struct{}, error) {
 			now := time.Now().UTC()
 

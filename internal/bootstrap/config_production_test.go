@@ -282,4 +282,3 @@ func TestConfig_ValidateInvalidOtelDeploymentEnv(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "OTEL_RESOURCE_DEPLOYMENT_ENVIRONMENT must be one of")
 }
-

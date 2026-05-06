@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	streaming "github.com/LerianStudio/lib-streaming"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -30,7 +32,7 @@ func TestForceMatch_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -41,7 +43,7 @@ func TestForceMatch_Success(t *testing.T) {
 	exec := portMocks.NewMockResolutionExecutor(ctrl)
 	audit := portMocks.NewMockAuditPublisher(ctrl)
 	actor := actorExtractor("analyst-1")
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	tx, mock, err := newMockTx(ctx)
 	require.NoError(t, err)
 	mock.ExpectCommit()
@@ -67,7 +69,7 @@ func TestForceMatch_Success(t *testing.T) {
 			return nil
 		})
 
-	uc, err := NewExceptionUseCase(repo, actor, audit, infra, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actor, audit, infra, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	result, err := uc.ForceMatch(ctx, ForceMatchCommand{
@@ -88,7 +90,7 @@ func TestForceMatch_ValidationErrors(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -100,10 +102,10 @@ func TestForceMatch_ValidationErrors(t *testing.T) {
 	audit := portMocks.NewMockAuditPublisher(ctrl)
 	actor := actorExtractor("analyst-1")
 
-	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 
 	_, err = uc.ForceMatch(
 		ctx,
@@ -134,7 +136,7 @@ func TestForceMatch_ActorRequired(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -146,10 +148,10 @@ func TestForceMatch_ActorRequired(t *testing.T) {
 	audit := portMocks.NewMockAuditPublisher(ctrl)
 	emptyActor := actorExtractor("")
 
-	uc, err := NewExceptionUseCase(repo, emptyActor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, emptyActor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	_, err = uc.ForceMatch(context.Background(), ForceMatchCommand{
+	_, err = uc.ForceMatch(testStreamingContext(), ForceMatchCommand{
 		ExceptionID:    exception.ID,
 		OverrideReason: "POLICY_EXCEPTION",
 		Notes:          "resolved after review",
@@ -157,10 +159,10 @@ func TestForceMatch_ActorRequired(t *testing.T) {
 	require.ErrorIs(t, err, ErrActorRequired)
 
 	whitespaceActor := actorExtractor("  ")
-	uc2, err := NewExceptionUseCase(repo, whitespaceActor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
+	uc2, err := NewExceptionUseCase(repo, whitespaceActor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	_, err = uc2.ForceMatch(context.Background(), ForceMatchCommand{
+	_, err = uc2.ForceMatch(testStreamingContext(), ForceMatchCommand{
 		ExceptionID:    exception.ID,
 		OverrideReason: "POLICY_EXCEPTION",
 		Notes:          "resolved after review",
@@ -174,7 +176,7 @@ func TestForceMatch_DependencyErrors(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -208,10 +210,10 @@ func TestForceMatch_DependencyErrors(t *testing.T) {
 			return exc, nil
 		})
 
-	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 
 	_, err = uc.ForceMatch(
 		ctx,
@@ -252,7 +254,7 @@ func TestForceMatch_AuditError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -283,11 +285,11 @@ func TestForceMatch_AuditError(t *testing.T) {
 			return errTestAudit
 		})
 
-	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	_, err = uc.ForceMatch(
-		context.Background(),
+		testStreamingContext(),
 		ForceMatchCommand{
 			ExceptionID:    exception.ID,
 			Notes:          "note",
@@ -305,7 +307,7 @@ func TestForceMatch_AssignedExceptionResolvesFromPending(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -313,14 +315,14 @@ func TestForceMatch_AssignedExceptionResolvesFromPending(t *testing.T) {
 	require.NoError(t, err)
 
 	// Assign with a valid assignee.
-	require.NoError(t, exception.Assign(context.Background(), "analyst-1", nil))
+	require.NoError(t, exception.Assign(testStreamingContext(), "analyst-1", nil))
 	require.Equal(t, value_objects.ExceptionStatusAssigned, exception.Status)
 
 	repo := repoMocks.NewMockExceptionRepository(ctrl)
 	exec := portMocks.NewMockResolutionExecutor(ctrl)
 	audit := portMocks.NewMockAuditPublisher(ctrl)
 	actor := actorExtractor("analyst-1")
-	ctx := context.Background()
+	ctx := testStreamingContext()
 
 	tx, mock, err := newMockTx(ctx)
 	require.NoError(t, err)
@@ -341,7 +343,7 @@ func TestForceMatch_AssignedExceptionResolvesFromPending(t *testing.T) {
 		})
 	audit.EXPECT().PublishExceptionEventWithTx(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 
-	uc, err := NewExceptionUseCase(repo, actor, audit, infra, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actor, audit, infra, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
 	result, err := uc.ForceMatch(ctx, ForceMatchCommand{
@@ -368,29 +370,29 @@ func TestNewUseCase_Validations(t *testing.T) {
 	exec := portMocks.NewMockResolutionExecutor(ctrl)
 	audit := portMocks.NewMockAuditPublisher(ctrl)
 
-	_, err := NewExceptionUseCase(nil, actor, audit, infra, WithResolutionExecutor(exec))
+	_, err := NewExceptionUseCase(nil, actor, audit, infra, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.ErrorIs(t, err, ErrNilExceptionRepository)
 
 	// The resolution executor is optional at construction time; its
 	// absence now surfaces when a resolution operation (ForceMatch) is
 	// called without having wired the executor via the option.
-	ucWithoutExec, err := NewExceptionUseCase(repo, actor, audit, infra)
+	ucWithoutExec, err := NewExceptionUseCase(repo, actor, audit, infra, WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	_, err = ucWithoutExec.ForceMatch(context.Background(), ForceMatchCommand{
+	_, err = ucWithoutExec.ForceMatch(testStreamingContext(), ForceMatchCommand{
 		ExceptionID:    uuid.New(),
 		OverrideReason: "POLICY_EXCEPTION",
 		Notes:          "test",
 	})
 	require.ErrorIs(t, err, ErrNilResolutionExecutor)
 
-	_, err = NewExceptionUseCase(repo, actor, nil, infra, WithResolutionExecutor(exec))
+	_, err = NewExceptionUseCase(repo, actor, nil, infra, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.ErrorIs(t, err, ErrNilAuditPublisher)
 
-	_, err = NewExceptionUseCase(repo, nil, audit, infra, WithResolutionExecutor(exec))
+	_, err = NewExceptionUseCase(repo, nil, audit, infra, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.ErrorIs(t, err, ErrNilActorExtractor)
 
-	_, err = NewExceptionUseCase(repo, actor, audit, nil, WithResolutionExecutor(exec))
+	_, err = NewExceptionUseCase(repo, actor, audit, nil, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.ErrorIs(t, err, ErrNilInfraProvider)
 }
 
@@ -416,7 +418,7 @@ func TestForceMatch_AllOverrideReasons(t *testing.T) {
 			ctrl := gomock.NewController(t)
 
 			exception, err := entities.NewException(
-				context.Background(),
+				testStreamingContext(),
 				uuid.New(),
 				sharedexception.ExceptionSeverityHigh,
 				nil,
@@ -447,10 +449,10 @@ func TestForceMatch_AllOverrideReasons(t *testing.T) {
 					return nil
 				})
 
-			uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
+			uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 			require.NoError(t, err)
 
-			result, err := uc.ForceMatch(context.Background(), ForceMatchCommand{
+			result, err := uc.ForceMatch(testStreamingContext(), ForceMatchCommand{
 				ExceptionID:    exception.ID,
 				OverrideReason: tc.reason,
 				Notes:          "resolved for reason: " + tc.reason,
@@ -469,7 +471,7 @@ func TestForceMatch_PendingResolutionRejected(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -489,10 +491,10 @@ func TestForceMatch_PendingResolutionRejected(t *testing.T) {
 	repo.EXPECT().FindByID(gomock.Any(), exception.ID).Return(exception, nil)
 	// StartResolution should fail, so no executor call, no update, no audit.
 
-	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	_, err = uc.ForceMatch(context.Background(), ForceMatchCommand{
+	_, err = uc.ForceMatch(testStreamingContext(), ForceMatchCommand{
 		ExceptionID:    exception.ID,
 		OverrideReason: "POLICY_EXCEPTION",
 		Notes:          "should fail",
@@ -506,7 +508,7 @@ func TestForceMatch_GatewayFailureRevertsStatus(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
@@ -539,10 +541,10 @@ func TestForceMatch_GatewayFailureRevertsStatus(t *testing.T) {
 			return exc, nil
 		})
 
-	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	_, err = uc.ForceMatch(context.Background(), ForceMatchCommand{
+	_, err = uc.ForceMatch(testStreamingContext(), ForceMatchCommand{
 		ExceptionID:    exception.ID,
 		OverrideReason: "POLICY_EXCEPTION",
 		Notes:          "note",
@@ -557,13 +559,13 @@ func TestForceMatch_GatewayFailureRevertsAssignedStatus(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	exception, err := entities.NewException(
-		context.Background(),
+		testStreamingContext(),
 		uuid.New(),
 		sharedexception.ExceptionSeverityHigh,
 		nil,
 	)
 	require.NoError(t, err)
-	require.NoError(t, exception.Assign(context.Background(), "analyst-1", nil))
+	require.NoError(t, exception.Assign(testStreamingContext(), "analyst-1", nil))
 	require.Equal(t, value_objects.ExceptionStatusAssigned, exception.Status)
 
 	repo := repoMocks.NewMockExceptionRepository(ctrl)
@@ -590,10 +592,10 @@ func TestForceMatch_GatewayFailureRevertsAssignedStatus(t *testing.T) {
 			return exc, nil
 		})
 
-	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
+	uc, err := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 	require.NoError(t, err)
 
-	_, err = uc.ForceMatch(context.Background(), ForceMatchCommand{
+	_, err = uc.ForceMatch(testStreamingContext(), ForceMatchCommand{
 		ExceptionID:    exception.ID,
 		OverrideReason: "POLICY_EXCEPTION",
 		Notes:          "note",
@@ -607,7 +609,7 @@ func TestForceMatch_ConcurrentOperations(t *testing.T) {
 
 	const numGoroutines = 10
 
-	ctx := context.Background()
+	ctx := testStreamingContext()
 	errChan := make(chan error, numGoroutines)
 
 	for i := 0; i < numGoroutines; i++ {
@@ -643,7 +645,7 @@ func TestForceMatch_ConcurrentOperations(t *testing.T) {
 				})
 			audit.EXPECT().PublishExceptionEventWithTx(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 
-			localUC, innerErr := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec))
+			localUC, innerErr := NewExceptionUseCase(repo, actor, audit, &stubInfraProvider{}, WithResolutionExecutor(exec), WithStreamingEmitter(streaming.NewNoopEmitter()))
 			if innerErr != nil {
 				errChan <- innerErr
 				return

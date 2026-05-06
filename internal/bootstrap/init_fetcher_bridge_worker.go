@@ -18,6 +18,7 @@ import (
 
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/LerianStudio/matcher/internal/discovery/adapters/fetcher"
 	discoveryExtractionRepo "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres/extraction"
@@ -52,7 +53,13 @@ func initFetcherBridgeWorker(
 	tenantLister sharedPorts.TenantLister,
 	bundle *FetcherBridgeAdapters,
 	logger libLog.Logger,
+	streamEmitters ...streaming.Emitter,
 ) (*discoveryWorker.BridgeWorker, error) {
+	var streamEmitter streaming.Emitter
+	if len(streamEmitters) > 0 {
+		streamEmitter = streamEmitters[0]
+	}
+
 	if cfg == nil || !cfg.Fetcher.Enabled {
 		return nil, nil
 	}
@@ -104,6 +111,7 @@ func initFetcherBridgeWorker(
 		bundle.LinkWrite,
 		sourceResolver,
 		orchestratorCfg,
+		discoveryCommand.WithBridgeStreamingEmitter(streamEmitter),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create bridge orchestrator: %w", err)
@@ -123,6 +131,7 @@ func initFetcherBridgeWorker(
 			},
 		},
 		logger,
+		discoveryWorker.WithStreamingEmitter(streamEmitter),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create bridge worker: %w", err)

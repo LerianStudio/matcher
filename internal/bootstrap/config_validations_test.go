@@ -369,4 +369,3 @@ func TestConfig_ValidateAllOtelEnvs(t *testing.T) {
 		})
 	}
 }
-

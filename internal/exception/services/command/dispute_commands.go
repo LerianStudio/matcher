@@ -119,6 +119,7 @@ func (uc *ExceptionUseCase) OpenDispute(
 	return uc.processOpenDispute(ctx, cmd, params, logger, span)
 }
 
+//nolint:cyclop // Transactional critical streaming guard is intentionally colocated with dispute state-machine write path.
 func (uc *ExceptionUseCase) processOpenDispute(
 	ctx context.Context,
 	cmd OpenDisputeCommand,
@@ -170,11 +171,27 @@ func (uc *ExceptionUseCase) processOpenDispute(
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 
+	// Arm the rollback BEFORE validating the lease. validateCriticalTxLease
+	// can return early when SQLTx() is nil, which would otherwise leak the
+	// lease's release callback (the connection-pool reservation guard). The
+	// nil-guarded Rollback is safe — TxLease.Rollback handles nil tx by
+	// invoking release once. sql.ErrTxDone filtering preserves the existing
+	// post-commit no-op semantics.
 	defer func() {
+		if txLease == nil {
+			return
+		}
+
 		if rbErr := txLease.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
 			libOpentelemetry.HandleSpanError(span, "tx.Rollback failed", rbErr)
 		}
 	}()
+
+	if err := validateCriticalTxLease(txLease, "begin open dispute transaction"); err != nil {
+		libOpentelemetry.HandleSpanError(span, "invalid critical streaming transaction", err)
+
+		return nil, err
+	}
 
 	created, err := uc.disputeRepo.CreateWithTx(ctx, txLease.SQLTx(), newDispute)
 	if err != nil {
@@ -199,6 +216,13 @@ func (uc *ExceptionUseCase) processOpenDispute(
 		libOpentelemetry.HandleSpanError(span, "audit publish failed", err)
 
 		return nil, fmt.Errorf("publish audit: %w", err)
+	}
+
+	if err := uc.emitDisputeCritical(ctx, span, txLease.SQLTx(), "dispute.opened", created, map[string]any{
+		"category":  created.Category.String(),
+		"opened_at": formatExceptionTime(created.UpdatedAt),
+	}); err != nil {
+		return nil, fmt.Errorf("emit dispute opened: %w", err)
 	}
 
 	if err := txLease.Commit(); err != nil {
@@ -234,6 +258,7 @@ func (uc *ExceptionUseCase) validateCloseDispute(
 		return nil, ErrDisputeIDRequired
 	}
 
+	// Actor captured pre-tx; JWT subject is immutable for the request lifetime.
 	actor := strings.TrimSpace(uc.actorExtractor.GetActor(ctx))
 	if actor == "" {
 		return nil, ErrActorRequired
@@ -265,6 +290,7 @@ func (uc *ExceptionUseCase) CloseDispute(
 	return uc.processCloseDispute(ctx, cmd, params, logger, span)
 }
 
+//nolint:cyclop // Transactional critical streaming guard is intentionally colocated with dispute state-machine write path.
 func (uc *ExceptionUseCase) processCloseDispute(
 	ctx context.Context,
 	cmd CloseDisputeCommand,
@@ -272,7 +298,36 @@ func (uc *ExceptionUseCase) processCloseDispute(
 	logger libLog.Logger,
 	span trace.Span,
 ) (*dispute.Dispute, error) {
-	existingDispute, err := uc.disputeRepo.FindByID(ctx, cmd.DisputeID)
+	// Atomic transaction: load dispute on primary, mutate, update, and create audit log.
+	// Loading inside the transaction avoids replica lag causing stale evidence reads.
+	// This ensures SOX compliance - if either fails, both are rolled back.
+	txLease, err := uc.infraProvider.BeginTx(ctx)
+	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "failed to begin transaction", err)
+
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+
+	// Arm the rollback BEFORE validating the lease (see openDispute for the
+	// full rationale): validateCriticalTxLease can return before the release
+	// callback runs, leaking the connection-pool reservation otherwise.
+	defer func() {
+		if txLease == nil {
+			return
+		}
+
+		if rbErr := txLease.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+			libOpentelemetry.HandleSpanError(span, "tx.Rollback failed", rbErr)
+		}
+	}()
+
+	if err := validateCriticalTxLease(txLease, "begin close dispute transaction"); err != nil {
+		libOpentelemetry.HandleSpanError(span, "invalid critical streaming transaction", err)
+
+		return nil, err
+	}
+
+	existingDispute, err := uc.disputeRepo.FindByIDWithTx(ctx, txLease.SQLTx(), cmd.DisputeID)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to load dispute", err)
 
@@ -299,21 +354,6 @@ func (uc *ExceptionUseCase) processCloseDispute(
 		}
 	}
 
-	// Atomic transaction: update dispute state AND create audit log in same transaction.
-	// This ensures SOX compliance - if either fails, both are rolled back.
-	txLease, err := uc.infraProvider.BeginTx(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to begin transaction", err)
-
-		return nil, fmt.Errorf("begin transaction: %w", err)
-	}
-
-	defer func() {
-		if rbErr := txLease.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
-			libOpentelemetry.HandleSpanError(span, "tx.Rollback failed", rbErr)
-		}
-	}()
-
 	updated, err := uc.disputeRepo.UpdateWithTx(ctx, txLease.SQLTx(), existingDispute)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to update dispute", err)
@@ -336,6 +376,17 @@ func (uc *ExceptionUseCase) processCloseDispute(
 		libOpentelemetry.HandleSpanError(span, "audit publish failed", err)
 
 		return nil, fmt.Errorf("publish audit: %w", err)
+	}
+
+	definitionKey := "dispute.lost"
+	if cmd.Won {
+		definitionKey = "dispute.won"
+	}
+
+	if err := uc.emitDisputeCritical(ctx, span, txLease.SQLTx(), definitionKey, updated, map[string]any{
+		"closed_at": formatExceptionTime(updated.UpdatedAt),
+	}); err != nil {
+		return nil, fmt.Errorf("emit dispute closed: %w", err)
 	}
 
 	if err := txLease.Commit(); err != nil {
@@ -372,6 +423,7 @@ func (uc *ExceptionUseCase) validateSubmitEvidence(
 		return nil, ErrDisputeIDRequired
 	}
 
+	// Actor captured pre-tx; JWT subject is immutable for the request lifetime.
 	actor := strings.TrimSpace(uc.actorExtractor.GetActor(ctx))
 	if actor == "" {
 		return nil, ErrActorRequired
@@ -418,6 +470,7 @@ func (uc *ExceptionUseCase) SubmitEvidence(
 	return uc.processSubmitEvidence(ctx, cmd, params, logger, span)
 }
 
+//nolint:cyclop // Transactional critical streaming guard is intentionally colocated with evidence state-machine write path.
 func (uc *ExceptionUseCase) processSubmitEvidence(
 	ctx context.Context,
 	cmd SubmitEvidenceCommand,
@@ -425,7 +478,37 @@ func (uc *ExceptionUseCase) processSubmitEvidence(
 	logger libLog.Logger,
 	span trace.Span,
 ) (*dispute.Dispute, error) {
-	existingDispute, err := uc.disputeRepo.FindByID(ctx, cmd.DisputeID)
+	// Atomic transaction: load dispute on primary, append evidence, update, and create audit log.
+	// Loading inside the transaction guarantees we read from the primary, avoiding replica lag
+	// that would cause evidence items from prior submissions to be silently lost.
+	// This ensures SOX compliance - if either fails, both are rolled back.
+	txLease, err := uc.infraProvider.BeginTx(ctx)
+	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "failed to begin transaction", err)
+
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+
+	// Arm the rollback BEFORE validating the lease (see openDispute for the
+	// full rationale): validateCriticalTxLease can return before the release
+	// callback runs, leaking the connection-pool reservation otherwise.
+	defer func() {
+		if txLease == nil {
+			return
+		}
+
+		if rbErr := txLease.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+			libOpentelemetry.HandleSpanError(span, "tx.Rollback failed", rbErr)
+		}
+	}()
+
+	if err := validateCriticalTxLease(txLease, "begin submit evidence transaction"); err != nil {
+		libOpentelemetry.HandleSpanError(span, "invalid critical streaming transaction", err)
+
+		return nil, err
+	}
+
+	existingDispute, err := uc.disputeRepo.FindByIDWithTx(ctx, txLease.SQLTx(), cmd.DisputeID)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to load dispute", err)
 
@@ -439,21 +522,6 @@ func (uc *ExceptionUseCase) processSubmitEvidence(
 
 		return nil, fmt.Errorf("add evidence: %w", err)
 	}
-
-	// Atomic transaction: update dispute state AND create audit log in same transaction.
-	// This ensures SOX compliance - if either fails, both are rolled back.
-	txLease, err := uc.infraProvider.BeginTx(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to begin transaction", err)
-
-		return nil, fmt.Errorf("begin transaction: %w", err)
-	}
-
-	defer func() {
-		if rbErr := txLease.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
-			libOpentelemetry.HandleSpanError(span, "tx.Rollback failed", rbErr)
-		}
-	}()
 
 	updated, err := uc.disputeRepo.UpdateWithTx(ctx, txLease.SQLTx(), existingDispute)
 	if err != nil {
@@ -481,6 +549,23 @@ func (uc *ExceptionUseCase) processSubmitEvidence(
 		libOpentelemetry.HandleSpanError(span, "audit publish failed", err)
 
 		return nil, fmt.Errorf("publish audit: %w", err)
+	}
+
+	var latestEvidence *dispute.Evidence
+	if len(updated.Evidence) > 0 {
+		latestEvidence = &updated.Evidence[len(updated.Evidence)-1]
+	}
+
+	if latestEvidence != nil {
+		if err := uc.emitExceptionPayload(ctx, span, txLease.SQLTx(), true, "evidence.submitted", latestEvidence.ID.String(), map[string]any{
+			"evidence_id":  latestEvidence.ID.String(),
+			"dispute_id":   updated.ID.String(),
+			"exception_id": updated.ExceptionID.String(),
+			"has_file":     latestEvidence.FileURL != nil,
+			"submitted_at": formatExceptionTime(latestEvidence.SubmittedAt),
+		}); err != nil {
+			return nil, fmt.Errorf("emit evidence submitted: %w", err)
+		}
 	}
 
 	if err := txLease.Commit(); err != nil {

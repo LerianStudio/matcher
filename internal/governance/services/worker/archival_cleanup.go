@@ -11,6 +11,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -97,17 +98,16 @@ func (aw *ArchivalWorker) verifyArchive(
 	return nil
 }
 
-// detachAndDrop detaches the partition from the parent table and drops it.
-func (aw *ArchivalWorker) detachAndDrop(ctx context.Context, metadata *entities.ArchiveMetadata) error {
-	if err := aw.partitionMgr.DetachPartition(ctx, metadata.PartitionName); err != nil {
-		return fmt.Errorf("detach partition: %w", err)
+func isPartitionAlreadyDetachedOrAbsent(err error) bool {
+	if err == nil {
+		return false
 	}
 
-	if err := aw.partitionMgr.DropPartition(ctx, metadata.PartitionName); err != nil {
-		return fmt.Errorf("drop partition: %w", err)
-	}
+	message := strings.ToLower(err.Error())
 
-	return nil
+	return strings.Contains(message, "is not a partition") ||
+		strings.Contains(message, "does not exist") ||
+		strings.Contains(message, "undefined_table")
 }
 
 // handlePartitionError marks the metadata with the error, persists the state,

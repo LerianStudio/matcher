@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/services"
-	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	exceptionVO "github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
 	"github.com/LerianStudio/matcher/internal/testutil"
 )
 

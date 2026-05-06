@@ -25,12 +25,14 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
+	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/internal/streaming/emission"
 )
 
 // Command use case errors.
@@ -93,10 +95,23 @@ type ExceptionUseCase struct {
 	connector          ports.ExternalConnector
 	idempotencyRepo    sharedPorts.IdempotencyRepository
 	rateLimiter        ports.CallbackRateLimiter
+	streamEmitter      streaming.Emitter
 
 	// OTel metrics initialised once at construction time.
 	revertFailedCounter metric.Int64Counter
 }
+
+func validateCriticalTxLease(txLease *sharedPorts.TxLease, operation string) error {
+	if txLease == nil || txLease.SQLTx() == nil {
+		return fmt.Errorf("%s: %w", operation, emission.ErrCriticalOutboxTxRequired)
+	}
+
+	return nil
+}
+
+// Functional options for streaming.Emitter injection follow the convention:
+// - Bare WithStreamingEmitter when this package owns one emitter consumer
+// - With<ReceiverName>StreamingEmitter when multiple consumers coexist in the same package.
 
 // UseCaseOption configures optional dependencies on the merged
 // ExceptionUseCase. Nil values are ignored so callers can pass results of
@@ -162,6 +177,17 @@ func WithCallbackRateLimiter(limiter ports.CallbackRateLimiter) UseCaseOption {
 	}
 }
 
+// WithStreamingEmitter sets the emitter used for exception streaming events.
+// Use emission.IsNilEmitter() to defend against typed-nil interface values
+// (e.g., a (*MockEmitter)(nil) hiding behind a streaming.Emitter interface).
+func WithStreamingEmitter(emitter streaming.Emitter) UseCaseOption {
+	return func(uc *ExceptionUseCase) {
+		if !emission.IsNilEmitter(emitter) {
+			uc.streamEmitter = emitter
+		}
+	}
+}
+
 // NewExceptionUseCase creates a new ExceptionUseCase with the required
 // dependencies. Specialised dependencies are wired via UseCaseOption.
 // Methods that need a specialised dependency not wired by the caller will
@@ -207,6 +233,16 @@ func NewExceptionUseCase(
 	}
 
 	return uc, nil
+}
+
+func ensureUpdatedException(span trace.Span, updated *entities.Exception) (*entities.Exception, error) {
+	if updated != nil {
+		return updated, nil
+	}
+
+	libOpentelemetry.HandleSpanError(span, "exception repository returned nil updated exception", ErrUnexpectedNilResult)
+
+	return nil, ErrUnexpectedNilResult
 }
 
 // initMetrics creates the OTel metric instruments for exception command operations.

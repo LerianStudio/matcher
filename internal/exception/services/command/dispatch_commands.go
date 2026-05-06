@@ -197,17 +197,25 @@ func (uc *ExceptionUseCase) processDispatch(
 		return nil, fmt.Errorf("begin audit transaction: %w", err)
 	}
 
+	if err := validateCriticalTxLease(txLease, "begin dispatch audit transaction"); err != nil {
+		libOpentelemetry.HandleSpanError(span, "invalid critical streaming transaction", err)
+
+		return nil, err
+	}
+
 	defer func() {
 		_ = txLease.Rollback() // No-op if already committed
 	}()
 
 	targetStr := string(params.target)
+	dispatchedAt := time.Now().UTC()
+
 	if err := uc.auditPublisher.PublishExceptionEventWithTx(ctx, txLease.SQLTx(), ports.AuditEvent{
 		ExceptionID: cmd.ExceptionID,
 		Action:      "DISPATCH",
 		Actor:       params.actor,
 		Notes:       fmt.Sprintf("Dispatched to %s", params.target),
-		OccurredAt:  time.Now().UTC(),
+		OccurredAt:  dispatchedAt,
 		Metadata: map[string]string{
 			"target":             targetStr,
 			"queue":              params.queue,
@@ -217,6 +225,17 @@ func (uc *ExceptionUseCase) processDispatch(
 		libOpentelemetry.HandleSpanError(span, "audit publish failed", err)
 
 		return nil, fmt.Errorf("publish audit: %w", err)
+	}
+
+	if err := uc.emitExceptionPayload(ctx, span, txLease.SQLTx(), true, "exception.dispatched", cmd.ExceptionID.String(), map[string]any{
+		"exception_id":       cmd.ExceptionID.String(),
+		"target_system":      string(params.target),
+		"queue":              params.queue,
+		"external_reference": result.ExternalReference,
+		"acknowledged":       result.Acknowledged,
+		"dispatched_at":      formatExceptionTime(dispatchedAt),
+	}); err != nil {
+		return nil, fmt.Errorf("emit exception dispatched: %w", err)
 	}
 
 	if err := txLease.Commit(); err != nil {
@@ -232,7 +251,7 @@ func (uc *ExceptionUseCase) processDispatch(
 		Target:            string(result.Target),
 		ExternalReference: result.ExternalReference,
 		Acknowledged:      result.Acknowledged,
-		DispatchedAt:      time.Now().UTC(),
+		DispatchedAt:      dispatchedAt,
 	}, nil
 }
 

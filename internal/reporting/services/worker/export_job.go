@@ -154,6 +154,7 @@ func (worker *ExportWorker) processJob(ctx context.Context, job *entities.Export
 		string(job.Format),
 		float64(time.Since(job.CreatedAt).Milliseconds()),
 	)
+	worker.emitExportJobEvent(ctx, span, "export_job.succeeded", job)
 
 	return true
 }
@@ -226,6 +227,8 @@ func (worker *ExportWorker) failJob(ctx context.Context, job *entities.ExportJob
 		libOpentelemetry.HandleSpanError(span, "failed to update job status to failed", updateErr)
 
 		libLog.SafeError(worker.logger, ctx, fmt.Sprintf("failed to update job %s status to failed", job.ID), updateErr, runtime.IsProductionMode())
+
+		return
 	}
 
 	// Terminal-failure lifecycle metric + duration histogram. Emitted after
@@ -241,6 +244,7 @@ func (worker *ExportWorker) failJob(ctx context.Context, job *entities.ExportJob
 		string(job.Format),
 		float64(time.Since(job.CreatedAt).Milliseconds()),
 	)
+	worker.emitExportJobEvent(ctx, span, "export_job.failed", job)
 }
 
 func (worker *ExportWorker) requeueForRetry(
@@ -273,6 +277,9 @@ func (worker *ExportWorker) handleRequeueFailure(
 	job *entities.ExportJob,
 	originalErr, updateErr error,
 ) {
+	_, span := worker.tracer.Start(ctx, "export_worker.handle_requeue_failure")
+	defer span.End()
+
 	libLog.SafeError(worker.logger, ctx, fmt.Sprintf("failed to requeue job %s for retry", job.ID), updateErr, runtime.IsProductionMode())
 
 	errMsg := fmt.Sprintf(
@@ -300,7 +307,11 @@ func (worker *ExportWorker) handleRequeueFailure(
 			failErr,
 			runtime.IsProductionMode(),
 		)
+
+		return
 	}
+
+	worker.emitExportJobEvent(ctx, span, "export_job.failed", job)
 }
 
 func (worker *ExportWorker) calculateBackoff(attempt int) time.Duration {

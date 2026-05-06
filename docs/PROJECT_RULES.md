@@ -42,7 +42,7 @@ Architectural constraints and design decisions for the Matcher codebase. This pr
 ## 2. Required Libraries
 
 - **AuthN/AuthZ**: `github.com/LerianStudio/lib-auth/v3` only (`v3.0.0-20260415175119-1568b252d48a`, pre-release pseudo-version pending upstream tag).
-- **Commons/Telemetry**: `github.com/LerianStudio/lib-commons/v5` (v5.0.0).
+- **Commons/Telemetry**: `github.com/LerianStudio/lib-commons/v5` (latest v5.x; currently v5.1.0).
 - **Assertions**: `github.com/LerianStudio/lib-commons/v5/commons/assert` (no panics; referred to as `pkg/assert` in shorthand).
 - **lib-commons submodules**:
   - Tracking/logging: `commons/log` (`libLog`), `commons/commons` (`libCommons.NewTrackingFromContext`).
@@ -425,12 +425,12 @@ All CI uses shared workflows from `LerianStudio/github-actions-shared-workflows`
 | `build.yml` | Tag push | Docker build (DockerHub + GHCR) + GitOps value updates |
 | `release.yml` | Push to develop/release-candidate/main | Automated semantic releases |
 
-- Go version: module minimum `go 1.26.0` (in `go.mod`); CI and Dockerfile use toolchain `1.26.1`. golangci-lint v2.10.1.
+- Go version: module `go 1.26.2` (in `go.mod`); CI and Dockerfile pinned to `1.26.2`. golangci-lint v2.10.1.
 - Coverage threshold: 70%, enforced via `fail_on_coverage_threshold: true`.
 
 ## 19. Docker
 
-- **Dockerfile**: Multi-stage build. `golang:1.26.1-alpine` (builder) -> `gcr.io/distroless/static-debian12:nonroot` (runtime).
+- **Dockerfile**: Multi-stage build. `golang:1.26.2-alpine` (builder) -> `gcr.io/distroless/static-debian12:nonroot` (runtime).
 - Separate `/health-probe` binary for distroless healthchecks (30s interval, 5s timeout, 3 retries).
 - Migrations copied to both `/migrations` and `/components/matcher/migrations` for lib-commons PostgresConnection.
 - **docker-compose services**:
@@ -442,7 +442,7 @@ All CI uses shared workflows from `LerianStudio/github-actions-shared-workflows`
 | redis | `valkey/valkey:8` | 6379 |
 | rabbitmq | `rabbitmq:4.1.3-management-alpine` | 5672, 15672 |
 | seaweedfs | `chrislusf/seaweedfs:3.80` | 8333, 9333 |
-| app | `golang:1.26.1-alpine` (air dev) | 4018 |
+| app | `golang:1.26.2-alpine` (air dev) | 4018 |
 
 - All infrastructure services have healthchecks. App container depends on all infra services being healthy.
 

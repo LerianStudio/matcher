@@ -27,7 +27,7 @@ import (
 // the local ExtractionRequest accordingly. It transitions the request through
 // EXTRACTING, COMPLETE, or FAILED based on the Fetcher's response.
 //
-//nolint:cyclop,gocognit,gocyclo,nestif // polling combines fetcher errors, remote lifecycle transitions, and optimistic concurrency handling.
+//nolint:cyclop,funlen,gocognit,gocyclo,nestif // polling combines fetcher errors, remote lifecycle transitions, persistence, and streaming side effects.
 func (uc *UseCase) PollExtractionStatus(ctx context.Context, extractionID uuid.UUID) (*entities.ExtractionRequest, error) {
 	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled
 
@@ -74,6 +74,7 @@ func (uc *UseCase) PollExtractionStatus(ctx context.Context, extractionID uuid.U
 		}
 
 		if errors.Is(err, sharedPorts.ErrFetcherResourceNotFound) {
+			previousStatus := req.Status.String()
 			if cancelErr := req.MarkCancelled(); cancelErr != nil {
 				return nil, fmt.Errorf("mark cancelled: %w", cancelErr)
 			}
@@ -96,6 +97,8 @@ func (uc *UseCase) PollExtractionStatus(ctx context.Context, extractionID uuid.U
 
 				return nil, fmt.Errorf("cancel extraction request after remote not found: %w", err)
 			}
+
+			uc.emitExtractionTerminal(ctx, span, req, previousStatus)
 
 			return req, nil
 		}
@@ -120,6 +123,8 @@ func (uc *UseCase) PollExtractionStatus(ctx context.Context, extractionID uuid.U
 		logMappedFieldsDivergence(ctx, submittedTables, status.MappedFields, req.FetcherJobID)
 	}
 
+	previousStatus := req.Status.String()
+
 	changed, err := uc.applyExtractionStatusTransition(ctx, span, req, status)
 	if err != nil {
 		return nil, err
@@ -142,6 +147,8 @@ func (uc *UseCase) PollExtractionStatus(ctx context.Context, extractionID uuid.U
 
 			return nil, fmt.Errorf("update extraction request: %w", err)
 		}
+
+		uc.emitExtractionTerminal(ctx, span, req, previousStatus)
 	}
 
 	return req, nil

@@ -146,9 +146,23 @@ func (uc *ExceptionUseCase) processCallback(
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 
+	// Arm the rollback BEFORE validating the lease. validateCriticalTxLease
+	// can return early when SQLTx() is nil; without this defer, the lease's
+	// release callback (the connection-pool reservation guard) is skipped on
+	// that failure path, leaking the lease. Rollback is a no-op when the tx
+	// is already committed and is nil-safe by the TxLease contract.
 	defer func() {
-		_ = txLease.Rollback() // No-op if already committed
+		if txLease != nil {
+			_ = txLease.Rollback() // No-op if already committed
+		}
 	}()
+
+	if err := validateCriticalTxLease(txLease, "begin callback transaction"); err != nil {
+		libOpentelemetry.HandleSpanError(span, "invalid critical streaming transaction", err)
+		uc.markIdempotencyFailed(ctx, params.dedupeKey)
+
+		return err
+	}
 
 	updated, err := uc.exceptionRepo.UpdateWithTx(ctx, txLease.SQLTx(), exception)
 	if err != nil {
@@ -166,6 +180,16 @@ func (uc *ExceptionUseCase) processCallback(
 
 	if err := uc.publishCallbackAudit(ctx, txLease.SQLTx(), cmd, params, updated, span); err != nil {
 		return err
+	}
+
+	if err := uc.emitExceptionCritical(ctx, span, txLease.SQLTx(), "exception.callback_processed", updated, map[string]any{
+		"external_system":   params.externalSystem,
+		"external_issue_id": params.externalIssueID,
+		"callback_type":     cmd.CallbackType,
+		"processed_at":      formatExceptionTime(updated.UpdatedAt),
+	}); err != nil {
+		uc.markIdempotencyFailed(ctx, params.dedupeKey)
+		return fmt.Errorf("emit callback processed: %w", err)
 	}
 
 	if err := txLease.Commit(); err != nil {

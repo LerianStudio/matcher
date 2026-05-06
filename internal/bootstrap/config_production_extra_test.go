@@ -213,4 +213,3 @@ func TestConfig_ProductionCORSWildcard(t *testing.T) {
 		assert.Contains(t, err.Error(), "CORS_ALLOWED_ORIGINS must be restricted in production")
 	})
 }
-

@@ -1,4 +1,26 @@
-## [2.0.0](https://github.com/LerianStudio/matcher/compare/v1.4.0...v2.0.0) (2026-04-24)
+## [2.0.0-beta.2](https://github.com/LerianStudio/matcher/compare/v2.0.0-beta.1...v2.0.0-beta.2) (2026-05-06)
+
+
+### Features
+
+* **health:** add fetcher dependency probe to /readyz and /health ([55eb264](https://github.com/LerianStudio/matcher/commit/55eb2647571ccdb3dd762f071611f6a31fde31ca))
+* **examples:** add raw matcher example datasets ([0bf0967](https://github.com/LerianStudio/matcher/commit/0bf09678cc546c9c0298975acc3c27490eed08ae))
+* **streaming:** adopt lib-streaming v1 builder API and route catalog ([7424459](https://github.com/LerianStudio/matcher/commit/74244598e4c01151a6bae9013e43f4c9c45d415a))
+* **streaming:** introduce generated instrumentation map ([ec8d396](https://github.com/LerianStudio/matcher/commit/ec8d396fc19133157805b2c2c344fb5271f7ef63))
+* **streaming:** wire lib-streaming/v2 emission ([03f8d03](https://github.com/LerianStudio/matcher/commit/03f8d03b081a2b7ece2ba51de9d0976b364d5339))
+
+
+### Bug Fixes
+
+* apply CodeRabbit auto-fixes ([11c1031](https://github.com/LerianStudio/matcher/commit/11c1031586d26d780e919e51f751156341e4e854)), closes [#135](https://github.com/LerianStudio/matcher/issues/135)
+* apply CodeRabbit auto-fixes ([6a4f547](https://github.com/LerianStudio/matcher/commit/6a4f547315ff572d5b8297229b89ee4793d21c3c)), closes [#135](https://github.com/LerianStudio/matcher/issues/135)
+* **exception:** read dispute inside transaction to prevent replica lag ([3b3aea2](https://github.com/LerianStudio/matcher/commit/3b3aea292cb847c288802ccbba0caf7b4846bb8a))
+* **api:** remove /config prefix from configuration endpoint routes ([fc22445](https://github.com/LerianStudio/matcher/commit/fc2244518428e3bd31e063a753d80a0a2f5ad038))
+* **test:** remove timing race in TestClient_ConcurrentResolverAndCalls ([7672d12](https://github.com/LerianStudio/matcher/commit/7672d12c274fa407de370c42ff874037a9b1679a))
+* **governance:** satisfy wsl_v5 defer whitespace rule ([cacb9cf](https://github.com/LerianStudio/matcher/commit/cacb9cfa1606163dfa28dfdb4d444518279e21cf))
+* **bootstrap:** use SafeGoWithContextAndComponent for readyz dispatch ([732087a](https://github.com/LerianStudio/matcher/commit/732087ad69b4a3f95d3f219cc44ea89e4de9ee82))
+
+## [2.0.0-beta.1](https://github.com/LerianStudio/matcher/compare/v1.4.0-beta.5...v2.0.0-beta.1) (2026-04-24)
 
 
 ### ⚠ BREAKING CHANGES
@@ -35,6 +57,18 @@ No dynamic identifiers leak into labels.
 * **observability:** REFACTOR-034 instrument custody retention worker cycle metrics ([79f673e](https://github.com/LerianStudio/matcher/commit/79f673ef7e4067b1896788b693a6f2ceaacb4e2e))
 * **observability:** REFACTOR-035 instrument discovery worker + extraction poller ([e5341ec](https://github.com/LerianStudio/matcher/commit/e5341ec45fba3ac0594b18f122f2cb2b6bc0ba14))
 * **tools:** REFACTOR-058 add determinism linter for test-time entity construction ([1357b28](https://github.com/LerianStudio/matcher/commit/1357b28409d5745648cc77c6ae87f3ef4c3a14f6))
+
+
+### Bug Fixes
+
+* add sharedhttp imports for swag type resolution ([72647df](https://github.com/LerianStudio/matcher/commit/72647df96223f0a27f1c0adbc094a96e986adab4))
+* apply CodeRabbit review feedback on PR [#118](https://github.com/LerianStudio/matcher/issues/118) ([f6a2424](https://github.com/LerianStudio/matcher/commit/f6a2424e0160aeec6a32ca9aa8f0e1f3649890f6))
+* apply second-round CodeRabbit feedback on PR [#118](https://github.com/LerianStudio/matcher/issues/118) ([dc901bc](https://github.com/LerianStudio/matcher/commit/dc901bcba72911e610c6728a1290c29e36dccbed))
+* **workers:** REFACTOR-015 correct defer order so RecoverAndLogWithContext runs last ([d2d49d0](https://github.com/LerianStudio/matcher/commit/d2d49d0652fed7d19a3dcb48947bd7fbf664b1d1))
+* **linter:** REFACTOR-015.1 enable unit+leak tags in lint-custom-strict ([6d46287](https://github.com/LerianStudio/matcher/commit/6d46287cd60c1292aca3034bc0a87761ba3b76be))
+* **linter:** REFACTOR-016 detect services via path, not name allow-list ([d799e45](https://github.com/LerianStudio/matcher/commit/d799e4571d16af0df5f11d2cafdb06132054e398))
+
+## [1.4.0-beta.5](https://github.com/LerianStudio/matcher/compare/v1.4.0-beta.4...v1.4.0-beta.5) (2026-04-23)
 
 
 ### Bug Fixes
@@ -302,6 +336,14 @@ Contributors: @bedatty, @dependabot[bot], @fred, @gandalf, @jeff, @lerian-studio
 
 ## [Unreleased]
 
+
+### Streaming Instrumentation Rollout
+
+* **observability:** `/readyz` and `/health` JSON response now includes a `streaming` key in the `checks` map, populated when the streaming emitter is wired (configurable via `STREAMING_ENABLED`). When streaming is disabled, the entry surfaces as `status: "skipped"` and does not flip the top-level aggregation. K8s probes (status-code-only) are unaffected. External dashboards or contract tests asserting on the keyset of `checks` MUST be updated to handle the new field.
+* **observability:** `/readyz` adds a `fetcher` key when fetcher integration is enabled (`FETCHER_ENABLED=true`). When disabled, the entry surfaces as `status: "skipped"` for the same aggregation reasons. Same migration note for keyset assertions.
+* **bootstrap:** `evaluateReadinessChecks` switched from unbounded `runtime.SafeGoWithContextAndComponent` fan-out to bounded `golang.org/x/sync/errgroup` with `SetLimit(4)`. Worst-case wall-clock for the readyz handler is now ⌈len(specs)/4⌉ × per-check-timeout instead of max(per-check-timeout). Behaviour-equivalent for the common case (every probe completes within budget), more predictable for the scale-out case.
+* **governance:** audit consumer added a streaming-disabled fast-path. When the configured emitter is `streaming.NoopEmitter` (production with `STREAMING_ENABLED=false`) or interface-nil, the consumer falls back to autocommit insert via `auditLogRepo.Create`, skipping the `BeginTx → CreateWithTx → Emit → Commit` sequence. Persisted entity is identical; the optimisation only removes the no-op streaming envelope and its 2 round-trips. Compliance posture unchanged: every audit row still lands.
+* **outbox:** `nonRetryableErrors` slice split into `matcherNonRetryableErrors` (matcher-internal sentinels) and `streamingNonRetryableErrors` (lib-streaming/v2 sentinels) so future lib-streaming sentinel churn does not silently rewrite matcher's retry classifier. Public behaviour of `IsNonRetryableOutboxError` is unchanged.
 
 ### BREAKING CHANGES
 

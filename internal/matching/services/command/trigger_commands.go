@@ -19,7 +19,9 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
+	tmcore "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
 
+	"github.com/LerianStudio/matcher/internal/auth"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -61,6 +63,8 @@ func (uc *UseCase) TriggerMatchForContext(ctx context.Context, tenantID, context
 		"auto_match_trigger",
 		runtime.KeepRunning,
 		func(innerCtx context.Context) {
+			innerCtx = contextWithTriggerTenant(innerCtx, tenantID)
+
 			input := RunMatchInput{
 				TenantID:  tenantID,
 				ContextID: contextID,
@@ -85,6 +89,13 @@ func (uc *UseCase) TriggerMatchForContext(ctx context.Context, tenantID, context
 			}
 		},
 	)
+}
+
+func contextWithTriggerTenant(ctx context.Context, tenantID uuid.UUID) context.Context {
+	tenantIDString := tenantID.String()
+	ctx = context.WithValue(ctx, auth.TenantIDKey, tenantIDString)
+
+	return tmcore.ContextWithTenantID(ctx, tenantIDString)
 }
 
 // isAutoMatchConfigurationError returns true when the error signals a wiring

@@ -132,6 +132,7 @@ func (uc *ExceptionUseCase) AdjustEntry(
 	return uc.processAdjustEntry(ctx, cmd, params, logger, span)
 }
 
+//nolint:cyclop,funlen,gocyclo // Adjust-entry orchestration validates, persists, audits, and emits within one transactional boundary.
 func (uc *ExceptionUseCase) processAdjustEntry(
 	ctx context.Context,
 	cmd AdjustEntryCommand,
@@ -220,6 +221,12 @@ func (uc *ExceptionUseCase) processAdjustEntry(
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 
+	if err := validateCriticalTxLease(txLease, "begin adjust entry transaction"); err != nil {
+		libOpentelemetry.HandleSpanError(span, "invalid critical streaming transaction", err)
+
+		return nil, err
+	}
+
 	defer func() {
 		_ = txLease.Rollback() // No-op if already committed
 	}()
@@ -229,6 +236,11 @@ func (uc *ExceptionUseCase) processAdjustEntry(
 		libOpentelemetry.HandleSpanError(span, "failed to update exception", err)
 
 		return nil, fmt.Errorf("update exception: %w", err)
+	}
+
+	updated, err = ensureUpdatedException(span, updated)
+	if err != nil {
+		return nil, err
 	}
 
 	reasonValue := string(params.reason)
@@ -244,6 +256,16 @@ func (uc *ExceptionUseCase) processAdjustEntry(
 		libOpentelemetry.HandleSpanError(span, "audit publish failed", err)
 
 		return nil, fmt.Errorf("publish audit: %w", err)
+	}
+
+	if err := uc.emitExceptionCritical(ctx, span, txLease.SQLTx(), "exception.adjust_entry_resolved", updated, map[string]any{
+		"resolution_type": "ADJUST_ENTRY",
+		"reason_code":     string(params.reason),
+		"amount":          cmd.Amount.String(),
+		"currency":        params.currency.String(),
+		"resolved_at":     formatExceptionTime(updated.UpdatedAt),
+	}); err != nil {
+		return nil, fmt.Errorf("emit adjust entry resolved: %w", err)
 	}
 
 	if err := txLease.Commit(); err != nil {

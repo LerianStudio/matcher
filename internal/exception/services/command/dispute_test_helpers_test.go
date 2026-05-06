@@ -26,12 +26,19 @@ var (
 )
 
 type stubDisputeRepo struct {
-	dispute    *dispute.Dispute
-	findErr    error
-	createErr  error
-	updateErr  error
-	listResult []*dispute.Dispute
-	listErr    error
+	dispute           *dispute.Dispute
+	findErr           error
+	createErr         error
+	updateErr         error
+	listResult        []*dispute.Dispute
+	listErr           error
+	findCalls         int
+	findWithTxCalls   int
+	findWithTxTx      repositories.Tx
+	createWithTxCalls int
+	createWithTxTx    repositories.Tx
+	updateWithTxCalls int
+	updateWithTxTx    repositories.Tx
 }
 
 func (repo *stubDisputeRepo) Create(
@@ -47,13 +54,33 @@ func (repo *stubDisputeRepo) Create(
 
 func (repo *stubDisputeRepo) CreateWithTx(
 	ctx context.Context,
-	_ repositories.Tx,
+	tx repositories.Tx,
 	d *dispute.Dispute,
 ) (*dispute.Dispute, error) {
+	repo.createWithTxCalls++
+	repo.createWithTxTx = tx
+
 	return repo.Create(ctx, d)
 }
 
 func (repo *stubDisputeRepo) FindByID(_ context.Context, _ uuid.UUID) (*dispute.Dispute, error) {
+	repo.findCalls++
+
+	if repo.findErr != nil {
+		return nil, repo.findErr
+	}
+
+	return repo.dispute, nil
+}
+
+func (repo *stubDisputeRepo) FindByIDWithTx(
+	_ context.Context,
+	tx repositories.Tx,
+	_ uuid.UUID,
+) (*dispute.Dispute, error) {
+	repo.findWithTxCalls++
+	repo.findWithTxTx = tx
+
 	if repo.findErr != nil {
 		return nil, repo.findErr
 	}
@@ -97,9 +124,12 @@ func (repo *stubDisputeRepo) Update(
 
 func (repo *stubDisputeRepo) UpdateWithTx(
 	ctx context.Context,
-	_ repositories.Tx,
+	tx repositories.Tx,
 	d *dispute.Dispute,
 ) (*dispute.Dispute, error) {
+	repo.updateWithTxCalls++
+	repo.updateWithTxTx = tx
+
 	return repo.Update(ctx, d)
 }
 

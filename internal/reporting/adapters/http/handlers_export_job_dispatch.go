@@ -30,6 +30,7 @@ var _ = sharedhttp.ErrorResponse{}
 // @Produce json
 // @Security BearerAuth
 // @Param X-Request-Id header string false "Request ID for tracing"
+// @Param X-Idempotency-Key header string false "Idempotency key for safe retries"
 // @Param jobId path string true "Export Job ID" format(uuid)
 // @Success 200 {object} ExportJobResponse
 // @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
@@ -116,7 +117,7 @@ func (handler *ExportJobHandlers) CancelExportJob(fiberCtx *fiber.Ctx) error {
 // DownloadExportJob handles GET /v1/export-jobs/:jobId/download
 // @ID downloadExportJob
 // @Summary Download export file
-// @Description Returns a presigned URL or redirects to download the export file.
+// @Description Returns a presigned URL to download the export file.
 // @Tags Export Jobs
 // @Produce json
 // @Security BearerAuth
