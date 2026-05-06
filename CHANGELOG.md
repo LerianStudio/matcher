@@ -73,7 +73,25 @@ No dynamic identifiers leak into labels.
 
 ### Bug Fixes
 
+* add sharedhttp imports for swag type resolution ([72647df](https://github.com/LerianStudio/matcher/commit/72647df96223f0a27f1c0adbc094a96e986adab4))
+* apply CodeRabbit review feedback on PR [#118](https://github.com/LerianStudio/matcher/issues/118) ([f6a2424](https://github.com/LerianStudio/matcher/commit/f6a2424e0160aeec6a32ca9aa8f0e1f3649890f6))
+* apply second-round CodeRabbit feedback on PR [#118](https://github.com/LerianStudio/matcher/issues/118) ([dc901bc](https://github.com/LerianStudio/matcher/commit/dc901bcba72911e610c6728a1290c29e36dccbed))
+* **workers:** REFACTOR-015 correct defer order so RecoverAndLogWithContext runs last ([d2d49d0](https://github.com/LerianStudio/matcher/commit/d2d49d0652fed7d19a3dcb48947bd7fbf664b1d1))
+* **linter:** REFACTOR-015.1 enable unit+leak tags in lint-custom-strict ([6d46287](https://github.com/LerianStudio/matcher/commit/6d46287cd60c1292aca3034bc0a87761ba3b76be))
+* **linter:** REFACTOR-016 detect services via path, not name allow-list ([d799e45](https://github.com/LerianStudio/matcher/commit/d799e4571d16af0df5f11d2cafdb06132054e398))
 * **discovery:** use ProductName instead of ConfigName for extraction metadata.source ([2061098](https://github.com/LerianStudio/matcher/commit/2061098d953f25832a18ad47e91977cf7e5c3ea9))
+
+## [1.4.0](https://github.com/LerianStudio/matcher/compare/v1.3.0...v1.4.0) (2026-04-23)
+
+
+### Features
+
+* **bootstrap:** production-grade /readyz endpoint with startup probe and TLS posture ([c9a830b](https://github.com/LerianStudio/matcher/commit/c9a830bb0ae2a6ab378a5e4ae6d5124f59bb728d))
+
+
+### Bug Fixes
+
+* **tests:** resolve make ci gaps from simplify wave ([bd00bed](https://github.com/LerianStudio/matcher/commit/bd00bed66ab73f2a7b8a7d4bd4c32946cfb5e85a))
 
 # Matcher Changelog
 
