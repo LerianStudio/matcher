@@ -1,3 +1,19 @@
+# Matcher Changelog
+
+## [2.1.1](https://github.com/LerianStudio/matcher/releases/tag/v2.1.1)
+
+Features:
+- Updated matcher to version 2.1.1, ensuring compatibility and performance improvements.
+
+Improvements:
+- Updated the Golang Docker image to version 1.26.2 for enhanced stability and security.
+
+Contributors: @fredcamaral, @lerian-studio,
+
+[Compare changes](https://github.com/LerianStudio/matcher/compare/v2.1.0...v2.1.1)
+
+---
+
 ## [2.1.1](https://github.com/LerianStudio/matcher/compare/v2.1.0...v2.1.1) (2026-05-06)
 
 ## [2.1.1-beta.1](https://github.com/LerianStudio/matcher/compare/v2.1.0...v2.1.1-beta.1) (2026-05-06)
@@ -1035,3 +1051,4 @@ Contributors: @bedatty, @dependabot[bot], @ferr3ira-gabriel, @ferr3ira.gabriel, 
 * **e2e:** resolve dashboard stresser flakiness with unique names ([7e93cfc](https://github.com/LerianStudio/matcher/commit/7e93cfcc13d9d074eceebe09b39e9f8b7f7f42ed))
 
 ## 1.0.0 (2026-02-19)
+
