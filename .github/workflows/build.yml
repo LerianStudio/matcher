@@ -28,7 +28,7 @@ jobs:
       needs.build.result == 'success' &&
       (contains(github.ref, '-beta') || contains(github.ref, '-rc')) &&
       needs.build.outputs.has_builds == 'true'
-    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/gitops-update.yml@2cd74e7ecfbeba0a91ecbb8325cc6341dbe918be # v1.28.0
+    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/gitops-update.yml@a3e7e1ada199dfe09019fd14cd73e498a43e0c2d # v1.28.8
     with:
       runner_type: "firmino-lxc-runners"
       artifact_pattern: "gitops-tags-matcher"
