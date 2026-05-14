@@ -367,8 +367,13 @@ func TestProperty_PseudonymizationIrreversible(t *testing.T) {
 		ctx := propertyContext()
 		actorID := "actor-irrev"
 
-		// State machine: track whether the row is currently redacted
-		// from the test's point of view.
+		// Independent oracle: redacted is set ONLY by opPseudonymize on an
+		// existing row, and cleared ONLY by opDelete or the delete step of
+		// opRecreate. The oracle never consults repo.snapshot() to compute
+		// `redacted` — that would collapse the invariant into a tautology
+		// (model mirrors repo, so repo always satisfies model). Instead,
+		// the oracle tracks the *intended* state and the test asserts that
+		// the *observed* repository state matches it.
 		redacted := false
 		exists := false
 
@@ -389,37 +394,53 @@ func TestProperty_PseudonymizationIrreversible(t *testing.T) {
 				// Rejected mutation: persisted state must not change.
 			}
 
-			// Reconcile model state with repo state.
+			// Snapshot is used ONLY for invariant assertions, never to
+			// derive the oracle's `redacted` flag.
 			snap, ok := repo.snapshot(actorID)
-			exists = ok
 
 			switch op.kind {
 			case opPseudonymize:
-				if exists {
+				// Pseudonymize is a direct repo mutation in the fake (no
+				// service call); it only redacts when a row exists.
+				if ok {
 					redacted = true
+					exists = true
 				}
 			case opDelete:
 				redacted = false
 				exists = false
 			case opCreate, opRecreate:
-				if exists && snap.IsRedacted() {
-					redacted = true
-				} else if exists {
-					redacted = false
+				// If the row exists in the repo and we have not redacted
+				// it via opPseudonymize, the oracle says non-redacted.
+				// Otherwise (existing-but-redacted, or the create was
+				// rejected because the row was already non-redacted with
+				// different PII), preserve the current oracle state.
+				if ok && !redacted {
+					exists = true
+				} else if ok {
+					exists = true
+				}
+				// If the row does not exist (rejected create that left
+				// nothing behind), exists stays false and redacted stays
+				// whatever it was — but with no row there is nothing to
+				// assert against.
+				if !ok {
+					exists = false
 				}
 			case opMutateName, opMutateEmail:
-				// Mutations on existing rows are rejected; on a
-				// non-existent row they create. Snapshot tells us
-				// the truth.
-				if exists {
-					redacted = snap.IsRedacted()
-				}
+				// Mutations on non-redacted existing rows are rejected;
+				// on a non-existent row they create. Either way the
+				// oracle's redacted flag does not change — the only way
+				// to enter redacted state is opPseudonymize.
+				exists = ok
 			}
 
-			// CORE INVARIANT 1: if model says redacted, repo agrees.
+			// CORE INVARIANT 1: once the oracle says redacted, the repo
+			// MUST show [REDACTED]/[REDACTED]. This is now a real check —
+			// `redacted` is independent of `snap.IsRedacted()`.
 			if redacted {
 				if !exists {
-					t.Logf("model says redacted but row missing at step %d", i)
+					t.Logf("oracle says redacted but row missing at step %d (op=%v)", i, op.kind)
 					return false
 				}
 				if !snap.IsRedacted() {
