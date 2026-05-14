@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
@@ -52,6 +53,11 @@ type ChaosHarness struct {
 	closeDBs   func() error
 
 	testMu sync.Mutex
+	// testLockHeld guards against double-lock deadlocks when a test
+	// mistakenly calls both ResetDatabase and LockHarnessForTest (or either
+	// one twice). The CAS-based check fails fast with a clear message
+	// instead of letting testMu.Lock() block forever.
+	testLockHeld atomic.Bool
 }
 
 var (

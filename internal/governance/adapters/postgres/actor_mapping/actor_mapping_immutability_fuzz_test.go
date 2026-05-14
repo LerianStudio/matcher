@@ -32,11 +32,15 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 )
+
+// fuzzFixedActorID is a deterministic actor ID used by buildActorMapping so
+// fuzz failures are reproducible across runs. The PII-diff helpers do not
+// branch on the actor ID value, so a constant ID is safe.
+const fuzzFixedActorID = "actor-fuzz-fixed-00000000-0000-0000-0000-000000000001"
 
 // FuzzStringPtrEqual probes the nil/empty/equality invariants of
 // stringPtrEqual. A mismatch between the helper and the documented semantics
@@ -146,7 +150,8 @@ func FuzzActorMappingPIIDiffers(f *testing.F) {
 
 // buildActorMapping is a small helper that converts the flat fuzz inputs into
 // an *entities.ActorMapping with nil-able pointer fields. The actor ID is a
-// fresh UUID so we exercise the PII comparison rather than identity equality.
+// fixed constant so fuzz failures are reproducible — the PII comparison does
+// not branch on the actor ID, so determinism here is safe.
 func buildActorMapping(display string, displayPresent bool, email string, emailPresent bool) *entities.ActorMapping {
 	// Defensive: drop malformed UTF-8 to keep the assertion failures focused
 	// on logic bugs rather than incidental encoding artefacts. The DB layer
@@ -155,7 +160,7 @@ func buildActorMapping(display string, displayPresent bool, email string, emailP
 		return nil
 	}
 
-	mapping := &entities.ActorMapping{ActorID: uuid.NewString()}
+	mapping := &entities.ActorMapping{ActorID: fuzzFixedActorID}
 	if displayPresent {
 		mapping.DisplayName = &display
 	}

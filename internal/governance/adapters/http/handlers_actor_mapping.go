@@ -69,10 +69,10 @@ func NewActorMappingHandler(
 }
 
 // UpsertActorMapping creates an actor mapping or returns the existing one when
-// the payload matches. Identity fields (display_name, email) are append-only
+// the payload matches. Identity fields (displayName, email) are append-only
 // after first creation; mutation attempts are rejected with 409 Conflict.
 // @Summary Upsert actor mapping
-// @Description Creates the PII mapping for an actor ID, or returns the existing mapping when the payload matches. Identity fields (display_name, email) are immutable after first creation — mutation attempts return 409 Conflict to prevent pseudonymization bypass.
+// @Description Creates the PII mapping for an actor ID, or returns the existing mapping when the payload matches. Identity fields (displayName, email) are immutable after first creation — mutation attempts return 409 Conflict to prevent pseudonymization bypass.
 // @ID upsertActorMapping
 // @Tags Governance
 // @Accept json
