@@ -410,21 +410,17 @@ func TestProperty_PseudonymizationIrreversible(t *testing.T) {
 				redacted = false
 				exists = false
 			case opCreate, opRecreate:
-				// If the row exists in the repo and we have not redacted
-				// it via opPseudonymize, the oracle says non-redacted.
-				// Otherwise (existing-but-redacted, or the create was
-				// rejected because the row was already non-redacted with
-				// different PII), preserve the current oracle state.
-				if ok && !redacted {
+				// If the row exists in the repo, the oracle records it as
+				// existing. The redacted flag is owned exclusively by
+				// opPseudonymize and is preserved here — an
+				// existing-but-redacted row stays redacted; a non-redacted
+				// row stays non-redacted (a rejected immutability conflict
+				// leaves the prior state intact). If the row does not exist
+				// (rejected create that left nothing behind), exists is
+				// false and there is nothing to assert against.
+				if ok {
 					exists = true
-				} else if ok {
-					exists = true
-				}
-				// If the row does not exist (rejected create that left
-				// nothing behind), exists stays false and redacted stays
-				// whatever it was — but with no row there is nothing to
-				// assert against.
-				if !ok {
+				} else {
 					exists = false
 				}
 			case opMutateName, opMutateEmail:
@@ -472,13 +468,10 @@ func TestProperty_IdempotencyOfCreateOrGetActorMapping(t *testing.T) {
 		actorSeed uint16,
 		displayName, email string,
 	) bool {
-		// Reject inputs that would fail entity-level validation (empty
-		// or oversize actor_id). The constructor's domain is a
-		// precondition of this property, not the property itself.
+		// actorID is derived from a uint16 seed, so it can never be empty
+		// and is bounded well under MaxActorMappingActorIDLength — the
+		// constructor's domain preconditions are satisfied by construction.
 		actorID := fmt.Sprintf("actor-idem-%d", actorSeed)
-		if actorID == "" {
-			return true
-		}
 
 		repo := newStatefulFakeRepository()
 		uc, err := NewActorMappingUseCase(repo)
