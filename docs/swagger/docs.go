@@ -6134,7 +6134,7 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "Actor mapping identity is immutable",
+                        "description": "Actor mapping identity is immutable (MTCH-0604)",
                         "schema": {
                             "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_shared_adapters_http.ErrorResponse"
                         }

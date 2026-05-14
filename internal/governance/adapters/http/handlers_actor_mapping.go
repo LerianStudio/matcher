@@ -85,7 +85,7 @@ func NewActorMappingHandler(
 // @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request"
 // @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
 // @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
-// @Failure 409 {object} sharedhttp.ErrorResponse "Actor mapping identity is immutable"
+// @Failure 409 {object} sharedhttp.ErrorResponse "Actor mapping identity is immutable (MTCH-0604)"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/governance/actor-mappings/{actorId} [put]
 func (ha *ActorMappingHandler) UpsertActorMapping(fiberCtx *fiber.Ctx) error {
