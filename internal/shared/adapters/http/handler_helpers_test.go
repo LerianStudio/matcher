@@ -82,6 +82,28 @@ func TestLogSpanError_AllowsNilLogger(t *testing.T) {
 	assertStatus(t, resp, fiber.StatusNoContent)
 }
 
+func TestLogSpanBusinessEvent_AllowsNilLogger(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+
+	app.Get("/", func(c *fiber.Ctx) error {
+		ctx, span, _ := StartHandlerSpan(c, "handler.shared.business_event")
+		defer span.End()
+
+		require.NotPanics(t, func() {
+			LogSpanBusinessEvent(ctx, span, nil, false, "client mistake", assertErr("boom"))
+		})
+
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	resp, err := app.Test(httptest.NewRequest(fiber.MethodGet, "/", http.NoBody))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assertStatus(t, resp, fiber.StatusNoContent)
+}
+
 func TestBadRequest_WritesStandardResponse(t *testing.T) {
 	t.Parallel()
 
