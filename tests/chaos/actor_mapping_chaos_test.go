@@ -20,27 +20,27 @@
 //
 // Scenario coverage:
 //
-//	1. TestChaos_ActorMapping_Upsert_DBConnectionDropMidTransaction_NoDataLoss
-//	   reset_peer toxic during a mutation attempt on an existing row →
-//	   caller sees an error, row UNCHANGED.
+//  1. TestChaos_ActorMapping_Upsert_DBConnectionDropMidTransaction_NoDataLoss
+//     reset_peer toxic during a mutation attempt on an existing row →
+//     caller sees an error, row UNCHANGED.
 //
-//	2. TestChaos_ActorMapping_Upsert_DBConnectionDropAfterInsert_NoCorruption
-//	   Fresh actor_id + reset_peer during the INSERT-or-RETURNING window →
-//	   either the row exists with exactly the submitted payload, or no row
-//	   exists. NEVER a partial state.
+//  2. TestChaos_ActorMapping_Upsert_DBConnectionDropAfterInsert_NoCorruption
+//     Fresh actor_id + reset_peer during the INSERT-or-RETURNING window →
+//     either the row exists with exactly the submitted payload, or no row
+//     exists. NEVER a partial state.
 //
-//	3. TestChaos_ActorMapping_Upsert_PseudonymizedRowUnderLatency_StillRejectsAttacker
-//	   Pseudonymized row + 1s latency injection + concurrent plaintext
-//	   attacks → every attack returns ErrActorMappingImmutable (or a
-//	   timeout); persisted row stays [REDACTED]/[REDACTED].
+//  3. TestChaos_ActorMapping_Upsert_PseudonymizedRowUnderLatency_StillRejectsAttacker
+//     Pseudonymized row + 1s latency injection + concurrent plaintext
+//     attacks → every attack returns ErrActorMappingImmutable (or a
+//     timeout); persisted row stays [REDACTED]/[REDACTED].
 //
-//	4. TestChaos_ActorMapping_CreateOrGet_GracefulOnDBUnreachable
-//	   PG proxy disabled → Upsert returns a wrapped error, no panic,
-//	   no nil-with-no-error.
+//  4. TestChaos_ActorMapping_CreateOrGet_GracefulOnDBUnreachable
+//     PG proxy disabled → Upsert returns a wrapped error, no panic,
+//     no nil-with-no-error.
 //
-//	5. TestChaos_ActorMapping_Upsert_NetworkPartition_RecoveryConsistent
-//	   Disable PG proxy → first Upsert fails → re-enable proxy → idempotent
-//	   re-PUT with same payload succeeds; row matches original.
+//  5. TestChaos_ActorMapping_Upsert_NetworkPartition_RecoveryConsistent
+//     Disable PG proxy → first Upsert fails → re-enable proxy → idempotent
+//     re-PUT with same payload succeeds; row matches original.
 package chaos
 
 import (
@@ -56,8 +56,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	actormapping "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/actor_mapping"
-	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
+	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
 )
 
 // -----------------------------------------------------------------------------
@@ -172,6 +172,7 @@ func pseudonymizeActorMappingDirect(t *testing.T, db *sql.DB, actorID string) {
 func TestChaos_ActorMapping_Upsert_DBConnectionDropMidTransaction_NoDataLoss(t *testing.T) {
 	h := GetSharedChaos()
 	require.NotNil(t, h, "chaos harness not initialized")
+	h.LockTest(t)
 
 	directDB := h.DirectDB(t)
 	truncateActorMappingDirect(t, directDB)
@@ -231,6 +232,7 @@ func TestChaos_ActorMapping_Upsert_DBConnectionDropMidTransaction_NoDataLoss(t *
 func TestChaos_ActorMapping_Upsert_DBConnectionDropAfterInsert_NoCorruption(t *testing.T) {
 	h := GetSharedChaos()
 	require.NotNil(t, h, "chaos harness not initialized")
+	h.LockTest(t)
 
 	directDB := h.DirectDB(t)
 	truncateActorMappingDirect(t, directDB)
@@ -303,6 +305,7 @@ func TestChaos_ActorMapping_Upsert_DBConnectionDropAfterInsert_NoCorruption(t *t
 func TestChaos_ActorMapping_Upsert_PseudonymizedRowUnderLatency_StillRejectsAttacker(t *testing.T) {
 	h := GetSharedChaos()
 	require.NotNil(t, h, "chaos harness not initialized")
+	h.LockTest(t)
 
 	directDB := h.DirectDB(t)
 	truncateActorMappingDirect(t, directDB)
@@ -399,6 +402,14 @@ func TestChaos_ActorMapping_Upsert_PseudonymizedRowUnderLatency_StillRejectsAtta
 	assert.Equal(t, "[REDACTED]", *emAfter,
 		"email MUST remain [REDACTED] after concurrent plaintext attacks under latency")
 
+	// At least one attacker MUST observe ErrActorMappingImmutable. A run in
+	// which 100% of calls fall into the timeout/otherErrors buckets would
+	// mask a real bypass behind a degenerate environment — fail loudly so
+	// the chaos suite cannot silently weaken its guarantee.
+	require.GreaterOrEqual(t, immutableHits.Load(), int64(1),
+		"at least one attacker must observe ErrActorMappingImmutable — "+
+			"100%% timeouts/errors would mask a real bypass under latency")
+
 	t.Logf("attempts: immutableHits=%d timeouts=%d otherErrors=%d (otherErrorList=%+v)",
 		immutableHits.Load(), timeouts.Load(), otherErrors.Load(), otherErrorList)
 }
@@ -415,6 +426,7 @@ func TestChaos_ActorMapping_Upsert_PseudonymizedRowUnderLatency_StillRejectsAtta
 func TestChaos_ActorMapping_CreateOrGet_GracefulOnDBUnreachable(t *testing.T) {
 	h := GetSharedChaos()
 	require.NotNil(t, h, "chaos harness not initialized")
+	h.LockTest(t)
 
 	directDB := h.DirectDB(t)
 	truncateActorMappingDirect(t, directDB)
@@ -493,6 +505,7 @@ func TestChaos_ActorMapping_CreateOrGet_GracefulOnDBUnreachable(t *testing.T) {
 func TestChaos_ActorMapping_Upsert_NetworkPartition_RecoveryConsistent(t *testing.T) {
 	h := GetSharedChaos()
 	require.NotNil(t, h, "chaos harness not initialized")
+	h.LockTest(t)
 
 	directDB := h.DirectDB(t)
 	truncateActorMappingDirect(t, directDB)
