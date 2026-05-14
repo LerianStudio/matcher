@@ -6072,7 +6072,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Creates or updates the PII mapping for an actor ID. Used to associate opaque actor identifiers with human-readable display names and emails.",
+                "description": "Creates the PII mapping for an actor ID, or returns the existing mapping when the payload matches. Identity fields (display_name, email) are immutable after first creation — mutation attempts return 409 Conflict to prevent pseudonymization bypass.",
                 "consumes": [
                     "application/json"
                 ],
@@ -6129,6 +6129,12 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_shared_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Actor mapping identity is immutable",
                         "schema": {
                             "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_shared_adapters_http.ErrorResponse"
                         }

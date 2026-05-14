@@ -15,6 +15,13 @@ var (
 	// ErrActorMappingNotFound is returned when an actor mapping is not found.
 	ErrActorMappingNotFound = errors.New("actor mapping not found")
 
+	// ErrActorMappingImmutable is returned when a caller attempts to mutate
+	// the identity fields (display_name, email) of an existing actor mapping.
+	// Actor identity is append-only post-creation to prevent the
+	// pseudonymization-bypass vulnerability flagged by Taura Security
+	// (28/04/2026). The HTTP layer maps this sentinel to 409 Conflict.
+	ErrActorMappingImmutable = errors.New("actor mapping identity fields are immutable post-creation")
+
 	// ErrMetadataNotFound is returned when archive metadata is not found.
 	ErrMetadataNotFound = errors.New("archive metadata not found")
 )

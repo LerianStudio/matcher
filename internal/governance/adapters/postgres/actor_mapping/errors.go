@@ -18,6 +18,12 @@ var (
 	ErrActorIDRequired          = errors.New("actor id is required")
 	ErrNilScanner               = errors.New("nil scanner")
 
+	// ErrActorMappingImmutable is re-exported from domain/errors so adapter
+	// callers can use the canonical sentinel without crossing layer boundaries.
+	// The single source of truth lives in domain/errors so service + HTTP
+	// layers (which cannot import the adapter) can errors.Is against it.
+	ErrActorMappingImmutable = governanceErrors.ErrActorMappingImmutable
+
 	// ErrActorMappingNotFound is returned when an actor mapping is not found.
 	// Re-exported from domain/errors for adapter-layer consumers.
 	ErrActorMappingNotFound = governanceErrors.ErrActorMappingNotFound

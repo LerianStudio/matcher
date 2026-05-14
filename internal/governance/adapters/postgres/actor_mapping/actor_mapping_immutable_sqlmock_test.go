@@ -14,8 +14,8 @@
 //   - When RETURNING yields a row (fresh actor_id), the repository returns it.
 //   - When RETURNING yields nothing (actor_id already exists), the repository
 //     SELECTs the current row and compares it to the payload:
-//       - Identical → returns the existing entity (idempotent success).
-//       - Different OR redacted → returns ErrActorMappingImmutable.
+//   - Identical → returns the existing entity (idempotent success).
+//   - Different OR redacted → returns ErrActorMappingImmutable.
 //   - Both the INSERT and the SELECT run inside the same transaction to
 //     close the TOCTOU window where a concurrent UPDATE could overwrite
 //     [REDACTED] between the read and the write.
