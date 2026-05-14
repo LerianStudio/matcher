@@ -44,14 +44,14 @@ import (
 func FuzzStringPtrEqual(f *testing.F) {
 	// Seed corpus covers: both nil, one nil + one empty, both empty,
 	// ASCII equality, UTF-8 equality, REDACTED token, NUL byte, very long.
-	f.Add("", false, "", false)                              // both nil
-	f.Add("", true, "", true)                                // both empty (non-nil)
-	f.Add("", false, "", true)                               // nil vs empty
+	f.Add("", false, "", false) // both nil
+	f.Add("", true, "", true)   // both empty (non-nil)
+	f.Add("", false, "", true)  // nil vs empty
 	f.Add("alice@example.com", true, "alice@example.com", true)
-	f.Add("Alice", true, "alice", true)                      // case difference
-	f.Add("[REDACTED]", true, "alice@example.com", true)     // adversarial: redacted vs plaintext
-	f.Add("é", true, "é", true)                   // é vs e + combining accent
-	f.Add("a\x00b", true, "a\x00b", true)                    // embedded NUL
+	f.Add("Alice", true, "alice", true)                  // case difference
+	f.Add("[REDACTED]", true, "alice@example.com", true) // adversarial: redacted vs plaintext
+	f.Add("é", true, "é", true)                         // é vs e + combining accent
+	f.Add("a\x00b", true, "a\x00b", true)                // embedded NUL
 	f.Add("emoji \U0001F600", true, "emoji \U0001F600", true)
 
 	f.Fuzz(func(t *testing.T, lhs string, lhsPresent bool, rhs string, rhsPresent bool) {
@@ -100,12 +100,12 @@ func FuzzActorMappingPIIDiffers(f *testing.F) {
 	// Seeds vary nil-ness via the *Present booleans and content via the strings.
 	// Each row encodes (display1, has_display1, email1, has_email1,
 	//                   display2, has_display2, email2, has_email2).
-	f.Add("Alice", true, "alice@example.com", true, "Alice", true, "alice@example.com", true)             // identical
-	f.Add("[REDACTED]", true, "[REDACTED]", true, "Alice", true, "alice@example.com", true)               // adversarial: redacted vs plaintext
-	f.Add("", false, "", false, "", false, "", false)                                                     // both fully nil
-	f.Add("", true, "", true, "", false, "", false)                                                       // empty vs nil
+	f.Add("Alice", true, "alice@example.com", true, "Alice", true, "alice@example.com", true)   // identical
+	f.Add("[REDACTED]", true, "[REDACTED]", true, "Alice", true, "alice@example.com", true)     // adversarial: redacted vs plaintext
+	f.Add("", false, "", false, "", false, "", false)                                           // both fully nil
+	f.Add("", true, "", true, "", false, "", false)                                             // empty vs nil
 	f.Add("é", true, "user@émail.com", true, "é", true, "user@émail.com", true)               // UTF-8 normalization
-	f.Add("name\x00null", true, "a@b\x00.com", true, "name\x00null", true, "a@b\x00.com", true)           // embedded NUL bytes
+	f.Add("name\x00null", true, "a@b\x00.com", true, "name\x00null", true, "a@b\x00.com", true) // embedded NUL bytes
 
 	f.Fuzz(func(t *testing.T,
 		d1 string, d1Present bool, e1 string, e1Present bool,

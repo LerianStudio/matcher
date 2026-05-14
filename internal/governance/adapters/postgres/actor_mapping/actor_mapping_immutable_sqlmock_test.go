@@ -4,7 +4,7 @@
 
 //go:build unit
 
-// TDD-RED for fix-actor-mapping-pseudonymization-bypass.
+// Pins post-fix contract for fix-actor-mapping-pseudonymization-bypass.
 //
 // These sqlmock tests encode the post-fix repository contract:
 //
@@ -20,14 +20,12 @@
 //     close the TOCTOU window where a concurrent UPDATE could overwrite
 //     [REDACTED] between the read and the write.
 //
-// All tests in this file are expected to FAIL until Gate 0.2 (TDD-GREEN)
-// updates the repository to: (a) emit the new SQL, (b) implement the
-// post-INSERT comparison path, and (c) expose ErrActorMappingImmutable
-// at this layer.
+// These tests guard the post-fix repository: (a) emits INSERT ... ON
+// CONFLICT (actor_id) DO NOTHING RETURNING, (b) implements the post-INSERT
+// comparison path, and (c) exposes ErrActorMappingImmutable at this layer.
 package actormapping
 
 import (
-	"regexp"
 	"testing"
 	"time"
 
@@ -38,12 +36,21 @@ import (
 )
 
 // newInsertOnConflictDoNothingQueryRegex matches the post-fix INSERT statement.
-// We use a permissive regex (rather than QuoteMeta) because the exact SQL is
-// being designed in Gate 0.2; this guards the contract by checking the
-// load-bearing tokens: INSERT INTO actor_mapping, ON CONFLICT (actor_id),
-// DO NOTHING, RETURNING.
+// We use a regex (rather than QuoteMeta) because squirrel's exact column-list
+// formatting is an implementation detail; this guards the contract by checking
+// the load-bearing tokens: INSERT INTO actor_mapping, the five columns
+// (actor_id, display_name, email, created_at, updated_at), ON CONFLICT
+// (actor_id) DO NOTHING, RETURNING the same five columns.
+//
+// Whitespace runs between tokens are matched with `\s+` (not `.*`) so the
+// regex does not silently accept arbitrary SQL injected between, say,
+// `DO NOTHING` and `RETURNING`. The column-list and VALUES segments use
+// scoped wildcards (`[^)]*`) bounded by parentheses to keep them tight
+// without coupling to squirrel's exact comma/space layout.
 func newInsertOnConflictDoNothingQueryRegex() string {
-	return `INSERT\s+INTO\s+actor_mapping.*ON\s+CONFLICT\s*\(\s*actor_id\s*\)\s*DO\s+NOTHING.*RETURNING`
+	return `INSERT\s+INTO\s+actor_mapping\s*\([^)]*actor_id[^)]*\)\s+VALUES\s*\([^)]*\)\s+` +
+		`ON\s+CONFLICT\s*\(\s*actor_id\s*\)\s+DO\s+NOTHING\s+RETURNING\s+` +
+		`actor_id,\s*display_name,\s*email,\s*created_at,\s*updated_at`
 }
 
 // newSelectByActorIDQueryRegex matches the post-fix SELECT used by the
@@ -230,9 +237,3 @@ func TestErrActorMappingImmutable_Exported(t *testing.T) {
 	require.Error(t, ErrActorMappingImmutable)
 	require.NotEmpty(t, ErrActorMappingImmutable.Error())
 }
-
-// Compile-time guard: the regex helpers are used by all post-fix tests
-// above. Keeping a reference here ensures gofmt/goimports does not drop
-// them if any of the cases above are temporarily commented out during
-// debugging.
-var _ = regexp.MustCompile

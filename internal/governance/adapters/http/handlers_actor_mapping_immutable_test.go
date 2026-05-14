@@ -4,7 +4,7 @@
 
 //go:build unit
 
-// TDD-RED for fix-actor-mapping-pseudonymization-bypass.
+// Pins post-fix contract for fix-actor-mapping-pseudonymization-bypass.
 //
 // These handler tests encode the post-fix HTTP contract:
 //
@@ -13,17 +13,16 @@
 //   - PUT with payload identical to the existing row: succeeds (200 OK,
 //     idempotent no-op).
 //   - PUT with a different display_name or email on an existing row:
-//     returns 409 Conflict with ErrActorMappingImmutable surfaced.
+//     returns 409 Conflict with the governance_actor_mapping_immutable
+//     product code surfaced.
 //   - PUT against a pseudonymized row ([REDACTED]) with any PII: returns
 //     409 Conflict. Stored data remains [REDACTED].
-//
-// All tests in this file are expected to FAIL until Gate 0.2 (TDD-GREEN)
-// (a) maps command.ErrActorMappingImmutable to fiber.StatusConflict in
-// the handler and (b) the service layer surfaces the sentinel.
 package http
 
 import (
-	"net/http"
+	"encoding/json"
+	nethttp "net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,6 +34,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
+	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
 // AC1 (HTTP layer) — PUT on a fresh actor_id creates the mapping and
@@ -107,7 +107,8 @@ func TestPutActorMapping_Idempotent_Returns200(t *testing.T) {
 
 // AC3 (HTTP layer) — PUT with different email on an existing row returns
 // 409 Conflict. The handler must map command.ErrActorMappingImmutable to
-// fiber.StatusConflict; this test will fail until that mapping is added.
+// fiber.StatusConflict with the governance_actor_mapping_immutable product
+// code.
 func TestPutActorMapping_DifferentEmail_Returns409(t *testing.T) {
 	t.Parallel()
 
@@ -129,6 +130,7 @@ func TestPutActorMapping_DifferentEmail_Returns409(t *testing.T) {
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusConflict, resp.StatusCode)
+	assertImmutableConflictBody(t, resp)
 }
 
 // AC4 (HTTP layer) — PUT with different display_name returns 409.
@@ -152,6 +154,7 @@ func TestPutActorMapping_DifferentDisplayName_Returns409(t *testing.T) {
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusConflict, resp.StatusCode)
+	assertImmutableConflictBody(t, resp)
 }
 
 // AC5 (HTTP layer) — the pentest PoC. PUT against a pseudonymized
@@ -179,9 +182,29 @@ func TestPutActorMapping_OverRedacted_Returns409(t *testing.T) {
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusConflict, resp.StatusCode)
+	assertImmutableConflictBody(t, resp)
 }
 
-// Compile-time guard: ensures the http and command packages are wired
-// together in this test file even if individual cases are temporarily
-// commented out.
-var _ = http.StatusOK
+// assertImmutableConflictBody decodes the response body and verifies the
+// governance_actor_mapping_immutable contract surfaces correctly:
+//   - product code equals constant.CodeGovernanceActorMappingImmutable
+//     (the catalog mapping for the governance_actor_mapping_immutable slug);
+//   - message mentions the immutability ("cannot be changed") so clients
+//     get an actionable diagnostic.
+func assertImmutableConflictBody(t *testing.T, resp *nethttp.Response) {
+	t.Helper()
+
+	var body struct {
+		Code    string `json:"code"`
+		Title   string `json:"title"`
+		Message string `json:"message"`
+	}
+
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	require.Equal(t, constant.CodeGovernanceActorMappingImmutable, body.Code,
+		"409 response must surface the governance_actor_mapping_immutable product code")
+	require.True(t,
+		strings.Contains(strings.ToLower(body.Message), "cannot be changed") ||
+			strings.Contains(strings.ToLower(body.Message), "immutable"),
+		"409 response message must describe the immutability constraint; got %q", body.Message)
+}
