@@ -172,7 +172,7 @@ func pseudonymizeActorMappingDirect(t *testing.T, db *sql.DB, actorID string) {
 func TestChaos_ActorMapping_Upsert_DBConnectionDropMidTransaction_NoDataLoss(t *testing.T) {
 	h := GetSharedChaos()
 	require.NotNil(t, h, "chaos harness not initialized")
-	h.LockTest(t)
+	h.LockHarnessForTest(t)
 
 	directDB := h.DirectDB(t)
 	truncateActorMappingDirect(t, directDB)
@@ -232,7 +232,7 @@ func TestChaos_ActorMapping_Upsert_DBConnectionDropMidTransaction_NoDataLoss(t *
 func TestChaos_ActorMapping_Upsert_DBConnectionDropAfterInsert_NoCorruption(t *testing.T) {
 	h := GetSharedChaos()
 	require.NotNil(t, h, "chaos harness not initialized")
-	h.LockTest(t)
+	h.LockHarnessForTest(t)
 
 	directDB := h.DirectDB(t)
 	truncateActorMappingDirect(t, directDB)
@@ -305,7 +305,7 @@ func TestChaos_ActorMapping_Upsert_DBConnectionDropAfterInsert_NoCorruption(t *t
 func TestChaos_ActorMapping_Upsert_PseudonymizedRowUnderLatency_StillRejectsAttacker(t *testing.T) {
 	h := GetSharedChaos()
 	require.NotNil(t, h, "chaos harness not initialized")
-	h.LockTest(t)
+	h.LockHarnessForTest(t)
 
 	directDB := h.DirectDB(t)
 	truncateActorMappingDirect(t, directDB)
@@ -390,7 +390,7 @@ func TestChaos_ActorMapping_Upsert_PseudonymizedRowUnderLatency_StillRejectsAtta
 	// CRITICAL invariants — independent of which buckets the attempts landed in:
 	//   1. ZERO successes (no plaintext attacker may overwrite [REDACTED]).
 	//   2. Row remains [REDACTED]/[REDACTED] on disk.
-	assert.Equal(t, int64(0), successes.Load(),
+	require.Equal(t, int64(0), successes.Load(),
 		"no plaintext attacker may overwrite a [REDACTED] row under chaos (latency injection)")
 
 	dnAfter, emAfter, exists := readActorMappingDirect(t, directDB, actorID)
@@ -426,7 +426,7 @@ func TestChaos_ActorMapping_Upsert_PseudonymizedRowUnderLatency_StillRejectsAtta
 func TestChaos_ActorMapping_CreateOrGet_GracefulOnDBUnreachable(t *testing.T) {
 	h := GetSharedChaos()
 	require.NotNil(t, h, "chaos harness not initialized")
-	h.LockTest(t)
+	h.LockHarnessForTest(t)
 
 	directDB := h.DirectDB(t)
 	truncateActorMappingDirect(t, directDB)
@@ -479,8 +479,8 @@ func TestChaos_ActorMapping_CreateOrGet_GracefulOnDBUnreachable(t *testing.T) {
 
 	select {
 	case outcome := <-done:
-		assert.Error(t, outcome.err, "Upsert with PG unreachable MUST return an error")
-		assert.Nil(t, outcome.result,
+		require.Error(t, outcome.err, "Upsert with PG unreachable MUST return an error")
+		require.Nil(t, outcome.result,
 			"Upsert returning an error MUST NOT also return a non-nil entity (no nil-and-no-error path)")
 	case <-time.After(10 * time.Second):
 		t.Fatal("repo.Upsert hung under DB-unreachable chaos — graceful-degradation contract violated")
@@ -505,7 +505,7 @@ func TestChaos_ActorMapping_CreateOrGet_GracefulOnDBUnreachable(t *testing.T) {
 func TestChaos_ActorMapping_Upsert_NetworkPartition_RecoveryConsistent(t *testing.T) {
 	h := GetSharedChaos()
 	require.NotNil(t, h, "chaos harness not initialized")
-	h.LockTest(t)
+	h.LockHarnessForTest(t)
 
 	directDB := h.DirectDB(t)
 	truncateActorMappingDirect(t, directDB)

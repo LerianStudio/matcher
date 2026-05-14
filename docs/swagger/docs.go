@@ -6072,7 +6072,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Creates the PII mapping for an actor ID, or returns the existing mapping when the payload matches. Identity fields (display_name, email) are immutable after first creation — mutation attempts return 409 Conflict to prevent pseudonymization bypass.",
+                "description": "Creates the PII mapping for an actor ID, or returns the existing mapping when the payload matches. Identity fields (displayName, email) are immutable after first creation — mutation attempts return 409 Conflict to prevent pseudonymization bypass.",
                 "consumes": [
                     "application/json"
                 ],

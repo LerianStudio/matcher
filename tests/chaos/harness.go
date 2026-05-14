@@ -386,12 +386,22 @@ func (h *ChaosHarness) Provider() ports.InfrastructureProvider {
 }
 
 // ResetDatabase truncates all tables and re-seeds for test isolation.
+//
+// Acquires the shared chaos harness mutex for the duration of t. Calling this
+// after LockHarnessForTest (or vice-versa) on the same test would deadlock on
+// testMu, so we fail fast via the testLockHeld CAS instead.
 func (h *ChaosHarness) ResetDatabase(t *testing.T) {
 	t.Helper()
+
+	if !h.testLockHeld.CompareAndSwap(false, true) {
+		t.Fatalf("ChaosHarness already locked: ResetDatabase/LockHarnessForTest called twice on the same test")
+	}
+
 	h.testMu.Lock()
 
 	t.Cleanup(func() {
 		h.testMu.Unlock()
+		h.testLockHeld.Store(false)
 	})
 
 	require.NoError(t, resetChaosDatabase(h.Connection), "reset database")
@@ -402,17 +412,27 @@ func (h *ChaosHarness) ResetDatabase(t *testing.T) {
 	h.Seed = seed
 }
 
-// LockTest acquires the shared chaos harness mutex for the duration of t,
-// releasing it via t.Cleanup. Use this in chaos tests that manage their own
-// per-table state (i.e. do NOT call ResetDatabase, which already takes the
+// LockHarnessForTest acquires the shared chaos harness mutex for the duration
+// of t, releasing it via t.Cleanup. Use this in chaos tests that manage their
+// own per-table state (i.e. do NOT call ResetDatabase, which already takes the
 // lock) so that concurrently-executing chaos tests cannot cross-contaminate
 // each other's toxic injections and direct-DB mutations.
-func (h *ChaosHarness) LockTest(t *testing.T) {
+//
+// Fails fast if the harness is already locked by the same test (i.e. a test
+// mistakenly called both ResetDatabase and LockHarnessForTest, or called this
+// method twice) — otherwise the second testMu.Lock() would deadlock.
+func (h *ChaosHarness) LockHarnessForTest(t *testing.T) {
 	t.Helper()
+
+	if !h.testLockHeld.CompareAndSwap(false, true) {
+		t.Fatalf("ChaosHarness already locked: LockHarnessForTest/ResetDatabase called twice on the same test")
+	}
+
 	h.testMu.Lock()
 
 	t.Cleanup(func() {
 		h.testMu.Unlock()
+		h.testLockHeld.Store(false)
 	})
 }
 
