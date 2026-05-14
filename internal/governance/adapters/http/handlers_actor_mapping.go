@@ -297,9 +297,9 @@ func (ha *ActorMappingHandler) writeNotFound(
 }
 
 // writeConflict surfaces ErrActorMappingImmutable as a 409 Conflict response.
-// The error is logged at info-level (not error-level) because it represents a
-// client-side request mistake — the persisted row is untouched — not an
-// infrastructure failure.
+// The error is recorded as a span business event (NOT a span error) and logged
+// via SafeError because it represents a client-side request mistake — the
+// persisted row is untouched — rather than an infrastructure or server fault.
 func (ha *ActorMappingHandler) writeConflict(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
@@ -312,7 +312,7 @@ func (ha *ActorMappingHandler) writeConflict(
 		message = "actor mapping identity fields cannot be changed; create a new actor_id for new identity values"
 	)
 
-	sharedhttp.LogSpanError(ctx, span, logger, ha.productionMode, message, err)
+	sharedhttp.LogSpanBusinessEvent(ctx, span, logger, ha.productionMode, message, err)
 
 	return respondError(fiberCtx, fiber.StatusConflict, slug, message)
 }
