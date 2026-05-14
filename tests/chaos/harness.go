@@ -390,6 +390,11 @@ func (h *ChaosHarness) Provider() ports.InfrastructureProvider {
 // Acquires the shared chaos harness mutex for the duration of t. Calling this
 // after LockHarnessForTest (or vice-versa) on the same test would deadlock on
 // testMu, so we fail fast via the testLockHeld CAS instead.
+//
+// SERIAL-EXECUTION INVARIANT: shares the testLockHeld safeguard with
+// LockHarnessForTest. See LockHarnessForTest docstring for the full rationale.
+// Calling ResetDatabase after LockHarnessForTest in the same test will
+// t.Fatalf instead of deadlocking on testMu.
 func (h *ChaosHarness) ResetDatabase(t *testing.T) {
 	t.Helper()
 
@@ -415,12 +420,23 @@ func (h *ChaosHarness) ResetDatabase(t *testing.T) {
 // LockHarnessForTest acquires the shared chaos harness mutex for the duration
 // of t, releasing it via t.Cleanup. Use this in chaos tests that manage their
 // own per-table state (i.e. do NOT call ResetDatabase, which already takes the
-// lock) so that concurrently-executing chaos tests cannot cross-contaminate
-// each other's toxic injections and direct-DB mutations.
+// lock) so that chaos tests cannot cross-contaminate each other's toxic
+// injections and direct-DB mutations.
 //
-// Fails fast if the harness is already locked by the same test (i.e. a test
-// mistakenly called both ResetDatabase and LockHarnessForTest, or called this
-// method twice) — otherwise the second testMu.Lock() would deadlock.
+// SERIAL-EXECUTION INVARIANT: the chaos test suite is intentionally single-
+// threaded — chaos tests run with -p 1 (see Makefile target test-chaos and
+// commit 0e6e076a "test(chaos): serialize actor_mapping chaos tests..."). Under
+// this model, LockHarnessForTest and ResetDatabase are never called
+// concurrently from different tests. The testLockHeld flag exists to detect
+// the same-test double-lock scenario (a test that mistakenly calls both
+// LockHarnessForTest and ResetDatabase, or either method twice, on the same
+// harness — which would deadlock on testMu). If the flag is already set we
+// fail fast via t.Fatalf rather than blocking on the mutex; this is the
+// deliberate behavior under serial execution.
+//
+// If the chaos suite is ever changed to permit concurrent test execution, the
+// CAS-before-mutex pattern here MUST be revisited — under concurrency it would
+// incorrectly fail a legitimate second test instead of blocking on testMu.
 func (h *ChaosHarness) LockHarnessForTest(t *testing.T) {
 	t.Helper()
 
