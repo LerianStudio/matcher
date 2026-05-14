@@ -402,6 +402,20 @@ func (h *ChaosHarness) ResetDatabase(t *testing.T) {
 	h.Seed = seed
 }
 
+// LockTest acquires the shared chaos harness mutex for the duration of t,
+// releasing it via t.Cleanup. Use this in chaos tests that manage their own
+// per-table state (i.e. do NOT call ResetDatabase, which already takes the
+// lock) so that concurrently-executing chaos tests cannot cross-contaminate
+// each other's toxic injections and direct-DB mutations.
+func (h *ChaosHarness) LockTest(t *testing.T) {
+	t.Helper()
+	h.testMu.Lock()
+
+	t.Cleanup(func() {
+		h.testMu.Unlock()
+	})
+}
+
 // DirectDB returns a direct database connection that bypasses Toxiproxy.
 // Useful for state assertions that must work even when the proxy is poisoned.
 func (h *ChaosHarness) DirectDB(t *testing.T) *sql.DB {
