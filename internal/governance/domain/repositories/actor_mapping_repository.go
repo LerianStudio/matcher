@@ -15,9 +15,19 @@ import (
 )
 
 // ActorMappingRepository defines persistence operations for actor mappings.
-// This is a mutable repository (unlike AuditLogRepository) to support GDPR compliance.
+// Identity fields (display_name, email) are append-only after first creation;
+// the row may be redacted via PseudonymizeWithTx or removed via Delete to
+// support GDPR right-to-erasure, but never mutated in place. AuditLog history
+// is fully immutable; this repository sits one rung up that ladder.
 type ActorMappingRepository interface {
-	// Upsert creates or updates an actor mapping.
+	// Upsert creates a new mapping or returns the existing one. If a row for
+	// actor_id already exists and the payload's display_name/email match the
+	// stored identity fields exactly, the existing entity is returned
+	// (idempotent success). If they differ — including when the stored row
+	// has been pseudonymized to [REDACTED] — Upsert returns
+	// ErrActorMappingImmutable and leaves the stored row untouched. This
+	// guards against the pseudonymization-bypass attack vector where an
+	// attacker could overwrite a redacted row by re-PUT-ing the actor_id.
 	// Returns the canonical persisted entity, including generated fields, so
 	// callers can continue without an additional read.
 	Upsert(ctx context.Context, mapping *entities.ActorMapping) (*entities.ActorMapping, error)
