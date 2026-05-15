@@ -128,10 +128,11 @@ func TestIntegration_ActorMappingImmutability_IdempotentSameValues_NoMutation(t 
 
 		// created_at and updated_at must remain pinned to the FIRST insert.
 		// This proves the conflict path performed a SELECT rather than an UPDATE.
-		assert.Equal(t, originalCreatedAt.Unix(), result.CreatedAt.Unix(),
-			"created_at must survive the idempotent path")
-		assert.Equal(t, originalUpdatedAt.Unix(), result.UpdatedAt.Unix(),
-			"updated_at must NOT advance on the idempotent path; row was not modified")
+		// Use time.Equal so sub-second drift cannot slip past Unix-seconds rounding.
+		assert.True(t, originalCreatedAt.Equal(result.CreatedAt),
+			"created_at must survive the idempotent path (got %v, want %v)", result.CreatedAt, originalCreatedAt)
+		assert.True(t, originalUpdatedAt.Equal(result.UpdatedAt),
+			"updated_at must NOT advance on the idempotent path; row was not modified (got %v, want %v)", result.UpdatedAt, originalUpdatedAt)
 	})
 }
 
@@ -467,8 +468,8 @@ func TestIntegration_ActorMappingImmutability_ConcurrentIdenticalPayloads_AllSuc
 		fetched, err := repo.GetByActorID(ctx, "actor-int-ac8-idem")
 		require.NoError(t, err)
 		require.NotNil(t, fetched)
-		assert.Equal(t, originalUpdatedAt.Unix(), fetched.UpdatedAt.Unix(),
-			"updated_at must remain pinned: no mutation occurred under identical-payload concurrency")
+		assert.True(t, originalUpdatedAt.Equal(fetched.UpdatedAt),
+			"updated_at must remain pinned: no mutation occurred under identical-payload concurrency (got %v, want %v)", fetched.UpdatedAt, originalUpdatedAt)
 	})
 }
 

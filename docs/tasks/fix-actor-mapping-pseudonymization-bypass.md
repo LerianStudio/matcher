@@ -9,7 +9,7 @@
 
 ## Contexto da vulnerabilidade
 
-1. `POST /v1/governance/actor-mappings/{ID}` cria mapping com `display_name`/`email` em texto plano.
+1. `PUT /v1/governance/actor-mappings/{ID}` cria mapping com `display_name`/`email` em texto plano (a rota PUT é a única que cria mappings; não há POST de criação).
 2. `POST /v1/governance/actor-mappings/{ID}/pseudonymize` substitui ambos por `[REDACTED]`.
 3. `PUT /v1/governance/actor-mappings/{ID}` subsequente envia novos `display_name`/`email` e **sobrescreve** o `[REDACTED]` — pseudonimização é revertida silenciosamente.
 

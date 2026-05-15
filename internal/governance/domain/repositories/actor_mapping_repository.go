@@ -23,11 +23,20 @@ type ActorMappingRepository interface {
 	// Upsert creates a new mapping or returns the existing one. If a row for
 	// actor_id already exists and the payload's display_name/email match the
 	// stored identity fields exactly, the existing entity is returned
-	// (idempotent success). If they differ — including when the stored row
-	// has been pseudonymized to [REDACTED] — Upsert returns
-	// ErrActorMappingImmutable and leaves the stored row untouched. This
-	// guards against the pseudonymization-bypass attack vector where an
-	// attacker could overwrite a redacted row by re-PUT-ing the actor_id.
+	// (idempotent success).
+	//
+	// Equality semantics: a nil-pointer field and an empty-string field are
+	// treated as equivalent ("" ≡ nil) because the DB stores NULL for both.
+	// All other comparisons are byte-exact, case-sensitive, no trimming —
+	// any deviation (different case, different whitespace, different bytes)
+	// is a mismatch.
+	//
+	// If they differ — including when the stored row has been pseudonymized
+	// to [REDACTED] — Upsert returns ErrActorMappingImmutable and leaves the
+	// stored row untouched. This guards against the pseudonymization-bypass
+	// attack vector where an attacker could overwrite a redacted row by
+	// re-PUT-ing the actor_id.
+	//
 	// Returns the canonical persisted entity, including generated fields, so
 	// callers can continue without an additional read.
 	Upsert(ctx context.Context, mapping *entities.ActorMapping) (*entities.ActorMapping, error)

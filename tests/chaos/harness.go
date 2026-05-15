@@ -399,7 +399,7 @@ func (h *ChaosHarness) ResetDatabase(t *testing.T) {
 	t.Helper()
 
 	if !h.testLockHeld.CompareAndSwap(false, true) {
-		t.Fatalf("ChaosHarness already locked: ResetDatabase/LockHarnessForTest called twice on the same test")
+		t.Fatalf("ChaosHarness already locked: a prior ResetDatabase/LockHarnessForTest call is still holding the harness mutex (chaos suite serial-execution invariant — see LockHarnessForTest docstring)")
 	}
 
 	h.testMu.Lock()
@@ -441,7 +441,7 @@ func (h *ChaosHarness) LockHarnessForTest(t *testing.T) {
 	t.Helper()
 
 	if !h.testLockHeld.CompareAndSwap(false, true) {
-		t.Fatalf("ChaosHarness already locked: LockHarnessForTest/ResetDatabase called twice on the same test")
+		t.Fatalf("ChaosHarness already locked: a prior LockHarnessForTest/ResetDatabase call is still holding the harness mutex (chaos suite serial-execution invariant — see docstring above)")
 	}
 
 	h.testMu.Lock()

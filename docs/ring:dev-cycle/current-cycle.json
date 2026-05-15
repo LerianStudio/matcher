@@ -43,9 +43,9 @@
       "base_sha": "67f07469d0f0d474b2f7da7f11a0213d178ac5fa",
       "accumulated_metrics": {
         "gate_durations_ms": {},
-        "review_iterations": 0,
+        "review_iterations": 1,
         "testing_iterations": 0,
-        "issues_by_severity": {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+        "issues_by_severity": {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 4, "LOW": 22}
       },
       "subtasks": [
         {

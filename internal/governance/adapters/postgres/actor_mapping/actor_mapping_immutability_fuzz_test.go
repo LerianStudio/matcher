@@ -156,7 +156,14 @@ func buildActorMapping(display string, displayPresent bool, email string, emailP
 	// Defensive: drop malformed UTF-8 to keep the assertion failures focused
 	// on logic bugs rather than incidental encoding artefacts. The DB layer
 	// uses TEXT/VARCHAR which would already reject invalid UTF-8 on write.
-	if !utf8.ValidString(display) || !utf8.ValidString(email) {
+	// Only validate fields that the caller marks as present — invalid bytes
+	// in an absent field are inert (we never read them), so rejecting them
+	// would shrink the valid input space without protecting any assertion.
+	if displayPresent && !utf8.ValidString(display) {
+		return nil
+	}
+
+	if emailPresent && !utf8.ValidString(email) {
 		return nil
 	}
 
