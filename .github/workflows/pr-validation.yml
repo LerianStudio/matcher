@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   validate:
-    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/pr-validation.yml@2cd74e7ecfbeba0a91ecbb8325cc6341dbe918be # v1.28.0
+    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/pr-validation.yml@a3e7e1ada199dfe09019fd14cd73e498a43e0c2d # v1.28.8
     with:
       runner_type: "blacksmith-4vcpu-ubuntu-2404"
       pr_title_types: |
