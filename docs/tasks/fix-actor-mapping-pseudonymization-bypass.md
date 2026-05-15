@@ -143,7 +143,7 @@
 
 | Risco | Mitigação |
 |---|---|
-| Clientes existentes dependem do upsert mutável | Buscar uso interno antes de PR. Documentar mudança como breaking change no CHANGELOG. Comunicar via release notes. |
+| Clientes existentes dependem do upsert mutável | Buscar uso interno antes de PR. Documentar mudança nas release notes e comunicar o caminho de migração. Como o produto está em beta/pre-launch, a decisão explícita é manter patch bump sem footer de major version. |
 | TOCTOU em service-only check | Defense-in-depth via SQL — INSERT ON CONFLICT DO NOTHING garante atomicidade. |
 | PUT idempotente quebrar retries | AC2 cobre exatamente esse caso — payload idêntico = no-op silencioso. |
 | Pseudonymize concorrente com PUT | Pseudonymize já usa transação (`PseudonymizeWithTx`). Verificar que SET TRANSACTION ISOLATION ou row-level locks (`SELECT ... FOR UPDATE`) blindam a ordenação. |

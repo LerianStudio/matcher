@@ -87,7 +87,7 @@ func TestCreateOrGetActorMapping_NewActor_Creates(t *testing.T) {
 	uc, err := NewActorMappingUseCase(repo)
 	require.NoError(t, err)
 
-	result, err := uc.CreateOrGetActorMapping(immutableTestContext(), "actor-new-001", &displayName, &email)
+	result, err := uc.CreateOrGetActorMapping(immutableTestContext(), &CreateOrGetActorMappingInput{ActorID: "actor-new-001", DisplayName: &displayName, Email: &email})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "actor-new-001", result.ActorID)
@@ -129,7 +129,7 @@ func TestCreateOrGetActorMapping_IdempotentSameValues_NoOp(t *testing.T) {
 	uc, err := NewActorMappingUseCase(repo)
 	require.NoError(t, err)
 
-	result, err := uc.CreateOrGetActorMapping(immutableTestContext(), "actor-idem-002", &displayName, &email)
+	result, err := uc.CreateOrGetActorMapping(immutableTestContext(), &CreateOrGetActorMappingInput{ActorID: "actor-idem-002", DisplayName: &displayName, Email: &email})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "actor-idem-002", result.ActorID)
@@ -161,7 +161,7 @@ func TestCreateOrGetActorMapping_DifferentEmail_ReturnsImmutableError(t *testing
 
 	newDisplayName := "Jane Roe"
 	newEmail := "different@example.com" // mutation attempt
-	result, err := uc.CreateOrGetActorMapping(immutableTestContext(), "actor-mut-003", &newDisplayName, &newEmail)
+	result, err := uc.CreateOrGetActorMapping(immutableTestContext(), &CreateOrGetActorMappingInput{ActorID: "actor-mut-003", DisplayName: &newDisplayName, Email: &newEmail})
 	require.Error(t, err)
 	require.Nil(t, result)
 	assert.ErrorIs(t, err, ErrActorMappingImmutable)
@@ -184,7 +184,7 @@ func TestCreateOrGetActorMapping_DifferentDisplayName_ReturnsImmutableError(t *t
 
 	newDisplayName := "Renamed Person" // mutation attempt
 	email := "stable@example.com"
-	result, err := uc.CreateOrGetActorMapping(immutableTestContext(), "actor-mut-004", &newDisplayName, &email)
+	result, err := uc.CreateOrGetActorMapping(immutableTestContext(), &CreateOrGetActorMappingInput{ActorID: "actor-mut-004", DisplayName: &newDisplayName, Email: &email})
 	require.Error(t, err)
 	require.Nil(t, result)
 	assert.ErrorIs(t, err, ErrActorMappingImmutable)
@@ -212,7 +212,7 @@ func TestCreateOrGetActorMapping_OnRedactedMapping_ReturnsImmutableError(t *test
 	// Attacker payload — tries to overwrite [REDACTED] with PII.
 	attackerName := "Attacker Name"
 	attackerEmail := "attacker@evil.example"
-	result, err := uc.CreateOrGetActorMapping(immutableTestContext(), "actor-pseudo-005", &attackerName, &attackerEmail)
+	result, err := uc.CreateOrGetActorMapping(immutableTestContext(), &CreateOrGetActorMappingInput{ActorID: "actor-pseudo-005", DisplayName: &attackerName, Email: &attackerEmail})
 	require.Error(t, err)
 	require.Nil(t, result)
 	assert.ErrorIs(t, err, ErrActorMappingImmutable)
@@ -233,7 +233,7 @@ func TestCreateOrGetActorMapping_RepositoryReturnsNotFound_PropagatedCleanly(t *
 	require.NoError(t, err)
 
 	displayName := "Test"
-	result, err := uc.CreateOrGetActorMapping(immutableTestContext(), "actor-nf-006", &displayName, nil)
+	result, err := uc.CreateOrGetActorMapping(immutableTestContext(), &CreateOrGetActorMappingInput{ActorID: "actor-nf-006", DisplayName: &displayName, Email: nil})
 	require.Error(t, err)
 	require.Nil(t, result)
 	assert.ErrorIs(t, err, governanceErrors.ErrActorMappingNotFound)

@@ -33,6 +33,7 @@ var (
 	ErrNilActorMappingRepository = entities.ErrNilActorMappingRepository
 	ErrNilPersistedActorMapping  = errors.New("actor mapping repository returned nil mapping")
 	ErrNilInfraProvider          = errors.New("infrastructure provider is required")
+	ErrCreateOrGetInputRequired  = errors.New("create or get actor mapping input is required")
 
 	// ErrActorMappingImmutable is the service-layer alias for the domain
 	// sentinel. Callers (handlers, mocks) errors.Is against this name; the
@@ -46,6 +47,14 @@ type ActorMappingUseCase struct {
 	repo          repositories.ActorMappingRepository
 	infraProvider sharedPorts.InfrastructureProvider
 	streamEmitter streaming.Emitter
+}
+
+// CreateOrGetActorMappingInput documents the identity payload used by the
+// append-only actor mapping command.
+type CreateOrGetActorMappingInput struct {
+	ActorID     string
+	DisplayName *string
+	Email       *string
 }
 
 // Functional options for streaming.Emitter injection follow the convention:
@@ -109,13 +118,21 @@ func NewActorMappingUseCase(repo repositories.ActorMappingRepository, options ..
 // allowed PUT requests to overwrite [REDACTED] PII via a COALESCE-based UPDATE
 // path. UpsertActorMapping is kept as a thin wrapper for backwards compatibility
 // of internal callers; new code should call CreateOrGetActorMapping directly.
-func (uc *ActorMappingUseCase) CreateOrGetActorMapping(ctx context.Context, actorID string, displayName, email *string) (*entities.ActorMapping, error) {
+func (uc *ActorMappingUseCase) CreateOrGetActorMapping(ctx context.Context, in *CreateOrGetActorMappingInput) (*entities.ActorMapping, error) {
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 	ctx, span := tracer.Start(ctx, "service.governance.create_or_get_actor_mapping")
 
 	defer span.End()
 
-	mapping, err := entities.NewActorMapping(ctx, actorID, displayName, email)
+	if in == nil {
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid actor mapping input", ErrCreateOrGetInputRequired)
+
+		libLog.SafeError(logger, ctx, "invalid actor mapping input", ErrCreateOrGetInputRequired, runtime.IsProductionMode())
+
+		return nil, ErrCreateOrGetInputRequired
+	}
+
+	mapping, err := entities.NewActorMapping(ctx, in.ActorID, in.DisplayName, in.Email)
 	if err != nil {
 		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid actor mapping input", err)
 
@@ -135,7 +152,7 @@ func (uc *ActorMappingUseCase) CreateOrGetActorMapping(ctx context.Context, acto
 			libLog.SafeError(
 				logger,
 				ctx,
-				fmt.Sprintf("actor mapping mutation rejected [id_prefix=%s]", entities.SafeActorIDPrefix(actorID)),
+				fmt.Sprintf("actor mapping mutation rejected [id_prefix=%s]", entities.SafeActorIDPrefix(in.ActorID)),
 				err,
 				runtime.IsProductionMode(),
 			)
@@ -165,7 +182,11 @@ func (uc *ActorMappingUseCase) CreateOrGetActorMapping(ctx context.Context, acto
 // CreateOrGetActorMapping. Existing callers (handler, tests) keep working
 // unchanged; identity-mutation attempts now return ErrActorMappingImmutable.
 func (uc *ActorMappingUseCase) UpsertActorMapping(ctx context.Context, actorID string, displayName, email *string) (*entities.ActorMapping, error) {
-	return uc.CreateOrGetActorMapping(ctx, actorID, displayName, email)
+	return uc.CreateOrGetActorMapping(ctx, &CreateOrGetActorMappingInput{
+		ActorID:     actorID,
+		DisplayName: displayName,
+		Email:       email,
+	})
 }
 
 // PseudonymizeActor replaces PII fields with [REDACTED] for GDPR compliance.

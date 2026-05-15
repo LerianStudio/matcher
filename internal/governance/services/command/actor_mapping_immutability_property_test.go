@@ -317,7 +317,7 @@ func runOnFakeService(
 ) error {
 	switch op.kind {
 	case opCreate, opRecreate:
-		_, err := uc.CreateOrGetActorMapping(ctx, actorID, strPtrLocal(op.displayName), strPtrLocal(op.email))
+		_, err := uc.CreateOrGetActorMapping(ctx, &CreateOrGetActorMappingInput{ActorID: actorID, DisplayName: strPtrLocal(op.displayName), Email: strPtrLocal(op.email)})
 		// opRecreate semantics: delete first, then create. The driver
 		// handles the delete; here both kinds reduce to a single
 		// create call.
@@ -326,10 +326,10 @@ func runOnFakeService(
 		repo.pseudonymize(actorID)
 		return nil
 	case opMutateName:
-		_, err := uc.CreateOrGetActorMapping(ctx, actorID, strPtrLocal(op.displayName+"-mutated"), strPtrLocal(op.email))
+		_, err := uc.CreateOrGetActorMapping(ctx, &CreateOrGetActorMappingInput{ActorID: actorID, DisplayName: strPtrLocal(op.displayName + "-mutated"), Email: strPtrLocal(op.email)})
 		return err
 	case opMutateEmail:
-		_, err := uc.CreateOrGetActorMapping(ctx, actorID, strPtrLocal(op.displayName), strPtrLocal(op.email+".mutated"))
+		_, err := uc.CreateOrGetActorMapping(ctx, &CreateOrGetActorMappingInput{ActorID: actorID, DisplayName: strPtrLocal(op.displayName), Email: strPtrLocal(op.email + ".mutated")})
 		return err
 	case opDelete:
 		return uc.DeleteActorMapping(ctx, actorID)
@@ -481,13 +481,13 @@ func TestProperty_IdempotencyOfCreateOrGetActorMapping(t *testing.T) {
 
 		ctx := propertyContext()
 
-		first, err1 := uc.CreateOrGetActorMapping(ctx, actorID, strPtrLocal(displayName), strPtrLocal(email))
+		first, err1 := uc.CreateOrGetActorMapping(ctx, &CreateOrGetActorMappingInput{ActorID: actorID, DisplayName: strPtrLocal(displayName), Email: strPtrLocal(email)})
 		if err1 != nil || first == nil {
 			t.Logf("first call failed: actorID=%q err=%v", actorID, err1)
 			return false
 		}
 
-		second, err2 := uc.CreateOrGetActorMapping(ctx, actorID, strPtrLocal(displayName), strPtrLocal(email))
+		second, err2 := uc.CreateOrGetActorMapping(ctx, &CreateOrGetActorMappingInput{ActorID: actorID, DisplayName: strPtrLocal(displayName), Email: strPtrLocal(email)})
 		if err2 != nil {
 			t.Logf("idempotent second call returned error: actorID=%q err=%v", actorID, err2)
 			return false
@@ -495,13 +495,6 @@ func TestProperty_IdempotencyOfCreateOrGetActorMapping(t *testing.T) {
 
 		if second == nil {
 			t.Logf("idempotent second call returned nil entity: actorID=%q", actorID)
-			return false
-		}
-
-		if errors.Is(err2, ErrActorMappingImmutable) {
-			// Defensive — err2 is nil above; this guards against any
-			// future short-circuit that might surface immutable as a
-			// non-error "soft" rejection.
 			return false
 		}
 
@@ -566,7 +559,7 @@ func TestProperty_MutationRejection(t *testing.T) {
 			seedEmail = "original@example.test"
 		}
 
-		if _, err := uc.CreateOrGetActorMapping(ctx, actorID, strPtrLocal(seedDisplay), strPtrLocal(seedEmail)); err != nil {
+		if _, err := uc.CreateOrGetActorMapping(ctx, &CreateOrGetActorMappingInput{ActorID: actorID, DisplayName: strPtrLocal(seedDisplay), Email: strPtrLocal(seedEmail)}); err != nil {
 			return false
 		}
 
@@ -577,7 +570,7 @@ func TestProperty_MutationRejection(t *testing.T) {
 
 		// Attempt 1: mutate display_name only.
 		mutatedDisplay := seedDisplay + "-" + mutator
-		_, errDisplay := uc.CreateOrGetActorMapping(ctx, actorID, strPtrLocal(mutatedDisplay), strPtrLocal(seedEmail))
+		_, errDisplay := uc.CreateOrGetActorMapping(ctx, &CreateOrGetActorMappingInput{ActorID: actorID, DisplayName: strPtrLocal(mutatedDisplay), Email: strPtrLocal(seedEmail)})
 
 		if !errors.Is(errDisplay, ErrActorMappingImmutable) {
 			t.Logf("display_name mutation not rejected: actor=%q new=%q got_err=%v", actorID, mutatedDisplay, errDisplay)
@@ -592,7 +585,7 @@ func TestProperty_MutationRejection(t *testing.T) {
 
 		// Attempt 2: mutate email only.
 		mutatedEmail := seedEmail + "." + mutator
-		_, errEmail := uc.CreateOrGetActorMapping(ctx, actorID, strPtrLocal(seedDisplay), strPtrLocal(mutatedEmail))
+		_, errEmail := uc.CreateOrGetActorMapping(ctx, &CreateOrGetActorMappingInput{ActorID: actorID, DisplayName: strPtrLocal(seedDisplay), Email: strPtrLocal(mutatedEmail)})
 
 		if !errors.Is(errEmail, ErrActorMappingImmutable) {
 			t.Logf("email mutation not rejected: actor=%q new=%q got_err=%v", actorID, mutatedEmail, errEmail)

@@ -402,6 +402,10 @@ Contributors: @bedatty, @dependabot[bot], @fred, @gandalf, @jeff, @lerian-studio
 ## [Unreleased]
 
 
+### Security
+
+* **governance:** actor_mapping identity fields (\`displayName\`, \`email\`) are append-only after first creation. A \`PUT /v1/governance/actor-mappings/{actorId}\` with a payload that differs from the stored identity now returns \`409 Conflict\` with \`MTCH-0604\` instead of mutating the row. This closes the pseudonymization bypass where plaintext PII could overwrite \`[REDACTED]\` values after pseudonymization. Migration: clients must treat \`409\` as the signal to create a new \`actor_id\` for new identity values; idempotent PUTs with the same payload continue to succeed. Release policy: Matcher is beta/pre-launch, so this security fix intentionally remains a patch bump and does not emit a major version.
+
 ### Streaming Instrumentation Rollout
 
 * **observability:** `/readyz` and `/health` JSON response now includes a `streaming` key in the `checks` map, populated when the streaming emitter is wired (configurable via `STREAMING_ENABLED`). When streaming is disabled, the entry surfaces as `status: "skipped"` and does not flip the top-level aggregation. K8s probes (status-code-only) are unaffected. External dashboards or contract tests asserting on the keyset of `checks` MUST be updated to handle the new field.
