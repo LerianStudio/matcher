@@ -82,9 +82,6 @@ func TestUpsert_NilMapping(t *testing.T) {
 	require.ErrorIs(t, err, ErrActorMappingRequired)
 }
 
-// TestUpsert_Success covers the fresh-actor happy path under the post-fix SQL
-// (INSERT ... ON CONFLICT DO NOTHING RETURNING). The query returns a row, so
-// no follow-up SELECT is issued and the repository returns the inserted entity.
 func TestUpsert_Success(t *testing.T) {
 	t.Parallel()
 
@@ -106,7 +103,7 @@ func TestUpsert_Success(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`INSERT INTO actor_mapping (actor_id,display_name,email,created_at,updated_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (actor_id) DO NOTHING RETURNING actor_id, display_name, email, created_at, updated_at`,
+		`INSERT INTO actor_mapping (actor_id,display_name,email,created_at,updated_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (actor_id) DO UPDATE SET display_name = COALESCE(EXCLUDED.display_name, actor_mapping.display_name), email = COALESCE(EXCLUDED.email, actor_mapping.email), updated_at = EXCLUDED.updated_at RETURNING actor_id, display_name, email, created_at, updated_at`,
 	)).
 		WithArgs("actor-123", &displayName, &email, now, now).
 		WillReturnRows(sqlmock.NewRows(actorMappingTestColumns).
@@ -125,9 +122,6 @@ func TestUpsert_Success(t *testing.T) {
 	require.Equal(t, now, result.UpdatedAt)
 }
 
-// TestUpsert_NilOptionalFields covers a fresh actor with both PII fields nil.
-// Post-fix SQL is INSERT ... ON CONFLICT DO NOTHING RETURNING; the INSERT
-// succeeds on a fresh actor_id and the returned row carries the nil values.
 func TestUpsert_NilOptionalFields(t *testing.T) {
 	t.Parallel()
 
@@ -145,7 +139,7 @@ func TestUpsert_NilOptionalFields(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`INSERT INTO actor_mapping (actor_id,display_name,email,created_at,updated_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (actor_id) DO NOTHING RETURNING actor_id, display_name, email, created_at, updated_at`,
+		`INSERT INTO actor_mapping (actor_id,display_name,email,created_at,updated_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (actor_id) DO UPDATE SET display_name = COALESCE(EXCLUDED.display_name, actor_mapping.display_name), email = COALESCE(EXCLUDED.email, actor_mapping.email), updated_at = EXCLUDED.updated_at RETURNING actor_id, display_name, email, created_at, updated_at`,
 	)).
 		WithArgs("actor-456", nil, nil, now, now).
 		WillReturnRows(sqlmock.NewRows(actorMappingTestColumns).
@@ -160,8 +154,6 @@ func TestUpsert_NilOptionalFields(t *testing.T) {
 	require.Nil(t, result.Email)
 }
 
-// TestUpsert_DatabaseError covers an INSERT failure. The error is wrapped with
-// the "upsert actor mapping" prefix and the transaction rolls back.
 func TestUpsert_DatabaseError(t *testing.T) {
 	t.Parallel()
 
@@ -179,7 +171,7 @@ func TestUpsert_DatabaseError(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`INSERT INTO actor_mapping (actor_id,display_name,email,created_at,updated_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (actor_id) DO NOTHING RETURNING actor_id, display_name, email, created_at, updated_at`,
+		`INSERT INTO actor_mapping (actor_id,display_name,email,created_at,updated_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (actor_id) DO UPDATE SET display_name = COALESCE(EXCLUDED.display_name, actor_mapping.display_name), email = COALESCE(EXCLUDED.email, actor_mapping.email), updated_at = EXCLUDED.updated_at RETURNING actor_id, display_name, email, created_at, updated_at`,
 	)).
 		WillReturnError(errTestDatabaseError)
 	mock.ExpectRollback()
@@ -221,8 +213,6 @@ func TestUpsertWithTx_NilMapping(t *testing.T) {
 	require.ErrorIs(t, err, ErrActorMappingRequired)
 }
 
-// TestUpsertWithTx_Success covers the fresh-actor happy path through the
-// WithTx entry point (passing nil tx so the repository creates its own).
 func TestUpsertWithTx_Success(t *testing.T) {
 	t.Parallel()
 
@@ -244,7 +234,7 @@ func TestUpsertWithTx_Success(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`INSERT INTO actor_mapping (actor_id,display_name,email,created_at,updated_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (actor_id) DO NOTHING RETURNING actor_id, display_name, email, created_at, updated_at`,
+		`INSERT INTO actor_mapping (actor_id,display_name,email,created_at,updated_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (actor_id) DO UPDATE SET display_name = COALESCE(EXCLUDED.display_name, actor_mapping.display_name), email = COALESCE(EXCLUDED.email, actor_mapping.email), updated_at = EXCLUDED.updated_at RETURNING actor_id, display_name, email, created_at, updated_at`,
 	)).
 		WithArgs("actor-tx-123", &displayName, &email, now, now).
 		WillReturnRows(sqlmock.NewRows(actorMappingTestColumns).
@@ -264,14 +254,7 @@ func TestUpsertWithTx_Success(t *testing.T) {
 	require.Equal(t, now, result.UpdatedAt)
 }
 
-// TestUpsert_PartialPayloadRejectedWhenStoredFieldsDiffer documents the new
-// contract: previously, COALESCE on the SQL side meant that submitting only
-// display_name would silently preserve the stored email. Under the new
-// append-only semantics, the repository compares ALL identity fields and
-// rejects the request when the existing row has data the payload does not
-// match — including the case where the payload omits a field that's stored
-// non-empty. This closes the pseudonymization-bypass surface.
-func TestUpsert_PartialPayloadRejectedWhenStoredFieldsDiffer(t *testing.T) {
+func TestUpsert_PreservesExistingFieldsWhenInputIsNil(t *testing.T) {
 	t.Parallel()
 
 	repo, mock, finish := setupMockRepository(t)
@@ -282,7 +265,6 @@ func TestUpsert_PartialPayloadRejectedWhenStoredFieldsDiffer(t *testing.T) {
 	updatedAt := now.Add(time.Minute)
 	updatedName := "Updated Name"
 	existingEmail := "existing@example.com"
-	existingName := "Original Name"
 
 	mapping := &entities.ActorMapping{
 		ActorID:     "actor-partial",
@@ -293,22 +275,20 @@ func TestUpsert_PartialPayloadRejectedWhenStoredFieldsDiffer(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`INSERT INTO actor_mapping (actor_id,display_name,email,created_at,updated_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (actor_id) DO NOTHING RETURNING actor_id, display_name, email, created_at, updated_at`,
+		`INSERT INTO actor_mapping (actor_id,display_name,email,created_at,updated_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (actor_id) DO UPDATE SET display_name = COALESCE(EXCLUDED.display_name, actor_mapping.display_name), email = COALESCE(EXCLUDED.email, actor_mapping.email), updated_at = EXCLUDED.updated_at RETURNING actor_id, display_name, email, created_at, updated_at`,
 	)).
 		WithArgs("actor-partial", &updatedName, nil, now, updatedAt).
-		WillReturnRows(sqlmock.NewRows(actorMappingTestColumns))
-	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT actor_id, display_name, email, created_at, updated_at FROM actor_mapping WHERE actor_id = $1`,
-	)).
-		WithArgs("actor-partial").
 		WillReturnRows(sqlmock.NewRows(actorMappingTestColumns).
-			AddRow("actor-partial", &existingName, &existingEmail, now, updatedAt))
-	mock.ExpectRollback()
+			AddRow("actor-partial", &updatedName, &existingEmail, now, updatedAt))
+	mock.ExpectCommit()
 
 	result, err := repo.Upsert(ctx, mapping)
-	require.Error(t, err)
-	require.Nil(t, result)
-	require.ErrorIs(t, err, ErrActorMappingImmutable)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.DisplayName)
+	require.Equal(t, updatedName, *result.DisplayName)
+	require.NotNil(t, result.Email)
+	require.Equal(t, existingEmail, *result.Email)
 }
 
 func TestGetByActorID_Success(t *testing.T) {

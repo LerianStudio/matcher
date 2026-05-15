@@ -58,70 +58,13 @@ func TestActorMapping_UpsertAndGet(t *testing.T) {
 	})
 }
 
-// TestActorMapping_IdempotentSamePayload verifies that a second PUT with an
-// identical payload returns the existing row unchanged. This pins the
-// idempotent-upsert leg of the immutability contract: clients that retry a
-// successful PUT receive the same row, not an error.
-func TestActorMapping_IdempotentSamePayload(t *testing.T) {
+// TestActorMapping_Update verifies that a second PUT updates the existing mapping
+// while leaving unchanged fields intact.
+func TestActorMapping_Update(t *testing.T) {
 	e2e.RunE2E(t, func(t *testing.T, tc *e2e.TestContext, apiClient *e2e.Client) {
 		ctx := context.Background()
 
-		actorID := "e2e-idem-same-" + tc.RunID()
-		displayName := "Stable Name"
-		email := "stable-" + tc.RunID() + "@example.com"
-
-		// First PUT — creates the mapping.
-		firstResp, err := apiClient.Governance.UpsertActorMapping(ctx, actorID, client.UpsertActorMappingRequest{
-			DisplayName: strPtr(displayName),
-			Email:       strPtr(email),
-		})
-		require.NoError(t, err)
-		require.NotNil(t, firstResp)
-		assert.NotEmpty(t, firstResp.CreatedAt, "first PUT must return non-empty created_at")
-		assert.NotEmpty(t, firstResp.UpdatedAt, "first PUT must return non-empty updated_at")
-		tc.Logf("Created initial actor mapping: actorID=%s", actorID)
-
-		// Second PUT — identical payload — must succeed (200) and echo the
-		// same persisted row.
-		secondResp, err := apiClient.Governance.UpsertActorMapping(ctx, actorID, client.UpsertActorMappingRequest{
-			DisplayName: strPtr(displayName),
-			Email:       strPtr(email),
-		})
-		require.NoError(t, err, "idempotent PUT with identical payload should succeed")
-		require.NotNil(t, secondResp)
-		assert.Equal(t, firstResp.CreatedAt, secondResp.CreatedAt, "created_at must remain stable on idempotent PUT")
-		assert.Equal(t, firstResp.UpdatedAt, secondResp.UpdatedAt, "updated_at must remain stable on idempotent PUT (no-op write)")
-		require.NotNil(t, secondResp.DisplayName)
-		assert.Equal(t, displayName, *secondResp.DisplayName, "display name preserved on idempotent PUT")
-		require.NotNil(t, secondResp.Email)
-		assert.Equal(t, email, *secondResp.Email, "email preserved on idempotent PUT")
-
-		// Verify GET still returns the original row.
-		getResp, err := apiClient.Governance.GetActorMapping(ctx, actorID)
-		require.NoError(t, err)
-		require.NotNil(t, getResp)
-		assert.Equal(t, firstResp.CreatedAt, getResp.CreatedAt, "GET created_at must match original row")
-		assert.Equal(t, firstResp.UpdatedAt, getResp.UpdatedAt, "GET updated_at must match original row")
-		require.NotNil(t, getResp.DisplayName)
-		assert.Equal(t, displayName, *getResp.DisplayName)
-		require.NotNil(t, getResp.Email)
-		assert.Equal(t, email, *getResp.Email)
-
-		tc.Logf("Idempotent PUT preserved row: actorID=%s", actorID)
-	})
-}
-
-// TestActorMapping_MutationReturnsConflict verifies that a second PUT with a
-// DIFFERENT display_name on an existing mapping is rejected with HTTP 409.
-// Identity fields (display_name, email) are append-only after first creation —
-// this prevents the pseudonymization-bypass attack vector identified by the
-// Taura Security pentest (28/04/2026), where an attacker could overwrite a
-// pseudonymized [REDACTED] row by re-PUT-ing the actor_id.
-func TestActorMapping_MutationReturnsConflict(t *testing.T) {
-	e2e.RunE2E(t, func(t *testing.T, tc *e2e.TestContext, apiClient *e2e.Client) {
-		ctx := context.Background()
-
-		actorID := "e2e-mut-" + tc.RunID()
+		actorID := "e2e-update-" + tc.RunID()
 		originalName := "Original Name"
 		email := "original-" + tc.RunID() + "@example.com"
 
@@ -133,32 +76,29 @@ func TestActorMapping_MutationReturnsConflict(t *testing.T) {
 		require.NoError(t, err)
 		tc.Logf("Created initial actor mapping: actorID=%s", actorID)
 
-		// Mutation attempt — different display_name on the same actor_id.
-		// Identity fields are immutable; the server must respond with 409.
-		mutatedName := "Mutated Name"
-		_, err = apiClient.Governance.UpsertActorMapping(ctx, actorID, client.UpsertActorMappingRequest{
-			DisplayName: strPtr(mutatedName),
-			Email:       strPtr(email),
+		// Update only the display name.
+		updatedName := "Updated Name"
+		updateResp, err := apiClient.Governance.UpsertActorMapping(ctx, actorID, client.UpsertActorMappingRequest{
+			DisplayName: strPtr(updatedName),
 		})
-		require.Error(t, err, "mutation of identity fields must be rejected")
+		require.NoError(t, err, "update actor mapping should succeed")
+		require.NotNil(t, updateResp)
+		require.NotNil(t, updateResp.DisplayName)
+		assert.Equal(t, updatedName, *updateResp.DisplayName, "put response should include updated display name")
+		require.NotNil(t, updateResp.Email)
+		assert.Equal(t, email, *updateResp.Email, "put response should preserve existing email")
 
-		var apiErr *client.APIError
-		require.True(t, errors.As(err, &apiErr), "error should be an APIError; got %T: %v", err, err)
-		assert.True(t, apiErr.IsConflict(), "expected 409, got %d", apiErr.StatusCode)
-		assert.Equal(t, "MTCH-0604", apiErr.ProductCode(),
-			"409 must surface governance_actor_mapping_immutable product code")
-
-		// Persisted row must be unchanged.
+		// Verify the update took effect.
 		getResp, err := apiClient.Governance.GetActorMapping(ctx, actorID)
 		require.NoError(t, err)
 		require.NotNil(t, getResp)
-		require.NotNil(t, getResp.DisplayName)
-		assert.Equal(t, originalName, *getResp.DisplayName,
-			"display name must survive rejected mutation attempt")
-		require.NotNil(t, getResp.Email)
-		assert.Equal(t, email, *getResp.Email, "email must survive rejected mutation attempt")
 
-		tc.Logf("Mutation attempt correctly rejected with 409: actorID=%s", actorID)
+		require.NotNil(t, getResp.DisplayName)
+		assert.Equal(t, updatedName, *getResp.DisplayName, "display name should be updated")
+		require.NotNil(t, getResp.Email)
+		assert.Equal(t, email, *getResp.Email, "email should remain unchanged")
+
+		tc.Logf("Actor mapping updated successfully: actorID=%s, displayName=%s", actorID, *getResp.DisplayName)
 	})
 }
 
