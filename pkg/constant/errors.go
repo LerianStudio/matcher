@@ -74,10 +74,9 @@ const (
 	CodeDispatchTargetUnsupported      = "MTCH-0508"
 	CodeDispatchConnectorNotConfigured = "MTCH-0509"
 
-	CodeGovernanceAuditLogNotFound      = "MTCH-0601"
-	CodeGovernanceActorMappingNotFound  = "MTCH-0602"
-	CodeGovernanceArchiveNotFound       = "MTCH-0603"
-	CodeGovernanceActorMappingImmutable = "MTCH-0604"
+	CodeGovernanceAuditLogNotFound     = "MTCH-0601"
+	CodeGovernanceActorMappingNotFound = "MTCH-0602"
+	CodeGovernanceArchiveNotFound      = "MTCH-0603"
 
 	CodeReportingExportJobNotFound    = "MTCH-0701"
 	CodeReportingExportWorkerDisabled = "MTCH-0702"

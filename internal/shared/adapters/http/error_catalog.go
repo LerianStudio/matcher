@@ -72,19 +72,18 @@ var (
 	defMatchingFeeRulesMissing          = matchererrors.Definition{Code: constant.CodeMatchingFeeRulesMissing, Title: http.StatusText(http.StatusUnprocessableEntity), HTTPStatus: http.StatusUnprocessableEntity}
 	defMatchingRunInProgress            = matchererrors.Definition{Code: constant.CodeMatchingRunInProgress, Title: http.StatusText(http.StatusConflict), HTTPStatus: http.StatusConflict}
 
-	defExceptionNotFound               = matchererrors.Definition{Code: constant.CodeExceptionNotFound, Title: http.StatusText(http.StatusNotFound), HTTPStatus: http.StatusNotFound}
-	defDisputeNotFound                 = matchererrors.Definition{Code: constant.CodeDisputeNotFound, Title: http.StatusText(http.StatusNotFound), HTTPStatus: http.StatusNotFound}
-	defExceptionInvalidState           = matchererrors.Definition{Code: constant.CodeExceptionInvalidState, Title: http.StatusText(http.StatusUnprocessableEntity), HTTPStatus: http.StatusUnprocessableEntity}
-	defCallbackInProgress              = matchererrors.Definition{Code: constant.CodeCallbackInProgress, Title: http.StatusText(http.StatusConflict), HTTPStatus: http.StatusConflict}
-	defCallbackRetryable               = matchererrors.Definition{Code: constant.CodeCallbackRetryable, Title: http.StatusText(http.StatusConflict), HTTPStatus: http.StatusConflict}
-	defCallbackRateLimitExceeded       = matchererrors.Definition{Code: constant.CodeCallbackRateLimitExceeded, Title: http.StatusText(http.StatusTooManyRequests), HTTPStatus: http.StatusTooManyRequests}
-	defCommentNotFound                 = matchererrors.Definition{Code: constant.CodeCommentNotFound, Title: http.StatusText(http.StatusNotFound), HTTPStatus: http.StatusNotFound}
-	defDispatchTargetUnsupported       = matchererrors.Definition{Code: constant.CodeDispatchTargetUnsupported, Title: http.StatusText(http.StatusUnprocessableEntity), HTTPStatus: http.StatusUnprocessableEntity}
-	defDispatchConnectorNotConfigured  = matchererrors.Definition{Code: constant.CodeDispatchConnectorNotConfigured, Title: http.StatusText(http.StatusUnprocessableEntity), HTTPStatus: http.StatusUnprocessableEntity}
-	defGovernanceAuditLogNotFound      = matchererrors.Definition{Code: constant.CodeGovernanceAuditLogNotFound, Title: http.StatusText(http.StatusNotFound), HTTPStatus: http.StatusNotFound}
-	defGovernanceActorMappingNotFound  = matchererrors.Definition{Code: constant.CodeGovernanceActorMappingNotFound, Title: http.StatusText(http.StatusNotFound), HTTPStatus: http.StatusNotFound}
-	defGovernanceArchiveNotFound       = matchererrors.Definition{Code: constant.CodeGovernanceArchiveNotFound, Title: http.StatusText(http.StatusNotFound), HTTPStatus: http.StatusNotFound}
-	defGovernanceActorMappingImmutable = matchererrors.Definition{Code: constant.CodeGovernanceActorMappingImmutable, Title: http.StatusText(http.StatusConflict), HTTPStatus: http.StatusConflict}
+	defExceptionNotFound              = matchererrors.Definition{Code: constant.CodeExceptionNotFound, Title: http.StatusText(http.StatusNotFound), HTTPStatus: http.StatusNotFound}
+	defDisputeNotFound                = matchererrors.Definition{Code: constant.CodeDisputeNotFound, Title: http.StatusText(http.StatusNotFound), HTTPStatus: http.StatusNotFound}
+	defExceptionInvalidState          = matchererrors.Definition{Code: constant.CodeExceptionInvalidState, Title: http.StatusText(http.StatusUnprocessableEntity), HTTPStatus: http.StatusUnprocessableEntity}
+	defCallbackInProgress             = matchererrors.Definition{Code: constant.CodeCallbackInProgress, Title: http.StatusText(http.StatusConflict), HTTPStatus: http.StatusConflict}
+	defCallbackRetryable              = matchererrors.Definition{Code: constant.CodeCallbackRetryable, Title: http.StatusText(http.StatusConflict), HTTPStatus: http.StatusConflict}
+	defCallbackRateLimitExceeded      = matchererrors.Definition{Code: constant.CodeCallbackRateLimitExceeded, Title: http.StatusText(http.StatusTooManyRequests), HTTPStatus: http.StatusTooManyRequests}
+	defCommentNotFound                = matchererrors.Definition{Code: constant.CodeCommentNotFound, Title: http.StatusText(http.StatusNotFound), HTTPStatus: http.StatusNotFound}
+	defDispatchTargetUnsupported      = matchererrors.Definition{Code: constant.CodeDispatchTargetUnsupported, Title: http.StatusText(http.StatusUnprocessableEntity), HTTPStatus: http.StatusUnprocessableEntity}
+	defDispatchConnectorNotConfigured = matchererrors.Definition{Code: constant.CodeDispatchConnectorNotConfigured, Title: http.StatusText(http.StatusUnprocessableEntity), HTTPStatus: http.StatusUnprocessableEntity}
+	defGovernanceAuditLogNotFound     = matchererrors.Definition{Code: constant.CodeGovernanceAuditLogNotFound, Title: http.StatusText(http.StatusNotFound), HTTPStatus: http.StatusNotFound}
+	defGovernanceActorMappingNotFound = matchererrors.Definition{Code: constant.CodeGovernanceActorMappingNotFound, Title: http.StatusText(http.StatusNotFound), HTTPStatus: http.StatusNotFound}
+	defGovernanceArchiveNotFound      = matchererrors.Definition{Code: constant.CodeGovernanceArchiveNotFound, Title: http.StatusText(http.StatusNotFound), HTTPStatus: http.StatusNotFound}
 
 	defReportingExportJobNotFound    = matchererrors.Definition{Code: constant.CodeReportingExportJobNotFound, Title: http.StatusText(http.StatusNotFound), HTTPStatus: http.StatusNotFound}
 	defReportingExportWorkerDisabled = matchererrors.Definition{Code: constant.CodeReportingExportWorkerDisabled, Title: http.StatusText(http.StatusServiceUnavailable), HTTPStatus: http.StatusServiceUnavailable}
@@ -170,7 +169,6 @@ var legacyDefinitionsBySlug = map[string]matchererrors.Definition{
 	"dispatch_connector_not_configured":     defDispatchConnectorNotConfigured,
 	"governance_audit_log_not_found":        defGovernanceAuditLogNotFound,
 	"governance_actor_mapping_not_found":    defGovernanceActorMappingNotFound,
-	"governance_actor_mapping_immutable":    defGovernanceActorMappingImmutable,
 	"governance_archive_not_found":          defGovernanceArchiveNotFound,
 	"reporting_export_job_not_found":        defReportingExportJobNotFound,
 	"reporting_invalid_export_format":       defReportingInvalidExportFormat,

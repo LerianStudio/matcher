@@ -17,7 +17,6 @@ import (
 	streaming "github.com/LerianStudio/lib-streaming"
 
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
-	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/internal/streaming/emission"
@@ -33,12 +32,6 @@ var (
 	ErrNilActorMappingRepository = entities.ErrNilActorMappingRepository
 	ErrNilPersistedActorMapping  = errors.New("actor mapping repository returned nil mapping")
 	ErrNilInfraProvider          = errors.New("infrastructure provider is required")
-
-	// ErrActorMappingImmutable is the service-layer alias for the domain
-	// sentinel. Callers (handlers, mocks) errors.Is against this name; the
-	// repository returns the same underlying error so the check succeeds
-	// across layer boundaries without the service importing the adapter.
-	ErrActorMappingImmutable = governanceErrors.ErrActorMappingImmutable
 )
 
 // ActorMappingUseCase handles command operations for actor mappings.
@@ -96,22 +89,12 @@ func NewActorMappingUseCase(repo repositories.ActorMappingRepository, options ..
 	return uc, nil
 }
 
-// CreateOrGetActorMapping creates a new actor mapping or returns the existing
-// row when the payload matches. Identity fields (display_name, email) are
-// append-only after first creation: any mutation attempt returns
-// ErrActorMappingImmutable, which the HTTP layer maps to 409 Conflict.
-//
-// Returns the persisted entity (including DB-generated timestamps) so the
-// handler can respond without a separate read query.
-//
-// This method replaces the previous UpsertActorMapping semantics in the wake
-// of the Taura Security pentest finding (28/04/2026): the prior implementation
-// allowed PUT requests to overwrite [REDACTED] PII via a COALESCE-based UPDATE
-// path. UpsertActorMapping is kept as a thin wrapper for backwards compatibility
-// of internal callers; new code should call CreateOrGetActorMapping directly.
-func (uc *ActorMappingUseCase) CreateOrGetActorMapping(ctx context.Context, actorID string, displayName, email *string) (*entities.ActorMapping, error) {
+// UpsertActorMapping creates or updates an actor mapping.
+// Returns the persisted entity (including DB-generated timestamps) so the handler
+// can respond without a separate read query, avoiding read-replica lag issues.
+func (uc *ActorMappingUseCase) UpsertActorMapping(ctx context.Context, actorID string, displayName, email *string) (*entities.ActorMapping, error) {
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-	ctx, span := tracer.Start(ctx, "service.governance.create_or_get_actor_mapping")
+	ctx, span := tracer.Start(ctx, "service.governance.upsert_actor_mapping")
 
 	defer span.End()
 
@@ -126,23 +109,6 @@ func (uc *ActorMappingUseCase) CreateOrGetActorMapping(ctx context.Context, acto
 
 	result, err := uc.repo.Upsert(ctx, mapping)
 	if err != nil {
-		// Identity-immutability rejection is a client error (the persisted
-		// row is untouched). Surface it as a business event so it isn't
-		// counted as a 5xx on dashboards.
-		if errors.Is(err, ErrActorMappingImmutable) {
-			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "actor mapping identity immutable", err)
-
-			libLog.SafeError(
-				logger,
-				ctx,
-				fmt.Sprintf("actor mapping mutation rejected [id_prefix=%s]", entities.SafeActorIDPrefix(actorID)),
-				err,
-				runtime.IsProductionMode(),
-			)
-
-			return nil, err
-		}
-
 		libOpentelemetry.HandleSpanError(span, "failed to upsert actor mapping", err)
 
 		libLog.SafeError(logger, ctx, "failed to upsert actor mapping", err, runtime.IsProductionMode())
@@ -159,13 +125,6 @@ func (uc *ActorMappingUseCase) CreateOrGetActorMapping(ctx context.Context, acto
 	}
 
 	return result, nil
-}
-
-// UpsertActorMapping is a backwards-compatibility alias for
-// CreateOrGetActorMapping. Existing callers (handler, tests) keep working
-// unchanged; identity-mutation attempts now return ErrActorMappingImmutable.
-func (uc *ActorMappingUseCase) UpsertActorMapping(ctx context.Context, actorID string, displayName, email *string) (*entities.ActorMapping, error) {
-	return uc.CreateOrGetActorMapping(ctx, actorID, displayName, email)
 }
 
 // PseudonymizeActor replaces PII fields with [REDACTED] for GDPR compliance.

@@ -68,11 +68,9 @@ func NewActorMappingHandler(
 	}, nil
 }
 
-// UpsertActorMapping creates an actor mapping or returns the existing one when
-// the payload matches. Identity fields (displayName, email) are append-only
-// after first creation; mutation attempts are rejected with 409 Conflict.
+// UpsertActorMapping creates or updates an actor mapping.
 // @Summary Upsert actor mapping
-// @Description Creates the PII mapping for an actor ID, or returns the existing mapping when the payload matches. Identity fields (displayName, email) are immutable after first creation — mutation attempts return 409 Conflict to prevent pseudonymization bypass.
+// @Description Creates or updates the PII mapping for an actor ID. Used to associate opaque actor identifiers with human-readable display names and emails.
 // @ID upsertActorMapping
 // @Tags Governance
 // @Accept json
@@ -85,7 +83,6 @@ func NewActorMappingHandler(
 // @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request"
 // @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
 // @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
-// @Failure 409 {object} sharedhttp.ErrorResponse "Actor mapping identity is immutable (MTCH-0604)"
 // @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/governance/actor-mappings/{actorId} [put]
 func (ha *ActorMappingHandler) UpsertActorMapping(fiberCtx *fiber.Ctx) error {
@@ -115,10 +112,6 @@ func (ha *ActorMappingHandler) UpsertActorMapping(fiberCtx *fiber.Ctx) error {
 	if err != nil {
 		if errors.Is(err, entities.ErrActorIDRequired) || errors.Is(err, entities.ErrActorIDExceedsMaxLen) {
 			return ha.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
-		}
-
-		if errors.Is(err, command.ErrActorMappingImmutable) {
-			return ha.writeConflict(ctx, fiberCtx, span, logger, err)
 		}
 
 		return ha.writeServiceError(ctx, fiberCtx, span, logger, "failed to upsert actor mapping", err)
@@ -294,25 +287,4 @@ func (ha *ActorMappingHandler) writeNotFound(
 	sharedhttp.LogSpanError(ctx, span, logger, ha.productionMode, message, err)
 
 	return respondError(fiberCtx, fiber.StatusNotFound, slug, message)
-}
-
-// writeConflict surfaces ErrActorMappingImmutable as a 409 Conflict response.
-// The error is recorded as a span business event (NOT a span error) and logged
-// via SafeError because it represents a client-side request mistake — the
-// persisted row is untouched — rather than an infrastructure or server fault.
-func (ha *ActorMappingHandler) writeConflict(
-	ctx context.Context,
-	fiberCtx *fiber.Ctx,
-	span trace.Span,
-	logger libLog.Logger,
-	err error,
-) error {
-	const (
-		slug    = "governance_actor_mapping_immutable"
-		message = "actor mapping identity fields cannot be changed; create a new actor_id for new identity values"
-	)
-
-	sharedhttp.LogSpanBusinessEvent(ctx, span, logger, ha.productionMode, message, err)
-
-	return respondError(fiberCtx, fiber.StatusConflict, slug, message)
 }
