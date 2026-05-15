@@ -1,3 +1,5 @@
+## [2.1.2-beta.1](https://github.com/LerianStudio/matcher/compare/v2.1.1...v2.1.2-beta.1) (2026-05-15)
+
 # Matcher Changelog
 
 ## [2.1.1](https://github.com/LerianStudio/matcher/releases/tag/v2.1.1)
@@ -1051,4 +1053,3 @@ Contributors: @bedatty, @dependabot[bot], @ferr3ira-gabriel, @ferr3ira.gabriel, 
 * **e2e:** resolve dashboard stresser flakiness with unique names ([7e93cfc](https://github.com/LerianStudio/matcher/commit/7e93cfcc13d9d074eceebe09b39e9f8b7f7f42ed))
 
 ## 1.0.0 (2026-02-19)
-
