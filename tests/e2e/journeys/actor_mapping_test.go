@@ -77,6 +77,8 @@ func TestActorMapping_IdempotentSamePayload(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.NotNil(t, firstResp)
+		assert.NotEmpty(t, firstResp.CreatedAt, "first PUT must return non-empty created_at")
+		assert.NotEmpty(t, firstResp.UpdatedAt, "first PUT must return non-empty updated_at")
 		tc.Logf("Created initial actor mapping: actorID=%s", actorID)
 
 		// Second PUT — identical payload — must succeed (200) and echo the
@@ -98,6 +100,8 @@ func TestActorMapping_IdempotentSamePayload(t *testing.T) {
 		getResp, err := apiClient.Governance.GetActorMapping(ctx, actorID)
 		require.NoError(t, err)
 		require.NotNil(t, getResp)
+		assert.Equal(t, firstResp.CreatedAt, getResp.CreatedAt, "GET created_at must match original row")
+		assert.Equal(t, firstResp.UpdatedAt, getResp.UpdatedAt, "GET updated_at must match original row")
 		require.NotNil(t, getResp.DisplayName)
 		assert.Equal(t, displayName, *getResp.DisplayName)
 		require.NotNil(t, getResp.Email)
