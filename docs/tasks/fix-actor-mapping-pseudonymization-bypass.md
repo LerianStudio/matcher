@@ -100,27 +100,42 @@
 
 ---
 
-## Arquivos afetados
+## Arquivos afetados (atualizado pós-implementação)
+
+> Atualizado em 2026-05-15 para refletir paths/nomes reais da implementação. Os paths originais especulados durante o planejamento foram substituídos pelos paths efetivos do código entregue.
 
 ### Implementação
-- `internal/governance/services/command/actor_mapping_commands.go` — renomear método, adicionar guard, mapear erros.
-- `internal/governance/services/command/commands.go` — sentinel `ErrActorMappingImmutable`.
-- `internal/governance/adapters/postgres/actor_mapping/actor_mapping.postgresql.go` — SQL `INSERT ... ON CONFLICT DO NOTHING` + comparação.
-- `internal/governance/adapters/postgres/actor_mapping/errors.go` — erro de conflito do adapter, se necessário.
-- `internal/governance/domain/repositories/actor_mapping_repository.go` — atualizar contrato da interface.
-- `internal/governance/domain/entities/actor_mapping.go` — possível helper `IdentityEquals(other *ActorMapping) bool`.
-- `internal/governance/adapters/http/handlers_actor_mapping.go` (ou equivalente) — mapear `ErrActorMappingImmutable` → 409.
+- `internal/governance/services/command/actor_mapping_commands.go` — método `CreateOrGetActorMapping` + wrapper `UpsertActorMapping` retrocompatível, guard via `errors.Is(err, ErrActorMappingImmutable)`, span business event + SafeError logging.
+- `internal/governance/domain/errors/errors.go` — sentinel `ErrActorMappingImmutable` (source of truth, parallel to `ErrActorMappingNotFound`/`ErrAuditLogNotFound`).
+- `internal/governance/adapters/postgres/actor_mapping/actor_mapping.postgresql.go` — SQL `INSERT ... ON CONFLICT DO NOTHING RETURNING` + transactional `SELECT` compare via `actorMappingPIIDiffers` / `stringPtrEqual`.
+- `internal/governance/adapters/postgres/actor_mapping/errors.go` — type-alias `var ErrActorMappingImmutable = governanceErrors.ErrActorMappingImmutable` para uso cross-layer com `errors.Is`.
+- `internal/governance/domain/repositories/actor_mapping_repository.go` — docstring do contrato `Upsert` atualizada para append-only.
+- `internal/governance/domain/entities/actor_mapping.go` — docstring do struct atualizada com o contrato de imutabilidade (não foi adicionado `IdentityEquals` helper; a comparação ficou no adapter via `actorMappingPIIDiffers`).
+- `internal/governance/adapters/http/handlers_actor_mapping.go` — `writeConflict` mapeia `ErrActorMappingImmutable` → 409 com slug `governance_actor_mapping_immutable` (`MTCH-0604`).
+- `internal/shared/adapters/http/error_catalog.go` — registro do `defGovernanceActorMappingImmutable` + slug map.
+- `internal/shared/adapters/http/handler_helpers.go` — novo helper `LogSpanBusinessEvent` (span business event + SafeError).
+- `pkg/constant/errors.go` — constante `CodeGovernanceActorMappingImmutable = "MTCH-0604"`.
+- `migrations/000033_actor_mapping_immutable_comment.{up,down}.sql` — `COMMENT ON TABLE` documentando o contrato append-only (documentação apenas; o enforcement está no application code).
 
 ### Testes
-- `internal/governance/services/command/actor_mapping_commands_test.go` — AC1, AC2, AC3, AC4, AC5, AC6 com mock repo.
-- `internal/governance/adapters/postgres/actor_mapping/actor_mapping_sqlmock_test.go` — AC2, AC3, AC4, AC5 em camada SQL.
-- `internal/governance/adapters/postgres/actor_mapping/actor_mapping.postgresql_test.go` (integration) — AC8 com testcontainers + goroutines concorrentes.
-- `internal/governance/adapters/http/handlers_actor_mapping_test.go` — AC1, AC2, AC3, AC5, AC7 verificando códigos HTTP.
-- Regressão E2E (opcional, se houver suite cobrindo governance flows).
+- `internal/governance/services/command/actor_mapping_immutable_test.go` — unit test com mock repo (gomock), cobertura de AC1-AC5.
+- `internal/governance/services/command/actor_mapping_immutability_property_test.go` — property test (rapid) com oráculo independente (commit 9a2dd570) cobrindo invariantes de irreversibilidade, idempotência e rejeição de mutação.
+- `internal/governance/adapters/postgres/actor_mapping/actor_mapping_immutable_sqlmock_test.go` — sqlmock unit cobrindo AC1-AC5 em camada SQL.
+- `internal/governance/adapters/postgres/actor_mapping/actor_mapping_immutability_fuzz_test.go` — fuzz dos helpers `stringPtrEqual` e `actorMappingPIIDiffers` (reflexividade, simetria, semântica nil/empty).
+- `internal/governance/adapters/postgres/actor_mapping/actor_mapping_immutability_integration_test.go` — integration test com testcontainers cobrindo AC1-AC5, AC7, AC8 (12 goroutines concorrentes por cenário).
+- `internal/governance/adapters/http/handlers_actor_mapping_immutable_test.go` — handler test cobrindo AC1-AC5 com status codes HTTP.
+- `internal/governance/domain/entities/actor_mapping_fuzz_test.go` — fuzz do constructor `NewActorMapping` (trimming, length, UTF-8, NUL bytes).
+- `internal/governance/domain/entities/actor_mapping_property_test.go` — property test do `IsRedacted` (biconditional, nil receiver, partial redaction).
+- `tests/chaos/actor_mapping_chaos_test.go` — chaos suite com Toxiproxy (connection drop, latency, partition + heal).
+- `tests/chaos/harness.go` + `tests/chaos/common.go` — `LockHarnessForTest` + `testLockHeld` atomic.Bool safeguard para serialização do chaos suite.
+- `tests/integration/governance/actor_mapping_test.go` — cross-layer integration (partial-payload PUT rejection).
+- `tests/e2e/journeys/actor_mapping_test.go` — e2e journey (`TestActorMapping_IdempotentSamePayload`, `TestActorMapping_MutationReturnsConflict`).
+- `internal/shared/adapters/http/handler_helpers_test.go` — unit test do novo `LogSpanBusinessEvent`.
 
 ### Documentação
-- `docs/swagger/swagger.json` + `swagger.yaml` — via `make generate-docs`.
-- Atualizar comentários Swagger no handler com `@Failure 409`.
+- `docs/swagger/{docs.go, swagger.json, swagger.yaml}` — regenerados via `make generate-docs`.
+- Annotations Swagger no handler: `@Failure 409 {object} sharedhttp.ErrorResponse "Actor mapping identity is immutable (MTCH-0604)"`.
+- `migrations/000033_actor_mapping_immutable_comment.up.sql` — `COMMENT ON TABLE` descrevendo o contrato.
 
 ---
 
