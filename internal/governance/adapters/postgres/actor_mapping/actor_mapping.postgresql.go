@@ -39,18 +39,31 @@ func NewRepository(provider ports.InfrastructureProvider) *Repository {
 	return &Repository{provider: provider}
 }
 
-// Upsert creates or updates an actor mapping using INSERT ... ON CONFLICT DO UPDATE ... RETURNING.
-// Returns the persisted entity so callers can use it directly without a separate read.
+// Upsert creates a new actor mapping or returns the existing one when the payload matches.
+//
+// Post-fix semantics (Taura Security pentest finding 28/04/2026):
+//
+//   - Identity fields (display_name, email) are append-only after first creation.
+//   - The underlying SQL is INSERT ... ON CONFLICT (actor_id) DO NOTHING RETURNING.
+//     On a fresh actor_id RETURNING yields the new row; on conflict it yields zero rows.
+//   - When the conflict path is taken, the repository SELECTs the current row within
+//     the same transaction and compares display_name and email to the payload:
+//     identical → returns the existing entity (idempotent success); different →
+//     returns ErrActorMappingImmutable and the transaction is rolled back.
+//
+// This design closes the pseudonymization-bypass vulnerability where the prior
+// COALESCE-based UPDATE allowed plaintext PII to overwrite [REDACTED] values.
 func (repo *Repository) Upsert(ctx context.Context, mapping *entities.ActorMapping) (*entities.ActorMapping, error) {
 	return repo.upsertInternal(ctx, nil, mapping)
 }
 
-// UpsertWithTx creates or updates an actor mapping within an existing transaction.
+// UpsertWithTx applies the same semantics as Upsert within an existing transaction.
 func (repo *Repository) UpsertWithTx(ctx context.Context, tx *sql.Tx, mapping *entities.ActorMapping) (*entities.ActorMapping, error) {
 	return repo.upsertInternal(ctx, tx, mapping)
 }
 
-// upsertInternal contains the core upsert logic, optionally reusing an external transaction.
+// upsertInternal contains the core append-only upsert logic, optionally reusing
+// an external transaction.
 func (repo *Repository) upsertInternal(ctx context.Context, tx *sql.Tx, mapping *entities.ActorMapping) (*entities.ActorMapping, error) {
 	if repo == nil || repo.provider == nil {
 		return nil, ErrRepositoryNotInitialized
@@ -70,25 +83,22 @@ func (repo *Repository) upsertInternal(ctx context.Context, tx *sql.Tx, mapping 
 		repo.provider,
 		tx,
 		func(innerTx *sql.Tx) (*entities.ActorMapping, error) {
-			query, args, err := psql.
-				Insert(tableName).
-				Columns("actor_id", "display_name", "email", "created_at", "updated_at").
-				Values(mapping.ActorID, mapping.DisplayName, mapping.Email, mapping.CreatedAt, mapping.UpdatedAt).
-				Suffix(fmt.Sprintf(
-					"ON CONFLICT (actor_id) DO UPDATE SET display_name = COALESCE(EXCLUDED.display_name, %s.display_name), email = COALESCE(EXCLUDED.email, %s.email), updated_at = EXCLUDED.updated_at RETURNING actor_id, display_name, email, created_at, updated_at",
-					tableName, tableName,
-				)).
-				ToSql()
-			if err != nil {
-				return nil, fmt.Errorf("building upsert query: %w", err)
-			}
-
-			row := innerTx.QueryRowContext(ctx, query, args...)
-
-			return scanActorMapping(row)
+			return repo.insertOrCompare(ctx, innerTx, mapping)
 		},
 	)
 	if err != nil {
+		// Immutability violations are business-level conflicts (client error),
+		// not infrastructure failures — record as a span business event so
+		// dashboards don't treat them as 5xx noise. The error is still wrapped
+		// with the operation prefix so wrapcheck is satisfied and the call
+		// stack stays diagnosable; errors.Is(...) on the sentinel still works.
+		if errors.Is(err, ErrActorMappingImmutable) {
+			wrappedImmutableErr := fmt.Errorf("upsert actor mapping: %w", err)
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "actor mapping identity immutable", wrappedImmutableErr)
+
+			return nil, wrappedImmutableErr
+		}
+
 		wrappedErr := fmt.Errorf("upsert actor mapping: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to upsert actor mapping", wrappedErr)
 
@@ -98,6 +108,94 @@ func (repo *Repository) upsertInternal(ctx context.Context, tx *sql.Tx, mapping 
 	}
 
 	return result, nil
+}
+
+// insertOrCompare executes the append-only INSERT and, on conflict, fetches and
+// compares the existing row. The whole sequence runs inside the caller-provided
+// transaction so a concurrent UPDATE cannot bypass the comparison.
+func (repo *Repository) insertOrCompare(ctx context.Context, tx *sql.Tx, mapping *entities.ActorMapping) (*entities.ActorMapping, error) {
+	query, args, err := psql.
+		Insert(tableName).
+		Columns("actor_id", "display_name", "email", "created_at", "updated_at").
+		Values(mapping.ActorID, mapping.DisplayName, mapping.Email, mapping.CreatedAt, mapping.UpdatedAt).
+		Suffix("ON CONFLICT (actor_id) DO NOTHING RETURNING actor_id, display_name, email, created_at, updated_at").
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building upsert query: %w", err)
+	}
+
+	row := tx.QueryRowContext(ctx, query, args...)
+
+	inserted, scanErr := scanActorMapping(row)
+	if scanErr == nil {
+		return inserted, nil
+	}
+
+	if !errors.Is(scanErr, sql.ErrNoRows) {
+		return nil, scanErr
+	}
+
+	// Conflict path: fetch the existing row inside the same transaction and
+	// compare identity fields against the payload.
+	existing, err := repo.selectForCompareWithTx(ctx, tx, mapping.ActorID)
+	if err != nil {
+		return nil, err
+	}
+
+	if actorMappingPIIDiffers(existing, mapping) {
+		return nil, ErrActorMappingImmutable
+	}
+
+	return existing, nil
+}
+
+// selectForCompareWithTx reads the current row for an actor_id within an
+// existing transaction. The transaction-scoped read prevents a concurrent
+// UPDATE from racing between the INSERT...DO NOTHING and this SELECT.
+func (repo *Repository) selectForCompareWithTx(ctx context.Context, tx *sql.Tx, actorID string) (*entities.ActorMapping, error) {
+	query, args, err := psql.
+		Select("actor_id", "display_name", "email", "created_at", "updated_at").
+		From(tableName).
+		Where(squirrel.Eq{"actor_id": actorID}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building select for compare query: %w", err)
+	}
+
+	row := tx.QueryRowContext(ctx, query, args...)
+
+	return scanActorMapping(row)
+}
+
+// actorMappingPIIDiffers reports whether the payload's display_name or email
+// differs from the persisted row. Both fields use pointer-to-string with
+// nil-or-empty treated as semantically equivalent to match the existing
+// constructor's NULL-handling.
+func actorMappingPIIDiffers(existing, payload *entities.ActorMapping) bool {
+	if existing == nil || payload == nil {
+		return true
+	}
+
+	return !stringPtrEqual(existing.DisplayName, payload.DisplayName) ||
+		!stringPtrEqual(existing.Email, payload.Email)
+}
+
+// stringPtrEqual treats nil and empty-string pointers as equivalent so a
+// caller submitting "" for a field that is stored as NULL (or vice versa) is
+// not flagged as a mutation attempt.
+func stringPtrEqual(lhs, rhs *string) bool {
+	lhsEmpty := lhs == nil || *lhs == ""
+	rhsEmpty := rhs == nil || *rhs == ""
+
+	if lhsEmpty && rhsEmpty {
+		return true
+	}
+
+	if lhsEmpty != rhsEmpty {
+		return false
+	}
+
+	return *lhs == *rhs
 }
 
 // GetByActorID retrieves an actor mapping by its actor ID.

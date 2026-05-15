@@ -61,6 +61,22 @@ func LogSpanError(
 	libLog.SafeError(logger, ctx, message, err, production)
 }
 
+// LogSpanBusinessEvent records a business-error event on the span and writes a
+// safe log entry. Unlike LogSpanError, this does NOT mark the span as failed —
+// it represents an expected, client-visible business outcome (e.g. 4xx response
+// driven by domain rules) rather than an infrastructure or server fault.
+func LogSpanBusinessEvent(
+	ctx context.Context,
+	span trace.Span,
+	logger libLog.Logger,
+	production bool,
+	message string,
+	err error,
+) {
+	libOpentelemetry.HandleSpanBusinessErrorEvent(span, message, err)
+	libLog.SafeError(logger, ctx, message, err, production)
+}
+
 // BadRequest logs the transport failure and responds with the standard invalid request payload.
 func BadRequest(
 	ctx context.Context,

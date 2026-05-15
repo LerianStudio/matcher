@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	actormapping "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/actor_mapping"
@@ -44,58 +45,21 @@ func TestIntegration_Governance_ActorMapping_UpsertAndGet(t *testing.T) {
 	})
 }
 
-func TestIntegration_Governance_ActorMapping_UpsertUpdatesExisting(t *testing.T) {
-	t.Parallel()
-
-	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
-		repo := actormapping.NewRepository(h.Provider())
-		ctx := h.Ctx()
-
-		displayName := "Bob Original"
-		email := "bob@example.com"
-
-		mapping, err := entities.NewActorMapping(ctx, "actor-002", &displayName, &email)
-		require.NoError(t, err)
-
-		original, err := repo.Upsert(ctx, mapping)
-		require.NoError(t, err)
-		require.NotNil(t, original)
-
-		readBack, err := repo.GetByActorID(ctx, "actor-002")
-		require.NoError(t, err)
-		require.Equal(t, "Bob Original", *readBack.DisplayName)
-
-		// Upsert with updated display name — same actor ID triggers ON CONFLICT UPDATE.
-		updatedName := "Bob Updated"
-		updatedEmail := "bob.updated@example.com"
-
-		updated, err := entities.NewActorMapping(ctx, "actor-002", &updatedName, &updatedEmail)
-		require.NoError(t, err)
-
-		updateResult, err := repo.Upsert(ctx, updated)
-		require.NoError(t, err)
-		require.NotNil(t, updateResult)
-		require.Equal(t, "actor-002", updateResult.ActorID)
-		require.NotNil(t, updateResult.DisplayName)
-		require.Equal(t, "Bob Updated", *updateResult.DisplayName)
-		require.NotNil(t, updateResult.Email)
-		require.Equal(t, "bob.updated@example.com", *updateResult.Email)
-
-		fetched, err := repo.GetByActorID(ctx, "actor-002")
-		require.NoError(t, err)
-
-		require.Equal(t, "actor-002", fetched.ActorID)
-		require.NotNil(t, fetched.DisplayName)
-		require.Equal(t, "Bob Updated", *fetched.DisplayName)
-		require.NotNil(t, fetched.Email)
-		require.Equal(t, "bob.updated@example.com", *fetched.Email)
-		// Verify created_at preserved from original insert (RETURNING correctness).
-		require.Equal(t, original.CreatedAt.Unix(), fetched.CreatedAt.Unix(),
-			"created_at should be preserved from original insert")
-	})
-}
-
-func TestIntegration_Governance_ActorMapping_UpsertPreservesExistingFieldWhenOmitted(t *testing.T) {
+// TestIntegration_Governance_ActorMapping_UpsertPartialPayloadIsRejected verifies
+// that a second PUT with a partial payload (e.g., a different display_name and a
+// nil email) against an existing row is rejected with ErrActorMappingImmutable
+// and the persisted row remains untouched.
+//
+// Pre-fix (vulnerable) behaviour was to COALESCE the omitted field with the
+// existing value, effectively letting partial PUTs mutate identity fields. The
+// new contract is "actor_mapping rows are immutable": any payload that differs
+// from the stored row — including via field omission — is rejected.
+//
+// The broader payload-mismatch scenarios live in
+// internal/governance/adapters/postgres/actor_mapping/actor_mapping_immutability_integration_test.go.
+// This test pins the specific nil-field (no-COALESCE) angle from the package-level
+// integration harness.
+func TestIntegration_Governance_ActorMapping_UpsertPartialPayloadIsRejected(t *testing.T) {
 	t.Parallel()
 
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
@@ -111,17 +75,31 @@ func TestIntegration_Governance_ActorMapping_UpsertPreservesExistingFieldWhenOmi
 		_, err = repo.Upsert(ctx, mapping)
 		require.NoError(t, err)
 
+		// Partial payload: different display_name, nil email. Under the old
+		// COALESCE-based path this would have silently mutated display_name and
+		// preserved email. Under the new immutability contract the comparison
+		// must observe a mismatch (display_name differs; nil email differs from
+		// the stored value) and reject the write.
 		updatedName := "Carol Updated"
 		partialUpdate, err := entities.NewActorMapping(ctx, "actor-omit", &updatedName, nil)
 		require.NoError(t, err)
 
 		result, err := repo.Upsert(ctx, partialUpdate)
+		require.Error(t, err, "partial PUT against an existing row must be rejected")
+		require.Nil(t, result)
+		require.ErrorIs(t, err, actormapping.ErrActorMappingImmutable,
+			"the rejection must surface ErrActorMappingImmutable so handlers map it to 409")
+
+		// Persisted row must remain untouched — no COALESCE escape hatch.
+		fetched, err := repo.GetByActorID(ctx, "actor-omit")
 		require.NoError(t, err)
-		require.NotNil(t, result)
-		require.NotNil(t, result.DisplayName)
-		require.Equal(t, updatedName, *result.DisplayName)
-		require.NotNil(t, result.Email)
-		require.Equal(t, email, *result.Email)
+		require.NotNil(t, fetched)
+		require.NotNil(t, fetched.DisplayName)
+		assert.Equal(t, "Carol Original", *fetched.DisplayName,
+			"persisted display_name must survive the rejected partial PUT")
+		require.NotNil(t, fetched.Email)
+		assert.Equal(t, "carol@example.com", *fetched.Email,
+			"persisted email must survive the rejected partial PUT")
 	})
 }
 
