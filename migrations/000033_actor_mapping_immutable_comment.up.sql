@@ -1,0 +1,15 @@
+-- Updates the COMMENT on actor_mapping to document the post-fix
+-- pseudonymization-bypass immutability contract introduced in
+-- fix-actor-mapping-pseudonymization-bypass.
+--
+-- After this change the table is APPEND-ONLY for identity fields: rows are
+-- created once via INSERT ... ON CONFLICT (actor_id) DO NOTHING, may be
+-- redacted via UPDATE to [REDACTED] (PseudonymizeWithTx) or removed via
+-- DELETE (right-to-erasure), but display_name and email cannot be mutated
+-- in place. Upsert with a differing payload returns ErrActorMappingImmutable
+-- (HTTP 409, MTCH-0604).
+--
+-- Background: Taura Security pentest (28/04/2026) found that the pre-fix
+-- INSERT ... ON CONFLICT DO UPDATE SET ... path allowed an attacker to
+-- overwrite a [REDACTED] row by re-PUT-ing the actor_id with plaintext PII.
+COMMENT ON TABLE actor_mapping IS 'GDPR-compliant actor identity mapping. Append-only for identity fields (display_name, email); supports pseudonymization (UPDATE to [REDACTED]) and right-to-erasure (DELETE) but rejects identity-field mutation with ErrActorMappingImmutable (HTTP 409, MTCH-0604).';
