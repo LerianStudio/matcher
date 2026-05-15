@@ -60,8 +60,8 @@ func SafeActorIDPrefix(actorID string) string {
 //     Re-Upsert with a different payload returns ErrActorMappingImmutable
 //     (HTTP 409, MTCH-0604); re-Upsert with the identical payload is a no-op.
 //   - The only allowed state transitions are:
-//       a) UPDATE both fields to "[REDACTED]" via Pseudonymize (GDPR pseudonymization);
-//       b) DELETE the row via right-to-erasure (LGPD/GDPR Art. 17).
+//     a) UPDATE both fields to "[REDACTED]" via Pseudonymize (GDPR pseudonymization);
+//     b) DELETE the row via right-to-erasure (LGPD/GDPR Art. 17).
 //   - Mutation attempts are rejected at the SQL layer (INSERT ... ON CONFLICT
 //     DO NOTHING + transactional SELECT-compare) and at the service layer.
 //
