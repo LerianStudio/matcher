@@ -87,6 +87,8 @@ func TestActorMapping_IdempotentSamePayload(t *testing.T) {
 		})
 		require.NoError(t, err, "idempotent PUT with identical payload should succeed")
 		require.NotNil(t, secondResp)
+		assert.Equal(t, firstResp.CreatedAt, secondResp.CreatedAt, "created_at must remain stable on idempotent PUT")
+		assert.Equal(t, firstResp.UpdatedAt, secondResp.UpdatedAt, "updated_at must remain stable on idempotent PUT (no-op write)")
 		require.NotNil(t, secondResp.DisplayName)
 		assert.Equal(t, displayName, *secondResp.DisplayName, "display name preserved on idempotent PUT")
 		require.NotNil(t, secondResp.Email)
